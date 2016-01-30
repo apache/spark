@@ -341,6 +341,15 @@ authenticate = true
 
 class ConfigParserWithDefaults(ConfigParser):
 
+    # These configuration elements can be fetched as the stdout of commands
+    # following the "{section}__{name}__cmd" pattern, the idea behind this is to not
+    # store password on boxes in text files.
+    as_command_stdout = {
+        ('core', 'sql_alchemy_conn'),
+        ('celery', 'broker_url'),
+        ('celery', 'celery_result_backend')
+    }
+
     def __init__(self, defaults, *args, **kwargs):
         self.defaults = defaults
         ConfigParser.__init__(self, *args, **kwargs)
@@ -370,7 +379,8 @@ class ConfigParserWithDefaults(ConfigParser):
         elif self.has_option(section, key):
             return expand_env_var(ConfigParser.get(self, section, key, **kwargs))
 
-        elif self.has_option(section, fallback_key):
+        elif ((section, key) in ConfigParserWithDefaults.as_command_stdout 
+            and self.has_option(section, fallback_key)):
             command = self.get(section, fallback_key)
             return run_command(command)
 
@@ -385,8 +395,6 @@ class ConfigParserWithDefaults(ConfigParser):
             raise AirflowConfigException(
                 "section/key [{section}/{key}] not found "
                 "in config".format(**locals()))
-
-        return None
 
     def getboolean(self, section, key):
         val = str(self.get(section, key)).lower().strip()

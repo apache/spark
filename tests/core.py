@@ -403,113 +403,94 @@ class CoreTest(unittest.TestCase):
         assert "{FERNET_KEY}" not in cfg
 
     def test_config_works_without_original_but_has_fallback(self):
-
         # initial assumption
-        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
-        self.assertFalse(
-            configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
-        )
+        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
+        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
 
-        SQL_ALCHEMY_CONN = configuration.get(
-            'core', 'SQL_ALCHEMY_CONN'
-        )
+        SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
+        BROKER_URL = configuration.get('celery', 'BROKER_URL')
+        CELERY_RESULT_BACKEND = configuration.get('celery',
+                                                  'CELERY_RESULT_BACKEND')
 
         # testing condition
         configuration.set("core", "SQL_ALCHEMY_CONN_CMD",
-                          "printf sqlite:///random_string/unittests.db"
-                          )
-        self.assertTrue(configuration.has_option(
-            "core",
-            "SQL_ALCHEMY_CONN_CMD"
-        )
-        )
+                          "printf sqlite:///random_string/unittests.db")
+        configuration.set("celery", "BROKER_URL_CMD",
+                          "printf sqlite:///BROKER_URL_CMD/unittests.db")
+        configuration.set("celery", "CELERY_RESULT_BACKEND_CMD",
+                          "printf sqlite:///CELERY_RESULT/unittests.db")
+
+        assert configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
+
         configuration.remove_option("core", "SQL_ALCHEMY_CONN")
+        configuration.remove_option("celery", "BROKER_URL")
+        configuration.remove_option("celery", "CELERY_RESULT_BACKEND")
 
-        FALLBACK_SQL_ALCHEMY_CONN = configuration.get(
-            "core",
-            "SQL_ALCHEMY_CONN"
-        )
+        FALLBACK_SQL_ALCHEMY = configuration.get("core",
+                                                 "SQL_ALCHEMY_CONN")
+        FALLBACK_BROKER_URL = configuration.get("celery",
+                                                "BROKER_URL")
+        FALLBACK_CELERY = configuration.get("celery",
+                                            "CELERY_RESULT_BACKEND")
 
-        self.assertEqual(
-            FALLBACK_SQL_ALCHEMY_CONN,
-            b"sqlite:///random_string/unittests.db"
-        )
+        assert FALLBACK_SQL_ALCHEMY == b"sqlite:///random_string/unittests.db"
+        assert FALLBACK_BROKER_URL == b"sqlite:///BROKER_URL_CMD/unittests.db"
+        assert FALLBACK_CELERY == b"sqlite:///CELERY_RESULT/unittests.db"
 
         # restore the conf back to the original state
         configuration.set("core", "SQL_ALCHEMY_CONN", SQL_ALCHEMY_CONN)
-        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
+        configuration.set("celery", "BROKER_URL", BROKER_URL)
+        configuration.set("celery", "CELERY_RESULT_BACKEND",
+                          CELERY_RESULT_BACKEND)
+
+        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
 
         configuration.remove_option("core", "SQL_ALCHEMY_CONN_CMD")
-        self.assertFalse(configuration.has_option(
-            "core",
-            "SQL_ALCHEMY_CONN_CMD"
-        )
-        )
+        configuration.remove_option("celery", "BROKER_URL_CMD")
+        configuration.remove_option("celery", "CELERY_RESULT_BACKEND_CMD")
 
-        NEW_SQL_ALCHEMY_CONN = configuration.get(
-            "core",
-            "SQL_ALCHEMY_CONN"
-        )
+        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
 
-        self.assertEqual(NEW_SQL_ALCHEMY_CONN, SQL_ALCHEMY_CONN)
+        NEW_SQL_ALCHEMY_CONN = configuration.get("core","SQL_ALCHEMY_CONN")
+
+        assert NEW_SQL_ALCHEMY_CONN == SQL_ALCHEMY_CONN
 
     def test_config_use_original_when_original_and_fallback_are_present(self):
-        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
-        self.assertFalse(configuration.has_option(
-            "core",
-            "SQL_ALCHEMY_CONN_CMD"
-        )
-        )
+        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
+        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
 
         SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
 
-        configuration.set(
-            "core",
-            "SQL_ALCHEMY_CONN_CMD",
-            "printf sqlite:///random_string/unittests.db"
-        )
-
-        self.assertTrue(configuration.has_option(
-            "core", "SQL_ALCHEMY_CONN_CMD"))
+        configuration.set("core", "SQL_ALCHEMY_CONN_CMD",
+                          "printf sqlite:///random_string/unittests.db")
 
         FALLBACK_SQL_ALCHEMY_CONN = configuration.get(
             "core",
             "SQL_ALCHEMY_CONN"
         )
 
-        self.assertEqual(FALLBACK_SQL_ALCHEMY_CONN, SQL_ALCHEMY_CONN)
+        assert FALLBACK_SQL_ALCHEMY_CONN == SQL_ALCHEMY_CONN
 
         # restore the conf back to the original state
         configuration.remove_option("core", "SQL_ALCHEMY_CONN_CMD")
-        self.assertFalse(configuration.has_option(
-            "core",
-            "SQL_ALCHEMY_CONN_CMD"
-        )
-        )
 
     def test_config_throw_error_when_original_and_fallback_is_absent(self):
-        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
-        self.assertFalse(configuration.has_option(
-            "core", "SQL_ALCHEMY_CONN_CMD"))
+        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
+        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
 
-        SQL_ALCHEMY_CONN = configuration.get(
-            "core",
-            "SQL_ALCHEMY_CONN"
-        )
+        SQL_ALCHEMY_CONN = configuration.get("core", "SQL_ALCHEMY_CONN")
         configuration.remove_option("core", "SQL_ALCHEMY_CONN")
 
         with self.assertRaises(AirflowConfigException) as cm:
             configuration.get("core", "SQL_ALCHEMY_CONN")
 
         exception = str(cm.exception)
-        self.assertEqual(
-            exception,
-            "section/key [core/sql_alchemy_conn] not found in config"
-        )
+        message = "section/key [core/sql_alchemy_conn] not found in config"
+        assert exception == message
 
         # restore the conf back to the original state
         configuration.set("core", "SQL_ALCHEMY_CONN", SQL_ALCHEMY_CONN)
-        self.assertTrue(configuration.has_option("core", "SQL_ALCHEMY_CONN"))
+        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
 
     def test_class_with_logger_should_have_logger_with_correct_name(self):
 
