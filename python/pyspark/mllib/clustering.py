@@ -528,7 +528,8 @@ class GaussianMixture(object):
         Train a Gaussian Mixture clustering model.
 
         :param rdd:
-          Train with an RDD of data points.
+          Training points as an `RDD` of `Vector` or convertible
+          sequence types.
         :param k:
           Number of independent Gaussians in the mixture model.
         :param convergenceTol:
@@ -648,7 +649,7 @@ class PowerIterationClustering(object):
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
         """
         :param rdd:
-          Train with an RDD of (i, j, s\ :sub:`ij`\) tuples representing the
+          An RDD of (i, j, s\ :sub:`ij`\) tuples representing the
           affinity matrix, which is the matrix A in the PIC paper.  The
           similarity s\ :sub:`ij`\ must be nonnegative.  This is a symmetric
           matrix and hence s\ :sub:`ij`\ = s\ :sub:`ji`\  For any (i, j) with
@@ -1005,7 +1006,11 @@ class LDA(object):
         """Train a LDA model.
 
         :param rdd:
-          Train with an RDD of data points.
+          RDD of documents, which are tuples of document IDs and term
+          (word) count vectors. The term count vectors are "bags of
+          words" with a fixed-size vocabulary (where the vocabulary size
+          is the length of the vector). Document IDs must be unique
+          and >= 0.
         :param k:
           Number of topics to infer, i.e., the number of soft cluster
           centers.
