@@ -88,8 +88,11 @@ class BisectingKMeansModel(JavaModelWrapper):
         Find the cluster that each of the points belongs to in this
         model.
 
-        :param x: the point (or RDD of points) to determine
-          compute the clusters for.
+        :param x:
+          A data point (or RDD of points) to determine cluster index.
+        :return:
+          Predicted cluster index or an RDD of predicted cluster indices
+          if the input is an RDD.
         """
         if isinstance(x, RDD):
             vecs = x.map(_convert_to_vector)
@@ -105,7 +108,8 @@ class BisectingKMeansModel(JavaModelWrapper):
         points to their nearest center) for this model on the given
         data. If provided with an RDD of points returns the sum.
 
-        :param point: the point or RDD of points to compute the cost(s).
+        :param point:
+          A data point (or RDD of points) to compute the cost(s).
         """
         if isinstance(x, RDD):
             vecs = x.map(_convert_to_vector)
@@ -143,17 +147,23 @@ class BisectingKMeans(object):
         """
         Runs the bisecting k-means algorithm return the model.
 
-        :param rdd: input RDD to be trained on
-        :param k: The desired number of leaf clusters (default: 4).
-            The actual number could be smaller if there are no divisible
-            leaf clusters.
-        :param maxIterations: the max number of k-means iterations to
-            split clusters (default: 20)
-        :param minDivisibleClusterSize: the minimum number of points
-            (if >= 1.0) or the minimum proportion of points (if < 1.0)
-            of a divisible cluster (default: 1)
-        :param seed: a random seed (default: -1888008604 from
-            classOf[BisectingKMeans].getName.##)
+        :param rdd:
+          Training points as an `RDD` of `Vector` or convertible
+          sequence types.
+        :param k:
+          The desired number of leaf clusters. The actual number could
+          be smaller if there are no divisible leaf clusters.
+          (default: 4)
+        :param maxIterations:
+          Maximum number of iterations allowed to split clusters.
+          (default: 20)
+        :param minDivisibleClusterSize:
+          Minimum number of points (if >= 1.0) or the minimum proportion
+          of points (if < 1.0) of a divisible cluster.
+          (default: 1)
+        :param seed:
+          Random seed value for cluster initialization.
+          (default: -1888008604 from classOf[BisectingKMeans].getName.##)
         """
         java_model = callMLlibFunc(
             "trainBisectingKMeans", rdd.map(_convert_to_vector),
@@ -165,9 +175,6 @@ class BisectingKMeans(object):
 class KMeansModel(Saveable, Loader):
 
     """A clustering model derived from the k-means method.
-
-    :param centers:
-      Initial cluster centers
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
@@ -242,8 +249,11 @@ class KMeansModel(Saveable, Loader):
         Find the cluster that each of the points belongs to in this
         model.
 
-        :param x: the point (or RDD of points) to determine
-            compute the clusters for.
+        :param x:
+          A data point (or RDD of points) to determine cluster index.
+        :return:
+          Predicted cluster index or an RDD of predicted cluster indices
+          if the input is an RDD.
         """
         best = 0
         best_distance = float("inf")
@@ -265,7 +275,8 @@ class KMeansModel(Saveable, Loader):
         their nearest center) for this model on the given
         data.
 
-        :param point: the RDD of points to compute the cost on.
+        :param rdd:
+          The RDD of points to compute the cost on.
         """
         cost = callMLlibFunc("computeCostKmeansModel", rdd.map(_convert_to_vector),
                              [_convert_to_vector(c) for c in self.centers])
@@ -303,7 +314,8 @@ class KMeans(object):
         Train a k-means clustering model.
 
         :param rdd:
-          Train with a RDD of data points.
+          Training points as an `RDD` of `Vector` or convertible
+          sequence types.
         :param k:
           Number of clusters to create.
         :param maxIterations:
@@ -322,14 +334,14 @@ class KMeans(object):
           generate seed based on system time.
           (default: None)
         :param initializationSteps:
-          Set the number of steps for the k-means|| initialization mode.
+          Number of steps for the k-means|| initialization mode.
           This is an advanced setting -- the default of 5 is almost
           always enough.
           (default: 5)
         :param epsilon:
-          Set the distance threshold within which we've consider centers
-          to have converged. If all centers move less than this Euclidean
-          distance, we stop iterating one run.
+          Distance threshold within which a center will be considered to
+          have converged. If all centers move less than this Euclidean
+          distance, iterations are stopped.
           (default: 1e-4)
         :param initialModel:
           Initial cluster centers can be provided as a KMeansModel object
@@ -455,9 +467,10 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         has maximum membership in this model.
 
         :param x:
-          Vector or RDD of vector represents data points.
+          A feature vector or an RDD of vectors representing data points.
         :return:
-          Cluster label or RDD of cluster labels.
+          Predicted cluster label or an RDD of predicted cluster labels
+          if the input is an RDD.
         """
         if isinstance(x, RDD):
             cluster_labels = self.predictSoft(x).map(lambda z: z.index(max(z)))
@@ -472,7 +485,7 @@ class GaussianMixtureModel(JavaModelWrapper, JavaSaveable, JavaLoader):
         Find the membership of point 'x' or each point in RDD 'x' to all mixture components.
 
         :param x:
-          Vector or RDD of vector represents data points.
+          A feature vector or an RDD of vectors representing data points.
         :return:
           The membership value to all mixture components for vector 'x'
           or each vector in RDD 'x'.
@@ -515,12 +528,12 @@ class GaussianMixture(object):
         Train a Gaussian Mixture clustering model.
 
         :param rdd:
-          Train with a RDD of data points.
+          Train with an RDD of data points.
         :param k:
           Number of independent Gaussians in the mixture model.
         :param convergenceTol:
           Maximum change in log-likelihood at which convergence is
-          considered to have occured.
+          considered to have occurred.
           (default: 1e-3)
         :param maxIterations:
           Maximum number of iterations allowed.
@@ -530,7 +543,7 @@ class GaussianMixture(object):
           generate seed based on system time.
           (default: None)
         :param initialModel:
-          Set the initial GMM starting point, bypassing the random
+          Initial GMM starting point, bypassing the random
           initialization.
           (default: None)
         """
@@ -635,20 +648,20 @@ class PowerIterationClustering(object):
     def train(cls, rdd, k, maxIterations=100, initMode="random"):
         """
         :param rdd:
-          Train with a RDD of (i, j, s,,ij,,) tuples representing the
+          Train with an RDD of (i, j, s\ :sub:`ij`\) tuples representing the
           affinity matrix, which is the matrix A in the PIC paper.  The
-          similarity s,,ij,, must be nonnegative.  This is a symmetric
-          matrix and hence s,,ij,, = s,,ji,,.  For any (i, j) with
-          nonzero similarity, there should be either (i, j, s,,ij,,) or
-          (j, i, s,,ji,,) in the input.  Tuples with i = j are ignored,
-          because we assume s,,ij,, = 0.0.
+          similarity s\ :sub:`ij`\ must be nonnegative.  This is a symmetric
+          matrix and hence s\ :sub:`ij`\ = s\ :sub:`ji`\  For any (i, j) with
+          nonzero similarity, there should be either (i, j, s\ :sub:`ij`\) or
+          (j, i, s\ :sub:`ji`\) in the input.  Tuples with i = j are ignored,
+          because it is assumed s\ :sub:`ij`\ = 0.0.
         :param k:
           Number of clusters.
         :param maxIterations:
           Maximum number of iterations of the PIC algorithm.
           (default: 100)
         :param initMode:
-          Set the initialization mode. This can be either "random" to use
+          Initialization mode. This can be either "random" to use
           a random vector as vertex properties, or "degree" to use
           normalized sum similarities.
           (default: "random")
@@ -992,7 +1005,7 @@ class LDA(object):
         """Train a LDA model.
 
         :param rdd:
-          Train with a RDD of data points.
+          Train with an RDD of data points.
         :param k:
           Number of topics to infer, i.e., the number of soft cluster
           centers.

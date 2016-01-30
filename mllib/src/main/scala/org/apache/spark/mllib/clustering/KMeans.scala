@@ -482,7 +482,7 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data Train with a `RDD[Vector]` of data points.
+   * @param data Training points as an `RDD` of `Vector` types.
    * @param k Number of clusters to create.
    * @param maxIterations Maximum number of iterations allowed.
    * @param runs Number of runs to execute in parallel. The best model according to the cost
@@ -511,7 +511,7 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data Train with a `RDD[Vector]` of data points.
+   * @param data Training points as an `RDD` of `Vector` types.
    * @param k Number of clusters to create.
    * @param maxIterations Maximum number of iterations allowed.
    * @param runs Number of runs to execute in parallel. The best model according to the cost
