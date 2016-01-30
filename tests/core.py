@@ -25,7 +25,7 @@ from airflow.utils import LoggingMixin, round_time
 from lxml import html
 from airflow.utils import AirflowException
 
-NUM_EXAMPLE_DAGS = 8
+NUM_EXAMPLE_DAGS = 7
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime(2015, 1, 1)
 DEFAULT_DATE_ISO = DEFAULT_DATE.isoformat()
