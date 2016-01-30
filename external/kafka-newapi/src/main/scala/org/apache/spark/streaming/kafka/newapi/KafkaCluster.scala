@@ -52,19 +52,9 @@ class KafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String
   }
 
   def getPartitions(topics: Set[String]): Set[TopicPartition] = {
-    withConsumer { consumer => {
-        val partInfo = topics.flatMap {
-          topic => Option(consumer.partitionsFor(topic)) match {
-            case None => throw new SparkException("Topic doesn't exist " + topic)
-            case Some(partInfoList) => partInfoList.asScala.toList
-          }
-        }
-        val topicPartitions: Set[TopicPartition] = partInfo.map { partition =>
-          new TopicPartition(partition.topic(), partition.partition())
-        }
-        topicPartitions
-      }
-    }.asInstanceOf[Set[TopicPartition]]
+    getPartitionInfo(topics).map { pi =>
+      new TopicPartition(pi.topic(), pi.partition())
+    }
   }
 
   def getPartitionsLeader(topics: Set[String]): Map[TopicPartition, String] = {
