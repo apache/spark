@@ -127,6 +127,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       val conf = getConf(isDriverSide = false)
 
       val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val existingBytesRead = inputMetrics.bytesRead
 
       // Sets the thread local variable for the file's name
       split.serializableHadoopSplit.value match {
@@ -142,9 +143,13 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         case _ => None
       }
 
+      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+      // task and in the same thread, in which case we need to avoid override values written by
+      // previous partitions (SPARK-13071).
       def updateBytesRead(): Unit = {
         getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(getBytesRead())
+          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
 

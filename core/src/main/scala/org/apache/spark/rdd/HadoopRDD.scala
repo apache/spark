@@ -215,6 +215,7 @@ class HadoopRDD[K, V](
       // TODO: there is a lot of duplicate code between this and NewHadoopRDD and SqlNewHadoopRDD
 
       val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val existingBytesRead = inputMetrics.bytesRead
 
       // Sets the thread local variable for the file's name
       split.inputSplit.value match {
@@ -230,9 +231,13 @@ class HadoopRDD[K, V](
         case _ => None
       }
 
+      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+      // task and in the same thread, in which case we need to avoid override values written by
+      // previous partitions (SPARK-13071).
       def updateBytesRead(): Unit = {
         getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(getBytesRead())
+          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
 
