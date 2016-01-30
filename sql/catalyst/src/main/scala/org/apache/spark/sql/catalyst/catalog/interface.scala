@@ -148,6 +148,7 @@ case class Table(
   name: String,
   schema: Seq[Column],
   partitionColumns: Seq[Column],
+  sortColumns: Seq[Column],
   storage: StorageFormat,
   numBuckets: Int,
   properties: Map[String, String],
