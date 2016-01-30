@@ -389,7 +389,8 @@ class Connection(Base):
     _password = Column('password', String(5000))
     port = Column(Integer())
     is_encrypted = Column(Boolean, unique=False, default=False)
-    extra = Column(String(5000))
+    is_extra_encrypted = Column(Boolean, unique=False, default=False)
+    _extra = Column('extra', String(5000))
 
     def __init__(
             self, conn_id=None, conn_type=None,
@@ -445,6 +446,29 @@ class Connection(Base):
     def password(cls):
         return synonym('_password',
                        descriptor=property(cls.get_password, cls.set_password))
+
+    def get_extra(self):
+        if self._extra and self.is_extra_encrypted:
+            if not ENCRYPTION_ON:
+                raise AirflowException(
+                    "Can't decrypt `extra`, configuration is missing")
+            return FERNET.decrypt(bytes(self._extra, 'utf-8')).decode()
+        else:
+            return self._extra
+
+    def set_extra(self, value):
+        if value:
+            try:
+                self._extra = FERNET.encrypt(bytes(value, 'utf-8')).decode()
+                self.is_extra_encrypted = True
+            except NameError:
+                self._extra = value
+                self.is_extra_encrypted = False
+
+    @declared_attr
+    def extra(cls):
+        return synonym('_extra',
+                       descriptor=property(cls.get_extra, cls.set_extra))
 
     def get_hook(self):
         from airflow import hooks
