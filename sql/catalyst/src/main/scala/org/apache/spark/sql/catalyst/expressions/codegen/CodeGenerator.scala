@@ -56,6 +56,20 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+    * Add an object to `references`, create a class member to access it.
+    *
+    * Returns the name of class member.
+    */
+  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
+    val term = freshName(name)
+    val idx = references.length
+    references += obj
+    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
+    term
+  }
+
+  /**
     * Holding a list of generated columns as input of current operator, will be used by
     * BoundReference to generate code.
     */
@@ -195,6 +209,39 @@ class CodegenContext {
       case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       case _ => s"$row.update($ordinal, $value)"
+    }
+  }
+
+  /**
+    * Update a column in MutableRow from ExprCode.
+    */
+  def updateColumn(
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (dataType.isInstanceOf[DecimalType]) {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             ${setColumn(row, dataType, ordinal, "null")};
+           }
+         """
+      } else {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             $row.setNullAt($ordinal);
+           }
+         """
+      }
+    } else {
+      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
     }
   }
 
