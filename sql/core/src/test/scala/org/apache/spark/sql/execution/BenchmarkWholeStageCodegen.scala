@@ -149,7 +149,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
   test("benchmark") {
     // testWholeStage(1024 * 1024 * 200)
-    testAggregateWithKey(20 << 20)
+    // testAggregateWithKey(20 << 20)
     // testBytesToBytesMap(1024 * 1024 * 50)
   }
 }
