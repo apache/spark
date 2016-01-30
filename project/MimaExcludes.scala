@@ -220,6 +220,10 @@ object MimaExcludes {
         // SPARK-11622 Make LibSVMRelation extends HadoopFsRelation and Add LibSVMOutputWriter
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.source.libsvm.DefaultSource"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.source.libsvm.DefaultSource.createRelation")
+      ) ++ Seq(
+        // SPARK-12977
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.Time.millis$1"),
+        ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.scheduler.StreamingListenerBus")
       )
     case v if v.startsWith("1.6") =>
       Seq(

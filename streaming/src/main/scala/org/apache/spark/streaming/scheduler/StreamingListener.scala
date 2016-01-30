@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.collection.mutable.Queue
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.Distribution
 
 /**
@@ -27,7 +28,18 @@ import org.apache.spark.util.Distribution
  * Base trait for events related to StreamingListener
  */
 @DeveloperApi
-sealed trait StreamingListenerEvent
+sealed trait StreamingListenerEvent extends SparkListenerEvent {
+  // Do not log streaming events in event log as history server does not support streaming
+  // events (SPARK-12140). TODO Once SPARK-12140 is resolved we should set it to true.
+  protected[spark] override def logEvent: Boolean = true
+}
+
+@DeveloperApi
+case class StreamingListenerApplicationStart(batchDuration: Long, startTime: Long)
+  extends StreamingListenerEvent
+
+@DeveloperApi
+case class StreamingListenerApplicationEnd(endTime: Long) extends StreamingListenerEvent
 
 @DeveloperApi
 case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
@@ -45,6 +57,10 @@ case class StreamingListenerOutputOperationStarted(outputOperationInfo: OutputOp
 @DeveloperApi
 case class StreamingListenerOutputOperationCompleted(outputOperationInfo: OutputOperationInfo)
   extends StreamingListenerEvent
+
+@DeveloperApi
+case class StreamingListenerInputStreamRegistered(
+    streamId: Int, name: String, isReceiverBased: Boolean) extends StreamingListenerEvent
 
 @DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
@@ -65,6 +81,18 @@ case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
  */
 @DeveloperApi
 trait StreamingListener {
+
+  /** Called when a streaming application has been started */
+  def onStreamingApplicationStarted(
+      streamingListenerApplicationStart: StreamingListenerApplicationStart) { }
+
+  /** Called when a streaming application has been stopped */
+  def onStreamingApplicationEnd(
+      streamingListenerApplicationEnd: StreamingListenerApplicationEnd) { }
+
+  /** Called when an InputDStream has been registered */
+  def onInputStreamRegistered(
+      streamingListenerInputStreamRegistered: StreamingListenerInputStreamRegistered) { }
 
   /** Called when a receiver has been started */
   def onReceiverStarted(receiverStarted: StreamingListenerReceiverStarted) { }
@@ -97,6 +125,7 @@ trait StreamingListener {
 /**
  * :: DeveloperApi ::
  * A simple StreamingListener that logs summary statistics across Spark Streaming batches
+ *
  * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
  */
 @DeveloperApi

@@ -32,7 +32,7 @@ private[ui] case class SparkJobIdWithUIData(sparkJobId: SparkJobId, jobUIData: O
 
 private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private val streamingListener = parent.listener
-  private val sparkListener = parent.ssc.sc.jobProgressListener
+  private val sparkListener = parent.sparkUI.jobProgressListener
 
   private def columns: Seq[Node] = {
     <th>Output Op Id</th>

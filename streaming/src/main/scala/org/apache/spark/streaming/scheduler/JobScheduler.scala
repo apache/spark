@@ -25,9 +25,9 @@ import scala.util.Failure
 import org.apache.spark.Logging
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
-
+import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 private[scheduler] sealed trait JobSchedulerEvent
 private[scheduler] case class JobStarted(job: Job, startTime: Long) extends JobSchedulerEvent
@@ -49,7 +49,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     ThreadUtils.newDaemonFixedThreadPool(numConcurrentJobs, "streaming-job-executor")
   private val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
-  val listenerBus = new StreamingListenerBus(ssc.sparkContext.listenerBus)
+  val listenerBus = new LiveStreamingListenerBus(ssc.sparkContext.listenerBus)
 
   // These two are created only when scheduler starts.
   // eventLoop not being null means the scheduler has been started and not stopped
@@ -77,6 +77,12 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     } ssc.addStreamingListener(rateController)
 
     listenerBus.start()
+
+    ssc.graph.getInputStreams().foreach { inputStream =>
+      listenerBus.post(StreamingListenerInputStreamRegistered(
+        inputStream.id, inputStream.name, inputStream.isInstanceOf[ReceiverInputDStream[_]]))
+    }
+
     receiverTracker = new ReceiverTracker(ssc)
     inputInfoTracker = new InputInfoTracker(ssc)
     receiverTracker.start()

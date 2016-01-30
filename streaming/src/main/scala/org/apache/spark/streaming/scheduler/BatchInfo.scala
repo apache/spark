@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.streaming.Time
 
@@ -34,10 +36,12 @@ import org.apache.spark.streaming.Time
 @DeveloperApi
 case class BatchInfo(
     batchTime: Time,
+    @JsonDeserialize(keyAs = classOf[java.lang.Integer])
     streamIdToInputInfo: Map[Int, StreamInputInfo],
     submissionTime: Long,
     processingStartTime: Option[Long],
     processingEndTime: Option[Long],
+    @JsonDeserialize(keyAs = classOf[java.lang.Integer])
     outputOperationInfos: Map[Int, OutputOperationInfo]
   ) {
 
