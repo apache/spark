@@ -15,13 +15,13 @@ from airflow import configuration as conf
 
 class DummyStatsLogger(object):
     @classmethod
-    def incr(cls):
+    def incr(cls, stat, count=1, rate=1):
         pass
     @classmethod
-    def decr(cls):
+    def decr(cls, stat, count=1, rate=1):
         pass
     @classmethod
-    def gauge(cls):
+    def gauge(cls, stat, value, rate=1, delta=False):
         pass
 
 Stats = DummyStatsLogger
