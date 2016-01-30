@@ -32,10 +32,8 @@ abstract class Catalog {
   // Databases
   // --------------------------------------------------------------------------
 
-  @throws[AnalysisException]("if database already exists and ifNotExists is false")
   def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
 
-  @throws[AnalysisException]("if database does not exist and ignoreIfNotExists is false")
   def dropDatabase(
     db: String,
     ignoreIfNotExists: Boolean,
