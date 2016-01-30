@@ -410,7 +410,7 @@ class CoreTest(unittest.TestCase):
             configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
         )
 
-        SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+        SQL_ALCHEMY_CONN = configuration.get(
             'core', 'SQL_ALCHEMY_CONN'
         )
 
@@ -425,14 +425,14 @@ class CoreTest(unittest.TestCase):
         )
         configuration.remove_option("core", "SQL_ALCHEMY_CONN")
 
-        FALLBACK_SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+        FALLBACK_SQL_ALCHEMY_CONN = configuration.get(
             "core",
             "SQL_ALCHEMY_CONN"
         )
 
         self.assertEqual(
             FALLBACK_SQL_ALCHEMY_CONN,
-            "sqlite:///random_string/unittests.db"
+            b"sqlite:///random_string/unittests.db"
         )
 
         # restore the conf back to the original state
@@ -446,7 +446,7 @@ class CoreTest(unittest.TestCase):
         )
         )
 
-        NEW_SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+        NEW_SQL_ALCHEMY_CONN = configuration.get(
             "core",
             "SQL_ALCHEMY_CONN"
         )
@@ -472,7 +472,7 @@ class CoreTest(unittest.TestCase):
         self.assertTrue(configuration.has_option(
             "core", "SQL_ALCHEMY_CONN_CMD"))
 
-        FALLBACK_SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+        FALLBACK_SQL_ALCHEMY_CONN = configuration.get(
             "core",
             "SQL_ALCHEMY_CONN"
         )
@@ -492,19 +492,19 @@ class CoreTest(unittest.TestCase):
         self.assertFalse(configuration.has_option(
             "core", "SQL_ALCHEMY_CONN_CMD"))
 
-        SQL_ALCHEMY_CONN = configuration.get_with_fallback(
+        SQL_ALCHEMY_CONN = configuration.get(
             "core",
             "SQL_ALCHEMY_CONN"
         )
         configuration.remove_option("core", "SQL_ALCHEMY_CONN")
 
         with self.assertRaises(AirflowConfigException) as cm:
-            configuration.get_with_fallback("core", "SQL_ALCHEMY_CONN")
+            configuration.get("core", "SQL_ALCHEMY_CONN")
 
         exception = str(cm.exception)
         self.assertEqual(
             exception,
-            'section/key [core/sql_alchemy_conn_cmd] not found in config'
+            "section/key [core/sql_alchemy_conn] not found in config"
         )
 
         # restore the conf back to the original state

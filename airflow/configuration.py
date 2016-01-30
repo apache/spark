@@ -11,6 +11,7 @@ from configparser import ConfigParser
 import errno
 import logging
 import os
+import subprocess
 
 try:
     from cryptography.fernet import Fernet
@@ -41,22 +42,22 @@ def expand_env_var(env_var):
         else:
             env_var = interpolated
 
-def run_bash_command(command):
+def run_command(command):
     """
-    Runs bash command and returns the derived value.
-    """    
-    if not command:
-        return command
+    Runs command and returns stdout
+    """
+    process = subprocess.Popen(
+        command.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, stderr = process.communicate()
 
-    import subprocess
-    process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
-    values = process.stdout.readline()
-    process.terminate()
+    if process.returncode != 0:
+        raise AirflowException(
+            "Cannot execute {}. Error code is: {}. Output: {}, Stderr: {}"
+            .format(cmd, process.returncode, output, stderr)
+        )
 
-    if values:
-        return values
+    return output
 
-    return None
 
 class AirflowConfigException(Exception):
     pass
@@ -347,38 +348,16 @@ class ConfigParserWithDefaults(ConfigParser):
 
     def _validate(self):
         if self.get("core", "executor") != 'SequentialExecutor' \
-                and "sqlite" in self.get_with_fallback('core', 'sql_alchemy_conn'):
+                and "sqlite" in self.get('core', 'sql_alchemy_conn'):
             raise AirflowConfigException("error: cannot use sqlite with the {}".
                                                        format(self.get('core', 'executor')))
 
         self.is_validated = True
 
     def get(self, section, key, **kwargs):
-        return self._get(section, key, True)
-
-    def get_with_fallback(self, section, key, **kwargs):
-        ret_val = self._get(section, key, False)
-
-        if ret_val:
-            return ret_val
-
-        fallback_key = key + '_CMD'        
-        command = self._get(section, fallback_key, True)
-        ret_val = run_bash_command(command)
-
-        if ret_val is None:
-            logging.warn("bash command {command} for section/key [{section}/{key}] returns no result"
-                .format(**locals()))
-
-            raise AirflowConfigException(
-                "bash command {command} for section/key [{section}/{key}] returns no result"
-                .format(**locals()))
-
-        return ret_val
-
-    def _get(self, section, key, throw_on_non_exist, **kwargs):
         section = str(section).lower()
         key = str(key).lower()
+        fallback_key = key + '_cmd'
         d = self.defaults
 
         # environment variables get precedence
@@ -391,11 +370,15 @@ class ConfigParserWithDefaults(ConfigParser):
         elif self.has_option(section, key):
             return expand_env_var(ConfigParser.get(self, section, key, **kwargs))
 
+        elif self.has_option(section, fallback_key):
+            command = self.get(section, fallback_key)
+            return run_command(command)
+
         # ...then the defaults
         elif section in d and key in d[section]:
             return expand_env_var(d[section][key])
 
-        elif throw_on_non_exist:
+        else:
             logging.warn("section/key [{section}/{key}] not found "
                          "in config".format(**locals()))
 
@@ -496,9 +479,6 @@ conf.read(AIRFLOW_CONFIG)
 
 def get(section, key, **kwargs):
     return conf.get(section, key, **kwargs)
-
-def get_with_fallback(section, key, **kwargs):
-    return conf.get_with_fallback(section, key, **kwargs)
 
 def getboolean(section, key):
     return conf.getboolean(section, key)

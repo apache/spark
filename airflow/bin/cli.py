@@ -411,7 +411,7 @@ def version(args):
 
 
 def flower(args):
-    broka = configuration.get_with_fallback('celery', 'BROKER_URL')
+    broka = configuration.get('celery', 'BROKER_URL')
     args.port = args.port or configuration.get('celery', 'FLOWER_PORT')
     port = '--port=' + args.port
     api = ''

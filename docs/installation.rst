@@ -91,16 +91,13 @@ or by creating a corresponding environment variable:
 
     AIRFLOW__CORE__SQL_ALCHEMY_CONN=my_conn_string
 
-You can also derive the connection string at run time by appending _cmd to the key like this:
+You can also derive the connection string at run time by appending ``_cmd`` to the key like this:
 
 .. code-block:: bash
 
     [core]
     sql_alchemy_conn_cmd = bash_command_to_run
 
-Three such keys namely sql_alchemy_conn, broker_url and celery_result_backend can derive values at run time
-using the fallback as described above. You'll only need to use one or the other. 
-If you have the key in both forms, only the original key will be used.
 
 Setting up a Backend
 ''''''''''''''''''''
