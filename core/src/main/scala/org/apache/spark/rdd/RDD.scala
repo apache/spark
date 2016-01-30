@@ -1540,7 +1540,7 @@ abstract class RDD[T: ClassTag](
   // less data but is not safe for all workloads. E.g. in streaming we may checkpoint both
   // an RDD and its parent in every batch, in which case the parent may never be checkpointed
   // and its lineage never truncated, leading to OOMs in the long run (SPARK-6847).
-  private val checkpointAllMarked =
+  private val checkpointAllMarkedAncestors =
     Option(sc.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS))
       .map(_.toBoolean).getOrElse(false)
 
@@ -1587,7 +1587,7 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
-          if (checkpointAllMarked) {
+          if (checkpointAllMarkedAncestors) {
             // TODO We can collect all the RDDs that needs to be checkpointed, and then checkpoint
             // them in parallel.
             // Checkpoint parents first because our lineage will be truncated after we

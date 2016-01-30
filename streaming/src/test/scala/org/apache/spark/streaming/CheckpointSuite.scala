@@ -880,10 +880,10 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
             map(_.toBoolean).getOrElse(false)
 
         val stateRDDs = findAllMarkedRDDs(rdd)
-          rdd.count()
-          // Check the two state RDDs are both checkpointed
-          rddsCheckpointed = stateRDDs.size == 2 && stateRDDs.forall(_.isCheckpointed)
-        }
+        rdd.count()
+        // Check the two state RDDs are both checkpointed
+        rddsCheckpointed = stateRDDs.size == 2 && stateRDDs.forall(_.isCheckpointed)
+      }
     ssc.start()
     batchCounter.waitUntilBatchesCompleted(1, 10000)
     assert(shouldCheckpointAllMarkedRDDs === true)
