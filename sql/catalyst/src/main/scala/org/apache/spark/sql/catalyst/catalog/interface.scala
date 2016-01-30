@@ -17,29 +17,55 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.AnalysisException
 
 
 /**
  * Interface for the system catalog (of columns, partitions, tables, and databases).
  *
- * This is only used for non-temporary items.
+ * This is only used for non-temporary items, and implementations must be thread-safe as they
+ * can be accessed in multiple threads.
  */
 abstract class Catalog {
 
   // --------------------------------------------------------------------------
-  // Functions
+  // Databases
   // --------------------------------------------------------------------------
 
-  def createFunction(db: String, funcDefinition: Function, ifNotExists: Boolean): Unit
+  @throws[AnalysisException]("if database already exists and ifNotExists is false")
+  def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
 
-  def dropFunction(db: String, funcName: String): Unit
+  @throws[AnalysisException]("if database does not exist and ignoreIfNotExists is false")
+  def dropDatabase(
+    db: String,
+    ignoreIfNotExists: Boolean,
+    cascade: Boolean): Unit
 
-  def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit
+  def alterDatabase(db: String, dbDefinition: Database): Unit
 
-  def getFunction(db: String, name: String): Function
+  def getDatabase(db: String): Database
 
-  def listFunctions(db: String, pattern: String): Seq[String]
+  def listDatabases(): Seq[String]
+
+  def listDatabases(pattern: String): Seq[String]
+
+  // --------------------------------------------------------------------------
+  // Tables
+  // --------------------------------------------------------------------------
+
+  def createTable(db: String, tableDefinition: Table, ifNotExists: Boolean): Unit
+
+  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit
+
+  def renameTable(db: String, oldName: String, newName: String): Unit
+
+  def alterTable(db: String, table: String, tableDefinition: Table): Unit
+
+  def getTable(db: String, table: String): Table
+
+  def listTables(db: String): Seq[String]
+
+  def listTables(db: String, pattern: String): Seq[String]
 
   // --------------------------------------------------------------------------
   // Partitions
@@ -52,59 +78,38 @@ abstract class Catalog {
   def alterPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
 
   // --------------------------------------------------------------------------
-  // Tables
+  // Functions
   // --------------------------------------------------------------------------
 
-  def createTable(db: String, tableDefinition: Table, ifNotExists: Boolean): Unit
+  def createFunction(db: String, funcDefinition: Function, ifNotExists: Boolean): Unit
 
-  def dropTable(
-    db: String, table: String, deleteData: Boolean, ignoreIfNotExists: Boolean): Unit
+  def dropFunction(db: String, funcName: String): Unit
 
-  def alterTable(db: String, table: String, tableDefinition: Table)
+  def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit
 
-  def getTable(db: String, table: String): Table
+  def getFunction(db: String, funcName: String): Function
 
-  def listTables(db: String): Seq[String]
+  def listFunctions(db: String, pattern: String): Seq[String]
 
-  def listTables(db: String, pattern: String): Seq[String]
-
-  // --------------------------------------------------------------------------
-  // Databases
-  // --------------------------------------------------------------------------
-
-  def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
-
-  def dropDatabase(
-      db: String,
-      deleteData: Boolean,
-      ignoreIfNotExists: Boolean,
-      deleteTables: Boolean): Unit
-
-  def alterDatabase(db: String, dbDefinition: Database)
-
-  def getDatabase(db: String): Database
-
-  def listDatabases(): Seq[String]
-
-  def listDatabases(pattern: String): Seq[String]
 }
 
 
 /**
  * A function defined in the catalog.
+ *
  * @param name name of the function
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  */
-class Function(
-  val name: String,
-  val className: String
+case class Function(
+  name: String,
+  className: String
 )
 
 
 /**
  * Storage format, used to describe how a partition or a table is stored.
  */
-class StorageFormat(
+case class StorageFormat(
   locationUri: String,
   inputFormat: String,
   outputFormat: String,
@@ -116,40 +121,41 @@ class StorageFormat(
 /**
  * A column in a table.
  */
-class Column(
-  val name: String,
-  val dataType: String,
-  val nullable: Boolean,
-  val comment: String
+case class Column(
+  name: String,
+  dataType: String,
+  nullable: Boolean,
+  comment: String
 )
 
 
 /**
  * A partition (Hive style) defined in the catalog.
+ *
  * @param values values for the partition columns
  * @param storage storage format of the partition
  */
-class TablePartition(
-  val values: Seq[String],
-  val storage: StorageFormat
+case class TablePartition(
+  values: Seq[String],
+  storage: StorageFormat
 )
 
 
 /**
  * A table defined in the catalog.
  */
-class Table(
-  val name: String,
-  val schema: Seq[Column],
-  val partitionColumns: Seq[Column],
-  val storage: StorageFormat,
-  val numBuckets: Int,
-  val properties: Map[String, String],
-  val tableType: String,
-  val createTime: Long,
-  val lastAccessTime: Long,
-  val viewOriginalText: Option[String],
-  val viewText: Option[String]) {
+case class Table(
+  name: String,
+  schema: Seq[Column],
+  partitionColumns: Seq[Column],
+  storage: StorageFormat,
+  numBuckets: Int,
+  properties: Map[String, String],
+  tableType: String,
+  createTime: Long,
+  lastAccessTime: Long,
+  viewOriginalText: Option[String],
+  viewText: Option[String]) {
 
   require(tableType == "EXTERNAL_TABLE" || tableType == "INDEX_TABLE" ||
     tableType == "MANAGED_TABLE" || tableType == "VIRTUAL_VIEW")
@@ -159,9 +165,9 @@ class Table(
 /**
  * A database defined in the catalog.
  */
-class Database(
-  val name: String,
-  val description: String,
-  val locationUri: String,
-  val properties: Map[String, String]
+case class Database(
+  name: String,
+  description: String,
+  locationUri: String,
+  properties: Map[String, String]
 )
