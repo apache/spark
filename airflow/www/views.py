@@ -2045,9 +2045,10 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     verbose_name = "Connection"
     verbose_name_plural = "Connections"
     column_default_sort = ('conn_id', False)
-    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted',)
+    column_list = ('conn_id', 'conn_type', 'host', 'port', 'is_encrypted', 'is_extra_encrypted',)
     form_overrides = dict(_password=PasswordField)
     form_widget_args = {
+        'is_extra_encrypted': {'disabled': True},
         'is_encrypted': {'disabled': True},
     }
     # Used to customized the form, the forms elements get rendered
@@ -2099,7 +2100,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
     def is_secure(self):
         """
         Used to display a message in the Connection list view making it clear
-        that the passwords can't be encrypted.
+        that the passwords and `extra` field can't be encrypted.
         """
         is_secure = False
         try:
