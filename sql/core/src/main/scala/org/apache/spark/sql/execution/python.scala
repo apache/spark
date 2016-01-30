@@ -143,7 +143,7 @@ object EvaluatePython {
         values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
         i += 1
       }
-      new GenericInternalRowWithSchema(values, struct)
+      new GenericRowWithSchema(values, struct)
 
     case (a: ArrayData, array: ArrayType) =>
       val values = new java.util.ArrayList[Any](a.numElements())
@@ -199,10 +199,7 @@ object EvaluatePython {
 
     case (c: Long, TimestampType) => c
 
-    case (c: String, StringType) => UTF8String.fromString(c)
-    case (c, StringType) =>
-      // If we get here, c is not a string. Call toString on it.
-      UTF8String.fromString(c.toString)
+    case (c, StringType) => UTF8String.fromString(c.toString)
 
     case (c: String, BinaryType) => c.getBytes("utf-8")
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
@@ -263,11 +260,11 @@ object EvaluatePython {
   }
 
   /**
-   * Pickler for InternalRow
+   * Pickler for external row.
    */
   private class RowPickler extends IObjectPickler {
 
-    private val cls = classOf[GenericInternalRowWithSchema]
+    private val cls = classOf[GenericRowWithSchema]
 
     // register this to Pickler and Unpickler
     def register(): Unit = {
@@ -282,7 +279,7 @@ object EvaluatePython {
       } else {
         // it will be memorized by Pickler to save some bytes
         pickler.save(this)
-        val row = obj.asInstanceOf[GenericInternalRowWithSchema]
+        val row = obj.asInstanceOf[GenericRowWithSchema]
         // schema should always be same object for memoization
         pickler.save(row.schema)
         out.write(Opcodes.TUPLE1)
