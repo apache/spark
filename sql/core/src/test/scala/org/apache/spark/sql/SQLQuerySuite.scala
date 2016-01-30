@@ -84,7 +84,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "Extended Usage")
 
     checkExistence(sql("describe functioN abcadf"), true,
-      "Function: abcadf is not found.")
+      "Function: abcadf not found.")
   }
 
   test("SPARK-6743: no columns from cache") {

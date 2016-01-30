@@ -124,15 +124,15 @@ private[hive] object IsolatedClientLoader extends Logging {
 }
 
 /**
- * Creates a Hive `ClientInterface` using a classloader that works according to the following rules:
+ * Creates a [[HiveClient]] using a classloader that works according to the following rules:
  *  - Shared classes: Java, Scala, logging, and Spark classes are delegated to `baseClassLoader`
- *    allowing the results of calls to the `ClientInterface` to be visible externally.
+ *    allowing the results of calls to the [[HiveClient]] to be visible externally.
  *  - Hive classes: new instances are loaded from `execJars`.  These classes are not
  *    accessible externally due to their custom loading.
- *  - ClientWrapper: a new copy is created for each instance of `IsolatedClassLoader`.
+ *  - [[HiveClientImpl]]: a new copy is created for each instance of `IsolatedClassLoader`.
  *    This new instance is able to see a specific version of hive without using reflection. Since
  *    this is a unique instance, it is not visible externally other than as a generic
- *    `ClientInterface`, unless `isolationOn` is set to `false`.
+ *    [[HiveClient]], unless `isolationOn` is set to `false`.
  *
  * @param version The version of hive on the classpath.  used to pick specific function signatures
  *                that are not compatible across versions.
@@ -179,7 +179,7 @@ private[hive] class IsolatedClientLoader(
 
   /** True if `name` refers to a spark class that must see specific version of Hive. */
   protected def isBarrierClass(name: String): Boolean =
-    name.startsWith(classOf[ClientWrapper].getName) ||
+    name.startsWith(classOf[HiveClientImpl].getName) ||
     name.startsWith(classOf[Shim].getName) ||
     barrierPrefixes.exists(name.startsWith)
 
@@ -233,9 +233,9 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(): ClientInterface = {
+  private[hive] def createClient(): HiveClient = {
     if (!isolationOn) {
-      return new ClientWrapper(version, config, baseClassLoader, this)
+      return new HiveClientImpl(version, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -244,10 +244,10 @@ private[hive] class IsolatedClientLoader(
 
     try {
       classLoader
-        .loadClass(classOf[ClientWrapper].getName)
+        .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
         .newInstance(version, config, classLoader, this)
-        .asInstanceOf[ClientInterface]
+        .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
         if (e.getCause().isInstanceOf[NoClassDefFoundError]) {

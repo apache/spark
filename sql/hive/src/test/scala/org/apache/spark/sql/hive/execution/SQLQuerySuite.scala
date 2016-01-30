@@ -199,7 +199,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       "Extended Usage")
 
     checkExistence(sql("describe functioN abcadf"), true,
-      "Function: abcadf is not found.")
+      "Function: abcadf not found.")
 
     checkExistence(sql("describe functioN  `~`"), true,
       "Function: ~",
