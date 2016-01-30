@@ -522,10 +522,13 @@ class Analyzer(
    */
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      // Here, this rule only resolves the missing sort references if the child is not Aggregate
-      //   Another rule ResolveAggregateFunctions will resolve that case.
-      case s @ Sort(_, _, child)
-          if !s.resolved && child.resolved && !child.isInstanceOf[Aggregate] =>
+      case s @ Sort(_, _, a: Aggregate) if a.resolved =>
+        // Here, it finds aggregate expressions in ORDER BY clauses but these expressions are
+        // not in the aggregate operator. These expressions are pushed down to the underlying
+        // aggregate operator and then projected away after the original operator.
+        ResolveAggregateFunctions.resolveAggregateFunctionsInSort(sort = s, aggregate = a)
+
+      case s @ Sort(_, _, child) if !s.resolved && child.resolved =>
         val (newOrdering, missingResolvableAttrs) = collectResolvableMissingAttrs(s.order, child)
 
         if (missingResolvableAttrs.isEmpty) {
@@ -601,7 +604,7 @@ class Analyzer(
      * Try to resolve the sort ordering and returns it with a list of attributes that are missing
      * from the plan but are present in the child.
      */
-    def resolveAndFindMissing(
+    private def resolveAndFindMissing(
         ordering: Seq[SortOrder],
         plan: LogicalPlan,
         child: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
@@ -704,66 +707,65 @@ class Analyzer(
         } else {
           filter
         }
+    }
 
-      case sort @ Sort(sortOrder, global, aggregate: Aggregate)
-        if aggregate.resolved =>
+    // Note, aggregate expressions in ORDER BY clauses are resolved in ResolveSortReferences.
+    def resolveAggregateFunctionsInSort(sort: Sort, aggregate: Aggregate): LogicalPlan = {
+      try {
+        val unresolvedSortOrders = sort.order.filter(s => !s.resolved || containsAggregate(s))
+        val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
+        val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
+        val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
+        val resolvedAliasedOrdering: Seq[Alias] =
+          resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
 
-        // Try resolving the ordering as though it is in the aggregate clause.
-        try {
-          val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
-          val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
-          val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
-          val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
-          val resolvedAliasedOrdering: Seq[Alias] =
-            resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
+        // If we pass the analysis check, then the ordering expressions should only reference to
+        // aggregate expressions or grouping expressions, and it's safe to push them down to
+        // Aggregate.
+        checkAnalysis(resolvedAggregate)
 
-          // If we pass the analysis check, then the ordering expressions should only reference to
-          // aggregate expressions or grouping expressions, and it's safe to push them down to
-          // Aggregate.
-          checkAnalysis(resolvedAggregate)
+        val originalAggExprs = aggregate.aggregateExpressions.map(
+          CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
 
-          val originalAggExprs = aggregate.aggregateExpressions.map(
-            CleanupAliases.trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
+        // If the ordering expression is same with original aggregate expression, we don't need
+        // to push down this ordering expression and can reference the original aggregate
+        // expression instead.
+        val needsPushDown = ArrayBuffer.empty[NamedExpression]
+        val evaluatedOrderings = resolvedAliasedOrdering.zip(sort.order).map {
+          case (evaluated, order) =>
+            val index = originalAggExprs.indexWhere {
+              case Alias(child, _) => child semanticEquals evaluated.child
+              case other => other semanticEquals evaluated.child
+            }
 
-          // If the ordering expression is same with original aggregate expression, we don't need
-          // to push down this ordering expression and can reference the original aggregate
-          // expression instead.
-          val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
-            case (evaluated, order) =>
-              val index = originalAggExprs.indexWhere {
-                case Alias(child, _) => child semanticEquals evaluated.child
-                case other => other semanticEquals evaluated.child
-              }
-
-              if (index == -1) {
-                needsPushDown += evaluated
-                order.copy(child = evaluated.toAttribute)
-              } else {
-                order.copy(child = originalAggExprs(index).toAttribute)
-              }
-          }
-
-          val sortOrdersMap = unresolvedSortOrders
-            .map(new TreeNodeRef(_))
-            .zip(evaluatedOrderings)
-            .toMap
-          val finalSortOrders = sortOrder.map(s => sortOrdersMap.getOrElse(new TreeNodeRef(s), s))
-
-          // Since we don't rely on sort.resolved as the stop condition for this rule,
-          // we need to check this and prevent applying this rule multiple times
-          if (sortOrder == finalSortOrders) {
-            sort
-          } else {
-            Project(aggregate.output,
-              Sort(finalSortOrders, global,
-                aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
-          }
-        } catch {
-          // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
-          // just return the original plan.
-          case ae: AnalysisException => sort
+            if (index == -1) {
+              needsPushDown += evaluated
+              order.copy(child = evaluated.toAttribute)
+            } else {
+              order.copy(child = originalAggExprs(index).toAttribute)
+            }
         }
+
+        val sortOrdersMap = unresolvedSortOrders
+          .map(new TreeNodeRef(_))
+          .zip(evaluatedOrderings)
+          .toMap
+        val finalSortOrders = sort.order.map(s => sortOrdersMap.getOrElse(new TreeNodeRef(s), s))
+
+        // Since we don't rely on sort.resolved as the stop condition for this rule,
+        // we need to check this and prevent applying this rule multiple times
+        if (sort.order == finalSortOrders) {
+          sort
+        } else {
+          Project(aggregate.output,
+            Sort(finalSortOrders, sort.global,
+              aggregate.copy(aggregateExpressions = originalAggExprs ++ needsPushDown)))
+        }
+      } catch {
+        // Attempting to resolve in the aggregate can result in ambiguity.  When this happens,
+        // just return the original plan.
+        case ae: AnalysisException => sort
+      }
     }
 
     protected def containsAggregate(condition: Expression): Boolean = {
