@@ -220,6 +220,12 @@ object MimaExcludes {
         // SPARK-11622 Make LibSVMRelation extends HadoopFsRelation and Add LibSVMOutputWriter
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.source.libsvm.DefaultSource"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.source.libsvm.DefaultSource.createRelation")
+      ) ++ Seq(
+        // SPARK-6363 Make Scala 2.11 the default Scala version
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.cleanup"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.metadataCleaner"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnDriverEndpoint"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
       )
     case v if v.startsWith("1.6") =>
       Seq(

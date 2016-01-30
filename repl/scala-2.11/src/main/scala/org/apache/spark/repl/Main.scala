@@ -33,7 +33,8 @@ object Main extends Logging {
 
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
-  var interp = new SparkILoop // this is a public var because tests reset it.
+  // this is a public var because tests reset it.
+  var interp: SparkILoop = _
 
   private var hasErrors = false
 
@@ -43,6 +44,12 @@ object Main extends Logging {
   }
 
   def main(args: Array[String]) {
+    doMain(args, new SparkILoop)
+  }
+
+  // Visible for testing
+  private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
+    interp = _interp
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
