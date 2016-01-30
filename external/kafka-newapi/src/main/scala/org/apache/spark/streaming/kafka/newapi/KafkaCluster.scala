@@ -125,17 +125,8 @@ class KafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String
   def getOffsets(topicPartitions: Set[TopicPartition], resetStrategy: OffsetResetStrategy):
     Map[TopicPartition, LeaderOffset] = {
     val topics = topicPartitions.map { _.topic }
+    val tplMap = getPartitionsLeader(topics)
     withConsumer{ consumer =>
-      val tplMap = topics.flatMap { topic =>
-        Option(consumer.partitionsFor(topic)) match {
-          case None =>
-            throw new SparkException("Topic doesnt exist " + topic)
-          case Some(piList) => piList.asScala.toList
-        }
-      }.map { pi =>
-        new TopicPartition(pi.topic, pi.partition) -> pi.leader.host
-      }.toMap
-
       consumer.assign(topicPartitions.toList.asJava)
       resetStrategy match {
         case OffsetResetStrategy.EARLIEST => consumer.seekToBeginning(topicPartitions.toList: _*)
