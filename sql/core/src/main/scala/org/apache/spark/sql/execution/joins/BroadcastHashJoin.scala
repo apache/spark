@@ -147,18 +147,21 @@ case class BroadcastHashJoin(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    // generate the key as UnsafeRow
     ctx.currentVars = input
     val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
     val keyVal = GenerateUnsafeProjection.createCode(ctx, keyExpr)
     val keyTerm = keyVal.value
     val anyNull = if (keyExpr.exists(_.nullable)) s"$keyTerm.anyNull()" else "false"
 
+    // find the matches from HashedRelation
     val matches = ctx.freshName("matches")
     val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
     val i = ctx.freshName("i")
     val size = ctx.freshName("size")
     val row = ctx.freshName("row")
 
+    // create variables for output
     ctx.currentVars = null
     ctx.INPUT_ROW = row
     val buildColumns = buildPlan.output.zipWithIndex.map { case (a, i) =>
@@ -170,9 +173,9 @@ case class BroadcastHashJoin(
     }
 
     val ouputCode = if (condition.isDefined) {
+      // filter the output via condition
       ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output)
-        .gen(ctx)
+      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
       s"""
          | ${ev.code}
          | if (!${ev.isNull} && ${ev.value}) {
