@@ -21,6 +21,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
+@ExpressionDescription(
+  usage = "_FUNC_(column) - Aggregate function: returns the number of items in a group.")
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
   override def nullable: Boolean = false

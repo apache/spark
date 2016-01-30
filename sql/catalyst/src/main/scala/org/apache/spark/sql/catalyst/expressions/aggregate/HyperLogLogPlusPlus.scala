@@ -48,6 +48,8 @@ import org.apache.spark.sql.types._
  * @param relativeSD the maximum estimation error allowed.
  */
 // scalastyle:on
+@ExpressionDescription(
+  usage = "_FUNC_(column) - Aggregate function: returns the approximate number of distinct items in a group.")
 case class HyperLogLogPlusPlus(
     child: Expression,
     relativeSD: Double = 0.05,

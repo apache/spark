@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 
+@ExpressionDescription(
+  usage = "_FUNC_(column) -Aggregate function: returns the unbiased variance of the values in a group.")
 case class VarianceSamp(child: Expression,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
@@ -50,6 +52,8 @@ case class VarianceSamp(child: Expression,
   }
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(column) - Aggregate function: returns the population variance of the values in a group.")
 case class VariancePop(
     child: Expression,
     mutableAggBufferOffset: Int = 0,

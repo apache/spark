@@ -29,6 +29,8 @@ import org.apache.spark.sql.types._
  * Definition of Pearson correlation can be found at
  * http://en.wikipedia.org/wiki/Pearson_product-moment_correlation_coefficient
  */
+@ExpressionDescription(
+  usage = "_FUNC_(column) - Aggregate function: returns the Pearson Correlation Coefficient for two columns..")
 case class Corr(
     left: Expression,
     right: Expression,
