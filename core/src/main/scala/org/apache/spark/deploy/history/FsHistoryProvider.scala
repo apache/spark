@@ -259,9 +259,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
         .flatMap { entry => Some(entry) }
         .sortWith { case (entry1, entry2) =>
-          val mod1 = entry1.getModificationTime()
-          val mod2 = entry2.getModificationTime()
-          mod1 >= mod2
+          entry1.getModificationTime() >= entry2.getModificationTime()
       }
 
       logInfos.grouped(20)
