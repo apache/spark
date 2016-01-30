@@ -2093,5 +2093,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
     )
 
+    checkAnswer(
+      sql("SELECT r as c1, min(s) as c2 FROM " +
+        "(SELECT a as r, sum(b) as s from testData2 GROUP BY a) t order by r"),
+      Row(1, 3) :: Row(2, 3) :: Row(3, 3) :: Nil
+    )
+
+    //val df = sql("select a  r, sum(b) s FROM testData2 GROUP BY r")
+    //val df = sql("SELECT * FROM ( select a r, sum(b) s FROM testData2 GROUP BY r) t")
   }
 }
