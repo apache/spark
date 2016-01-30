@@ -83,6 +83,11 @@ final class DataStreamWriter private[sql](df: DataFrame) {
     this
   }
 
+  def name(queryName: String): DataStreamWriter = {
+    this.name = queryName
+    this
+  }
+
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives.  The returned [[ContinuousQuery]] object can be used to interact with
@@ -108,7 +113,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
       extraOptions.toMap,
       normalizedParCols)
 
-    new StreamExecution(df.sqlContext, df.logicalPlan, sink)
+    df.sqlContext.continuousQueryManager.startQuery(name, df, sink)
   }
 
   private def normalizedParCols: Seq[String] = {
@@ -126,6 +131,8 @@ final class DataStreamWriter private[sql](df: DataFrame) {
   ///////////////////////////////////////////////////////////////////////////////////////
 
   private var source: String = df.sqlContext.conf.defaultDataSourceName
+
+  private var name: String = StreamExecution.nextName
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 

@@ -17,35 +17,16 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.execution.streaming.{Offset, Sink}
+
 /**
- * A handle to a query that is executing continuously in the background as new data arrives.
+ * Status and metrics of a streaming [[Sink]].
+ *
+ * @param description Description of the source corresponding to this status
+ * @param offset      Current offset up to which data has been written by the sink
  */
-trait ContinuousQuery {
-
-  /** Returns the name of the query */
-  def name: String
-
-  def sqlContext: SQLContext
-
-  /** Whether the query is currently active or not */
-  def isActive: Boolean
-
-  /** Returns the [[QueryException]] if the query was terminated by an exception. */
-  def exception: Option[QueryException]
-
-  /** Returns current status of all the sources. */
-  def sourceStatuses: Array[SourceStatus]
-
-  /** Returns current status of the sink. */
-  def sinkStatus: SinkStatus
-
-  def awaitTermination(): Unit
-
-  def awaitTermination(timeoutMs: Long): Boolean
-
-  /**
-   * Stops the execution of this query if it is running.  This method blocks until the threads
-   * performing execution has stopped.
-   */
-  def stop(): Unit
-}
+@DeveloperApi
+class SinkStatus private[sql](
+  val description: String,
+  val offset: Option[Offset])

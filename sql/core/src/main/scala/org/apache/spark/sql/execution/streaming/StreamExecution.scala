@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.lang.Thread.UncaughtExceptionHandler
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{ContinuousQuery, DataFrame, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
@@ -35,15 +35,14 @@ import org.apache.spark.sql.execution.QueryExecution
  * and the results are committed transactionally to the given [[Sink]].
  */
 class StreamExecution(
-    sqlContext: SQLContext,
+    val sqlContext: SQLContext,
+    val name: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
-
-  @volatile
-  private var batchRun = false
+  private val awaitTerminationLock = new Object
 
   /** Minimum amount of time in between the start of each batch. */
   private val minBatchTime = 10
@@ -77,31 +76,57 @@ class StreamExecution(
   logInfo(s"Stream running at $streamProgress")
 
   /** When false, signals to the microBatchThread that it should stop running. */
-  @volatile private var shouldRun = true
+  @volatile
+  private var active = true
+
+  @volatile
+  private[sql] var lastExecution: QueryExecution = null
+
+  @volatile
+  private[sql] var streamDeathCause: QueryException = null
 
   /** The thread that runs the micro-batches of this stream. */
   private[sql] val microBatchThread = new Thread("stream execution thread") {
     override def run(): Unit = {
-      SQLContext.setActive(sqlContext)
-      while (shouldRun) {
-        attemptBatch()
-        Thread.sleep(minBatchTime) // TODO: Could be tighter
+      try {
+        SQLContext.setActive(sqlContext)
+        while (active) {
+          attemptBatch()
+          Thread.sleep(minBatchTime) // TODO: Could be tighter
+        }
+      } catch {
+        case _: InterruptedException if active == false => // interrupted by stop()
+        case t: Throwable =>
+          streamDeathCause = new QueryException(
+            s"Query terminated with exception", t, Some(streamProgress.toOffset))
+      } finally {
+        active = false
+        sqlContext.streams.notifyQueryTermination(StreamExecution.this)
+        awaitTerminationLock.synchronized {
+          awaitTerminationLock.notifyAll()
+        }
       }
     }
   }
   microBatchThread.setDaemon(true)
-  microBatchThread.setUncaughtExceptionHandler(
-    new UncaughtExceptionHandler {
-      override def uncaughtException(t: Thread, e: Throwable): Unit = {
-        streamDeathCause = e
-      }
-    })
   microBatchThread.start()
 
   @volatile
-  private[sql] var lastExecution: QueryExecution = null
-  @volatile
-  private[sql] var streamDeathCause: Throwable = null
+  private var batchRun = false
+
+  /** Whether the query is currently active or not */
+  override def isActive: Boolean = active
+
+  /** Returns current status of all the sources. */
+  override def sourceStatuses: Array[SourceStatus] = {
+    sources.map(s => new SourceStatus(s.toString, streamProgress.get(s))).toArray
+  }
+
+  /** Returns current status of the sink. */
+  override def sinkStatus: SinkStatus = new SinkStatus(sink.toString, sink.currentOffset)
+
+  /** Returns the [[QueryException]] if the query was terminated by an exception. */
+  override def exception: Option[QueryException] = Option(streamDeathCause)
 
   /**
    * Checks to see if any new data is present in any of the sources.  When new data is available,
@@ -160,7 +185,7 @@ class StreamExecution(
         sink.addBatch(nextBatch)
       }
 
-      batchRun = true
+      active = true
       awaitBatchLock.synchronized {
         // Wake up any threads that are waiting for the stream to progress.
         awaitBatchLock.notifyAll()
@@ -177,9 +202,12 @@ class StreamExecution(
    * Signals to the thread executing micro-batches that it should stop running after the next
    * batch. This method blocks until the thread stops running.
    */
-  def stop(): Unit = {
-    shouldRun = false
-    if (microBatchThread.isAlive) { microBatchThread.join() }
+  override def stop(): Unit = {
+    active = false
+    if (microBatchThread.isAlive) {
+      microBatchThread.interrupt()
+      microBatchThread.join()
+    }
   }
 
   /**
@@ -198,6 +226,35 @@ class StreamExecution(
     logDebug(s"Unblocked at $newOffset for $source")
   }
 
+  override def awaitTermination(): Unit = {
+    awaitTerminationLock.synchronized {
+      while (active) {
+        awaitTerminationLock.wait(10)
+      }
+      if (streamDeathCause != null) {
+        throw streamDeathCause
+      }
+    }
+  }
+
+  override def awaitTermination(timeoutMs: Long): Boolean = {
+    require(timeoutMs > 0, "Timeout has to be positive")
+
+    val endTime = System.currentTimeMillis + timeoutMs
+    def timeLeft = math.max(endTime - System.currentTimeMillis, 0)
+
+    awaitTerminationLock.synchronized {
+      while (active && timeLeft > 0) {
+        awaitTerminationLock.wait(10)
+      }
+      if (streamDeathCause != null) {
+        throw streamDeathCause
+      } else {
+        !isActive
+      }
+    }
+  }
+
   override def toString: String =
     s"""
        |=== Streaming Query ===
@@ -209,3 +266,8 @@ class StreamExecution(
      """.stripMargin
 }
 
+private[sql] object StreamExecution {
+  private val nextId = new AtomicInteger()
+
+  def nextName = s"query-${nextId.getAndIncrement}"
+}

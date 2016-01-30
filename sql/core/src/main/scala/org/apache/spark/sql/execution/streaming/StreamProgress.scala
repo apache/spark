@@ -55,6 +55,10 @@ class StreamProgress {
     copied
   }
 
+  private[sql] def toOffset: Offset = {
+    CompositeOffset.fill(currentOffsets.values.toSeq:_*)
+  }
+
   override def toString: String =
     currentOffsets.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
