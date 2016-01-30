@@ -19,7 +19,7 @@ package org.apache.spark.util.sketch;
 
 import java.io.UnsupportedEncodingException;
 
-public class Utils {
+class Utils {
   public static byte[] getBytesFromUTF8String(String str) {
     try {
       return str.getBytes("utf-8");

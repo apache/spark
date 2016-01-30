@@ -19,26 +19,40 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class AggregateOptimizeSuite extends PlanTest {
+class ReplaceOperatorSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Aggregate", FixedPoint(100),
-      RemoveLiteralFromGroupExpressions) :: Nil
+    val batches =
+      Batch("Replace Operators", FixedPoint(100),
+        ReplaceDistinctWithAggregate,
+        ReplaceIntersectWithSemiJoin) :: Nil
   }
 
-  test("remove literals in grouping expression") {
+  test("replace Intersect with Left-semi Join") {
+    val table1 = LocalRelation('a.int, 'b.int)
+    val table2 = LocalRelation('c.int, 'd.int)
+
+    val query = Intersect(table1, table2)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Join(table1, table2, LeftSemi, Option('a <=> 'c && 'b <=> 'd))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Distinct with Aggregate") {
     val input = LocalRelation('a.int, 'b.int)
 
-    val query =
-      input.groupBy('a, Literal(1), Literal(1) + Literal(2))(sum('b))
-    val optimized = Optimize.execute(query)
+    val query = Distinct(input)
+    val optimized = Optimize.execute(query.analyze)
 
-    val correctAnswer = input.groupBy('a)(sum('b))
+    val correctAnswer = Aggregate(input.output, input.output, input)
 
     comparePlans(optimized, correctAnswer)
   }

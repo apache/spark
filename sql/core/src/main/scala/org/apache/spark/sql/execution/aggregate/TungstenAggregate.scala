@@ -194,10 +194,10 @@ case class TungstenAggregate(
       (resultVars, resultVars.map(_.code).mkString("\n"))
     }
 
-    val doAgg = ctx.freshName("doAgg")
+    val doAgg = ctx.freshName("doAggregateWithoutKey")
     ctx.addNewFunction(doAgg,
       s"""
-         | private void $doAgg() {
+         | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
          |   ${bufVars.map(_.code).mkString("\n")}
          |
@@ -287,6 +287,16 @@ case class TungstenAggregate(
     GenerateUnsafeRowJoiner.create(groupingKeySchema, bufferSchema)
   }
 
+
+  /**
+    * Update peak execution memory, called in generated Java class.
+    */
+  def updatePeakMemory(hashMap: UnsafeFixedWidthAggregationMap): Unit = {
+    val mapMemory = hashMap.getPeakMemoryUsedBytes
+    val metrics = TaskContext.get().taskMetrics()
+    metrics.incPeakExecutionMemory(mapMemory)
+  }
+
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")
     ctx.addMutableState("boolean", initAgg, s"$initAgg = false;")
@@ -359,7 +369,7 @@ case class TungstenAggregate(
        """
     }
 
-    val doAgg = ctx.freshName("doAggregate")
+    val doAgg = ctx.freshName("doAggregateWithKeys")
     ctx.addNewFunction(doAgg,
       s"""
         private void $doAgg() throws java.io.IOException {
@@ -384,6 +394,7 @@ case class TungstenAggregate(
        if (!currentRows.isEmpty()) return;
      }
 
+     $thisPlan.updatePeakMemory($hashMapTerm);
      $hashMapTerm.free();
      """
   }

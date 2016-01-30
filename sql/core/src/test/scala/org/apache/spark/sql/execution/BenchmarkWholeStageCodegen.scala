@@ -64,19 +64,19 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("Aggregate w/o codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
-      sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").count().count()
+      sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
     }
     benchmark.addCase(s"Aggregate w codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").count().count()
+      sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
     }
 
     /*
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    Aggregate w/o codegen                   8271.75             6.34         1.00 X
-    Aggregate w codegen                     5066.57            10.35         1.63 X
+    Aggregate w/o codegen                   4254.38             4.93         1.00 X
+    Aggregate w codegen                     2661.45             7.88         1.60 X
     */
     benchmark.run()
   }
@@ -148,8 +148,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   test("benchmark") {
-    // testWholeStage(1024 * 1024 * 200)
-    // testAggregateWithKey(1024 * 1024 * 50)
-    // testBytesToBytesMap(1024 * 1024 * 50)
+    // testWholeStage(200 << 20)
+    // testAggregateWithKey(20 << 20)
+    // testBytesToBytesMap(50 << 20)
   }
 }
