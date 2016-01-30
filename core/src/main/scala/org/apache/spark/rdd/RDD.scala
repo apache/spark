@@ -1535,9 +1535,14 @@ abstract class RDD[T: ClassTag](
 
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
-  // Whether checkpoint all RDDs that are marked with the checkpoint flag.
+  // Whether to checkpoint all ancestor RDDs that are marked for checkpointing. By default,
+  // we stop as soon as we find the first such RDD, an optimization that allows us to write
+  // less data but is not safe for all workloads. E.g. in streaming we may checkpoint both
+  // an RDD and its parent in every batch, in which case the parent may never be checkpointed
+  // and its lineage never truncated, leading to OOMs in the long run (SPARK-6847).
   private val checkpointAllMarked =
-    Option(sc.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED)).map(_.toBoolean).getOrElse(false)
+    Option(sc.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS))
+      .map(_.toBoolean).getOrElse(false)
 
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
@@ -1583,8 +1588,10 @@ abstract class RDD[T: ClassTag](
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
           if (checkpointAllMarked) {
-            // Checkpoint dependencies first because dependencies will be set to
-            // ReliableCheckpointRDD after checkpointing.
+            // TODO We can collect all the RDDs that needs to be checkpointed, and then checkpoint
+            // them in parallel.
+            // Checkpoint parents first because our lineage will be truncated after we
+            // checkpoint ourselves
             dependencies.foreach(_.rdd.doCheckpoint())
           }
           checkpointData.get.checkpoint()
@@ -1706,7 +1713,8 @@ abstract class RDD[T: ClassTag](
  */
 object RDD {
 
-  private[spark] val CHECKPOINT_ALL_MARKED = "spark.checkpoint.checkpointAllMarked"
+  private[spark] val CHECKPOINT_ALL_MARKED_ANCESTORS =
+    "spark.checkpoint.checkpointAllMarkedAncestors"
 
   // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find

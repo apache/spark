@@ -245,9 +245,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
     SparkEnv.set(ssc.env)
 
-    // Enable "spark.checkpoint.checkpointAllMarked" to make sure that all RDDs marked with the
-    // checkpoint flag are all checkpointed to avoid the stack overflow issue. See SPARK-6847
-    ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED, "true")
+    // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
+    // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
+    ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
     Try {
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       graph.generateJobs(time) // generate jobs using allocated block

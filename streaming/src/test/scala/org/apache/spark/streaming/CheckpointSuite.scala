@@ -828,12 +828,16 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     //
     // 1) input rdd          input rdd          input rdd
     //       |                  |                  |
+    //       v                  v                  v
     // 2) cogroup rdd   ---> cogroup rdd   ---> cogroup rdd  ...
     //       |         /        |         /        |
+    //       v        /         v        /         v
     // 3)  map rdd ---        map rdd ---        map rdd     ...
-    //       |
+    //       |                  |                  |
+    //       v                  v                  v
     // 4) cogroup rdd   ---> cogroup rdd   ---> cogroup rdd  ...
     //       |         /        |         /        |
+    //       v        /         v        /         v
     // 5)  map rdd ---        map rdd ---        map rdd     ...
     //
     // Every batch depends on its previous batch, so "updateStateByKey" needs to do checkpoint to
@@ -853,35 +857,36 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val updateFunc = (values: Seq[Int], state: Option[Int]) => {
       Some(values.sum + state.getOrElse(0))
     }
-    @volatile var checkpointAllMarkedRDDsEnable = false
+    @volatile var shouldCheckpointAllMarkedRDDs = false
     @volatile var rddsCheckpointed = false
     inputDStream.map(i => (i, i))
       .updateStateByKey(updateFunc).checkpoint(batchDuration)
       .updateStateByKey(updateFunc).checkpoint(batchDuration)
       .foreachRDD { rdd =>
-        checkpointAllMarkedRDDsEnable =
-          Option(rdd.sparkContext.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED)).
+        /**
+         * Find all RDDs that are marked for checkpointing in the specified RDD and its ancestors.
+         */
+        def findAllMarkedRDDs(rdd: RDD[_]): List[RDD[_]] = {
+          val markedRDDs = rdd.dependencies.flatMap(dep => findAllMarkedRDDs(dep.rdd)).toList
+          if (rdd.checkpointData.isDefined) {
+            rdd :: markedRDDs
+          } else {
+            markedRDDs
+          }
+        }
+
+        shouldCheckpointAllMarkedRDDs =
+          Option(rdd.sparkContext.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS)).
             map(_.toBoolean).getOrElse(false)
 
-        val stateRDDs = {
-          def findAllMarkedRDDs(_rdd: RDD[_], buffer: ArrayBuffer[RDD[_]]): Unit = {
-            if (_rdd.checkpointData.isDefined) {
-              buffer += _rdd
-            }
-            _rdd.dependencies.foreach(dep => findAllMarkedRDDs(dep.rdd, buffer))
-          }
-
-          val buffer = new ArrayBuffer[RDD[_]]
-          findAllMarkedRDDs(rdd, buffer)
-          buffer.toSeq
+        val stateRDDs = findAllMarkedRDDs(rdd)
+          rdd.count()
+          // Check the two state RDDs are both checkpointed
+          rddsCheckpointed = stateRDDs.size == 2 && stateRDDs.forall(_.isCheckpointed)
         }
-        rdd.count()
-        // Check the two state RDDs are both checkpointed
-        rddsCheckpointed = stateRDDs.size == 2 && stateRDDs.forall(_.isCheckpointed)
-      }
     ssc.start()
     batchCounter.waitUntilBatchesCompleted(1, 10000)
-    assert(checkpointAllMarkedRDDsEnable === true)
+    assert(shouldCheckpointAllMarkedRDDs === true)
     assert(rddsCheckpointed === true)
   }
 
