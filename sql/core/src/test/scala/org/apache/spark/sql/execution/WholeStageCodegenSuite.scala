@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions.{avg, broadcast, col, max}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
