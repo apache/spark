@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -43,8 +44,8 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
  * Note that this class is typically loaded with an internal classloader for each instantiation,
  * allowing it to interact directly with a specific isolated version of Hive.  Loading this class
- * with the isolated classloader however will result in it only being visible as a ClientInterface,
- * not a ClientWrapper.
+ * with the isolated classloader however will result in it only being visible as a [[HiveClient]],
+ * not a [[HiveClientImpl]].
  *
  * This class needs to interact with multiple versions of Hive, but will always be compiled with
  * the 'native', execution version of Hive.  Therefore, any places where hive breaks compatibility
@@ -54,14 +55,14 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * @param config  a collection of configuration options that will be added to the hive conf before
  *                opening the hive client.
  * @param initClassLoader the classloader used when creating the `state` field of
- *                        this ClientWrapper.
+ *                        this [[HiveClientImpl]].
  */
-private[hive] class ClientWrapper(
+private[hive] class HiveClientImpl(
     override val version: HiveVersion,
     config: Map[String, String],
     initClassLoader: ClassLoader,
     val clientLoader: IsolatedClientLoader)
-  extends ClientInterface
+  extends HiveClient
   with Logging {
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
@@ -76,7 +77,7 @@ private[hive] class ClientWrapper(
     case hive.v1_2 => new Shim_v1_2()
   }
 
-  // Create an internal session state for this ClientWrapper.
+  // Create an internal session state for this HiveClientImpl.
   val state = {
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
@@ -159,7 +160,7 @@ private[hive] class ClientWrapper(
         case e: Exception if causedByThrift(e) =>
           caughtException = e
           logWarning(
-            "HiveClientWrapper got thrift exception, destroying client and retrying " +
+            "HiveClient got thrift exception, destroying client and retrying " +
               s"(${retryLimit - numTries} tries remaining)", e)
           clientLoader.cachedHive = null
           Thread.sleep(retryDelayMillis)
@@ -198,7 +199,7 @@ private[hive] class ClientWrapper(
    */
   def withHiveState[A](f: => A): A = retryLocked {
     val original = Thread.currentThread().getContextClassLoader
-    // Set the thread local metastore client to the client associated with this ClientWrapper.
+    // Set the thread local metastore client to the client associated with this HiveClientImpl.
     Hive.set(client)
     // The classloader in clientLoader could be changed after addJar, always use the latest
     // classloader
@@ -227,6 +228,14 @@ private[hive] class ClientWrapper(
 
   override def currentDatabase: String = withHiveState {
     state.getCurrentDatabase
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    if (getDatabaseOption(databaseName).isDefined) {
+      state.setCurrentDatabase(databaseName)
+    } else {
+      throw new NoSuchDatabaseException
+    }
   }
 
   override def createDatabase(database: HiveDatabase): Unit = withHiveState {
@@ -512,8 +521,8 @@ private[hive] class ClientWrapper(
     runSqlHive(s"ADD JAR $path")
   }
 
-  def newSession(): ClientWrapper = {
-    clientLoader.createClient().asInstanceOf[ClientWrapper]
+  def newSession(): HiveClientImpl = {
+    clientLoader.createClient().asInstanceOf[HiveClientImpl]
   }
 
   def reset(): Unit = withHiveState {

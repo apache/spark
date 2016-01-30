@@ -371,6 +371,13 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_CACHETABLE;
+TOK_UNCACHETABLE;
+TOK_CLEARCACHE;
+TOK_SETCONFIG;
+TOK_DFS;
+TOK_ADDFILE;
+TOK_ADDJAR;
 }
 
 
@@ -515,6 +522,11 @@ import java.util.HashMap;
     xlateMap.put("KW_WEEK", "WEEK");
     xlateMap.put("KW_MILLISECOND", "MILLISECOND");
     xlateMap.put("KW_MICROSECOND", "MICROSECOND");
+    xlateMap.put("KW_CLEAR", "CLEAR");
+    xlateMap.put("KW_LAZY", "LAZY");
+    xlateMap.put("KW_CACHE", "CACHE");
+    xlateMap.put("KW_UNCACHE", "UNCACHE");
+    xlateMap.put("KW_DFS", "DFS");
 
     // Operators
     xlateMap.put("DOT", ".");
@@ -687,8 +699,12 @@ catch (RecognitionException e) {
 
 // starting rule
 statement
-	: explainStatement EOF
-	| execStatement EOF
+    : explainStatement EOF
+    | execStatement EOF
+    | KW_ADD KW_JAR -> ^(TOK_ADDJAR)
+    | KW_ADD KW_FILE -> ^(TOK_ADDFILE)
+    | KW_DFS -> ^(TOK_DFS)
+    | (KW_SET)=> KW_SET -> ^(TOK_SETCONFIG)
 	;
 
 explainStatement
@@ -717,6 +733,7 @@ execStatement
     | deleteStatement
     | updateStatement
     | sqlTransactionStatement
+    | cacheStatement
     ;
 
 loadStatement
@@ -1390,7 +1407,7 @@ showStatement
 @init { pushMsg("show statement", state); }
 @after { popMsg(state); }
     : KW_SHOW (KW_DATABASES|KW_SCHEMAS) (KW_LIKE showStmtIdentifier)? -> ^(TOK_SHOWDATABASES showStmtIdentifier?)
-    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES (TOK_FROM $db_name)? showStmtIdentifier?)
+    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES ^(TOK_FROM $db_name)? showStmtIdentifier?)
     | KW_SHOW KW_COLUMNS (KW_FROM|KW_IN) tableName ((KW_FROM|KW_IN) db_name=identifier)?
     -> ^(TOK_SHOWCOLUMNS tableName $db_name?)
     | KW_SHOW KW_FUNCTIONS (KW_LIKE showFunctionIdentifier|showFunctionIdentifier)?  -> ^(TOK_SHOWFUNCTIONS KW_LIKE? showFunctionIdentifier?)
@@ -2438,12 +2455,11 @@ BEGIN user defined transaction boundaries; follows SQL 2003 standard exactly exc
 sqlTransactionStatement
 @init { pushMsg("transaction statement", state); }
 @after { popMsg(state); }
-  :
-  startTransactionStatement
-	|	commitStatement
-	|	rollbackStatement
-	| setAutoCommitStatement
-	;
+  : startTransactionStatement
+  | commitStatement
+  | rollbackStatement
+  | setAutoCommitStatement
+  ;
 
 startTransactionStatement
   :
@@ -2489,3 +2505,31 @@ setAutoCommitStatement
 /*
 END user defined transaction boundaries
 */
+
+/*
+Table Caching statements.
+ */
+cacheStatement
+@init { pushMsg("cache statement", state); }
+@after { popMsg(state); }
+  :
+  cacheTableStatement
+  | uncacheTableStatement
+  | clearCacheStatement
+  ;
+
+cacheTableStatement
+  :
+  KW_CACHE (lazy=KW_LAZY)? KW_TABLE identifier (KW_AS selectStatementWithCTE)? -> ^(TOK_CACHETABLE identifier $lazy? selectStatementWithCTE?)
+  ;
+
+uncacheTableStatement
+  :
+  KW_UNCACHE KW_TABLE identifier -> ^(TOK_UNCACHETABLE identifier)
+  ;
+
+clearCacheStatement
+  :
+  KW_CLEAR KW_CACHE -> ^(TOK_CLEARCACHE)
+  ;
+

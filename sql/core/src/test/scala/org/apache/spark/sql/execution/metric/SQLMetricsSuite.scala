@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
@@ -335,23 +335,47 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("save metrics") {
     withTempPath { file =>
-      val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
-      // Assume the execution plan is
-      // PhysicalRDD(nodeId = 0)
-      person.select('name).write.format("json").save(file.getAbsolutePath)
-      sparkContext.listenerBus.waitUntilEmpty(10000)
-      val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
-      assert(executionIds.size === 1)
-      val executionId = executionIds.head
-      val jobs = sqlContext.listener.getExecution(executionId).get.jobs
-      // Use "<=" because there is a race condition that we may miss some jobs
-      // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
-      assert(jobs.size <= 1)
-      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-      // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
-      // However, we still can check the value.
-      assert(metricValues.values.toSeq === Seq("2"))
+      withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+        val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
+        // Assume the execution plan is
+        // PhysicalRDD(nodeId = 0)
+        person.select('name).write.format("json").save(file.getAbsolutePath)
+        sparkContext.listenerBus.waitUntilEmpty(10000)
+        val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+        assert(executionIds.size === 1)
+        val executionId = executionIds.head
+        val jobs = sqlContext.listener.getExecution(executionId).get.jobs
+        // Use "<=" because there is a race condition that we may miss some jobs
+        // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
+        assert(jobs.size <= 1)
+        val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
+        // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
+        // However, we still can check the value.
+        assert(metricValues.values.toSeq === Seq("2"))
+      }
     }
+  }
+
+  test("metrics can be loaded by history server") {
+    val metric = new LongSQLMetric("zanzibar", LongSQLMetricParam)
+    metric += 10L
+    val metricInfo = metric.toInfo(Some(metric.localValue), None)
+    metricInfo.update match {
+      case Some(v: LongSQLMetricValue) => assert(v.value === 10L)
+      case Some(v) => fail(s"metric value was not a LongSQLMetricValue: ${v.getClass.getName}")
+      case _ => fail("metric update is missing")
+    }
+    assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    // After serializing to JSON, the original value type is lost, but we can still
+    // identify that it's a SQL metric from the metadata
+    val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
+    val metricInfoDeser = JsonProtocol.accumulableInfoFromJson(metricInfoJson)
+    metricInfoDeser.update match {
+      case Some(v: String) => assert(v.toLong === 10L)
+      case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
+      case _ => fail("deserialized metric update is missing")
+    }
+    assert(metricInfoDeser.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
   }
 
 }
