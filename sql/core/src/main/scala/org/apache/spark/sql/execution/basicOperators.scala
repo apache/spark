@@ -233,7 +233,7 @@ case class Range(
       |  }
       |  ${consume(ctx, Seq(ev))}
       |
-      |  if (!currentRows.isEmpty()) return;
+      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }

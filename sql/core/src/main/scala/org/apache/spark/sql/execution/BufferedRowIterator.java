@@ -22,6 +22,7 @@ import java.util.LinkedList;
 
 import scala.collection.Iterator;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 
@@ -50,6 +51,20 @@ public class BufferedRowIterator {
 
   public void setInput(Iterator<InternalRow> iter) {
     input = iter;
+  }
+
+  /**
+   * Returns whether it should stop processing next row or not.
+   */
+  protected boolean shouldStop() {
+    return !currentRows.isEmpty();
+  }
+
+  /**
+   * Increase the peak execution memory for current task.
+   */
+  protected void incPeakExecutionMemory(long size) {
+    TaskContext.get().taskMetrics().incPeakExecutionMemory(size);
   }
 
   /**

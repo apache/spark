@@ -25,6 +25,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
+import org.apache.spark.sql.functions._
 
 /**
   * Benchmark to measure whole stage codegen performance.
@@ -77,6 +78,30 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     -------------------------------------------------------------------------------
     Aggregate w/o codegen                   4254.38             4.93         1.00 X
     Aggregate w codegen                     2661.45             7.88         1.60 X
+    */
+    benchmark.run()
+  }
+
+  def testBroadcastHashJoin(values: Int): Unit = {
+    val benchmark = new Benchmark("BroadcastHashJoin", values)
+
+    val dim = broadcast(sqlContext.range(1 << 16).selectExpr("id as k", "cast(id as string) as v"))
+
+    benchmark.addCase("BroadcastHashJoin w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+    benchmark.addCase(s"BroadcastHashJoin w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+
+    /*
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      BroadcastHashJoin:                 Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      BroadcastHashJoin w/o codegen           3053.41             3.43         1.00 X
+      BroadcastHashJoin w codegen             1028.40            10.20         2.97 X
     */
     benchmark.run()
   }
@@ -151,5 +176,6 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     // testWholeStage(200 << 20)
     // testAggregateWithKey(20 << 20)
     // testBytesToBytesMap(50 << 20)
+    // testBroadcastHashJoin(10 << 20)
   }
 }

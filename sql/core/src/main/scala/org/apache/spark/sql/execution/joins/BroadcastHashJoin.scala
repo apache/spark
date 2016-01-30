@@ -121,23 +121,25 @@ case class BroadcastHashJoin(
     }
   }
 
-  // the broadcasted hash relation
-  private var broadcastRelation: Broadcast[HashedRelation] = _
   // the term for hash relation
   private var relationTerm: String = _
 
   override def upstream(): RDD[InternalRow] = {
-    broadcastRelation = Await.result(broadcastFuture, timeout)
     streamedPlan.asInstanceOf[CodegenSupport].upstream()
   }
 
   override def doProduce(ctx: CodegenContext): String = {
     // create a name for HashRelation
+    val broadcastRelation = Await.result(broadcastFuture, timeout)
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     relationTerm = ctx.freshName("relation")
     // TODO: create specialized HashRelation for single join key
     val clsName = classOf[UnsafeHashedRelation].getName
-    ctx.addMutableState(clsName, relationTerm, s"$relationTerm = ($clsName) $broadcast.value();")
+    ctx.addMutableState(clsName, relationTerm,
+      s"""
+         | $relationTerm = ($clsName) $broadcast.value();
+         | incPeakExecutionMemory($relationTerm.getUnsafeSize());
+       """.stripMargin)
 
     s"""
        | ${streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)}

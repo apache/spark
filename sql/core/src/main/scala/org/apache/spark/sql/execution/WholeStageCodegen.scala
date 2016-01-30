@@ -166,7 +166,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
        |   InternalRow $row = (InternalRow) input.next();
        |   ${columns.map(_.code).mkString("\n")}
        |   ${consume(ctx, columns)}
-       |   if (!currentRows.isEmpty()) {
+       |   if (shouldStop()) {
        |     return;
        |   }
        | }
@@ -366,13 +366,9 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
           val combined = plan.transform {
             // The build side can't be compiled together
             case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
-              val input = apply(left)
-              inputs += input
-              b.copy(left = input)
+              b.copy(left = apply(left))
             case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
-              val input = apply(right)
-              inputs += input
-              b.copy(right = input)
+              b.copy(right = apply(right))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input
