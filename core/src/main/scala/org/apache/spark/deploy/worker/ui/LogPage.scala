@@ -32,10 +32,9 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   private val worker = parent.worker
   private val workDir = parent.workDir
   private val supportedLogTypes = Set("stderr", "stdout")
+  private val defaultBytes = 100 * 1024
 
   def renderLog(request: HttpServletRequest): String = {
-    val defaultBytes = 100 * 1024
-
     val appId = Option(request.getParameter("appId"))
     val executorId = Option(request.getParameter("executorId"))
     val driverId = Option(request.getParameter("driverId"))
@@ -45,9 +44,9 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
 
     val logDir = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
-        s"${workDir.getPath}/$appId/$executorId/"
+        s"${workDir.getPath}/$a/$e/"
       case (None, None, Some(d)) =>
-        s"${workDir.getPath}/$driverId/"
+        s"${workDir.getPath}/$d/"
       case _ =>
         throw new Exception("Request must specify either application or driver identifiers")
     }
@@ -58,7 +57,6 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val defaultBytes = 100 * 1024
     val appId = Option(request.getParameter("appId"))
     val executorId = Option(request.getParameter("executorId"))
     val driverId = Option(request.getParameter("driverId"))
@@ -77,62 +75,43 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
 
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
     val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
+    val curLogLength = endByte - startByte;
     val range =
-      <span>
-        Showing {byteLength} Bytes: {startByte.toString} - {endByte.toString} of {logLength}
+      <span id="log-data">
+        Showing {curLogLength} Bytes: {startByte.toString} - {endByte.toString} of {logLength}
       </span>
 
     val moreButton =
-      if (startByte > 0) {
-        <a href={"?%s&logType=%s&offset=%s&byteLength=%s"
-          .format(params, logType, math.max(startByte - defaultBytes, 0),
-            math.min(byteLength + defaultBytes, logLength))}>
-          <button type="button" class="logMoreBtn btn btn-default">
-            Load More...
-          </button>
-        </a>
-      } else {
-        <button type="button" class="logMoreBtn btn btn-default" disabled="disabled">
-          Top of Log
-        </button>
-      }
+      <button type="button" onclick={"loadMore()"} class="log-more-btn btn btn-default">
+        Load More
+      </button>
 
     val newButton =
-      if (endByte < logLength) {
-        <a href={"?%s&logType=%s&byteLength=%s"
-          .format(params, logType, logLength - startByte)}>
-          <button type="button" class="logMoreBtn btn btn-default">
-            Load New...
-          </button>
-        </a>
-      } else {
-        Seq.empty
-      }
+      <button type="button" onclick={"loadNew()"} class="log-new-btn btn btn-default">
+        Load New
+      </button>
 
-    val scrollPercent =
-      if (!offset.isEmpty) {
-        defaultBytes.toDouble / byteLength
-      } else {
-        1.0
-      }
+    val alert =
+      <div class="no-new-alert alert alert-info" style="display: none;">
+        End of Log
+      </div>
 
-    val script =
-      <script>
-        {Unparsed {"""scrollLocation = $(".logContent")[0].scrollHeight * """}} {scrollPercent};
-        {Unparsed {"""window.onload = function() {$(".logContent").scrollTop(scrollLocation);}"""}}
-      </script>
+    val logParams = "?%s&logType=%s".format(params, logType)
+    val jsOnload = "window.onload = " +
+      s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
 
     val content =
       <html>
         <body>
           {linkToMaster}
           {range}
-          <div class="logContent" style="height:80vh; overflow:auto; padding:5px;">
+          <div class="log-content" style="height:80vh; overflow:auto; padding:5px;">
             <div>{moreButton}</div>
             <pre>{logText}</pre>
+            {alert}
             <div>{newButton}</div>
           </div>
-          {script}
+          <script>{Unparsed(jsOnload)}</script>
         </body>
       </html>
     UIUtils.basicSparkPage(content, logType + " log page for " + pageName)
