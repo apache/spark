@@ -22,8 +22,7 @@ import java.io.File
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{Exchange, WholeStageCodegen}
+import org.apache.spark.sql.execution.{Exchange, PhysicalRDD}
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.execution.joins.SortMergeJoin
 import org.apache.spark.sql.functions._
@@ -61,19 +60,16 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
-  // To verify if pruning works, we compare the results before filtering
+  // To verify bucket pruning, we compare the contents of remaining buckets (before filtering)
+  // with the expectedAnswer.
   private def checkPrunedAnswers(
-      sourceDataFrame: DataFrame,
-      filterCondition: Column,
+      bucketedDataFrame: DataFrame,
       expectedAnswer: DataFrame): Unit = {
-    val filter = sourceDataFrame.filter(filterCondition).queryExecution.executedPlan
-    assert(
-      filter.isInstanceOf[execution.Filter] ||
-      (filter.isInstanceOf[WholeStageCodegen] &&
-        filter.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[execution.Filter]))
+    val rdd = bucketedDataFrame.queryExecution.executedPlan.find(_.isInstanceOf[PhysicalRDD])
+    assert(rdd.isDefined)
     checkAnswer(
       expectedAnswer.orderBy(expectedAnswer.logicalPlan.output.map(attr => Column(attr)) : _*),
-      filter.children.head.executeCollectPublic().sortBy(_.toString()))
+      rdd.get.executeCollectPublic().sortBy(_.toString()))
   }
 
   test("read partitioning bucketed tables with bucket pruning filters") {
@@ -91,20 +87,20 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       for (j <- 10 until 23) {
         // Case 1: EqualTo
         checkPrunedAnswers(
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
-          filterCondition = $"j" === j,
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" === j),
           df.select("i", "j", "k").filter($"j" === j))
 
         // Case 2: EqualNullSafe
         checkPrunedAnswers(
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
-          filterCondition = $"j" <=> j,
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" <=> j),
           df.select("i", "j", "k").filter($"j" <=> j))
 
         // Case 3: In
         checkPrunedAnswers(
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
-          filterCondition = $"j".isin(j, j + 1, j + 2, j + 3),
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j".isin(j, j + 1, j + 2, j + 3)),
           df.select("i", "j", "k").filter($"j".isin(j, j + 1, j + 2, j + 3)))
       }
       // Case 4: InSet
@@ -133,8 +129,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
       for (j <- 10 until 23) {
         checkPrunedAnswers(
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
-          filterCondition = $"j" === j,
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" === j),
           df.select("i", "j", "k").filter($"j" === j))
       }
     }
@@ -153,14 +149,12 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
       // Case 1: isNull
       checkPrunedAnswers(
-        hiveContext.table("bucketed_table").select("n", "s"),
-        filterCondition = $"s".isNull,
+        hiveContext.table("bucketed_table").select("n", "s").filter($"s".isNull),
         nullStrings.select("n", "s").filter($"s".isNull))
 
       // Case 2: <=> null
       checkPrunedAnswers(
-        hiveContext.table("bucketed_table").select("n", "s"),
-        filterCondition = $"s" <=> null,
+        hiveContext.table("bucketed_table").select("n", "s").filter($"s" <=> null),
         nullStrings.select("n", "s").filter($"s" <=> null))
     }
   }
@@ -179,18 +173,18 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         .saveAsTable("bucketed_table")
 
       for (j <- 10 until 23) {
+        // the filter $"k" > $"j" is not applied since they are ineligible for pushdown and pruning
         checkPrunedAnswers(
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
-          filterCondition = $"j" === j && $"k" > $"j",
-          // the filter $"k" > $"j" is not applied
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" === j && $"k" > $"j"),
           df.select("i", "j", "k").filter($"j" === j))
 
+        // $"i" > j % 5 is partitioning only filter.
+        // $"j" === j is bucketing only filter and each bucket corresponds to at most one value.
+        // Thus, the final results apply both conditions
         checkPrunedAnswers(
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
-          filterCondition = $"j" === j && $"i" > j % 5,
-          // $"i" > j % 5 is partitioning only filter.
-          // $"j" === j is bucketing only filter and each bucket corresponds to at most one value.
-          // Thus, the final results apply both conditions
+          hiveContext.table("bucketed_table")
+            .select("i", "j", "k").filter($"j" === j && $"i" > j % 5),
           df.select("i", "j", "k").filter($"j" === j && $"i" > j % 5))
       }
     }
