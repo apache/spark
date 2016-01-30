@@ -115,10 +115,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
       .where('a.attr > 10)
       .join(tr2.where('d.attr < 100), LeftOuter, Some("tr1.a".attr === "tr2.a".attr))
       .analyze.constraints,
-      Set(tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10,
-        IsNull(tr2.resolveQuoted("a", caseInsensitiveResolution).get),
-        IsNull(tr2.resolveQuoted("d", caseInsensitiveResolution).get),
-        IsNull(tr2.resolveQuoted("e", caseInsensitiveResolution).get)))
+      Set(tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10))
   }
 
   test("propagating constraints in right-outer join") {
@@ -128,24 +125,14 @@ class ConstraintPropagationSuite extends SparkFunSuite {
       .where('a.attr > 10)
       .join(tr2.where('d.attr < 100), RightOuter, Some("tr1.a".attr === "tr2.a".attr))
       .analyze.constraints,
-      Set(tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100,
-        IsNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get),
-        IsNull(tr1.resolveQuoted("b", caseInsensitiveResolution).get),
-        IsNull(tr1.resolveQuoted("c", caseInsensitiveResolution).get)))
+      Set(tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100))
   }
 
   test("propagating constraints in full-outer join") {
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
-    verifyConstraints(tr1
-      .where('a.attr > 10)
+    assert(tr1.where('a.attr > 10)
       .join(tr2.where('d.attr < 100), FullOuter, Some("tr1.a".attr === "tr2.a".attr))
-      .analyze.constraints,
-      Set(IsNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get),
-        IsNull(tr1.resolveQuoted("b", caseInsensitiveResolution).get),
-        IsNull(tr1.resolveQuoted("c", caseInsensitiveResolution).get),
-        IsNull(tr2.resolveQuoted("a", caseInsensitiveResolution).get),
-        IsNull(tr2.resolveQuoted("d", caseInsensitiveResolution).get),
-        IsNull(tr2.resolveQuoted("e", caseInsensitiveResolution).get)))
+      .analyze.constraints.isEmpty)
   }
 }

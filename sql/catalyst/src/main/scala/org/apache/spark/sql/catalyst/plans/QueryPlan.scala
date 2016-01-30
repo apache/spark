@@ -28,11 +28,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
   def output: Seq[Attribute]
 
   /**
-   * Extracts the relevant per-row constraints from a given child while removing those that
-   * don't apply anymore.
+   * Extracts the relevant constraints from a given set of constraints based on the attributes that
+   * appear in the [[outputSet]].
    */
-  protected def getRelevantConstraints(child: QueryPlan[PlanType]): Set[Expression] = {
-    child.constraints.filter(_.references.subsetOf(outputSet))
+  private def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
+    constraints.filter(_.references.subsetOf(outputSet))
   }
 
   /**
@@ -40,8 +40,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
    * operator. For example, if the output of this operator is column `a`, an example `constraints`
    * can be `Set(a > 10, a < 20)`.
    */
-  lazy val constraints: Set[Expression] = validConstraints
+  lazy val constraints: Set[Expression] = getRelevantConstraints(validConstraints)
 
+  /**
+   * This method can be overridden by any child class of QueryPlan to specify a set of constraints
+   * based on the given operator's constraint propagation logic. These constraints are then
+   * canonicalized and filtered automatically to contain only those attributes that appear in the
+   * [[outputSet]]
+   */
   protected def validConstraints: Set[Expression] = Set.empty
 
   /**
@@ -77,6 +83,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
+   *
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
@@ -85,6 +92,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
 
   /**
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
+   *
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
@@ -117,6 +125,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
 
   /**
    * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
+   *
    * @param rule the rule to be applied to every expression in this operator.
    * @return
    */
