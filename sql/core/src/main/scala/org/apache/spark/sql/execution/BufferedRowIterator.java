@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution;
 
+import java.io.IOException;
+
 import scala.collection.Iterator;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -34,7 +36,7 @@ public class BufferedRowIterator {
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
-  public boolean hasNext() {
+  public boolean hasNext() throws IOException {
     if (currentRow == null) {
       processNext();
     }
@@ -56,7 +58,7 @@ public class BufferedRowIterator {
    *
    * After it's called, if currentRow is still null, it means no more rows left.
    */
-  protected void processNext() {
+  protected void processNext() throws IOException {
     if (input.hasNext()) {
       currentRow = input.next();
     }
