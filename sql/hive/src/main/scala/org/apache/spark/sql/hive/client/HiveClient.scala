@@ -60,9 +60,9 @@ private[hive] case class HiveTable(
     viewText: Option[String] = None) {
 
   @transient
-  private[client] var client: ClientInterface = _
+  private[client] var client: HiveClient = _
 
-  private[client] def withClient(ci: ClientInterface): this.type = {
+  private[client] def withClient(ci: HiveClient): this.type = {
     client = ci
     this
   }
@@ -85,7 +85,7 @@ private[hive] case class HiveTable(
  * internal and external classloaders for a given version of Hive and thus must expose only
  * shared classes.
  */
-private[hive] trait ClientInterface {
+private[hive] trait HiveClient {
 
   /** Returns the Hive Version of this client. */
   def version: HiveVersion
@@ -184,8 +184,8 @@ private[hive] trait ClientInterface {
   /** Add a jar into class loader */
   def addJar(path: String): Unit
 
-  /** Return a ClientInterface as new session, that will share the class loader and Hive client */
-  def newSession(): ClientInterface
+  /** Return a [[HiveClient]] as new session, that will share the class loader and Hive client */
+  def newSession(): HiveClient
 
   /** Run a function within Hive state (SessionState, HiveConf, Hive client and class loader) */
   def withHiveState[A](f: => A): A
