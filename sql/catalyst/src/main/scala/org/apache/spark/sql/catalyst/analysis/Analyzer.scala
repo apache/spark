@@ -523,7 +523,7 @@ class Analyzer(
   object ResolveSortReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       // Skip sort with aggregate. This will be handled in ResolveAggregateFunctions
-      case sa: Sort if sa.order.exists(ResolveAggregateFunctions.containsAggregate) => sa
+      case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(_, _, child) if !s.resolved && child.resolved =>
         val (newOrdering, missingResolvableAttrs) = collectResolvableMissingAttrs(s.order, child)
