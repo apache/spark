@@ -113,3 +113,13 @@ test_that("summary works on base GLM models", {
   baseSummary <- summary(baseModel)
   expect_true(abs(baseSummary$deviance - 12.19313) < 1e-4)
 })
+
+test_that("kmeans", {
+  newIris <- iris
+  newIris$Species <- NULL
+  training <- suppressWarnings(createDataFrame(sqlContext, newIris))
+  model <- kmeans(x = training)
+  print("Is there any problems?")
+  print(model)
+  #expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+})

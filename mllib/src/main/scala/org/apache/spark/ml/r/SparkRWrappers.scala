@@ -17,14 +17,16 @@
 
 package org.apache.spark.ml.api.r
 
+import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.ml.clustering.{KMeansModel, KMeans}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.feature.{VectorAssembler, RFormula}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Row, SQLContext, DataFrame}
 
-private[r] object SparkRWrappers {
+object SparkRWrappers {
   def fitRModelFormula(
       value: String,
       df: DataFrame,
@@ -49,6 +51,26 @@ private[r] object SparkRWrappers {
     }
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)
+  }
+
+  def fitKMeans(
+      initMode: String,
+      df: DataFrame,
+      maxIter: Double,
+      initSteps: Double,
+      k: Double,
+      columns: String): KMeansModel = {
+    val assembler = new VectorAssembler().setInputCols(columns.split(",")).setOutputCol("features")
+    val features = assembler.transform(df).select("features")
+    // scalastyle:off println
+    features.collect().foreach { case Row(v) => println(v) }
+    // scalastyle:on println
+    val kMeans = new KMeans()
+      .setInitMode(initMode)
+      .setMaxIter(maxIter.toInt)
+      .setInitSteps(initSteps.toInt)
+      .setK(k.toInt)
+    kMeans.fit(features)
   }
 
   def getModelCoefficients(model: PipelineModel): Array[Double] = {
@@ -114,4 +136,20 @@ private[r] object SparkRWrappers {
         "LogisticRegressionModel"
     }
   }
+
+  // scalastyle:off println
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("test-R").setMaster("local")
+    val sc = new SparkContext(conf)
+    val sqlCtx = new SQLContext(sc)
+    import sqlCtx.implicits._
+    val initMode = "random"
+    val columns = "Sepal_Length,Sepal_Width,Petal_Length,Petal_Width"
+    val df = sc.textFile("iris.txt").map(_.split("\\s+"))
+      .map(ary => (ary(1).toDouble, ary(2).toDouble, ary(3).toDouble, ary(4).toDouble))
+      .toDF("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width")
+    val model = fitKMeans(initMode, df, 10, 10, 3, columns)
+    println(model)
+  }
+  // scalastyle:on println
 }

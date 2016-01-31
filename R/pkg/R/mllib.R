@@ -126,3 +126,34 @@ setMethod("summary", signature(object = "PipelineModel"),
               return(list(coefficients = coefficients))
             }
           })
+
+#' @title S4 class that represents a KMeansModel
+#' @param model A Java object reference to the backing Scala KMeansModel
+#' @export
+setClass("KMeansModel", representation(model = "jobj"))
+
+#' Fit a k-means model
+#'
+#' Fit a k-means model, similarly to R's kmeans().
+#'
+#' @param x DataFrame for training
+#' @param centers Number of centers
+#' @param iter.max Maximum iteration number
+#' @param nstart Number of start points
+#' @param algorithm Algorithm choosen to fit the model
+#' @return A k-means model
+#' @rdname kmeans
+#' @export
+#' @examples
+#'\dontrun{
+#' model <- kmeans(x, algorithm="random")
+#'}
+setMethod("kmeans", signature(x = "DataFrame"),
+          function(x) {
+            cat("Am I in the right function?")
+            columnNames <- "Sepal_Length,Sepal_Width,Petal_Length,Petal_Width"
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                 "fitKMeans", "random", x@sdf, 10,
+                                 10, 2, columnNames)
+            return(new("KMeansModel", model = model))
+         })
