@@ -275,6 +275,7 @@ def countDistinct(col, *cols):
     jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
+
 @since(1.3)
 def first(col, ignorenulls=False):
     """Aggregate function: returns the first value in a group.
@@ -282,6 +283,7 @@ def first(col, ignorenulls=False):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
     return Column(jc)
+
 
 @since(1.6)
 def input_file_name():
@@ -314,6 +316,7 @@ def isnull(col):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
+
 @since(1.3)
 def last(col, ignorenulls=False):
     """Aggregate function: returns the last value in a group.
@@ -321,6 +324,7 @@ def last(col, ignorenulls=False):
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
     return Column(jc)
+
 
 @since(1.6)
 def monotonically_increasing_id():
