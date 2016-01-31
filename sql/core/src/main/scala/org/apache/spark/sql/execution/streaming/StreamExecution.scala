@@ -22,14 +22,14 @@ import java.lang.Thread.UncaughtExceptionHandler
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext, StandingQuery}
+import org.apache.spark.sql.{ContinuousQuery, DataFrame, SQLContext, StreamingQuery}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
 
 /**
- * Manages the execution of a streaming Spark SQL query that is occuring in a separate thread.
+ * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
  * Unlike a standard query, a streaming query executes repeatedly each time new data arrives at any
  * [[Source]] present in the query plan. Whenever new data arrives, a [[QueryExecution]] is created
  * and the results are committed transactionally to the given [[Sink]].
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.QueryExecution
 class StreamExecution(
     sqlContext: SQLContext,
     private[sql] val logicalPlan: LogicalPlan,
-    val sink: Sink) extends StandingQuery with Logging {
+    val sink: Sink) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   val awaitBatchLock = new Object
@@ -198,21 +198,6 @@ class StreamExecution(
       awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
     }
     logDebug(s"Unblocked at $newOffset for $source")
-  }
-
-  /** Clears the indicator that a batch has completed.  Used for testing. */
-  override def clearBatchMarker(): Unit = {
-    batchRun = false
-  }
-
-  /**
-   * Awaits the completion of at least one streaming batch. Must be called after `clearBatchMarker`
-   * to gurantee that a new batch has been processed.
-   */
-  override def awaitBatchCompletion(): Unit = {
-    while (!batchRun) {
-      awaitBatchLock.synchronized { awaitBatchLock.wait(100) }
-    }
   }
 
   override def toString: String =

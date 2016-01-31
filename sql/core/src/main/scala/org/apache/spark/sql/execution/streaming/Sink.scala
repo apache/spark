@@ -21,21 +21,21 @@ package org.apache.spark.sql.execution.streaming
  * An interface for systems that can collect the results of a streaming query.
  *
  * When new data is produced by a query, a [[Sink]] must be able to transactionally collect the
- * data and update the [[StreamProgress]]. In the case of a failure, the sink will be recreated
- * and must be able to return the [[StreamProgress]] for all of the data that is made durable.
+ * data and update the [[Offset]]. In the case of a failure, the sink will be recreated
+ * and must be able to return the [[Offset]] for all of the data that is made durable.
  * This contract allows Spark to process data with exactly-once semantics, even in the case
  * of failures that require the computation to be restarted.
  */
 trait Sink {
   /**
    * Returns the [[Offset]] for all data that is currently present in the sink, if any. This
-   * function will be called by Spark when restarting a stream in order to determine at which point
-   * in streamed input data computation should be resumed from.
+   * function will be called by Spark when restarting execution in order to determine at which point
+   * in the input stream computation should be resumed from.
    */
   def currentOffset: Option[Offset]
 
   /**
-   * Accepts a new batch of data as well as a [[StreamProgress]] that denotes how far in the input
+   * Accepts a new batch of data as well as a [[Offset]] that denotes how far in the input
    * data computation has progressed to.  When computation restarts after a failure, it is important
    * that a [[Sink]] returns the same [[Offset]] as the most recent batch of data that
    * has been persisted durrably.  Note that this does not necessarily have to be the

@@ -85,23 +85,23 @@ final class DataStreamWriter private[sql](df: DataFrame) {
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives.  The returned [[StandingQuery]] object can be used to interact with
+   * path as new data arrives.  The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
    * @since 2.0.0
    */
-  def start(path: String): StandingQuery = {
+  def start(path: String): ContinuousQuery = {
     this.extraOptions += ("path" -> path)
     start()
   }
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives.  The returned [[StandingQuery]] object can be used to interact with
+   * path as new data arrives.  The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
-  def start(): StandingQuery = {
+  def start(): ContinuousQuery = {
     val sink = ResolvedDataSource.createSink(
       df.sqlContext,
       source,

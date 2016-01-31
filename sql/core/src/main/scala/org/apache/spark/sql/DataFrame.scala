@@ -1692,9 +1692,10 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
-   * Interface for starting a streaming query that will continually save data to the specified
+   * Interface for starting a streaming query that will continually output results to the specified
    * external sink as new data arrives.
    */
+  @Experimental
   def streamTo: DataStreamWriter = new DataStreamWriter(this)
 
   /**

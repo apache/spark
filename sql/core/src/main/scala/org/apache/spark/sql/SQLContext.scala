@@ -597,8 +597,7 @@ class SQLContext private[sql](
 
   /**
    * :: Experimental ::
-   * Returns a [[DataStreamReader]] than can be used to create queries that execute continuously
-   * as new data arrives.
+   * Returns a [[DataStreamReader]] than can be used to access data continuously as it arrives.
    */
   @Experimental
   def streamFrom: DataStreamReader = new DataStreamReader(this)
