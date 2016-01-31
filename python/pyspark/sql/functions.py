@@ -279,6 +279,9 @@ def countDistinct(col, *cols):
 @since(1.3)
 def first(col, ignorenulls=False):
     """Aggregate function: returns the first value in a group.
+
+    The function by default returns the first values it sees. It will return the first non-null
+    value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
@@ -320,6 +323,9 @@ def isnull(col):
 @since(1.3)
 def last(col, ignorenulls=False):
     """Aggregate function: returns the last value in a group.
+
+    The function by default returns the last values it sees. It will return the last non-null
+    value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)

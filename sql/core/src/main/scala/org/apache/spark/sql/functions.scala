@@ -349,8 +349,10 @@ object functions extends LegacyFunctions {
   }
 
   /**
-    * Aggregate function: returns the first value in a group. The function does not consider null
-    * values when the ignoreNulls flag is set to true.
+    * Aggregate function: returns the first value in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     *
     * @group agg_funcs
     * @since 2.0.0
@@ -360,8 +362,10 @@ object functions extends LegacyFunctions {
   }
 
   /**
-    * Aggregate function: returns the first value of a column in a group. The function does not
-    * consider null values when the ignoreNulls flag is set to true.
+    * Aggregate function: returns the first value of a column in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     *
     * @group agg_funcs
     * @since 2.0.0
@@ -373,6 +377,9 @@ object functions extends LegacyFunctions {
   /**
     * Aggregate function: returns the first value in a group.
     *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
     * @group agg_funcs
     * @since 1.3.0
     */
@@ -380,6 +387,9 @@ object functions extends LegacyFunctions {
 
   /**
     * Aggregate function: returns the first value of a column in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     *
     * @group agg_funcs
     * @since 1.3.0
@@ -403,8 +413,10 @@ object functions extends LegacyFunctions {
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
   /**
-    * Aggregate function: returns the last value in a group. The function does not
-    * consider null values when the ignoreNulls flag is set to true.
+    * Aggregate function: returns the last value in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     *
     * @group agg_funcs
     * @since 2.0.0
@@ -414,8 +426,10 @@ object functions extends LegacyFunctions {
   }
 
   /**
-    * Aggregate function: returns the last value of the column in a group. The function does not
-    * consider null values when the ignoreNulls flag is set to true.
+    * Aggregate function: returns the last value of the column in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     *
     * @group agg_funcs
     * @since 2.0.0
@@ -427,6 +441,9 @@ object functions extends LegacyFunctions {
   /**
     * Aggregate function: returns the last value in a group.
     *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
     * @group agg_funcs
     * @since 1.3.0
     */
@@ -434,6 +451,9 @@ object functions extends LegacyFunctions {
 
   /**
     * Aggregate function: returns the last value of the column in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
     *
     * @group agg_funcs
     * @since 1.3.0
