@@ -91,6 +91,7 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected val LEFT = Keyword("LEFT")
   protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
+  protected val NATURAL = Keyword("NATURAL")
   protected val NOT = Keyword("NOT")
   protected val NULL = Keyword("NULL")
   protected val ON = Keyword("ON")
@@ -189,13 +190,19 @@ object SqlParser extends AbstractSparkSQLParser with DataTypeParser {
   protected lazy val joinConditions: Parser[Expression] =
     ON ~> expression
 
-  protected lazy val joinType: Parser[JoinType] =
-    ( INNER           ^^^ Inner
-    | LEFT  ~ SEMI    ^^^ LeftSemi
-    | LEFT  ~ OUTER.? ^^^ LeftOuter
-    | RIGHT ~ OUTER.? ^^^ RightOuter
-    | FULL  ~ OUTER.? ^^^ FullOuter
-    )
+  protected lazy val joinType: Parser[JoinType] = {
+    val joinTypeParser: Parser[JoinType] =
+      ( INNER           ^^^ Inner
+      | LEFT  ~ SEMI    ^^^ LeftSemi
+      | LEFT  ~ OUTER.? ^^^ LeftOuter
+      | RIGHT ~ OUTER.? ^^^ RightOuter
+      | FULL  ~ OUTER.? ^^^ FullOuter
+      )
+    val naturalJoinTypeParser: Parser[JoinType] = (NATURAL ~> joinTypeParser.?) ^^ { case _ =>
+      throw new AnalysisException("NATURAL JOIN is not supported")
+    }
+    naturalJoinTypeParser | joinTypeParser
+  }
 
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
     ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
