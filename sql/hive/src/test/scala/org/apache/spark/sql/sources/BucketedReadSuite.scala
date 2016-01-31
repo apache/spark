@@ -37,7 +37,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   test("read bucketed data") {
-
     withTable("bucketed_table") {
       df.write
         .format("parquet")
@@ -70,7 +69,9 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       bucketValues: Seq[Integer],
       bucketedDataFrame: DataFrame,
       expectedAnswer: DataFrame): Unit = {
+
     val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
+    // Limit: bucket pruning only works when the bucket column has one and only one column
     assert(bucketColumnNames.length == 1)
     val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
     val bucketColumn = bucketedDataFrame.schema.toAttributes.head
