@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.streaming.test
 
-import java.io.File
-
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.streaming.{Batch, Offset, Source, Sink}
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{SQLContext, StreamTest}
+import org.apache.spark.sql.execution.streaming.{Batch, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 
 object LastOptions {
   var parameters: Map[String, String] = null
