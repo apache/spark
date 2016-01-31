@@ -2028,4 +2028,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(false) :: Row(true) :: Nil)
   }
 
+  test("SPARK-13105: NATURAL JOIN queries should fail analysis since they are not supported") {
+    withTempTable("foo", "bar") {
+      Seq((1, 1), (-1, 1)).toDF("key", "value").registerTempTable("bar")
+      Seq((1, 1), (-1, 1)).toDF("key", "value").registerTempTable("foo")
+      val joinTypes = Seq("", "INNER", "LEFT OUTER", "RIGHT OUTER", "FULL OUTER")
+      for (joinType <- joinTypes) {
+        val query = s"SELECT * FROM foo NATURAL $joinType JOIN bar"
+        withClue(query) {
+          val e = intercept[AnalysisException] {
+            sql("SELECT * FROM foo NATURAL JOIN bar").collect()
+          }
+          assert(e.getMessage.contains("NATURAL JOIN is not supported"))
+        }
+      }
+    }
+  }
+
 }
