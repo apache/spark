@@ -3,6 +3,7 @@ from __future__ import print_function
 import logging
 import os
 import subprocess
+import textwrap
 from datetime import datetime
 
 from builtins import input
@@ -266,7 +267,6 @@ def list_tasks(args):
 
 
 def test(args):
-
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
@@ -279,6 +279,24 @@ def test(args):
         ti.dry_run()
     else:
         ti.run(force=True, ignore_dependencies=True, test_mode=True)
+
+
+def render(args):
+    args.execution_date = dateutil.parser.parse(args.execution_date)
+    dagbag = DagBag(process_subdir(args.subdir))
+    if args.dag_id not in dagbag.dags:
+        raise AirflowException('dag_id could not be found')
+    dag = dagbag.dags[args.dag_id]
+    task = dag.get_task(task_id=args.task_id)
+    ti = TaskInstance(task, args.execution_date)
+    ti.render_templates()
+    for attr in task.__class__.template_fields:
+        print(textwrap.dedent("""\
+        # ----------------------------------------------------------
+        # property: {}
+        # ----------------------------------------------------------
+        {}
+        """.format(attr, getattr(task, attr))))
 
 
 def clear(args):
@@ -702,5 +720,16 @@ def get_parser():
         "principal", help="kerberos principal",
         nargs='?', default=configuration.get('kerberos', 'principal'))
     parser_kerberos.set_defaults(func=kerberos)
+
+    ht = "Render a task instance's template(s)"
+    parser_render = subparsers.add_parser('render', help=ht)
+    parser_render.add_argument("dag_id", help="The id of the dag to check")
+    parser_render.add_argument("task_id", help="The task_id to check")
+    parser_render.add_argument(
+        "execution_date", help="The execution date to check")
+    parser_render.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=DAGS_FOLDER)
+    parser_render.set_defaults(func=render)
 
     return parser

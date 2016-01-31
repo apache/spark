@@ -1196,7 +1196,7 @@ class TaskInstance(Base):
         for attr in task.__class__.template_fields:
             content = getattr(task, attr)
             if content:
-                rendered_content = self.task.render_template(content, jinja_context)
+                rendered_content = rt(content, jinja_context)
                 setattr(task, attr, rendered_content)
 
     def email_alert(self, exception, is_retry=False):
