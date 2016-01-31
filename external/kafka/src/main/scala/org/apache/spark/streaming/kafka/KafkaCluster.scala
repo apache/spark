@@ -19,6 +19,7 @@ package org.apache.spark.streaming.kafka
 
 import java.util.Properties
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 import scala.util.control.NonFatal

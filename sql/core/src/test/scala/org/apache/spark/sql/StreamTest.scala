@@ -299,8 +299,8 @@ trait StreamTest extends QueryTest with Timeouts {
   def createStressTest(
       ds: Dataset[Int],
       addData: Seq[Int] => StreamAction,
-      iterations: Int = 500): Unit = {
-    implicit val intEncoder = ExpressionEncoder[Int]
+      iterations: Int = 100): Unit = {
+    implicit val intEncoder = ExpressionEncoder[Int]()
     var dataPos = 0
     var running = true
     val actions = new ArrayBuffer[StreamAction]()

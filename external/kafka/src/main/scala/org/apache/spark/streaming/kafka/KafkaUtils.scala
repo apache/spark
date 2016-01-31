@@ -173,7 +173,7 @@ object KafkaUtils {
   }
 
   /** get leaders for the given offset ranges, or throw an exception */
-  private[spark] def leadersForRanges(
+  private def leadersForRanges(
       kc: KafkaCluster,
       offsetRanges: Array[OffsetRange]): Map[TopicAndPartition, (String, Int)] = {
     val topics = offsetRanges.map(o => TopicAndPartition(o.topic, o.partition)).toSet

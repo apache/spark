@@ -15,46 +15,115 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.streaming
+package org.apache.spark.sql.streaming.test
 
 import java.io.File
 
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.StreamTest
+import org.apache.spark.sql.execution.streaming.{Batch, Offset, Source, Sink}
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{SQLContext, StreamTest}
+import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.Utils
 
-class DataStreamReaderSuite extends StreamTest with SharedSQLContext {
+object LastOptions {
+  var parameters: Map[String, String] = null
+  var schema: Option[StructType] = null
+}
+
+/** Dummy provider: returns no-op source/sink and records options in [[LastOptions]]. */
+class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
+  override def createSource(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: Option[StructType]): Source = {
+    LastOptions.parameters = parameters
+    LastOptions.schema = schema
+    new Source {
+      override def getNextBatch(start: Option[Offset]): Option[Batch] = None
+      override def schema: StructType = StructType(Nil)
+    }
+  }
+
+  override def createSink(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): Sink = {
+    LastOptions.parameters = parameters
+    new Sink {
+      override def addBatch(batch: Batch): Unit = {}
+      override def currentOffset: Option[Offset] = None
+    }
+  }
+}
+
+class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
-  test("read from text files") {
-    val src = Utils.createDirectory("streaming.src")
-    val dest = Utils.createDirectory("streaming.dest")
-
-    val df =
-      sqlContext
-        .streamFrom
-        .format("text")
-        .open(src.getCanonicalPath)
-
-    val filtered = df.filter($"value" contains "keep")
-
-    val runningQuery =
-      filtered
-        .streamTo
-        .format("text")
-        .start(dest.getCanonicalPath)
-
-    runningQuery.clearBatchMarker()
-
-    // Add some data
-    stringToFile(new File(src, "1"), "drop1\nkeep2\nkeep3")
-
-    runningQuery.awaitBatchCompletion()
-
-    val output = sqlContext.read.text(dest.getCanonicalPath).as[String]
-    checkAnswer(output, "keep2", "keep3")
-
-    runningQuery.stop()
+  test("resolve default source") {
+    sqlContext.streamFrom
+      .format("org.apache.spark.sql.streaming.test")
+      .open()
+      .streamTo
+      .format("org.apache.spark.sql.streaming.test")
+      .start()
+      .stop()
   }
+
+  test("resolve full class") {
+    sqlContext.streamFrom
+      .format("org.apache.spark.sql.streaming.test.DefaultSource")
+      .open()
+      .streamTo
+      .format("org.apache.spark.sql.streaming.test")
+      .start()
+      .stop()
+  }
+
+  test("options") {
+    val map = new java.util.HashMap[String, String]
+    map.put("opt3", "3")
+
+    val df = sqlContext.streamFrom
+        .format("org.apache.spark.sql.streaming.test")
+        .option("opt1", "1")
+        .options(Map("opt2" -> "2"))
+        .options(map)
+        .open()
+
+    assert(LastOptions.parameters("opt1") == "1")
+    assert(LastOptions.parameters("opt2") == "2")
+    assert(LastOptions.parameters("opt3") == "3")
+
+    LastOptions.parameters = null
+
+    df.streamTo
+      .format("org.apache.spark.sql.streaming.test")
+      .option("opt1", "1")
+      .options(Map("opt2" -> "2"))
+      .options(map)
+      .start()
+      .stop()
+
+    assert(LastOptions.parameters("opt1") == "1")
+    assert(LastOptions.parameters("opt2") == "2")
+    assert(LastOptions.parameters("opt3") == "3")
+  }
+
+  test("stream paths") {
+    val df = sqlContext.streamFrom
+      .format("org.apache.spark.sql.streaming.test")
+      .open("/test")
+
+    assert(LastOptions.parameters("path") == "/test")
+
+    LastOptions.parameters = null
+
+    df.streamTo
+      .format("org.apache.spark.sql.streaming.test")
+      .start("/test")
+      .stop()
+
+    assert(LastOptions.parameters("path") == "/test")
+  }
+
 }
