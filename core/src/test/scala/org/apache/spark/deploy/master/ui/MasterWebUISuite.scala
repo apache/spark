@@ -23,11 +23,11 @@ import scala.io.Source
 import scala.language.postfixOps
 
 import org.json4s.jackson.JsonMethods._
-import org.json4s.JsonAST.{JNothing, JString, JInt}
+import org.json4s.JsonAST.{JInt, JNothing, JString}
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkConf, SecurityManager, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.DeployMessages.MasterStateResponse
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._

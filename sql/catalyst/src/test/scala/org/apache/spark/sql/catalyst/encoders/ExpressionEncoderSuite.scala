@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.sql.{Timestamp, Date}
+import java.sql.{Date, Timestamp}
 import java.util.Arrays
 import java.util.concurrent.ConcurrentMap
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
@@ -27,10 +28,10 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.types.{StructType, ArrayType}
+import org.apache.spark.sql.types.{ArrayType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -160,6 +161,9 @@ class ExpressionEncoderSuite extends SparkFunSuite {
 
   productTest(OptionalData(None, None, None, None, None, None, None, None))
 
+  encodeDecodeTest(Seq(Some(1), None), "Option in array")
+  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
+
   productTest(BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
 
   productTest(BoxedData(null, null, null, null, null, null, null))
@@ -243,6 +247,8 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     val longEnc = ExpressionEncoder[Long]
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
+
+  productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("nullable of encoder schema") {
     def checkNullable[T: ExpressionEncoder](nullable: Boolean*): Unit = {

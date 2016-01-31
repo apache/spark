@@ -20,7 +20,7 @@ package org.apache.spark.streaming.flume
 import java.net.InetSocketAddress
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -30,8 +30,8 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
 class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {

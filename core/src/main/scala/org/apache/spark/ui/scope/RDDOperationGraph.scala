@@ -18,7 +18,7 @@
 package org.apache.spark.ui.scope
 
 import scala.collection.mutable
-import scala.collection.mutable.{StringBuilder, ListBuffer}
+import scala.collection.mutable.{ListBuffer, StringBuilder}
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
@@ -130,7 +130,11 @@ private[ui] object RDDOperationGraph extends Logging {
           }
         }
         // Attach the outermost cluster to the root cluster, and the RDD to the innermost cluster
-        rddClusters.headOption.foreach { cluster => rootCluster.attachChildCluster(cluster) }
+        rddClusters.headOption.foreach { cluster =>
+          if (!rootCluster.childClusters.contains(cluster)) {
+            rootCluster.attachChildCluster(cluster)
+          }
+        }
         rddClusters.lastOption.foreach { cluster => cluster.attachChildNode(node) }
       }
     }

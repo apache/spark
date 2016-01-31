@@ -17,13 +17,13 @@
 
 package org.apache.spark.examples.streaming;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
@@ -33,9 +33,8 @@ import org.apache.spark.streaming.twitter.TwitterUtils;
 import scala.Tuple2;
 import twitter4j.Status;
 
-import java.io.IOException;
-import java.net.URI;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -44,7 +43,7 @@ import java.util.List;
  */
 public class JavaTwitterHashTagJoinSentiments {
 
-  public static void main(String[] args) throws IOException {
+  public static void main(String[] args) {
     if (args.length < 4) {
       System.err.println("Usage: JavaTwitterHashTagJoinSentiments <consumer key> <consumer secret>" +
         " <access token> <access token secret> [<filters>]");
@@ -72,14 +71,14 @@ public class JavaTwitterHashTagJoinSentiments {
 
     JavaDStream<String> words = stream.flatMap(new FlatMapFunction<Status, String>() {
       @Override
-      public Iterable<String> call(Status s) {
-        return Arrays.asList(s.getText().split(" "));
+      public Iterator<String> call(Status s) {
+        return Arrays.asList(s.getText().split(" ")).iterator();
       }
     });
 
     JavaDStream<String> hashTags = words.filter(new Function<String, Boolean>() {
       @Override
-      public Boolean call(String word) throws Exception {
+      public Boolean call(String word) {
         return word.startsWith("#");
       }
     });
@@ -91,8 +90,7 @@ public class JavaTwitterHashTagJoinSentiments {
         @Override
         public Tuple2<String, Double> call(String line) {
           String[] columns = line.split("\t");
-          return new Tuple2<String, Double>(columns[0],
-            Double.parseDouble(columns[1]));
+          return new Tuple2<>(columns[0], Double.parseDouble(columns[1]));
         }
       });
 
@@ -101,7 +99,7 @@ public class JavaTwitterHashTagJoinSentiments {
         @Override
         public Tuple2<String, Integer> call(String s) {
           // leave out the # character
-          return new Tuple2<String, Integer>(s.substring(1), 1);
+          return new Tuple2<>(s.substring(1), 1);
         }
       });
 
@@ -120,9 +118,8 @@ public class JavaTwitterHashTagJoinSentiments {
       hashTagTotals.transformToPair(new Function<JavaPairRDD<String, Integer>,
         JavaPairRDD<String, Tuple2<Double, Integer>>>() {
         @Override
-        public JavaPairRDD<String, Tuple2<Double, Integer>> call(JavaPairRDD<String,
-          Integer> topicCount)
-          throws Exception {
+        public JavaPairRDD<String, Tuple2<Double, Integer>> call(
+            JavaPairRDD<String, Integer> topicCount) {
           return wordSentiments.join(topicCount);
         }
       });
@@ -131,9 +128,9 @@ public class JavaTwitterHashTagJoinSentiments {
       new PairFunction<Tuple2<String, Tuple2<Double, Integer>>, String, Double>() {
         @Override
         public Tuple2<String, Double> call(Tuple2<String,
-          Tuple2<Double, Integer>> topicAndTuplePair) throws Exception {
+          Tuple2<Double, Integer>> topicAndTuplePair) {
           Tuple2<Double, Integer> happinessAndCount = topicAndTuplePair._2();
-          return new Tuple2<String, Double>(topicAndTuplePair._1(),
+          return new Tuple2<>(topicAndTuplePair._1(),
             happinessAndCount._1() * happinessAndCount._2());
         }
       });
@@ -141,9 +138,8 @@ public class JavaTwitterHashTagJoinSentiments {
     JavaPairDStream<Double, String> happinessTopicPairs = topicHappiness.mapToPair(
       new PairFunction<Tuple2<String, Double>, Double, String>() {
         @Override
-        public Tuple2<Double, String> call(Tuple2<String, Double> topicHappiness)
-          throws Exception {
-          return new Tuple2<Double, String>(topicHappiness._2(),
+        public Tuple2<Double, String> call(Tuple2<String, Double> topicHappiness) {
+          return new Tuple2<>(topicHappiness._2(),
             topicHappiness._1());
         }
       });
@@ -151,17 +147,17 @@ public class JavaTwitterHashTagJoinSentiments {
     JavaPairDStream<Double, String> happiest10 = happinessTopicPairs.transformToPair(
       new Function<JavaPairRDD<Double, String>, JavaPairRDD<Double, String>>() {
         @Override
-        public JavaPairRDD<Double, String> call(JavaPairRDD<Double,
-          String> happinessAndTopics) throws Exception {
+        public JavaPairRDD<Double, String> call(
+            JavaPairRDD<Double, String> happinessAndTopics) {
           return happinessAndTopics.sortByKey(false);
         }
       }
     );
 
     // Print hash tags with the most positive sentiment values
-    happiest10.foreachRDD(new Function<JavaPairRDD<Double, String>, Void>() {
+    happiest10.foreachRDD(new VoidFunction<JavaPairRDD<Double, String>>() {
       @Override
-      public Void call(JavaPairRDD<Double, String> happinessTopicPairs) throws Exception {
+      public void call(JavaPairRDD<Double, String> happinessTopicPairs) {
         List<Tuple2<Double, String>> topList = happinessTopicPairs.take(10);
         System.out.println(
           String.format("\nHappiest topics in last 10 seconds (%s total):",
@@ -170,7 +166,6 @@ public class JavaTwitterHashTagJoinSentiments {
           System.out.println(
             String.format("%s (%s happiness)", pair._2(), pair._1()));
         }
-        return null;
       }
     });
 

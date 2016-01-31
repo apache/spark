@@ -21,8 +21,8 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.hive.conf.HiveConf
 
-import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.{Row, SQLConf}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetCompatibilityTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHiveSingleton {

@@ -17,15 +17,14 @@
 
 package org.apache.spark.input
 
-import org.apache.hadoop.conf.{Configuration, Configurable => HConfigurable}
 import com.google.common.io.{ByteStreams, Closeables}
-
+import org.apache.hadoop.conf.{Configurable => HConfigurable, Configuration}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.InputSplit
-import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, CombineFileRecordReader}
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileRecordReader, CombineFileSplit}
 
 /**
  * A trait to implement [[org.apache.hadoop.conf.Configurable Configurable]] interface.
