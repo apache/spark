@@ -349,6 +349,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.intersect(nullInts),
+      Row(1) ::
+      Row(2) ::
+      Row(3) ::
+      Row(null) :: Nil)
+
+    // check if values are de-duplicated
+    checkAnswer(
+      allNulls.intersect(allNulls),
+      Row(null) :: Nil)
+
+    // check if values are de-duplicated
+    val df = Seq(("id1", 1), ("id1", 1), ("id", 1), ("id1", 2)).toDF("id", "value")
+    checkAnswer(
+      df.intersect(df),
+      Row("id1", 1) ::
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
   }
 
   test("intersect - nullability") {
