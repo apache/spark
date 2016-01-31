@@ -26,36 +26,54 @@ import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A helper class to write data into global row buffer using `UnsafeRow` format,
- * used by {@link org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection}.
+ * A helper class to write data into global row buffer using `UnsafeRow` format.
+ *
+ * It will remember the offset of row buffer which it starts to write, and move the cursor of row
+ * buffer while writing.  If new data(can be the input record if this is the outermost writer, or
+ * nested struct if this is an inner writer) comes, the starting cursor of row buffer may be
+ * changed, so we need to call `UnsafeRowWriter.reset` before writing, to update the
+ * `startingOffset` and clear out null bits.
+ *
+ * Note that if this is the outermost writer, which means we will always write from the very
+ * beginning of the global row buffer, we don't need to update `startingOffset` and can just call
+ * `zeroOutNullBytes` before writing new data.
  */
 public class UnsafeRowWriter {
 
-  private BufferHolder holder;
+  private final BufferHolder holder;
   // The offset of the global buffer where we start to write this row.
   private int startingOffset;
-  private int nullBitsSize;
-  private UnsafeRow row;
+  private final int nullBitsSize;
+  private final int fixedSize;
 
-  public void initialize(BufferHolder holder, int numFields) {
+  public UnsafeRowWriter(BufferHolder holder, int numFields) {
     this.holder = holder;
-    this.startingOffset = holder.cursor;
     this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
+    this.fixedSize = nullBitsSize + 8 * numFields;
+    this.startingOffset = holder.cursor;
+  }
+
+  /**
+   * Resets the `startingOffset` according to the current cursor of row buffer, and clear out null
+   * bits.  This should be called before we write a new nested struct to the row buffer.
+   */
+  public void reset() {
+    this.startingOffset = holder.cursor;
 
     // grow the global buffer to make sure it has enough space to write fixed-length data.
-    final int fixedSize = nullBitsSize + 8 * numFields;
-    holder.grow(fixedSize, row);
+    holder.grow(fixedSize);
     holder.cursor += fixedSize;
 
-    // zero-out the null bits region
+    zeroOutNullBytes();
+  }
+
+  /**
+   * Clears out null bits.  This should be called before we write a new row to row buffer.
+   */
+  public void zeroOutNullBytes() {
     for (int i = 0; i < nullBitsSize; i += 8) {
       Platform.putLong(holder.buffer, startingOffset + i, 0L);
     }
-  }
-
-  public void initialize(UnsafeRow row, BufferHolder holder, int numFields) {
-    initialize(holder, numFields);
-    this.row = row;
   }
 
   private void zeroOutPaddingBytes(int numBytes) {
@@ -98,7 +116,7 @@ public class UnsafeRowWriter {
 
     if (remainder > 0) {
       final int paddingBytes = 8 - remainder;
-      holder.grow(paddingBytes, row);
+      holder.grow(paddingBytes);
 
       for (int i = 0; i < paddingBytes; i++) {
         Platform.putByte(holder.buffer, holder.cursor, (byte) 0);
@@ -161,7 +179,7 @@ public class UnsafeRowWriter {
       }
     } else {
       // grow the global buffer before writing data.
-      holder.grow(16, row);
+      holder.grow(16);
 
       // zero-out the bytes
       Platform.putLong(holder.buffer, holder.cursor, 0L);
@@ -193,7 +211,7 @@ public class UnsafeRowWriter {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
-    holder.grow(roundedSize, row);
+    holder.grow(roundedSize);
 
     zeroOutPaddingBytes(numBytes);
 
@@ -214,7 +232,7 @@ public class UnsafeRowWriter {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
 
     // grow the global buffer before writing data.
-    holder.grow(roundedSize, row);
+    holder.grow(roundedSize);
 
     zeroOutPaddingBytes(numBytes);
 
@@ -230,7 +248,7 @@ public class UnsafeRowWriter {
 
   public void write(int ordinal, CalendarInterval input) {
     // grow the global buffer before writing data.
-    holder.grow(16, row);
+    holder.grow(16);
 
     // Write the months and microseconds fields of Interval to the variable length portion.
     Platform.putLong(holder.buffer, holder.cursor, input.months);

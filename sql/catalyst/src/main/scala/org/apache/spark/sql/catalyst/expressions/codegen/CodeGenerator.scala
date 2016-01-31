@@ -56,6 +56,20 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+    * Add an object to `references`, create a class member to access it.
+    *
+    * Returns the name of class member.
+    */
+  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
+    val term = freshName(name)
+    val idx = references.length
+    references += obj
+    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
+    term
+  }
+
+  /**
     * Holding a list of generated columns as input of current operator, will be used by
     * BoundReference to generate code.
     */
@@ -125,7 +139,7 @@ class CodegenContext {
   val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
 
   // The collection of sub-exression result resetting methods that need to be called on each row.
-  val subExprResetVariables = mutable.ArrayBuffer.empty[String]
+  val subexprFunctions = mutable.ArrayBuffer.empty[String]
 
   def declareAddedFunctions(): String = {
     addedFunctions.map { case (funcName, funcCode) => funcCode }.mkString("\n")
@@ -145,13 +159,22 @@ class CodegenContext {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
+    * A prefix used to generate fresh name.
+    */
+  var freshNamePrefix = ""
+
+  /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
    *
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  def freshName(prefix: String): String = {
-    s"$prefix${curId.getAndIncrement}"
+  def freshName(name: String): String = {
+    if (freshNamePrefix == "") {
+      s"$name${curId.getAndIncrement}"
+    } else {
+      s"${freshNamePrefix}_$name${curId.getAndIncrement}"
+    }
   }
 
   /**
@@ -186,6 +209,39 @@ class CodegenContext {
       case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       case _ => s"$row.update($ordinal, $value)"
+    }
+  }
+
+  /**
+    * Update a column in MutableRow from ExprCode.
+    */
+  def updateColumn(
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (dataType.isInstanceOf[DecimalType]) {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             ${setColumn(row, dataType, ordinal, "null")};
+           }
+         """
+      } else {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             $row.setNullAt($ordinal);
+           }
+         """
+      }
+    } else {
+      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
     }
   }
 
@@ -424,9 +480,9 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach(e => {
       val expr = e.head
-      val isNull = freshName("isNull")
-      val value = freshName("value")
       val fnName = freshName("evalExpr")
+      val isNull = s"${fnName}IsNull"
+      val value = s"${fnName}Value"
 
       // Generate the code for this expression tree and wrap it in a function.
       val code = expr.gen(this)
@@ -461,7 +517,7 @@ class CodegenContext {
       addMutableState(javaType(expr.dataType), value,
         s"$value = ${defaultValue(expr.dataType)};")
 
-      subExprResetVariables += s"$fnName($INPUT_ROW);"
+      subexprFunctions += s"$fnName($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
       e.foreach(subExprEliminationExprs.put(_, state))
     })

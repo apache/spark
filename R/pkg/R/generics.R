@@ -418,15 +418,27 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
+setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
 
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
+
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
+
+#' @rdname drop
+#' @export
+setGeneric("drop", function(x, ...) { standardGeneric("drop") })
 
 #' @rdname dropduplicates
 #' @export
@@ -535,7 +547,7 @@ setGeneric("sampleBy", function(x, col, fractions, seed) { standardGeneric("samp
 
 #' @rdname saveAsTable
 #' @export
-setGeneric("saveAsTable", function(df, tableName, source, mode, ...) {
+setGeneric("saveAsTable", function(df, tableName, source = NULL, mode = "error", ...) {
   standardGeneric("saveAsTable")
 })
 
@@ -548,7 +560,15 @@ setGeneric("transform", function(`_data`, ...) {standardGeneric("transform") })
 
 #' @rdname write.df
 #' @export
-setGeneric("saveDF", function(df, path, ...) { standardGeneric("saveDF") })
+setGeneric("write.df", function(df, path, source = NULL, mode = "error", ...) {
+  standardGeneric("write.df")
+})
+
+#' @rdname write.df
+#' @export
+setGeneric("saveDF", function(df, path, source = NULL, mode = "error", ...) {
+  standardGeneric("saveDF")
+})
 
 #' @rdname write.json
 #' @export

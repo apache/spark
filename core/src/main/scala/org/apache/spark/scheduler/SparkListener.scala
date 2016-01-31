@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import javax.annotation.Nullable
 
 import scala.collection.Map
 import scala.collection.mutable
@@ -34,7 +35,10 @@ import org.apache.spark.util.{Distribution, Utils}
 
 @DeveloperApi
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
-trait SparkListenerEvent
+trait SparkListenerEvent {
+  /* Whether output this event to the event log */
+  protected[spark] def logEvent: Boolean = true
+}
 
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
@@ -57,7 +61,7 @@ case class SparkListenerTaskEnd(
     taskType: String,
     reason: TaskEndReason,
     taskInfo: TaskInfo,
-    taskMetrics: TaskMetrics)
+    @Nullable taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 
 @DeveloperApi
@@ -108,12 +112,12 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
 /**
  * Periodic updates from executors.
  * @param execId executor id
- * @param taskMetrics sequence of (task id, stage id, stage attempt, metrics)
+ * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
     execId: String,
-    taskMetrics: Seq[(Long, Int, Int, TaskMetrics)])
+    accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])])
   extends SparkListenerEvent
 
 @DeveloperApi

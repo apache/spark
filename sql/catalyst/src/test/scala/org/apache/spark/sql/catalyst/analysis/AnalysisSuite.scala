@@ -154,6 +154,11 @@ class AnalysisSuite extends AnalysisTest {
     checkAnalysis(plan, expected)
   }
 
+  test("self intersect should resolve duplicate expression IDs") {
+    val plan = testRelation.intersect(testRelation)
+    assertAnalysisSuccess(plan)
+  }
+
   test("SPARK-8654: invalid CAST in NULL IN(...) expression") {
     val plan = Project(Alias(In(Literal(null), Seq(Literal(1), Literal(2))), "a")() :: Nil,
       LocalRelation()
@@ -234,6 +239,12 @@ class AnalysisSuite extends AnalysisTest {
       .groupBy(a, c)(alias1, alias2, alias3)
       .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
       .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
+    checkAnalysis(plan, expected)
+  }
+
+  test("Eliminate the unnecessary union") {
+    val plan = Union(testRelation :: Nil)
+    val expected = testRelation
     checkAnalysis(plan, expected)
   }
 

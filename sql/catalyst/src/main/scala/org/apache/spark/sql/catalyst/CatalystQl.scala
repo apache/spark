@@ -140,6 +140,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
+    case Token("TOK_CHAR", Token(_, Nil) :: Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
     case Token("TOK_DOUBLE", Nil) => DoubleType
     case Token("TOK_DATE", Nil) => DateType
@@ -156,9 +157,10 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
 
   protected def nodeToStructField(node: ASTNode): StructField = node match {
     case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: _ /* comment */:: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
+      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true)
+    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: comment :: Nil) =>
+      val meta = new MetadataBuilder().putString("comment", unquoteString(comment.text)).build()
+      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true, meta)
     case _ =>
       noParseRule("StructField", node)
   }
@@ -210,6 +212,29 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
+    case Token("TOK_SHOWFUNCTIONS", args) =>
+      // Skip LIKE.
+      val pattern = args match {
+        case like :: nodes if like.text.toUpperCase == "LIKE" => nodes
+        case nodes => nodes
+      }
+
+      // Extract Database and Function name
+      pattern match {
+        case Nil =>
+          ShowFunctions(None, None)
+        case Token(name, Nil) :: Nil =>
+          ShowFunctions(None, Some(unquoteString(cleanIdentifier(name))))
+        case Token(db, Nil) :: Token(name, Nil) :: Nil =>
+          ShowFunctions(Some(unquoteString(cleanIdentifier(db))),
+            Some(unquoteString(cleanIdentifier(name))))
+        case _ =>
+          noParseRule("SHOW FUNCTIONS", node)
+      }
+
+    case Token("TOK_DESCFUNCTION", Token(functionName, Nil) :: isExtended) =>
+      DescribeFunction(cleanIdentifier(functionName), isExtended.nonEmpty)
+
     case Token("TOK_QUERY", queryArgs @ Token("TOK_CTE" | "TOK_FROM" | "TOK_INSERT", _) :: _) =>
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {
@@ -402,8 +427,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             overwrite)
       }
 
-      // If there are multiple INSERTS just UNION them together into on query.
-      val query = queries.reduceLeft(Union)
+      // If there are multiple INSERTS just UNION them together into one query.
+      val query = if (queries.length == 1) queries.head else Union(queries)
 
       // return With plan if there is CTE
       cteRelations.map(With(query, _)).getOrElse(query)
@@ -589,7 +614,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("Select", node)
   }
 
-  protected val escapedIdentifier = "`([^`]+)`".r
+  protected val escapedIdentifier = "`(.+)`".r
   protected val doubleQuotedString = "\"([^\"]+)\"".r
   protected val singleQuotedString = "'([^']+)'".r
 
@@ -623,6 +648,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val CASE = "(?i)CASE".r
 
   val INTEGRAL = "[+-]?\\d+".r
+  val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
 
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
@@ -632,7 +658,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(nameParts) =>
           UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
-        case other => UnresolvedExtractValue(other, Literal(attr))
+        case other => UnresolvedExtractValue(other, Literal(cleanIdentifier(attr)))
       }
 
     /* Stars (*) */
@@ -640,7 +666,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", target) :: Nil) if target.nonEmpty =>
-      UnresolvedStar(Some(target.map(_.text)))
+      UnresolvedStar(Some(target.map(x => cleanIdentifier(x.text))))
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
@@ -785,8 +811,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case ast if ast.tokenType == SparkSqlParser.BigintLiteral =>
       Literal.create(ast.text.substring(0, ast.text.length() - 1).toLong, LongType)
 
-    case ast if ast.tokenType == SparkSqlParser.DecimalLiteral =>
-      Literal(Decimal(ast.text.substring(0, ast.text.length() - 2)))
+    case ast if ast.tokenType == SparkSqlParser.DoubleLiteral =>
+      Literal(ast.text.toDouble)
 
     case ast if ast.tokenType == SparkSqlParser.Number =>
       val text = ast.text
@@ -799,7 +825,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               Literal(v.longValue())
             case v => Literal(v.underlying())
           }
+        case DECIMAL(_*) =>
+          Literal(BigDecimal(text).underlying())
         case _ =>
+          // Convert a scientifically notated decimal into a double.
           Literal(text.toDouble)
       }
     case ast if ast.tokenType == SparkSqlParser.StringLiteral =>
@@ -945,7 +974,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   protected def nodeToGenerate(node: ASTNode, outer: Boolean, child: LogicalPlan): Generate = {
     val Token("TOK_SELECT", Token("TOK_SELEXPR", clauses) :: Nil) = node
 
-    val alias = getClause("TOK_TABALIAS", clauses).children.head.text
+    val alias = cleanIdentifier(getClause("TOK_TABALIAS", clauses).children.head.text)
 
     val generator = clauses.head match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: childNode :: Nil) =>

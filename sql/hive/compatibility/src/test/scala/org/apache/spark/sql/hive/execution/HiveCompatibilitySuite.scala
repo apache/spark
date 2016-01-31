@@ -323,7 +323,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Feature removed in HIVE-11145
     "alter_partition_protect_mode",
     "drop_partitions_ignore_protection",
-    "protectmode"
+    "protectmode",
+
+    // Spark parser treats numerical literals differently: it creates decimals instead of doubles.
+    "udf_abs",
+    "udf_format_number",
+    "udf_round",
+    "udf_round_3",
+    "view_cast"
   )
 
   /**
@@ -884,7 +891,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_10_trims",
     "udf_E",
     "udf_PI",
-    "udf_abs",
     "udf_acos",
     "udf_add",
     "udf_array",
@@ -928,7 +934,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_find_in_set",
     "udf_float",
     "udf_floor",
-    "udf_format_number",
     "udf_from_unixtime",
     "udf_greaterthan",
     "udf_greaterthanorequal",
@@ -976,8 +981,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_regexp_replace",
     "udf_repeat",
     "udf_rlike",
-    "udf_round",
-    "udf_round_3",
     "udf_rpad",
     "udf_rtrim",
     "udf_sign",

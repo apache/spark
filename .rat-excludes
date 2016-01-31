@@ -25,6 +25,16 @@ graphlib-dot.min.js
 sorttable.js
 vis.min.js
 vis.min.css
+dataTables.bootstrap.css
+dataTables.bootstrap.min.js
+dataTables.rowsGroup.js
+jquery.blockUI.min.js
+jquery.cookies.2.2.0.min.js
+jquery.dataTables.1.10.4.min.css
+jquery.dataTables.1.10.4.min.js
+jquery.mustache.js
+jsonFormatter.min.css
+jsonFormatter.min.js
 .*avsc
 .*txt
 .*json

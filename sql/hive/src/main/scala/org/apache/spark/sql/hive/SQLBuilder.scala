@@ -129,11 +129,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         conditionSQL = condition.sql
       } yield s"$childSQL $whereOrHaving $conditionSQL"
 
-    case Union(left, right) =>
-      for {
-        leftSQL <- toSQL(left)
-        rightSQL <- toSQL(right)
-      } yield s"$leftSQL UNION ALL $rightSQL"
+    case Union(children) if children.length > 1 =>
+      val childrenSql = children.map(toSQL(_))
+      if (childrenSql.exists(_.isEmpty)) {
+        None
+      } else {
+        Some(childrenSql.map(_.get).mkString(" UNION ALL "))
+      }
 
     // Persisted data source relation
     case Subquery(alias, LogicalRelation(_, _, Some(TableIdentifier(table, Some(database))))) =>

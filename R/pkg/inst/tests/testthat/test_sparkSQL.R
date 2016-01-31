@@ -824,11 +824,6 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
-
-  df$age2 <- NULL
-  expect_equal(columns(df), c("name", "age"))
-  df$age3 <- NULL
-  expect_equal(columns(df), c("name", "age"))
 })
 
 test_that("select with column", {
@@ -852,6 +847,27 @@ test_that("select with column", {
 
   expect_error(select(df, c("name", "age"), "name"),
                 "To select multiple columns, use a character vector or list for col")
+})
+
+test_that("drop column", {
+  df <- select(read.json(sqlContext, jsonPath), "name", "age")
+  df1 <- drop(df, "name")
+  expect_equal(columns(df1), c("age"))
+
+  df$age2 <- df$age
+  df1 <- drop(df, c("name", "age"))
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age)
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df$age2 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+  df$age3 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+
+  # Test to make sure base::drop is not masked
+  expect_equal(drop(1:3 %*% 2:4), 20)
 })
 
 test_that("subsetting", {
@@ -937,8 +953,21 @@ test_that("test HiveContext", {
   df3 <- sql(hiveCtx, "select * from json2")
   expect_is(df3, "DataFrame")
   expect_equal(count(df3), 3)
-
   unlink(jsonPath2)
+
+  hivetestDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  df4 <- sql(hiveCtx, "select * from hivetestbl")
+  expect_is(df4, "DataFrame")
+  expect_equal(count(df4), 3)
+  unlink(hivetestDataPath)
+
+  parquetDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  invisible(saveAsTable(df, "parquetest", "parquet", mode="overwrite", path=parquetDataPath))
+  df5 <- sql(hiveCtx, "select * from parquetest")
+  expect_is(df5, "DataFrame")
+  expect_equal(count(df5), 3)
+  unlink(parquetDataPath)
 })
 
 test_that("column operators", {
@@ -967,6 +996,8 @@ test_that("column functions", {
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
+  c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
+  c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1462,6 +1493,11 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF)[3], "newAge")
   expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 32)
 
+  # Replace existing column
+  newDF <- withColumn(df, "age", df$age + 2)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
@@ -1812,7 +1848,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   expect_equal(coltypes(x), "map<string,string>")
 
   df <- selectExpr(read.json(sqlContext, jsonPath), "name", "(age * 1.21) as age")
-  expect_equal(dtypes(df), list(c("name", "string"), c("age", "double")))
+  expect_equal(dtypes(df), list(c("name", "string"), c("age", "decimal(24,2)")))
 
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")

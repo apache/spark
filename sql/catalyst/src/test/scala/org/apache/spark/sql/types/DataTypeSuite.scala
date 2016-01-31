@@ -122,7 +122,9 @@ class DataTypeSuite extends SparkFunSuite {
     val right = StructType(List())
     val merged = left.merge(right)
 
-    assert(merged === left)
+    assert(DataType.equalsIgnoreCompatibleNullability(merged, left))
+    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
   }
 
   test("merge where left is empty") {
@@ -135,8 +137,9 @@ class DataTypeSuite extends SparkFunSuite {
 
     val merged = left.merge(right)
 
-    assert(right === merged)
-
+    assert(DataType.equalsIgnoreCompatibleNullability(merged, right))
+    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
   }
 
   test("merge where both are non-empty") {
@@ -154,7 +157,10 @@ class DataTypeSuite extends SparkFunSuite {
 
     val merged = left.merge(right)
 
-    assert(merged === expected)
+    assert(DataType.equalsIgnoreCompatibleNullability(merged, expected))
+    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
   }
 
   test("merge where right contains type conflict") {

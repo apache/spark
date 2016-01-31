@@ -37,7 +37,6 @@ private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
     driverUrl: String,
     executorId: String,
-    hostPort: String,
     cores: Int,
     userClassPath: Seq[URL],
     env: SparkEnv)
@@ -55,8 +54,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
-      ref.ask[RegisterExecutorResponse](
-        RegisterExecutor(executorId, self, hostPort, cores, extractLogUrls))
+      ref.ask[RegisterExecutorResponse](RegisterExecutor(executorId, self, cores, extractLogUrls))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       case Success(msg) => Utils.tryLogNonFatalError {
@@ -184,14 +182,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
-      // SparkEnv will set spark.executor.port if the rpc env is listening for incoming
-      // connections (e.g., if it's using akka). Otherwise, the executor is running in
-      // client mode only, and does not accept incoming connections.
-      val sparkHostPort = env.conf.getOption("spark.executor.port").map { port =>
-          hostname + ":" + port
-        }.orNull
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
-        env.rpcEnv, driverUrl, executorId, sparkHostPort, cores, userClassPath, env))
+        env.rpcEnv, driverUrl, executorId, cores, userClassPath, env))
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
@@ -249,6 +241,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     }
 
     run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath)
+    System.exit(0)
   }
 
   private def printUsageAndExit() = {
