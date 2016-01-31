@@ -264,7 +264,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
   // Get the bucket ID based on the bucketing values.
   // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
-  private def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
+  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
     val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
     mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
     val bucketIdGeneration = UnsafeProjection.create(
@@ -303,8 +303,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         matchedBuckets.set(getBucketId(a, numBuckets, v))
       case expressions.EqualNullSafe(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
         matchedBuckets.set(getBucketId(a, numBuckets, v))
-      case expressions.InSet(a: Attribute, set) if a.name == bucketColumnName =>
-        set.foreach(e => matchedBuckets.set(getBucketId(a, numBuckets, e)))
       // Because we only convert In to InSet in Optimizer when there are more than certain
       // items. So it is possible we still get an In expression here that needs to be pushed
       // down.

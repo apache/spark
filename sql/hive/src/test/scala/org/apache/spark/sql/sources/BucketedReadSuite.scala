@@ -20,21 +20,23 @@ package org.apache.spark.sql.sources
 import java.io.File
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{Exchange, PhysicalRDD}
-import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSourceStrategy}
 import org.apache.spark.sql.execution.joins.SortMergeJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
+  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+
   test("read bucketed data") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
     withTable("bucketed_table") {
       df.write
@@ -60,75 +62,94 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
-  // To verify bucket pruning, we compare the contents of remaining buckets (before filtering)
-  // with the expectedAnswer.
+  // To verify if the bucket pruning works, this function checks two conditions:
+  //   1) Check if the pruned buckets (before filtering) are empty.
+  //   2) Verify the final result is the same as the expected one
   private def checkPrunedAnswers(
+      bucketSpec: BucketSpec,
+      bucketValues: Seq[Integer],
       bucketedDataFrame: DataFrame,
       expectedAnswer: DataFrame): Unit = {
+    val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
+    assert(bucketColumnNames.length == 1)
+    val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
+    val bucketColumn = bucketedDataFrame.schema.toAttributes.head
+    val matchedBuckets = new BitSet(numBuckets)
+    bucketValues.foreach { value =>
+      matchedBuckets.set(DataSourceStrategy.getBucketId(bucketColumn, numBuckets, value))
+    }
+
+    // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
     val rdd = bucketedDataFrame.queryExecution.executedPlan.find(_.isInstanceOf[PhysicalRDD])
     assert(rdd.isDefined)
+
+    val checkBucketId = rdd.get.execute().map(_.copy()).mapPartitions(iter => {
+      iter.map(row =>
+        DataSourceStrategy.getBucketId(
+          bucketColumn, numBuckets, row.get(bucketColumnIndex, bucketColumn.dataType)))})
+    // Check if all the returned rows are from the non-pruned buckets
+    assert(checkBucketId.collect().forall(matchedBuckets.get))
+
     checkAnswer(
-      expectedAnswer.orderBy(expectedAnswer.logicalPlan.output.map(attr => Column(attr)) : _*),
-      rdd.get.executeCollectPublic().sortBy(_.toString()))
+      expectedAnswer
+        .orderBy(expectedAnswer.logicalPlan.output.map(attr => Column(attr)) : _*),
+      bucketedDataFrame
+        .orderBy(bucketedDataFrame.logicalPlan.output.map(attr => Column(attr)) : _*))
   }
 
   test("read partitioning bucketed tables with bucket pruning filters") {
-    val df = (10 until 50).map(i => (i % 5, i % 13 + 10, i.toString)).toDF("i", "j", "k")
-
     withTable("bucketed_table") {
-      // The number of buckets should be large enough to make sure each bucket contains
-      // at most one bucketing key value.
+      val numBuckets = 50
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
         .format("json")
         .partitionBy("i")
-        .bucketBy(50, "j")
+        .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
-      for (j <- 10 until 23) {
+
+      for (j <- 0 until 13) {
         // Case 1: EqualTo
         checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
           hiveContext.table("bucketed_table")
             .select("i", "j", "k").filter($"j" === j),
           df.select("i", "j", "k").filter($"j" === j))
 
         // Case 2: EqualNullSafe
         checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
           hiveContext.table("bucketed_table")
             .select("i", "j", "k").filter($"j" <=> j),
           df.select("i", "j", "k").filter($"j" <=> j))
 
         // Case 3: In
         checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Seq(j, j + 1, j + 2, j + 3),
           hiveContext.table("bucketed_table")
             .select("i", "j", "k").filter($"j".isin(j, j + 1, j + 2, j + 3)),
           df.select("i", "j", "k").filter($"j".isin(j, j + 1, j + 2, j + 3)))
       }
-      // Case 4: InSet
-      // The buckets that all these inset elements are counted. Thus, the returned results will
-      // contain many ineligible rows. Below, we just check if the returned results are right.
-      // If buckets are incorrectly pruned, the return results could miss the eligible rows.
-      checkAnswer(
-        df.select("i", "j", "k").filter($"j".isin(10, 11, 12, 13, -3, -4, -5, -6, -7, -8, -9))
-          .sort("i", "j", "k"),
-        hiveContext.table("bucketed_table").select("i", "j", "k")
-          .filter($"j".isin(10, 11, 12, 13, -3, -4, -5, -6, -7, -8, -9)).sort("i", "j", "k"))
     }
   }
 
   test("read non-partitioning bucketed tables with bucket pruning filters") {
-    val df = (10 until 50).map(i => (i % 5, i % 13 + 10, i.toString)).toDF("i", "j", "k")
-
     withTable("bucketed_table") {
-      // The number of buckets should be large enough to make sure each bucket contains
-      // at most one bucketing key value.
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
         .format("json")
-        .bucketBy(50, "j")
+        .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 10 until 23) {
+      for (j <- 0 until 13) {
         checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
           hiveContext.table("bucketed_table")
             .select("i", "j", "k").filter($"j" === j),
           df.select("i", "j", "k").filter($"j" === j))
@@ -138,51 +159,53 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
   test("read partitioning bucketed tables having null in bucketing key") {
     withTable("bucketed_table") {
-      // The number of buckets should be large enough to make sure each bucket contains
-      // at most one bucketing key value.
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("s"), Nil)
       // json does not support predicate push-down, and thus json is used here
       nullStrings.write
         .format("json")
         .partitionBy("n")
-        .bucketBy(50, "s")
+        .bucketBy(numBuckets, "s")
         .saveAsTable("bucketed_table")
 
       // Case 1: isNull
       checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = null :: Nil,
         hiveContext.table("bucketed_table").select("n", "s").filter($"s".isNull),
         nullStrings.select("n", "s").filter($"s".isNull))
 
       // Case 2: <=> null
       checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = null :: Nil,
         hiveContext.table("bucketed_table").select("n", "s").filter($"s" <=> null),
         nullStrings.select("n", "s").filter($"s" <=> null))
     }
   }
 
   test("read partitioning bucketed tables having composite filters") {
-    val df = (10 until 50).map(i => (i % 5, i % 13 + 10, i)).toDF("i", "j", "k")
-
     withTable("bucketed_table") {
-      // The number of buckets should be large enough to make sure each bucket contains
-      // at most one bucketing key value.
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
         .format("json")
         .partitionBy("i")
-        .bucketBy(50, "j")
+        .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
-      for (j <- 10 until 23) {
-        // the filter $"k" > $"j" is not applied since they are ineligible for pushdown and pruning
+      for (j <- 0 until 13) {
         checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
           hiveContext.table("bucketed_table")
             .select("i", "j", "k").filter($"j" === j && $"k" > $"j"),
-          df.select("i", "j", "k").filter($"j" === j))
+          df.select("i", "j", "k").filter($"j" === j && $"k" > $"j"))
 
-        // $"i" > j % 5 is partitioning only filter.
-        // $"j" === j is bucketing only filter and each bucket corresponds to at most one value.
-        // Thus, the final results apply both conditions
         checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
           hiveContext.table("bucketed_table")
             .select("i", "j", "k").filter($"j" === j && $"i" > j % 5),
           df.select("i", "j", "k").filter($"j" === j && $"i" > j % 5))
