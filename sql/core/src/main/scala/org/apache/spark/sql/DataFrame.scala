@@ -143,11 +143,25 @@ class DataFrame private[sql](
       queryExecution.analyzed
   }
 
+  /**
+   * Resolves a column path i.e column name may contain "." or "`". .
+   */
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
       throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
+  }
+
+  /**
+   * Resolves a column name. This is called when it is required to resolve a column by its
+   * name only and not as a column path..
+   */
+  private[sql] def resolveColName(colName: String, userSuppliedName: String): Boolean = {
+    // First remove any user supplied quotes.
+    val unquotedColName = userSuppliedName.stripPrefix("`").stripSuffix("`")
+    sqlContext.analyzer.resolver(colName, unquotedColName)
+
   }
 
   protected[sql] def numericColumns: Seq[Expression] = {
@@ -1175,12 +1189,11 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
+    val shouldReplace = output.exists(f => resolveColName(f.name, colName))
     if (shouldReplace) {
       val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
+        if (resolveColName(field.name, colName)) {
           col.as(colName)
         } else {
           Column(field)
@@ -1196,12 +1209,11 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
+    val shouldReplace = output.exists(f => resolveColName(f.name, colName))
     if (shouldReplace) {
       val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
+        if (resolveColName(field.name, colName)) {
           col.as(colName, metadata)
         } else {
           Column(field)
@@ -1220,12 +1232,11 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val shouldRename = output.exists(f => resolver(f.name, existingName))
+    val shouldRename = output.exists(f => resolveColName(f.name, existingName))
     if (shouldRename) {
       val columns = output.map { col =>
-        if (resolver(col.name, existingName)) {
+        if (resolveColName(col.name, existingName)) {
           Column(col).as(newName)
         } else {
           Column(col)
@@ -1255,13 +1266,9 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val unquotedCols = colNames.map (
-      f => f.stripPrefix("`").stripSuffix("`")
-    )
     val remainingCols =
-      output.filter(f => unquotedCols.forall(n => !resolver(f.name, n))).map(f => Column(f))
+      output.filter(f => colNames.forall(n => !resolveColName(f.name, n))).map(f => Column(f))
     if (remainingCols.size == this.schema.size) {
       this
     } else {
@@ -1278,18 +1285,20 @@ class DataFrame private[sql](
    * @since 1.4.1
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    def expression(attr: Attribute): Expression = col match {
       case Column(u: UnresolvedAttribute) =>
-        val unquotedName = u.name.stripPrefix("`").stripSuffix("`")
-        queryExecution.analyzed.resolveQuoted(s"`${unquotedName}`",
-          sqlContext.analyzer.resolver).getOrElse(u)
+        if (resolveColName(attr.name, u.name)) attr else u
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
+      attr != expression(attr)
     }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+    if (colsAfterDrop.size == this.schema.size) {
+      this
+    } else {
+      select(colsAfterDrop: _*)
+    }
   }
 
   /**
