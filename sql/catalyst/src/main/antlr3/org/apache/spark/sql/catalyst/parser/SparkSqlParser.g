@@ -142,6 +142,7 @@ TOK_UNIONTYPE;
 TOK_COLTYPELIST;
 TOK_CREATEDATABASE;
 TOK_CREATETABLE;
+TOK_CREATETABLEUSING;
 TOK_TRUNCATETABLE;
 TOK_CREATEINDEX;
 TOK_CREATEINDEX_INDEXTBLNAME;
@@ -371,6 +372,10 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_REFRESHTABLE;
+TOK_TABLEPROVIDER;
+TOK_TABLEOPTIONS;
+TOK_TABLEOPTION;
 TOK_CACHETABLE;
 TOK_UNCACHETABLE;
 TOK_CLEARCACHE;
@@ -660,6 +665,12 @@ import java.util.HashMap;
   }
   private char [] excludedCharForColumnName = {'.', ':'};
   private boolean containExcludedCharForCreateTableColumnName(String input) {
+    if (input.length() > 0) {
+      if (input.charAt(0) == '`' && input.charAt(input.length() - 1) == '`') {
+        // When column name is backquoted, we don't care about excluded chars.
+        return false;
+      }
+    }
     for(char c : excludedCharForColumnName) {
       if(input.indexOf(c)>-1) {
         return true;
@@ -781,6 +792,7 @@ ddlStatement
     | truncateTableStatement
     | alterStatement
     | descStatement
+    | refreshStatement
     | showStatement
     | metastoreCheck
     | createViewStatement
@@ -907,12 +919,31 @@ createTableStatement
 @init { pushMsg("create table statement", state); }
 @after { popMsg(state); }
     : KW_CREATE (temp=KW_TEMPORARY)? (ext=KW_EXTERNAL)? KW_TABLE ifNotExists? name=tableName
-      (  like=KW_LIKE likeName=tableName
+      (
+         like=KW_LIKE likeName=tableName
          tableRowFormat?
          tableFileFormat?
          tableLocation?
          tablePropertiesPrefixed?
+      -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+         ^(TOK_LIKETABLE $likeName?)
+         tableRowFormat?
+         tableFileFormat?
+         tableLocation?
+         tablePropertiesPrefixed?
+         )
+      |
+         tableProvider
+         tableOpts?
+         (KW_AS selectStatementWithCTE)?
+      -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+          tableProvider
+          tableOpts?
+          selectStatementWithCTE?
+          )
        | (LPAREN columnNameTypeList RPAREN)?
+         (p=tableProvider?)
+         tableOpts?
          tableComment?
          tablePartition?
          tableBuckets?
@@ -922,8 +953,15 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          (KW_AS selectStatementWithCTE)?
-      )
-    -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+      -> {p != null}?
+         ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+         columnNameTypeList?
+         $p
+         tableOpts?
+         selectStatementWithCTE?
+         )
+      ->
+         ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
          ^(TOK_LIKETABLE $likeName?)
          columnNameTypeList?
          tableComment?
@@ -935,7 +973,8 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          selectStatementWithCTE?
-        )
+         )
+      )
     ;
 
 truncateTableStatement
@@ -1379,6 +1418,13 @@ tabPartColTypeExpr
     :  tableName partitionSpec? extColumnName? -> ^(TOK_TABTYPE tableName partitionSpec? extColumnName?)
     ;
 
+refreshStatement
+@init { pushMsg("refresh statement", state); }
+@after { popMsg(state); }
+    :
+    KW_REFRESH KW_TABLE tableName -> ^(TOK_REFRESHTABLE tableName)
+    ;
+
 descStatement
 @init { pushMsg("describe statement", state); }
 @after { popMsg(state); }
@@ -1774,6 +1820,30 @@ showStmtIdentifier
     | StringLiteral
     ;
 
+tableProvider
+@init { pushMsg("table's provider", state); }
+@after { popMsg(state); }
+    :
+      KW_USING Identifier (DOT Identifier)*
+    -> ^(TOK_TABLEPROVIDER Identifier+)
+    ;
+
+optionKeyValue
+@init { pushMsg("table's option specification", state); }
+@after { popMsg(state); }
+    :
+       (looseIdentifier (DOT looseIdentifier)*) StringLiteral
+    -> ^(TOK_TABLEOPTION looseIdentifier+ StringLiteral)
+    ;
+
+tableOpts
+@init { pushMsg("table's options", state); }
+@after { popMsg(state); }
+    :
+      KW_OPTIONS LPAREN optionKeyValue (COMMA optionKeyValue)* RPAREN
+    -> ^(TOK_TABLEOPTIONS optionKeyValue+)
+    ;
+
 tableComment
 @init { pushMsg("table's comment", state); }
 @after { popMsg(state); }
@@ -2132,7 +2202,7 @@ structType
 mapType
 @init { pushMsg("map type", state); }
 @after { popMsg(state); }
-    : KW_MAP LESSTHAN left=primitiveType COMMA right=type GREATERTHAN
+    : KW_MAP LESSTHAN left=type COMMA right=type GREATERTHAN
     -> ^(TOK_MAP $left $right)
     ;
 

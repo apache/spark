@@ -324,6 +324,8 @@ KW_ISOLATION: 'ISOLATION';
 KW_LEVEL: 'LEVEL';
 KW_SNAPSHOT: 'SNAPSHOT';
 KW_AUTOCOMMIT: 'AUTOCOMMIT';
+KW_REFRESH: 'REFRESH';
+KW_OPTIONS: 'OPTIONS';
 KW_WEEK: 'WEEK'|'WEEKS';
 KW_MILLISECOND: 'MILLISECOND'|'MILLISECONDS';
 KW_MICROSECOND: 'MICROSECOND'|'MICROSECONDS';
@@ -470,7 +472,7 @@ Identifier
 fragment    
 QuotedIdentifier 
     :
-    '`'  ( '``' | ~('`') )* '`' { setText(getText().substring(1, getText().length() -1 ).replaceAll("``", "`")); }
+    '`'  ( '``' | ~('`') )* '`' { setText(getText().replaceAll("``", "`")); }
     ;
 
 WS  :  (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;}
