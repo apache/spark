@@ -81,8 +81,6 @@ _functions = {
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
-    'first': 'Aggregate function: returns the first value in a group.',
-    'last': 'Aggregate function: returns the last value in a group.',
     'count': 'Aggregate function: returns the number of items in a group.',
     'sum': 'Aggregate function: returns the sum of all values in the expression.',
     'avg': 'Aggregate function: returns the average of the values in a group.',
@@ -277,6 +275,13 @@ def countDistinct(col, *cols):
     jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
+@since(1.3)
+def first(col, ignorenulls=False):
+    """Aggregate function: returns the first value in a group.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
+    return Column(jc)
 
 @since(1.6)
 def input_file_name():
@@ -309,6 +314,13 @@ def isnull(col):
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
 
+@since(1.3)
+def last(col, ignorenulls=False):
+    """Aggregate function: returns the last value in a group.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
+    return Column(jc)
 
 @since(1.6)
 def monotonically_increasing_id():
