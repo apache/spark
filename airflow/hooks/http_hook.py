@@ -40,6 +40,8 @@ class HttpHook(BaseHook):
         """
         Performs the request
         """
+        extra_options = extra_options or {}
+
         session = self.get_conn(headers)
 
         url = self.base_url + endpoint
