@@ -35,6 +35,7 @@ import org.apache.spark.annotation.DeveloperApi
  * @param value total accumulated value so far, maybe None if used on executors to describe a task
  * @param internal whether this accumulator was internal
  * @param countFailedValues whether to count this accumulator's partial value if the task failed
+ * @param metadata internal metadata associated with this accumulator, if any
  */
 @DeveloperApi
 case class AccumulableInfo private[spark] (
@@ -43,7 +44,9 @@ case class AccumulableInfo private[spark] (
     update: Option[Any], // represents a partial update within a task
     value: Option[Any],
     private[spark] val internal: Boolean,
-    private[spark] val countFailedValues: Boolean)
+    private[spark] val countFailedValues: Boolean,
+    // TODO: use this to identify internal task metrics instead of encoding it in the name
+    private[spark] val metadata: Option[String] = None)
 
 
 /**
