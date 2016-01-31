@@ -605,13 +605,15 @@ class LinearRegressionSuite
   }
 
   test("regularized linear regression through origin with constant label") {
-    // The problem is ill-defined if fitIntercept=false, regParam is non-zero and \
+    // The problem is ill-defined if fitIntercept=false, regParam is non-zero and
     // standardization=true. An exception is thrown in this case.
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
-      val model = new LinearRegression()
-        .setFitIntercept(false).setRegParam(0.1).setStandardization(true).setSolver(solver)
-      intercept[IllegalArgumentException] {
-        model.fit(datasetWithWeightConstantLabel)
+      for (standardization <- Seq(false, true)) {
+        val model = new LinearRegression().setFitIntercept(false)
+          .setRegParam(0.1).setStandardization(standardization).setSolver(solver)
+        intercept[IllegalArgumentException] {
+          model.fit(datasetWithWeightConstantLabel)
+        }
       }
     }
   }
