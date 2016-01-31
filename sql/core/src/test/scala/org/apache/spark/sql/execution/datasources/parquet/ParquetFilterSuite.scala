@@ -421,6 +421,21 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // We will remove the temporary metadata when writing Parquet file.
         val forPathSix = sqlContext.read.parquet(pathSix).schema
         assert(forPathSix.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
+
+        // sanity test: make sure optional metadata field is not wrongly set.
+        val pathSeven = s"${dir.getCanonicalPath}/table7"
+        (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathSeven)
+        val pathEight = s"${dir.getCanonicalPath}/table8"
+        (4 to 6).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathEight)
+
+        val df2 = sqlContext.read.parquet(pathSeven, pathEight).filter("a = 1").selectExpr("a", "b")
+        checkAnswer(
+          df2,
+          Row(1, "1"))
+
+        // The fields "a" and "b" exist in both two Parquet files. No metadata is set.
+        assert(!df2.schema("a").metadata.contains(StructType.metadataKeyForOptionalField))
+        assert(!df2.schema("b").metadata.contains(StructType.metadataKeyForOptionalField))
       }
     }
   }

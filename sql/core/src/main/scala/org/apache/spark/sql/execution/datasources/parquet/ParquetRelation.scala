@@ -800,12 +800,37 @@ private[sql] object ParquetRelation extends Logging {
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               writeLegacyParquetFormat = writeLegacyParquetFormat)
 
-          footers.map { footer =>
-            ParquetRelation.readSchemaFromFooter(footer, converter)
-          }.reduceLeftOption(_ merge _).iterator
+          if (footers.isEmpty) {
+            Iterator.empty
+          } else {
+            var mergedSchema = ParquetRelation.readSchemaFromFooter(footers.head, converter)
+            footers.tail.foreach { footer =>
+              val schema = ParquetRelation.readSchemaFromFooter(footer, converter)
+              try {
+                mergedSchema = mergedSchema.merge(schema)
+              } catch { case cause: SparkException =>
+                throw new SparkException(
+                  s"Failed merging schema of file ${footer.getFile}:\n${schema.treeString}", cause)
+              }
+            }
+            Iterator.single(mergedSchema)
+          }
         }.collect()
 
-    partiallyMergedSchemas.reduceLeftOption(_ merge _)
+    if (partiallyMergedSchemas.isEmpty) {
+      None
+    } else {
+      var finalSchema = partiallyMergedSchemas.head
+      partiallyMergedSchemas.tail.foreach { schema =>
+        try {
+          finalSchema = finalSchema.merge(schema)
+        } catch { case cause: SparkException =>
+          throw new SparkException(
+            s"Failed merging schema:\n${schema.treeString}", cause)
+        }
+      }
+      Some(finalSchema)
+    }
   }
 
   /**
