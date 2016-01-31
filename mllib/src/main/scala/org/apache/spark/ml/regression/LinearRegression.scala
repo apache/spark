@@ -74,7 +74,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the regularization parameter.
    * Default is 0.0.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
@@ -83,7 +84,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set if we should fit the intercept
    * Default is true.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.5.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
@@ -96,7 +98,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * the models should be always converged to the same solution when no regularization
    * is applied. In R's GLMNET package, the default behavior is true as well.
    * Default is true.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
@@ -107,7 +110,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
    * For 0 < alpha < 1, the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
@@ -116,7 +120,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   /**
    * Set the maximum number of iterations.
    * Default is 100.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -126,7 +131,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * Set the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
@@ -136,7 +142,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * Whether to over-/under-sample training instances according to the given weights in weightCol.
    * If empty, all instances are treated equally (weight 1.0).
    * Default is empty, so all instances have weight one.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.6.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -150,7 +157,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * solution to the linear regression problem.
    * The default value is "auto" which means that the solver algorithm is
    * selected automatically.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
@@ -226,9 +234,14 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         // zero coefficient; as a result, training is not needed.
         // Also, if yMean==0 and rawYStd==0, all the coefficients are zero regardless of
         // the fitIntercept
-        logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
-          s"zeros and the intercept will be the mean of the label; as a result, " +
-          s"training is not needed.")
+        if (yMean == 0.0) {
+          logWarning(s"Mean and standard deviation of the label are zero, so the coefficients " +
+            s"and the intercept will all be zero; as a result, training is not needed.")
+        } else {
+          logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+            s"zeros and the intercept will be the mean of the label; as a result, " +
+            s"training is not needed.")
+        }
         if (handlePersistence) instances.unpersist()
         val coefficients = Vectors.sparse(numFeatures, Seq())
         val intercept = yMean
@@ -256,7 +269,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     // if y is constant (rawYStd is zero), then y cannot be scaled. In this case
     // setting yStd=1.0 ensures that y is not scaled anymore in l-bfgs algorithm.
-    val yStd = if (rawYStd > 0) rawYStd else if (yMean != 0.0) math.abs(yMean) else 1.0
+    val yStd = if (rawYStd > 0) rawYStd else math.abs(yMean)
     val featuresMean = featuresSummarizer.mean.toArray
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
 
@@ -409,7 +422,8 @@ class LinearRegressionModel private[ml] (
 
   /**
    * Evaluates the model on a testset.
-   * @param dataset Test dataset to evaluate model on.
+    *
+    * @param dataset Test dataset to evaluate model on.
    */
   // TODO: decide on a good name before exposing to public API
   private[regression] def evaluate(dataset: DataFrame): LinearRegressionSummary = {
@@ -507,7 +521,8 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
  * :: Experimental ::
  * Linear regression training results. Currently, the training summary ignores the
  * training coefficients except for the objective trace.
- * @param predictions predictions outputted by the model's `transform` method.
+  *
+  * @param predictions predictions outputted by the model's `transform` method.
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 @Since("1.5.0")
@@ -531,7 +546,8 @@ class LinearRegressionTrainingSummary private[regression] (
 /**
  * :: Experimental ::
  * Linear regression results evaluated on a dataset.
- * @param predictions predictions outputted by the model's `transform` method.
+  *
+  * @param predictions predictions outputted by the model's `transform` method.
  */
 @Since("1.5.0")
 @Experimental
