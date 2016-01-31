@@ -30,11 +30,12 @@
             <input type="submit" value="Go" class="btn btn-default"
             action="" method="get">
         </form>
+
+            <button class="btn btn-default" id="refreshButton" style="float: left;">Refresh Tasks</button>
             <div class="input-group" style="float: right;">
               <input type="text" id="searchbox" class="form-control" placeholder="Search for..." onenter="null">
             </div><!-- /input-group -->
         <div style="clear: both;">
-
     </div>
 <hr/>
 <div>
@@ -82,37 +83,15 @@
     var g = dagreD3.json.decode(nodes, edges);
     var duration = 500;
     var stateFocusMap = {
-        'no status':false, 'failed':false, 'running':false, 
+        'no status':false, 'failed':false, 'running':false,
         'queued': false, 'success': false};
 
 
     var layout = dagreD3.layout().rankDir(arrange).nodeSep(15).rankSep(15);
     var renderer = new dagreD3.Renderer();
     renderer.layout(layout).run(g, d3.select("#dig"));
+    apply_border_coloring(task_instances);
 
-    // Assigning css classes based on state to nodes for border coloring
-    $.each(task_instances, function(task_id, ti) {
-      $('tspan').filter(function(index) { return $(this).text() === task_id; })
-        .parent().parent().parent()
-        .attr("class", "node enter " + ti.state)
-        .attr("data-toggle", "tooltip")
-        .attr("title", function(d) {
-          // Tooltip
-          task = tasks[task_id];
-          tt =  "Task_id: " + ti.task_id + "<br>";
-          tt += "Run: " + ti.execution_date + "<br>";
-          if(ti.run_id != undefined){
-            tt += "run_id: <nobr>" + ti.run_id + "</nobr><br>";
-          }
-          tt += "Operator: " + task.task_type + "<br>";
-          tt += "Started: " + ti.start_date + "<br>";
-          tt += "Ended: " + ti.end_date + "<br>";
-          tt += "Duration: " + ti.duration + "<br>";
-          tt += "State: " + ti.state + "<br>";
-          return tt;
-        });
-    });
-    
     d3.selectAll("g.node").on("click", function(d){
         task = tasks[d];
         if (task.task_type == "SubDagOperator")
@@ -180,7 +159,7 @@
                     .selectAll("rect")
                     .style("stroke-width", "2px");
             }
-            else{ 
+            else{
                 d3.select("g.edgePaths")
                     .transition().duration(duration)
                     .style("opacity", 0.2);
@@ -205,11 +184,11 @@
         if(match) {
             var transform = d3.transform(d3.select(match).attr("transform"));
             transform.translate = [
-                -transform.translate[0] + 520, 
+                -transform.translate[0] + 520,
                 -(transform.translate[1] - 400)
             ];
             transform.scale = [1, 1];
-            
+
             d3.select("g.zoom")
                 .transition()
                 .attr("transform", transform.toString());
@@ -217,6 +196,31 @@
             renderer.zoom_obj.scale(1);
         }
     });
+
+    // Assigning css classes based on state to nodes for border coloring
+    function apply_border_coloring(task_instances) {
+        $.each(task_instances, function(task_id, ti) {
+          $('tspan').filter(function(index) { return $(this).text() === task_id; })
+            .parent().parent().parent()
+            .attr("class", "node enter " + ti.state)
+            .attr("data-toggle", "tooltip")
+            .attr("title", function(d) {
+              // Tooltip
+              task = tasks[task_id];
+              tt =  "Task_id: " + ti.task_id + "<br>";
+              tt += "Run: " + ti.execution_date + "<br>";
+              if(ti.run_id != undefined){
+                tt += "run_id: <nobr>" + ti.run_id + "</nobr><br>";
+              }
+              tt += "Operator: " + task.task_type + "<br>";
+              tt += "Started: " + ti.start_date + "<br>";
+              tt += "Ended: " + ti.end_date + "<br>";
+              tt += "Duration: " + ti.duration + "<br>";
+              tt += "State: " + ti.state + "<br>";
+              return tt;
+            });
+        });
+    }
 
     function clearFocus(){
         d3.selectAll("g.node")
@@ -267,6 +271,18 @@
         }
         return false
     }
+
+    d3.select("#refreshButton").on("click",
+        function() {
+            $.get(
+                "/admin/airflow/object/task_instances",
+                {dag_id : "{{ dag.dag_id }}", execution_date : "{{ execution_date }}"},
+                function(task_instances) {
+                    apply_border_coloring(JSON.parse(task_instances));
+                }
+            );
+        }
+    );
 
     </script>
 {% endblock %}
