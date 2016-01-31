@@ -301,37 +301,23 @@ class Word2Vec extends Serializable with Logging {
     val expTable = sc.broadcast(createExpTable())
     val bcVocab = sc.broadcast(vocab)
     val bcVocabHash = sc.broadcast(vocabHash)
-    // each partition is a collection of sentences, will be translated into arrays of Index integer
-    val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
-      new Iterator[Array[Int]] {
-        var wordIter: Iterator[String] = null
-
-        def hasNext: Boolean = sentenceIter.hasNext || (wordIter != null && wordIter.hasNext)
-
-        def next(): Array[Int] = {
-          val sentence = ArrayBuilder.make[Int]
-          var sentenceLength = 0
-          // do translation of each word into its index in the vocabulary,
-          // do cutting only when the sentence is larger than maxSentenceLength
-          if ((wordIter == null || !wordIter.hasNext) && sentenceIter.hasNext) {
-            do {
-              // get the non-empty wordIter
-              wordIter = sentenceIter.next().iterator
-            } while (!wordIter.hasNext && sentenceIter.hasNext)
+    // each partition is a collection of sentences,
+    // will be translated into arrays of Index integer
+    val sentences: RDD[Array[Int]] = dataset.mapPartitions {
+      // Each sentence will map to 0 or more Array[Int]
+      sentenceIter =>
+        sentenceIter.flatMap {
+          sentence => {
+            // Sentence of words, some of which map to a word index
+            val wordIndexes = sentence.flatMap(bcVocabHash.value.get)
+            if (wordIndexes.nonEmpty) {
+              // break wordIndexes into trunks of maxSentenceLength when has more
+              val sentenceSplit = wordIndexes.grouped(maxSentenceLength)
+              sentenceSplit.map(_.toArray)
+            } else
+              None
           }
-          while (wordIter.hasNext && sentenceLength < maxSentenceLength) {
-            val word = wordIter.next()
-            val wordIndex = bcVocabHash.value.get(word)
-            wordIndex match {
-              case Some(w) =>
-                sentence += w
-                sentenceLength += 1
-              case None =>
-            }
-          }
-          sentence.result()
         }
-      }
     }
 
     val newSentences = sentences.repartition(numPartitions).cache()
@@ -566,13 +552,17 @@ class Word2VecModel private[spark] (
       }
       ind += 1
     }
-    wordList.zip(cosVec)
+    var topResults = wordList.zip(cosVec)
       .toSeq
-      .sortBy(- _._2)
+      .sortBy(-_._2)
       .take(num + 1)
       .tail
-      .map(v => (if (vecNorm == 0) v else (v._1, v._2 / vecNorm)))
-      .toArray
+    if (vecNorm != 0.0f) {
+      topResults = topResults.map {
+        case (word: String, cosVec: Double) => (word, cosVec / vecNorm)
+      }
+    }
+    topResults.toArray
   }
 
   /**
