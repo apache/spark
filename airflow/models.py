@@ -168,7 +168,7 @@ class DagBag(LoggingMixin):
             found_dags = self.process_file(
                 filepath=orm_dag.fileloc, only_if_updated=False)
 
-            if dag_id in [dag.dag_id for dag in found_dags]:
+            if found_dags and dag_id in [dag.dag_id for dag in found_dags]:
                 return self.dags[dag_id]
             elif dag_id in self.dags:
                 del self.dags[dag_id]
