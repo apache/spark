@@ -270,7 +270,7 @@ class StatsReportListener extends SparkListener with Logging {
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     implicit val sc = stageCompleted
-    this.logInfo("Finished stage: " + stageCompleted.stageInfo)
+    this.logInfo("Finished stage: " + getStatusDetail(stageCompleted.stageInfo))
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration), taskInfoMetrics)
 
     // Shuffle write
@@ -297,6 +297,15 @@ class StatsReportListener extends SparkListener with Logging {
     taskInfoMetrics.clear()
   }
 
+  private[spark] def getStatusDetail(stageInfo: StageInfo): String = {
+    "Stage(%d, %d); Name: \"%s\"; Status: %s%s; numTasks: %d; Took: %s msec".format(
+      stageInfo.stageId, stageInfo.attemptId, stageInfo.name, stageInfo.getStatusString,
+      stageInfo.failureReason.map(x => "(" + x + ")").getOrElse(""),
+      stageInfo.numTasks,
+      stageInfo.submissionTime.map(
+        x => stageInfo.completionTime.getOrElse(System.currentTimeMillis()) - x).getOrElse("-")
+    )
+  }
 }
 
 private[spark] object StatsReportListener extends Logging {
