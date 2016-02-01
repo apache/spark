@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSQLContext
 
+// TODO: this needs a lot more testing but it's currently not easy to test with the parquet
+// writer abstractions. Revisit.
 class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContext {
   import testImplicits._
 
@@ -30,7 +32,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
     null.asInstanceOf[String])
 
   test("All Types Dictionary") {
-    (1 :: 100 :: Nil).foreach { n => {
+    (1 :: 1000 :: Nil).foreach { n => {
       withTempPath { dir =>
         List.fill(n)(ROW).toDF.repartition(1).write.parquet(dir.getCanonicalPath)
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).toArray.head

@@ -286,12 +286,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
 
-  // This is used for decoding dictionary IDs (as opposed to definition levels).
+  // The RLE reader implements the vectorized decoding interface when used to decode dictionary
+  // IDs. This is different than the above APIs that decodes definitions levels along with values.
+  // Since this is only used to decode dictionary IDs, only decoding integers is supported.
   @Override
   public void readIntegers(int total, ColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
-    if (this.currentCount == 0) this.readNextGroup();
+      if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
       switch (mode) {
         case RLE:

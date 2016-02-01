@@ -68,8 +68,12 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public final void readBytes(int total, ColumnVector c, int rowId) {
-    c.putBytes(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
-    offset += total;
+    for (int i = 0; i < total; i++) {
+      // Bytes are stored as a 4-byte little endian int. Just read the first byte.
+      // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
+      c.putInt(rowId + i, buffer[offset]);
+      offset += 4;
+    }
   }
 
   @Override
