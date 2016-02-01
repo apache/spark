@@ -179,7 +179,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       .orElse(Option(System.getenv("SPARK_EXECUTOR_URI")))
 
     if (uri.isEmpty) {
-      val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
+      val runScript = new File(executorSparkHome, "./bin/spark-class").getPath
       command.setValue(
         "%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend"
           .format(prefixEnv, runScript) +
