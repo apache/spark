@@ -352,9 +352,6 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
       .drop("b")
     val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
     val df = src.select($"*", max("c").over(winSpec) as "max")
-
-    df.explain(true)
-
     checkAnswer(df, Row(5, Row(0, 3), 5))
   }
 }
