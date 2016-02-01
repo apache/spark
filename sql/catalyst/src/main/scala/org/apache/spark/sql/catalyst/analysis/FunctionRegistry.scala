@@ -200,6 +200,8 @@ object FunctionRegistry {
     expression[VarianceSamp]("var_samp"),
     expression[Skewness]("skewness"),
     expression[Kurtosis]("kurtosis"),
+    expression[CollectList]("collect_list"),
+    expression[CollectSet]("collect_set"),
 
     // string functions
     expression[Ascii]("ascii"),

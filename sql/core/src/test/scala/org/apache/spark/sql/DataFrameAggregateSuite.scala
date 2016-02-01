@@ -361,4 +361,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         expr("kurtosis(a)")),
       Row(null, null, null, null, null))
   }
+
+  test("collect functions") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
+    )
+  }
 }
