@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, So
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
-import org.apache.spark.sql.catalyst.util.safeSQLIdent
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 /**
@@ -96,7 +96,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       p.child match {
         // Persisted data source relation
         case LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-          s"`$database`.`$table`"
+          s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
         // Parentheses is not used for persisted data source relations
         // e.g., select x.c1 from (t1) as x inner join (t1) as y on x.c1 = y.c1
         case Subquery(_, _: LogicalRelation | _: MetastoreRelation) =>
@@ -115,8 +115,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case p: MetastoreRelation =>
       build(
-        s"`${p.databaseName}`.`${p.tableName}`",
-        p.alias.map(a => s" AS `$a`").getOrElse("")
+        s"${quoteIdentifier(p.databaseName)}.${quoteIdentifier(p.tableName)}",
+        p.alias.map(a => s" AS ${quoteIdentifier(a)}").getOrElse("")
       )
 
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))

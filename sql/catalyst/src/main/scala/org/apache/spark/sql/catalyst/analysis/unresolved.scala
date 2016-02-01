@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.safeSQLIdent
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -69,7 +69,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = safeSQLIdent(name)
+  override def sql: String = quoteIdentifier(name)
 }
 
 object UnresolvedAttribute {
@@ -230,6 +230,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
  * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
  * as follows:
  *  MultiAlias(stack_function, Seq(a, b))
+ *
 
  * @param child the computation being performed
  * @param names the names to be associated with each output of computing [[child]].

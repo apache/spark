@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst
 
 import java.io._
 
-import org.apache.spark.sql.catalyst.parser.SparkSqlParser
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.StringType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 package object util {
@@ -131,29 +133,20 @@ package object util {
     ret
   }
 
-  private val sqlKeywords =
-    SparkSqlParser
-      .tokenNames
-      .filter(_.startsWith("KW_"))
-      .map(_.stripPrefix("KW_").toLowerCase)
-      .toSet
+  // Replaces attributes, string literals, complex type extracters with their pretty form so that
+  // generated column names don't contain back-ticks or double-quotes.
+  def usePrettyExpression(e: Expression): Expression = e transform {
+    case a: Attribute => new PrettyAttribute(a)
+    case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+    case e @ GetStructField(child, _, Some(name)) => PrettyGetStructField(child, name, e.dataType)
+    case e: GetArrayStructFields =>
+      PrettyGetArrayStructFields(e.child, e.ordinal, e.field.name, e.field.dataType)
+  }
 
-  /**
-   * Quotes a SQL identifier with back-ticks when:
-   *
-   *  1. The identifier is a keyword, or
-   *  2. The identifier doesn't match regular expression "[a-zA-Z][a-zA-Z0-9_]*"
-   */
-  def safeSQLIdent(name: String): String = {
-    val SimpleIdent = "[a-zA-Z][a-zA-Z0-9_]*".r
-
-    name match {
-      case SimpleIdent() if !sqlKeywords.contains(name) => name
-
-      // Escapes back-ticks within the identifier name with double-backticks, and then quote the
-      // identifier with back-ticks.
-      case _ => "`" + name.replace("`", "``") + "`"
-    }
+  def quoteIdentifier(name: String): String = {
+    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
+    // identifier with back-ticks.
+    "`" + name.replace("`", "``") + "`"
   }
 
   /* FIX ME

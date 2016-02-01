@@ -21,7 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.util.{safeSQLIdent, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -112,7 +112,7 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
   override def toString: String = s"$child.${name.getOrElse(childSchema(ordinal).name)}"
   override def sql: String =
-    child.sql + s".${safeSQLIdent(name.getOrElse(childSchema(ordinal).name))}"
+    child.sql + s".${quoteIdentifier(name.getOrElse(childSchema(ordinal).name))}"
 
   protected override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
@@ -136,6 +136,12 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   }
 }
 
+case class PrettyGetStructField(child: Expression, name: String, dataType: DataType)
+  extends UnaryExpression with Unevaluable {
+
+  override def sql: String = s"${child.sql}.$name"
+}
+
 /**
  * Returns the array of value of fields in the Array of Struct `child`.
  *
@@ -149,8 +155,8 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends UnaryExpression with ExtractValue {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def toString: String = s"$child.${field.name}"
-  override def sql: String = s"${child.sql}.${safeSQLIdent(field.name)}"
+  override def toString: String = s"$child[$ordinal].${field.name}"
+  override def sql: String = s"${child.sql}[$ordinal].${quoteIdentifier(field.name)}"
 
   protected override def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData]
@@ -199,6 +205,13 @@ case class GetArrayStructFields(
       """
     })
   }
+}
+
+case class PrettyGetArrayStructFields(
+    child: Expression, ordinal: Int, name: String, dataType: DataType)
+  extends UnaryExpression with Unevaluable {
+
+  override def sql: String = s"${child.sql}[$ordinal].$name"
 }
 
 /**

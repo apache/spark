@@ -197,17 +197,17 @@ class Column(object):
 
         >>> df = sc.parallelize([([1, 2], {"key": "value"})]).toDF(["l", "d"])
         >>> df.select(df.l.getItem(0), df.d.getItem("key")).show()
-        +----+--------+
-        |l[0]|d["key"]|
-        +----+--------+
-        |   1|   value|
-        +----+--------+
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         >>> df.select(df.l[0], df.d["key"]).show()
-        +----+--------+
-        |l[0]|d["key"]|
-        +----+--------+
-        |   1|   value|
-        +----+--------+
+        +----+------+
+        |l[0]|d[key]|
+        +----+------+
+        |   1| value|
+        +----+------+
         """
         return self[key]
 

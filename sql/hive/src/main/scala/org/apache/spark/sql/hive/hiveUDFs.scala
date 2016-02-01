@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.safeSQLIdent
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types._
@@ -189,7 +189,7 @@ private[hive] case class HiveSimpleUDF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def prettyName: String = safeSQLIdent(name)
+  override def prettyName: String = quoteIdentifier(name)
 
   override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
@@ -256,7 +256,7 @@ private[hive] case class HiveGenericUDF(
     unwrap(function.evaluate(deferredObjects), returnInspector)
   }
 
-  override def prettyName: String = safeSQLIdent(name)
+  override def prettyName: String = quoteIdentifier(name)
 
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
@@ -342,7 +342,7 @@ private[hive] case class HiveGenericUDTF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def prettyName: String = safeSQLIdent(name)
+  override def prettyName: String = quoteIdentifier(name)
 }
 
 /**
@@ -436,7 +436,7 @@ private[hive] case class HiveUDAFFunction(
 
   override val dataType: DataType = inspectorToDataType(returnInspector)
 
-  override def prettyName: String = safeSQLIdent(name)
+  override def prettyName: String = quoteIdentifier(name)
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else " "

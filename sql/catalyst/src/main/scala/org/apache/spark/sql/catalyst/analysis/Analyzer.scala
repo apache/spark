@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -165,15 +166,19 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case e: ExtractValue => Alias(e, usePrettyAttribute(e).sql)()
-              case e => Alias(e, optionalAliasName.getOrElse(usePrettyAttribute(e).sql))()
+              case e: ExtractValue => Alias(e, usePrettyExpression(e).sql)()
+              case e => Alias(e, optionalAliasName.getOrElse(usePrettyExpression(e).sql))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
     }
 
-    private def usePrettyAttribute(e: Expression): Expression = e transform {
+    private def usePrettyExpression(e: Expression): Expression = e transform {
       case a: Attribute => new PrettyAttribute(a)
+      case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+      case e @ GetStructField(child, _, Some(name)) => PrettyGetStructField(child, name, e.dataType)
+      case e: GetArrayStructFields =>
+        PrettyGetArrayStructFields(e.child, e.ordinal, e.field.name, e.field.dataType)
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =
