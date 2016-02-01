@@ -31,6 +31,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
     testStream(mapped)(
       AddData(inputData, 1, 2, 3),
+      StartStream,
       CheckAnswer(2, 3, 4),
       StopStream,
       AddData(inputData, 4, 5, 6),

@@ -128,7 +128,7 @@ class MemorySink(schema: StructType) extends Sink with Logging {
    * that has been lost due to buffering.
    */
   def dropBatches(num: Int): Unit = synchronized {
-    batches.remove(batches.size - num, num)
+    batches.dropRight(num)
   }
 
   override def toString: String = synchronized {

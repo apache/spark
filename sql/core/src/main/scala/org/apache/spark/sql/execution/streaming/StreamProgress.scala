@@ -22,9 +22,8 @@ import scala.collection.mutable
 /**
  * A helper class that looks like a Map[Source, Offset].
  */
-class StreamProgress extends Serializable {
+class StreamProgress {
   private val currentOffsets = new mutable.HashMap[Source, Offset]
-    with mutable.SynchronizedMap[Source, Offset]
 
   private[streaming] def update(source: Source, newOffset: Offset): Unit = {
     currentOffsets.get(source).foreach(old =>

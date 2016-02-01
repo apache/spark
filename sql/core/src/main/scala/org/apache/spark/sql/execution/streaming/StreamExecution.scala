@@ -40,13 +40,13 @@ class StreamExecution(
     val sink: Sink) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
-  val awaitBatchLock = new Object
+  private val awaitBatchLock = new Object
 
   @volatile
-  var batchRun = false
+  private var batchRun = false
 
   /** Minimum amount of time in between the start of each batch. */
-  val minBatchTime = 10
+  private val minBatchTime = 10
 
   /** Tracks how much data we have processed from each input source. */
   private[sql] val currentOffsets = new StreamProgress
@@ -79,7 +79,6 @@ class StreamExecution(
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
 
-  // TODO: add exception handling to batch thread
   /** The thread that runs the micro-batches of this stream. */
   private[sql] val microBatchThread = new Thread("stream execution thread") {
     override def run(): Unit = {
@@ -91,19 +90,18 @@ class StreamExecution(
     }
   }
   microBatchThread.setDaemon(true)
-  microBatchThread.start()
-
-  @volatile
-  private[sql] var lastExecution: QueryExecution = null
-  @volatile
-  private[sql] var streamDeathCause: Throwable = null
-
   microBatchThread.setUncaughtExceptionHandler(
     new UncaughtExceptionHandler {
       override def uncaughtException(t: Thread, e: Throwable): Unit = {
         streamDeathCause = e
       }
     })
+  microBatchThread.start()
+
+  @volatile
+  private[sql] var lastExecution: QueryExecution = null
+  @volatile
+  private[sql] var streamDeathCause: Throwable = null
 
   /**
    * Checks to see if any new data is present in any of the sources.  When new data is available,

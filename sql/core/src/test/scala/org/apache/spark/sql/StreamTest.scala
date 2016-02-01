@@ -120,7 +120,7 @@ trait StreamTest extends QueryTest with Timeouts {
   case class DropBatches(num: Int) extends StreamAction
 
   /** Stops the stream.  It must currently be running. */
-  case object StopStream extends StreamAction
+  case object StopStream extends StreamAction with StreamMustBeRunning
 
   /** Starts the stream, resuming if data has already been processed.  It must not be running. */
   case object StartStream extends StreamAction
@@ -151,7 +151,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
     // If the test doesn't manually start the stream, we do it automatically at the beginning.
     val startedManually =
-      actions.takeWhile(_.isInstanceOf[StreamMustBeRunning]).contains(StartStream)
+      actions.takeWhile(!_.isInstanceOf[StreamMustBeRunning]).contains(StartStream)
     val startedTest = if (startedManually) actions else StartStream +: actions
 
     def testActions = actions.zipWithIndex.map {
