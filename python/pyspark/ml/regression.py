@@ -154,7 +154,7 @@ class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                         HasWeightCol):
+                         HasWeightCol, MLWritable, MLReadable):
     """
     .. note:: Experimental
 
@@ -237,7 +237,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel):
+class IsotonicRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     .. note:: Experimental
 
@@ -373,7 +373,7 @@ class GBTParams(TreeEnsembleParams):
 @inherit_doc
 class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
-                            HasSeed):
+                            HasSeed, MLWritable, MLReadable):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for regression.
@@ -440,7 +440,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel):
+class DecisionTreeModel(JavaModel, MLWritable, MLReadable):
     """Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
@@ -490,7 +490,8 @@ class DecisionTreeRegressionModel(DecisionTreeModel):
 
 @inherit_doc
 class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval):
+                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
+                            MLWritable, MLReadable):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for regression.
@@ -560,7 +561,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels):
+class RandomForestRegressionModel(TreeEnsembleModels, MLWritable, MLReadable):
     """
     Model fitted by RandomForestRegressor.
 
@@ -570,7 +571,8 @@ class RandomForestRegressionModel(TreeEnsembleModels):
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed,
+                   MLWritable, MLReadable):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for regression.
@@ -653,7 +655,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels):
+class GBTRegressionModel(TreeEnsembleModels, MLWritable, MLReadable):
     """
     Model fitted by GBTRegressor.
 
@@ -663,7 +665,7 @@ class GBTRegressionModel(TreeEnsembleModels):
 
 @inherit_doc
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            HasFitIntercept, HasMaxIter, HasTol):
+                            HasFitIntercept, HasMaxIter, HasTol, MLWritable, MLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
 
@@ -787,7 +789,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel):
+class AFTSurvivalRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by AFTSurvivalRegression.
 
