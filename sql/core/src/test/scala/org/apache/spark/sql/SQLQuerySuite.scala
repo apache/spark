@@ -2050,8 +2050,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {
       df.registerTempTable("maptest")
-      checkAnswer(sql("SELECT value['abc'] FROM maptest"), Row("somestring"))
-      checkAnswer(sql("SELECT value['cba'] FROM maptest"), Row(null))
+      checkAnswer(sql("SELECT value['abc'] FROM maptest where key = 1"), Row("somestring"))
+      checkAnswer(sql("SELECT value['cba'] FROM maptest where key = 1"), Row(null))
     }
   }
 
