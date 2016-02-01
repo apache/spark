@@ -25,6 +25,8 @@ import org.apache.spark.sql.AnalysisException
  *
  * This is only used for non-temporary items, and implementations must be thread-safe as they
  * can be accessed in multiple threads.
+ *
+ * Implementations should throw [[AnalysisException]] when table or database don't exist.
  */
 abstract class Catalog {
 
@@ -51,7 +53,7 @@ abstract class Catalog {
   // Tables
   // --------------------------------------------------------------------------
 
-  def createTable(db: String, tableDefinition: Table, ifNotExists: Boolean): Unit
+  def createTable(db: String, tableDefinition: Table, ignoreIfExists: Boolean): Unit
 
   def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit
 
@@ -79,7 +81,7 @@ abstract class Catalog {
   // Functions
   // --------------------------------------------------------------------------
 
-  def createFunction(db: String, funcDefinition: Function, ifNotExists: Boolean): Unit
+  def createFunction(db: String, funcDefinition: Function, ignoreIfExists: Boolean): Unit
 
   def dropFunction(db: String, funcName: String): Unit
 
@@ -141,9 +143,13 @@ case class TablePartition(
 
 /**
  * A table defined in the catalog.
+ *
+ * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
+ * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class Table(
   name: String,
+  description: String,
   schema: Seq[Column],
   partitionColumns: Seq[Column],
   sortColumns: Seq[Column],

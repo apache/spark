@@ -22,7 +22,7 @@ import org.apache.spark.sql.AnalysisException
 
 
 /**
- * Defines test cases (i.e. behaviors) for a [[Catalog]].
+ * A reasonable complete test suite (i.e. behaviors) for a [[Catalog]].
  *
  * Implementations of the [[Catalog]] interface can create test suites by extending this.
  */
@@ -44,9 +44,9 @@ abstract class CatalogTestCases extends SparkFunSuite {
     catalog.createDatabase(newDb("db1"), ifNotExists = false)
     catalog.createDatabase(newDb("db2"), ifNotExists = false)
 
-    catalog.createTable("db2", newTable("tbl1"), ifNotExists = false)
-    catalog.createTable("db2", newTable("tbl2"), ifNotExists = false)
-    catalog.createFunction("db2", newFunc("func1"), ifNotExists = false)
+    catalog.createTable("db2", newTable("tbl1"), ignoreIfExists = false)
+    catalog.createTable("db2", newTable("tbl2"), ignoreIfExists = false)
+    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
     catalog
   }
 
@@ -56,7 +56,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
     Database(name, name + " description", "uri", Map.empty)
 
   private def newTable(name: String): Table =
-    Table(name, Seq.empty, Seq.empty, Seq.empty, null, 0, Map.empty, "EXTERNAL_TABLE", 0, 0,
+    Table(name, "", Seq.empty, Seq.empty, Seq.empty, null, 0, Map.empty, "EXTERNAL_TABLE", 0, 0,
       None, None)
 
   private def newFunc(name: String): Function = Function(name, "class.name")
