@@ -28,9 +28,9 @@ def process_subdir(subdir):
     dags_folder = configuration.get("core", "DAGS_FOLDER")
     dags_folder = os.path.expanduser(dags_folder)
     if subdir:
-        subdir = os.path.abspath(os.path.expanduser(subdir))
         if "DAGS_FOLDER" in subdir:
             subdir = subdir.replace("DAGS_FOLDER", dags_folder)
+        subdir = os.path.abspath(os.path.expanduser(subdir))
         if dags_folder not in subdir:
             raise AirflowException(
                 "subdir has to be part of your DAGS_FOLDER as defined in your "
