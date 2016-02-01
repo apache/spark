@@ -26,8 +26,8 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecificMutableRow
+import org.apache.spark.sql.catalyst.{expressions,InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, SpecificMutableRow}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -223,11 +223,57 @@ private[sql] object JDBCRDD extends Logging {
         } else {
           null
         }
+      case ArithmeticOPEqualTo(operation, value) =>
+        getArithmeticString(operation).get + s" =  ${compileValue(value)}"
+      case ArithmeticOPGreaterThan(operation, value) =>
+        getArithmeticString(operation).get + s" > ${compileValue(value)}"
+      case ArithmeticOPGreaterThanOrEqual(operation, value) =>
+        getArithmeticString(operation).get + s" >=  ${compileValue(value)}"
+      case ArithmeticOPLessThan(operation, value) =>
+        getArithmeticString(operation).get + s" <  ${compileValue(value)}"
+      case ArithmeticOPLessThanOrEqual(operation, value) =>
+        getArithmeticString(operation).get + s" <=  ${compileValue(value)}"
       case _ => null
     })
   }
 
-
+  private def getArithmeticString (predicate: Expression): Option[String] = {
+    predicate match {
+      case expressions.Add(left, right) => {
+        val add = Seq(left, right).map(getArithmeticString(_)).flatten
+        if (add.size == 2) {
+          Some(add.map(p => s"($p)").mkString(" + "))
+        } else {
+          None
+        }
+      }
+      case expressions.Subtract(left, right) => {
+        val subtract = Seq(left, right).map(getArithmeticString(_)).flatten
+        if (subtract.size == 2) {
+          Some(subtract.map(p => s"($p)").mkString(" - "))
+        } else {
+          None
+        }
+      }
+      case expressions.Multiply(left, right) => {
+        val multiply = Seq(left, right).map(getArithmeticString(_)).flatten
+        if (multiply.size == 2) {
+          Some(multiply.map(p => s"($p)").mkString(" * "))
+        } else {
+          None
+        }
+      }
+      case expressions.Divide(left, right) => {
+        val divide = Seq(left, right).map(getArithmeticString(_)).flatten
+        if (divide.size == 2) {
+          Some(divide.map(p => s"($p)").mkString(" / "))
+        } else {
+          None
+        }
+      }
+      case a:Attribute => Some(a.name)
+    }
+  }
 
   /**
    * Build and return JDBCRDD from the given information.
