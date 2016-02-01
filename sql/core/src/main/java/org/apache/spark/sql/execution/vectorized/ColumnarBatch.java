@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
 
@@ -25,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -150,44 +153,40 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) {
-      return columns[ordinal].getIsNull(rowId);
-    }
+    public final boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
 
     @Override
-    public final boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
 
     @Override
     public final byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
 
     @Override
-    public final short getShort(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
 
     @Override
-    public final int getInt(int ordinal) {
-      return columns[ordinal].getInt(rowId);
-    }
+    public final int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
 
     @Override
     public final long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
 
     @Override
-    public final float getFloat(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
 
     @Override
-    public final double getDouble(int ordinal) {
-      return columns[ordinal].getDouble(rowId);
-    }
+    public final double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
 
     @Override
     public final Decimal getDecimal(int ordinal, int precision, int scale) {
-      throw new NotImplementedException();
+      if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        return Decimal.apply(getLong(ordinal), precision, scale);
+      } else {
+        // TODO: best perf?
+        byte[] bytes = getBinary(ordinal);
+        BigInteger bigInteger = new BigInteger(bytes);
+        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+        return Decimal.apply(javaDecimal, precision, scale);
+      }
     }
 
     @Override
@@ -198,12 +197,17 @@ public final class ColumnarBatch {
 
     @Override
     public final byte[] getBinary(int ordinal) {
-      throw new NotImplementedException();
+      ColumnVector.Array array = columns[ordinal].getByteArray(rowId);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
     }
 
     @Override
     public final CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
+      final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
+      final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
+      return new CalendarInterval(months, microseconds);
     }
 
     @Override
