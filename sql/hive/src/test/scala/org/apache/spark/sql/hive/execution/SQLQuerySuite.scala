@@ -1019,6 +1019,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       ).map(i => Row(i._1, i._2)))
   }
 
+  // todo: fix this test case by reimplementing the function ResolveAggregateFunctions
+  ignore("window function: Pushing aggregate Expressions in Sort to Aggregate") {
+    val data = Seq(
+      WindowData(1, "d", 10),
+      WindowData(2, "a", 6),
+      WindowData(3, "b", 7),
+      WindowData(4, "b", 8),
+      WindowData(5, "c", 9),
+      WindowData(6, "c", 11)
+    )
+    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product) over () as c from windowData
+          |where product > 3 group by area, product
+          |having avg(month) > 0 order by avg(month), product
+        """.stripMargin),
+      Seq(
+        ("a", 51),
+        ("b", 51),
+        ("b", 51),
+        ("c", 51),
+        ("c", 51),
+        ("d", 51)
+      ).map(i => Row(i._1, i._2)))
+  }
+
   test("window function: multiple window expressions in a single expression") {
     val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
     nums.registerTempTable("nums")
