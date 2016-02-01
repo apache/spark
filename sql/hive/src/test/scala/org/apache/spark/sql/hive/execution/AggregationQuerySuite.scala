@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -879,7 +880,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         RandomDataGenerator.forType(
           dataType = schemaForGenerator,
           nullable = true,
-          seed = Some(System.nanoTime()))
+          new Random(System.nanoTime()))
       val dataGenerator =
         maybeDataGenerator
           .getOrElse(fail(s"Failed to create data generator for schema $schemaForGenerator"))

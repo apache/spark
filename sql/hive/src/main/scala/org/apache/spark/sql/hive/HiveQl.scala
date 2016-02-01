@@ -35,11 +35,12 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.ParseUtils._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{AnalyzeTable, DropTable, HiveNativeCommand, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.AnalysisException
 
@@ -113,7 +114,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_CREATEROLE",
 
     "TOK_DESCDATABASE",
-    "TOK_DESCFUNCTION",
 
     "TOK_DROPDATABASE",
     "TOK_DROPFUNCTION",
@@ -151,12 +151,9 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_SHOW_TRANSACTIONS",
     "TOK_SHOWCOLUMNS",
     "TOK_SHOWDATABASES",
-    "TOK_SHOWFUNCTIONS",
     "TOK_SHOWINDEXES",
     "TOK_SHOWLOCKS",
     "TOK_SHOWPARTITIONS",
-
-    "TOK_SWITCHDATABASE",
 
     "TOK_UNLOCKTABLE"
   )
@@ -244,6 +241,15 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
+      case Token("TOK_DFS", Nil) =>
+        HiveNativeCommand(node.source + " " + node.remainder)
+
+      case Token("TOK_ADDFILE", Nil) =>
+        AddFile(node.remainder)
+
+      case Token("TOK_ADDJAR", Nil) =>
+        AddJar(node.remainder)
+
       // Special drop table that also uncaches.
       case Token("TOK_DROPTABLE", Token("TOK_TABNAME", tableNameParts) :: ifExists) =>
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
@@ -558,7 +564,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
   protected override def nodeToTransformation(
       node: ASTNode,
-      child: LogicalPlan): Option[ScriptTransformation] = node match {
+      child: LogicalPlan): Option[logical.ScriptTransformation] = node match {
     case Token("TOK_SELEXPR",
       Token("TOK_TRANSFORM",
       Token("TOK_EXPLIST", inputExprs) ::
@@ -651,7 +657,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
         schemaLess)
 
       Some(
-        ScriptTransformation(
+        logical.ScriptTransformation(
           inputExprs.map(nodeToExpr),
           unescapedScript,
           output,

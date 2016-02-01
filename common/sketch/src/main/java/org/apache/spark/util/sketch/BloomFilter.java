@@ -22,16 +22,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * A Bloom filter is a space-efficient probabilistic data structure, that is used to test whether
- * an element is a member of a set. It returns false when the element is definitely not in the
- * set, returns true when the element is probably in the set.
- *
- * Internally a Bloom filter is initialized with 2 information: how many space to use(number of
- * bits) and how many hash values to calculate for each record.  To get as lower false positive
- * probability as possible, user should call {@link BloomFilter#create} to automatically pick a
- * best combination of these 2 parameters.
- *
- * Currently the following data types are supported:
+ * A Bloom filter is a space-efficient probabilistic data structure that offers an approximate
+ * containment test with one-sided error: if it claims that an item is contained in it, this
+ * might be in error, but if it claims that an item is <i>not</i> contained in it, then this is
+ * definitely true. Currently supported data types include:
  * <ul>
  *   <li>{@link Byte}</li>
  *   <li>{@link Short}</li>
@@ -39,18 +33,23 @@ import java.io.OutputStream;
  *   <li>{@link Long}</li>
  *   <li>{@link String}</li>
  * </ul>
+ * The false positive probability ({@code FPP}) of a Bloom filter is defined as the probability that
+ * {@linkplain #mightContain(Object)} will erroneously return {@code true} for an object that hasu
+ * not actually been put in the {@code BloomFilter}.
  *
- * The implementation is largely based on the {@code BloomFilter} class from guava.
+ * The implementation is largely based on the {@code BloomFilter} class from Guava.
  */
 public abstract class BloomFilter {
 
   public enum Version {
     /**
-     * {@code BloomFilter} binary format version 1 (all values written in big-endian order):
-     * - Version number, always 1 (32 bit)
-     * - Total number of words of the underlying bit array (32 bit)
-     * - The words/longs (numWords * 64 bit)
-     * - Number of hash functions (32 bit)
+     * {@code BloomFilter} binary format version 1. All values written in big-endian order:
+     * <ul>
+     *   <li>Version number, always 1 (32 bit)</li>
+     *   <li>Number of hash functions (32 bit)</li>
+     *   <li>Total number of words of the underlying bit array (32 bit)</li>
+     *   <li>The words/longs (numWords * 64 bit)</li>
+     * </ul>
      */
     V1(1);
 
@@ -66,14 +65,13 @@ public abstract class BloomFilter {
   }
 
   /**
-   * Returns the false positive probability, i.e. the probability that
-   * {@linkplain #mightContain(Object)} will erroneously return {@code true} for an object that
-   * has not actually been put in the {@code BloomFilter}.
+   * Returns the probability that {@linkplain #mightContain(Object)} erroneously return {@code true}
+   * for an object that has not actually been put in the {@code BloomFilter}.
    *
-   * <p>Ideally, this number should be close to the {@code fpp} parameter
-   * passed in to create this bloom filter, or smaller. If it is
-   * significantly higher, it is usually the case that too many elements (more than
-   * expected) have been put in the {@code BloomFilter}, degenerating it.
+   * Ideally, this number should be close to the {@code fpp} parameter passed in
+   * {@linkplain #create(long, double)}, or smaller. If it is significantly higher, it is usually
+   * the case that too many items (more than expected) have been put in the {@code BloomFilter},
+   * degenerating it.
    */
   public abstract double expectedFpp();
 
@@ -83,8 +81,8 @@ public abstract class BloomFilter {
   public abstract long bitSize();
 
   /**
-   * Puts an element into this {@code BloomFilter}. Ensures that subsequent invocations of
-   * {@link #mightContain(Object)} with the same element will always return {@code true}.
+   * Puts an item into this {@code BloomFilter}. Ensures that subsequent invocations of
+   * {@linkplain #mightContain(Object)} with the same item will always return {@code true}.
    *
    * @return true if the bloom filter's bits changed as a result of this operation. If the bits
    *     changed, this is <i>definitely</i> the first time {@code object} has been added to the
@@ -94,6 +92,21 @@ public abstract class BloomFilter {
    *     it is called.
    */
   public abstract boolean put(Object item);
+
+  /**
+   * A specialized variant of {@link #put(Object)} that only supports {@code String} items.
+   */
+  public abstract boolean putString(String item);
+
+  /**
+   * A specialized variant of {@link #put(Object)} that only supports {@code long} items.
+   */
+  public abstract boolean putLong(long item);
+
+  /**
+   * A specialized variant of {@link #put(Object)} that only supports byte array items.
+   */
+  public abstract boolean putBinary(byte[] item);
 
   /**
    * Determines whether a given bloom filter is compatible with this bloom filter. For two
@@ -120,21 +133,36 @@ public abstract class BloomFilter {
   public abstract boolean mightContain(Object item);
 
   /**
-   * Writes out this {@link BloomFilter} to an output stream in binary format.
-   * It is the caller's responsibility to close the stream.
+   * A specialized variant of {@link #mightContain(Object)} that only tests {@code String} items.
+   */
+  public abstract boolean mightContainString(String item);
+
+  /**
+   * A specialized variant of {@link #mightContain(Object)} that only tests {@code long} items.
+   */
+  public abstract boolean mightContainLong(long item);
+
+  /**
+   * A specialized variant of {@link #mightContain(Object)} that only tests byte array items.
+   */
+  public abstract boolean mightContainBinary(byte[] item);
+
+  /**
+   * Writes out this {@link BloomFilter} to an output stream in binary format. It is the caller's
+   * responsibility to close the stream.
    */
   public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
-   * Reads in a {@link BloomFilter} from an input stream.
-   * It is the caller's responsibility to close the stream.
+   * Reads in a {@link BloomFilter} from an input stream. It is the caller's responsibility to close
+   * the stream.
    */
   public static BloomFilter readFrom(InputStream in) throws IOException {
     return BloomFilterImpl.readFrom(in);
   }
 
   /**
-   * Computes the optimal k (number of hashes per element inserted in Bloom filter), given the
+   * Computes the optimal k (number of hashes per item inserted in Bloom filter), given the
    * expected insertions and total number of bits in the Bloom filter.
    *
    * See http://en.wikipedia.org/wiki/File:Bloom_filter_fp_probability.svg for the formula.
@@ -163,21 +191,31 @@ public abstract class BloomFilter {
   static final double DEFAULT_FPP = 0.03;
 
   /**
-   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and the default {@code fpp}.
+   * Creates a {@link BloomFilter} with the expected number of insertions and a default expected
+   * false positive probability of 3%.
+   *
+   * Note that overflowing a {@code BloomFilter} with significantly more elements than specified,
+   * will result in its saturation, and a sharp deterioration of its false positive probability.
    */
   public static BloomFilter create(long expectedNumItems) {
     return create(expectedNumItems, DEFAULT_FPP);
   }
 
   /**
-   * Creates a {@link BloomFilter} with given {@code expectedNumItems} and {@code fpp}, it will pick
-   * an optimal {@code numBits} and {@code numHashFunctions} for the bloom filter.
+   * Creates a {@link BloomFilter} with the expected number of insertions and expected false
+   * positive probability.
+   *
+   * Note that overflowing a {@code BloomFilter} with significantly more elements than specified,
+   * will result in its saturation, and a sharp deterioration of its false positive probability.
    */
   public static BloomFilter create(long expectedNumItems, double fpp) {
-    assert fpp > 0.0 : "False positive probability must be > 0.0";
-    assert fpp < 1.0 : "False positive probability must be < 1.0";
-    long numBits = optimalNumOfBits(expectedNumItems, fpp);
-    return create(expectedNumItems, numBits);
+    if (fpp <= 0D || fpp >= 1D) {
+      throw new IllegalArgumentException(
+        "False positive probability must be within range (0.0, 1.0)"
+      );
+    }
+
+    return create(expectedNumItems, optimalNumOfBits(expectedNumItems, fpp));
   }
 
   /**
@@ -185,9 +223,14 @@ public abstract class BloomFilter {
    * pick an optimal {@code numHashFunctions} which can minimize {@code fpp} for the bloom filter.
    */
   public static BloomFilter create(long expectedNumItems, long numBits) {
-    assert expectedNumItems > 0 : "Expected insertions must be > 0";
-    assert numBits > 0 : "number of bits must be > 0";
-    int numHashFunctions = optimalNumOfHashFunctions(expectedNumItems, numBits);
-    return new BloomFilterImpl(numHashFunctions, numBits);
+    if (expectedNumItems <= 0) {
+      throw new IllegalArgumentException("Expected insertions must be positive");
+    }
+
+    if (numBits <= 0) {
+      throw new IllegalArgumentException("Number of bits must be positive");
+    }
+
+    return new BloomFilterImpl(optimalNumOfHashFunctions(expectedNumItems, numBits), numBits);
   }
 }
