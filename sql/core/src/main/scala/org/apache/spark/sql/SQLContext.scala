@@ -210,6 +210,8 @@ class SQLContext private[sql](
 
   protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
 
+  protected[sql] def doPriCheck(logicalPlan: LogicalPlan): Unit = Nil
+
   protected[sql] def executeSql(sql: String):
     org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
 

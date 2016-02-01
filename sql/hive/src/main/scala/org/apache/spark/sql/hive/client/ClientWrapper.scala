@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
-import java.util.{Map => JMap}
+import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
@@ -29,13 +29,18 @@ import org.apache.hadoop.hive.metastore.{TableType => HTableType}
 import org.apache.hadoop.hive.metastore.api.{Database, FieldSchema}
 import org.apache.hadoop.hive.ql.{metadata, Driver}
 import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.plan.HiveOperation
 import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.security.authorization.plugin._
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject
+  .HivePrivilegeObjectType
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -121,7 +126,7 @@ private[hive] class ClientWrapper(
       }
 
       val state = version match {
-        case hive.v12  => new SessionState(initialConf)
+        case hive.v12 => new SessionState(initialConf)
         case _ => new SessionState(initialConf, userName)
       }
 
@@ -141,6 +146,62 @@ private[hive] class ClientWrapper(
 
   /** Returns the configuration for the current session. */
   def conf: HiveConf = SessionState.get().getConf
+
+  def checkPrivileges(logicalPlan: LogicalPlan): Unit = {
+    val authorizer = SessionState.get().getAuthorizerV2
+    val hiveOp = HiveOperationType.valueOf(getHiveOperation(logicalPlan).name())
+    val (inputsHObjs, outputsHObjs) = getInputOutputHObjs(logicalPlan)
+
+    val hiveAuthzContext = getHiveAuthzContext(logicalPlan, logicalPlan.toString)
+    authorizer.checkPrivileges(hiveOp, inputsHObjs, outputsHObjs, hiveAuthzContext)
+  }
+
+  def getHiveOperation(logicalPlan: LogicalPlan): HiveOperation = {
+    logicalPlan match {
+      case Project(_, _) => HiveOperation.QUERY
+      case _ => HiveOperation.ALTERINDEX_PROPS // TODO add more types here
+    }
+  }
+
+  def getHiveAuthzContext(logicalPlan: LogicalPlan, command: String): HiveAuthzContext = {
+    val authzContextBuilder = new HiveAuthzContext.Builder()
+    authzContextBuilder.setUserIpAddress(SessionState.get().getUserIpAddress)
+    authzContextBuilder.setCommandString(command)
+    authzContextBuilder.build()
+  }
+
+  def getInputOutputHObjs(logicalPlan: LogicalPlan): (JList[HivePrivilegeObject],
+      JList[HivePrivilegeObject]) = {
+    val inputObjs = new JArrayList[HivePrivilegeObject]
+    val outputObjs = new JArrayList[HivePrivilegeObject]
+    getInputOutputHObjsHelper(inputObjs, outputObjs, null, logicalPlan)
+    (inputObjs, outputObjs)
+  }
+
+  def getInputOutputHObjsHelper(
+      inputObjs: JList[HivePrivilegeObject],
+      outputObjs: JList[HivePrivilegeObject],
+      hivePrivilegeObjectType: HivePrivilegeObjectType,
+      logicalPlan: LogicalPlan): Unit = {
+    logicalPlan match {
+      case Project(projectionList, child) => buildHivePrivilegeObject(
+        HivePrivilegeObjectType.TABLE_OR_VIEW, projectionList, inputObjs, child)
+      case _ => Nil
+    }
+  }
+
+  private def buildHivePrivilegeObject(
+      hivePrivilegeObjectType: HivePrivilegeObjectType,
+      projectionList: Seq[Expression],
+      hivePriObjs: JList[HivePrivilegeObject], logicalPlan: LogicalPlan): Unit = {
+    logicalPlan match {
+      case Filter(_, child) => buildHivePrivilegeObject(hivePrivilegeObjectType, projectionList,
+        hivePriObjs, child)
+      case MetastoreRelation(dbName, tblName, _) =>
+        hivePriObjs.add(new HivePrivilegeObject(hivePrivilegeObjectType, dbName, tblName, null))
+      case _ => Nil
+    }
+  }
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)

@@ -23,6 +23,7 @@ import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 private[hive] case class HiveDatabase(name: String, location: String)
 
@@ -86,6 +87,7 @@ private[hive] case class HiveTable(
  * shared classes.
  */
 private[hive] trait ClientInterface {
+  def checkPrivileges(logicalPlan: LogicalPlan): Unit
 
   /** Returns the Hive Version of this client. */
   def version: HiveVersion

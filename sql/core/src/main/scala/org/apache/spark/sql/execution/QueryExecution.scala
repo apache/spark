@@ -35,6 +35,11 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
 
+  lazy val authorized: LogicalPlan = {
+    sqlContext.doPriCheck(analyzed)
+    analyzed
+  }
+
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     sqlContext.cacheManager.useCachedData(analyzed)

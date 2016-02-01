@@ -554,6 +554,14 @@ class HiveContext private[hive](
     new SparkSQLParser(new ExtendedHiveQlParser(this))
   }
 
+  override protected[sql] def doPriCheck(logicalPlan: LogicalPlan): Unit = {
+    log.info("check privildege")
+    val threadClassLoader = Thread.currentThread.getContextClassLoader
+    Thread.currentThread.setContextClassLoader(metadataHive.getClass.getClassLoader)
+    val authorizer = metadataHive.checkPrivileges(logicalPlan)
+    Thread.currentThread.setContextClassLoader(threadClassLoader)
+  }
+
   @transient
   private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
     val hiveContext = self
