@@ -1,3 +1,19 @@
+## SnappyData's extensions to Spark
+
+- SnappyData collocates Spark executors with its in-memory data store in the same JVM. To achieve this, support for external cluster manager in Spark 2.0 is used to add a SnappyData cluster manager.
+- SnappyData's MemoryManager was needed to generate and handle memory events. A property spark.memory.manager is now used to specify a memory manager other than Spark's own.
+- To display the consumption of memory in an external embedded store, Spark's storage UI was updated.
+- Support for getting length of type (for VARCHAR) was added in the JDBCDialect class.
+- For SnappyData, dynamic continous queries on streams would be enabled in future. For that, support for registering DStreams after streaming context has started is added.
+- For partitioning, sequence of expressions can be provided. SnappyData adds OrderlessHashPartitioning that does not take into account order of expressions while partitioning.
+- Hive client thread-local configuration changed to be instance specific.
+- Hive client added support for dropTable and listing tables for all databases.
+- RDD partitions with executor specific preferred locations will be forced to be routed to one of those executors if alive.
+- An "unsecure" version of random UUID added in DiskBlockManager for temporary file names.
+- Added a fix for SPARK-13116.
+- Increased visibility of some classes/methods.
+
+
 # Apache Spark
 
 Spark is a fast and general cluster computing system for Big Data. It provides
