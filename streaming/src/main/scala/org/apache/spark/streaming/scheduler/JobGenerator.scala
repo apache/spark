@@ -20,6 +20,7 @@ package org.apache.spark.streaming.scheduler
 import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
 import org.apache.spark.streaming.util.RecurringTimer
 import org.apache.spark.util.{Clock, EventLoop, ManualClock, Utils}
@@ -243,6 +244,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // Example: BlockRDDs are created in this thread, and it needs to access BlockManager
     // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
     SparkEnv.set(ssc.env)
+
+    // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
+    // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
+    ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
     Try {
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       graph.generateJobs(time) // generate jobs using allocated block
