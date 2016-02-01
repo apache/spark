@@ -95,6 +95,8 @@ case class CollectList(
   override def initialize(mutableAggBuffer: MutableRow): Unit = {
     mutableAggBuffer.update(mutableAggBufferOffset, ListMutableArrayData())
   }
+
+  override def prettyName: String = "collect_list"
 }
 
 case class CollectSet(
@@ -113,6 +115,8 @@ case class CollectSet(
   override def initialize(mutableAggBuffer: MutableRow): Unit = {
     mutableAggBuffer.update(mutableAggBufferOffset, SetMutableArrayData())
   }
+
+  override def prettyName: String = "collect_set"
 }
 
 /**
