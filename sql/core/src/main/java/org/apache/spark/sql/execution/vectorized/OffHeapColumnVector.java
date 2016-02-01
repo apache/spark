@@ -367,7 +367,7 @@ public final class OffHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final void loadBytes(Array array) {
+  public final void loadBytes(ColumnVector.Array array) {
     if (array.tmpByteArray.length < array.length) array.tmpByteArray = new byte[array.length];
     Platform.copyMemory(
         null, data + array.offset, array.tmpByteArray, Platform.BYTE_ARRAY_OFFSET, array.length);
