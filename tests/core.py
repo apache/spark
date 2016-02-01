@@ -618,6 +618,9 @@ class CliTests(unittest.TestCase):
             'backfill', 'example_bash_operator', '-l',
             '-s', DEFAULT_DATE.isoformat()]))
 
+    def test_process_subdir_path_with_placeholder(self):
+        assert cli.process_subdir('DAGS_FOLDER/abc') == os.path.join(configuration.get_dags_folder(), 'abc')
+
 
 class WebUiTests(unittest.TestCase):
 
