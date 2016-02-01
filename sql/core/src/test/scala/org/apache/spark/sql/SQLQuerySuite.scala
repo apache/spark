@@ -2056,4 +2056,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       )
     }
   }
+
+  test("SPARK-13056: Null in map value causes NPE") {
+    val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
+    df.registerTempTable("maptest")
+    checkAnswer(sql("SELECT value['abc'] FROM maptest"), Row("somestring"))
+    checkAnswer(sql("SELECT value['cba'] FROM maptest"), Row(null))
+  }
 }
