@@ -45,6 +45,10 @@ object MimaExcludes {
         excludePackage("org.apache.spark.sql.execution"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.feature.PCAModel.this"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.ApplicationAttemptInfo.this"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.status.api.v1.ApplicationAttemptInfo.<init>$default$5"),
         // SPARK-12600 Remove SQL deprecated methods
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$QueryExecution"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$SparkPlanner"),
@@ -59,6 +63,37 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.SparkContext.emptyRDD"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.broadcast.HttpBroadcastFactory")
+      ) ++
+      Seq(
+        // SPARK-3369 Fix Iterable/Iterator in Java API
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.DoubleFlatMapFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.DoubleFlatMapFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction2.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.FlatMapFunction2.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.PairFlatMapFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.PairFlatMapFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.CoGroupFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.CoGroupFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.MapPartitionsFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.MapPartitionsFunction.call"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "org.apache.spark.api.java.function.FlatMapGroupsFunction.call"),
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.api.java.function.FlatMapGroupsFunction.call")
       ) ++
       Seq(
         // SPARK-4819 replace Guava Optional
@@ -127,6 +162,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockManager"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.storage.ExternalBlockStore")
+      ) ++ Seq(
+        // SPARK-12149 Added new fields to ExecutorSummary
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
       // SPARK-12665 Remove deprecated and unused classes
       Seq(
@@ -142,6 +180,15 @@ object MimaExcludes {
         // SPARK-12510 Refactor ActorReceiver to support Java
         ProblemFilters.exclude[AbstractClassProblem]("org.apache.spark.streaming.receiver.ActorReceiver")
       ) ++ Seq(
+        // SPARK-12895 Implement TaskMetrics using accumulators
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.internalMetricsToAccumulators"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.collectInternalAccumulators"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.collectAccumulators")
+      ) ++ Seq(
+        // SPARK-12896 Send only accumulator updates to driver, not TaskMetrics
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.Accumulable.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.Accumulator.this")
+      ) ++ Seq(
         // SPARK-12692 Scala style: Fix the style violation (Space before "," or ":")
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.SparkSink.org$apache$spark$streaming$flume$sink$Logging$$log_"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.SparkSink.org$apache$spark$streaming$flume$sink$Logging$$log__="),
@@ -153,6 +200,11 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.Logging.org$apache$spark$streaming$flume$sink$Logging$$_log_="),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.TransactionProcessor.org$apache$spark$streaming$flume$sink$Logging$$log_"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.TransactionProcessor.org$apache$spark$streaming$flume$sink$Logging$$log__=")
+      ) ++ Seq(
+        // SPARK-12689 Migrate DDL parsing to the newly absorbed parser
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLParser"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLException"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.ddlParser")
       ) ++ Seq(
         // SPARK-7799 Add "streaming-akka" project
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.zeromq.ZeroMQUtils.createStream"),
@@ -169,6 +221,16 @@ object MimaExcludes {
         // SPARK-12847 Remove StreamingListenerBus and post all Streaming events to the same thread as Spark events
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.AsynchronousListenerBus$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.AsynchronousListenerBus")
+      ) ++ Seq(
+        // SPARK-11622 Make LibSVMRelation extends HadoopFsRelation and Add LibSVMOutputWriter
+        ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.source.libsvm.DefaultSource"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.ml.source.libsvm.DefaultSource.createRelation")
+      ) ++ Seq(
+        // SPARK-6363 Make Scala 2.11 the default Scala version
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.cleanup"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.metadataCleaner"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnDriverEndpoint"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
       )
     case v if v.startsWith("1.6") =>
       Seq(
@@ -301,6 +363,9 @@ object MimaExcludes {
         // SPARK-3580 Add getNumPartitions method to JavaRDD
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.api.java.JavaRDDLike.getNumPartitions")
+      ) ++ Seq(
+        // SPARK-12149 Added new fields to ExecutorSummary
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
       // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
       // private class.

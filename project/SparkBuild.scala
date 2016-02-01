@@ -34,13 +34,24 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val allProjects@Seq(catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka,
-    streamingMqtt, streamingTwitter, streamingZeromq, launcher, unsafe, testTags) =
-    Seq("catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
-      "streaming-flume", "streaming-akka", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
-      "streaming-zeromq", "launcher", "unsafe", "test-tags").map(ProjectRef(buildLocation, _))
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver"
+  ).map(ProjectRef(buildLocation, _))
+
+  val streamingProjects@Seq(
+    streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka, streamingMqtt,
+    streamingTwitter, streamingZeromq
+  ) = Seq(
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-akka", "streaming-kafka",
+    "streaming-mqtt", "streaming-twitter", "streaming-zeromq"
+  ).map(ProjectRef(buildLocation, _))
+
+  val allProjects@Seq(
+    core, graphx, mllib, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+  ) = Seq(
+    "core", "graphx", "mllib", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
+    "test-tags", "sketch"
+  ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests) =
@@ -108,11 +119,11 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
-    if (System.getProperty("scala-2.11") == "") {
-      // To activate scala-2.11 profile, replace empty property value to non-empty value
+    if (System.getProperty("scala-2.10") == "") {
+      // To activate scala-2.10 profile, replace empty property value to non-empty value
       // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
       // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
-      System.setProperty("scala-2.11", "true")
+      System.setProperty("scala-2.10", "true")
     }
     profiles
   }
@@ -232,11 +243,15 @@ object SparkBuild extends PomBuild {
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
-  // TODO: remove streamingAkka from this list after 2.0.0
-  allProjects.filterNot(x => Seq(spark, hive, hiveThriftServer, catalyst, repl,
-    networkCommon, networkShuffle, networkYarn, unsafe, streamingAkka, testTags).contains(x)).foreach {
-      x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
-    }
+  // TODO: remove streamingAkka and sketch from this list after 2.0.0
+  allProjects.filterNot { x =>
+    Seq(
+      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      unsafe, streamingAkka, testTags, sketch
+    ).contains(x)
+  }.foreach { x =>
+    enable(MimaBuild.mimaSettings(sparkHome, x))(x)
+  }
 
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
@@ -367,7 +382,7 @@ object OldDeps {
   lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
 
   def versionArtifact(id: String): Option[sbt.ModuleID] = {
-    val fullId = id + "_2.10"
+    val fullId = id + "_2.11"
     Some("org.apache.spark" % fullId % "1.2.0")
   }
 
@@ -375,7 +390,7 @@ object OldDeps {
     name := "old-deps",
     scalaVersion := "2.10.5",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
-      "spark-streaming-flume", "spark-streaming-kafka", "spark-streaming-twitter",
+      "spark-streaming-flume", "spark-streaming-twitter",
       "spark-streaming", "spark-mllib", "spark-graphx",
       "spark-core").map(versionArtifact(_).get intransitive())
   )
@@ -689,7 +704,7 @@ object Java8TestSettings {
   lazy val settings = Seq(
     javacJVMVersion := "1.8",
     // Targeting Java 8 bytecode is only supported in Scala 2.11.4 and higher:
-    scalacJVMVersion := (if (System.getProperty("scala-2.11") == "true") "1.8" else "1.7")
+    scalacJVMVersion := (if (System.getProperty("scala-2.10") == "true") "1.7" else "1.8")
   )
 }
 

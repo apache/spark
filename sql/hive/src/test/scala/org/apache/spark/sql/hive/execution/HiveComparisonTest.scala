@@ -150,7 +150,11 @@ abstract class HiveComparisonTest
        """.stripMargin
     })
 
-    super.afterAll()
+    try {
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   protected def prepareAnswer(
