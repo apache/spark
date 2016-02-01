@@ -38,6 +38,7 @@ from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
@@ -238,6 +239,14 @@ class ParamTests(PySparkTestCase):
             "\n".join(["inputCol: input column name. (undefined)",
                        "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
                        "seed: random seed. (default: 41, current: 43)"]))
+
+    def test_kmeans_param(self):
+        algo = KMeans()
+        self.assertEqual(algo.getInitMode(), "k-means||")
+        algo.setK(10)
+        self.assertEqual(algo.getK(), 10)
+        algo.setInitSteps(10)
+        self.assertEqual(algo.getInitSteps(), 10)
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
