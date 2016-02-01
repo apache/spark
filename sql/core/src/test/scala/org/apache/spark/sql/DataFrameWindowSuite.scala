@@ -344,4 +344,14 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
         Row("b", 1, null, null, null, null, null, null),
         Row("b", 2, null, null, null, null, null, null)))
   }
+
+  test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
+    val src = Seq((0, 3, 5)).toDF("a", "b", "c")
+      .withColumn("Data", struct("a", "b"))
+      .drop("a")
+      .drop("b")
+    val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
+    val df = src.select($"*", max("c").over(winSpec) as "max")
+    checkAnswer(df, Row(5, Row(0, 3), 5))
+  }
 }
