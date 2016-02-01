@@ -331,7 +331,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final void loadBytes(Array array) {
+  public final void loadBytes(ColumnVector.Array array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
   }
