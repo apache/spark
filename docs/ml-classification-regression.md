@@ -302,6 +302,31 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 </div>
 </div>
 
+## Naive Bayes
+
+[OneVsRest](http://en.wikipedia.org/wiki/Multiclass_classification#One-vs.-rest) are a family of simple 
+probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence assumptions 
+between the features. More information about the spark.ml implementation can be found further in the 
+section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
+
+**Example**
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.NaiveBayes) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/NaiveBayesExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRest.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
+</div>
+</div>
+
 
 # Regression
 
