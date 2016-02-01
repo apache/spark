@@ -339,6 +339,7 @@ case class TungstenAggregate(
           // use the first row as aggregate buffer
           mergeProjection.target(currentRow)
 
+          // merge the following rows with same key together
           var findNextGroup = false
           while (!findNextGroup && sortedIter.next()) {
             val key = sortedIter.getKey
@@ -516,6 +517,11 @@ case class TungstenAggregate(
     } else {
       "true"
     }
+
+    // We try to do hash map based in-memory aggregation first. If there is not enough memory (the
+    // hash map will return null for new key), we spill the hash map to disk to free memory, then
+    // continue to do in-memory aggregation and spilling until all the rows had been processed.
+    // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
      // generate grouping key
      ${keyCode.code}
