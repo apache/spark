@@ -25,78 +25,80 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types.StringType
 
 class ResolveNaturalJoinSuite extends AnalysisTest {
-  import org.apache.spark.sql.catalyst.analysis.TestRelations._
-
-  lazy val t1 = testRelation2.select('a, 'b)
-  lazy val t2 = testRelation2.select('a, 'c)
-  lazy val a = testRelation2.output(0)
-  lazy val b = testRelation2.output(1)
-  lazy val c = testRelation2.output(2)
-  lazy val testRelation0 = LocalRelation(
-    AttributeReference("d", StringType, nullable = false)(),
-    AttributeReference("e", StringType, nullable = false)(),
-    AttributeReference("f", StringType, nullable = false)())
-  lazy val t3 = testRelation0.select('d, 'e)
-  lazy  val t4 = testRelation0.select('d, 'f)
-  lazy val d = testRelation0.output(0)
-  lazy val e = testRelation0.output(1)
-  lazy val f = testRelation0.output(2)
-  lazy val nullableE = testRelation0.output(1).withNullability(true)
-  lazy val nullableF = testRelation0.output(2).withNullability(true)
+  lazy val r1 = LocalRelation(
+    AttributeReference("r1_a", StringType, nullable = true)(),
+    AttributeReference("r1_b", StringType, nullable = true)(),
+    AttributeReference("r1_c", StringType, nullable = true)())
+  lazy val r2 = LocalRelation(
+    AttributeReference("r2_a", StringType, nullable = false)(),
+    AttributeReference("r2_b", StringType, nullable = false)(),
+    AttributeReference("r2_c", StringType, nullable = false)())
+  lazy val t1 = r1.select('r1_a, 'r1_b)
+  lazy val t2 = r1.select('r1_a, 'r1_c)
+  lazy val r1a = r1.output(0)
+  lazy val r1b = r1.output(1)
+  lazy val r1c = r1.output(2)
+  lazy val t3 = r2.select('r2_a, 'r2_b)
+  lazy val t4 = r2.select('r2_a, 'r2_c)
+  lazy val r2a = r2.output(0)
+  lazy val r2b = r2.output(1)
+  lazy val r2c = r2.output(2)
+  lazy val nullableR2B = r2.output(1).withNullability(true)
+  lazy val nullableR2C = r2.output(2).withNullability(true)
 
   test("natural inner join") {
     val plan = t1.join(t2, NaturalJoin(Inner), None)
-    val expected = testRelation2.select(a, b).join(
-      testRelation2.select(a, c), Inner, Some(EqualTo(a, a))).select(a, b, c)
+    val expected = r1.select(r1a, r1b).join(
+      r1.select(r1a, r1c), Inner, Some(EqualTo(r1a, r1a))).select(r1a, r1b, r1c)
     checkAnalysis(plan, expected)
   }
 
   test("natural left join") {
     val plan = t1.join(t2, NaturalJoin(LeftOuter), None)
-    val expected = testRelation2.select(a, b).join(
-      testRelation2.select(a, c), LeftOuter, Some(EqualTo(a, a))).select(a, b, c)
+    val expected = r1.select(r1a, r1b).join(
+      r1.select(r1a, r1c), LeftOuter, Some(EqualTo(r1a, r1a))).select(r1a, r1b, r1c)
     checkAnalysis(plan, expected)
   }
 
   test("natural right join") {
     val plan = t1.join(t2, NaturalJoin(RightOuter), None)
-    val expected = testRelation2.select(a, b).join(
-      testRelation2.select(a, c), RightOuter, Some(EqualTo(a, a))).select(a, b, c)
+    val expected = r1.select(r1a, r1b).join(
+      r1.select(r1a, r1c), RightOuter, Some(EqualTo(r1a, r1a))).select(r1a, r1b, r1c)
     checkAnalysis(plan, expected)
   }
 
   test("natural full outer join") {
     val plan = t1.join(t2, NaturalJoin(FullOuter), None)
-    val expected = testRelation2.select(a, b).join(testRelation2.select(
-      a, c), FullOuter, Some(EqualTo(a, a))).select(Alias(Coalesce(Seq(a, a)), "a")(), b, c)
+    val expected = r1.select(r1a, r1b).join(r1.select(r1a, r1c), FullOuter, Some(
+      EqualTo(r1a, r1a))).select(Alias(Coalesce(Seq(r1a, r1a)), "r1_a")(), r1b, r1c)
     checkAnalysis(plan, expected)
   }
 
   test("natural inner join with no nullability") {
     val plan = t3.join(t4, NaturalJoin(Inner), None)
-    val expected = testRelation0.select(d, e).join(
-      testRelation0.select(d, f), Inner, Some(EqualTo(d, d))).select(d, e, f)
+    val expected = r2.select(r2a, r2b).join(
+      r2.select(r2a, r2c), Inner, Some(EqualTo(r2a, r2a))).select(r2a, r2b, r2c)
     checkAnalysis(plan, expected)
   }
 
   test("natural left join with no nullability") {
     val plan = t3.join(t4, NaturalJoin(LeftOuter), None)
-    val expected = testRelation0.select(d, e).join(
-      testRelation0.select(d, f), LeftOuter, Some(EqualTo(d, d))).select(d, e, nullableF)
+    val expected = r2.select(r2a, r2b).join(
+      r2.select(r2a, r2c), LeftOuter, Some(EqualTo(r2a, r2a))).select(r2a, r2b, nullableR2C)
     checkAnalysis(plan, expected)
   }
 
   test("natural right join with no nullability") {
     val plan = t3.join(t4, NaturalJoin(RightOuter), None)
-    val expected = testRelation0.select(d, e).join(
-      testRelation0.select(d, f), RightOuter, Some(EqualTo(d, d))).select(d, nullableE, f)
+    val expected = r2.select(r2a, r2b).join(
+      r2.select(r2a, r2c), RightOuter, Some(EqualTo(r2a, r2a))).select(r2a, nullableR2B, r2c)
     checkAnalysis(plan, expected)
   }
 
   test("natural full outer join with no nullability") {
     val plan = t3.join(t4, NaturalJoin(FullOuter), None)
-    val expected = testRelation0.select(d, e).join(testRelation0.select(d, f), FullOuter, Some(
-      EqualTo(d, d))).select(Alias(Coalesce(Seq(d, d)), "d")(), nullableE, nullableF)
+    val expected = r2.select(r2a, r2b).join(r2.select(r2a, r2c), FullOuter, Some(EqualTo(
+      r2a, r2a))).select(Alias(Coalesce(Seq(r2a, r2a)), "r2_a")(), nullableR2B, nullableR2C)
     checkAnalysis(plan, expected)
   }
 }
