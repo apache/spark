@@ -373,4 +373,18 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
     )
   }
+
+  test("collect functions structs") {
+    val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", struct($"x", $"y").as("b"))
+    checkAnswer(
+      df.select(collect_list($"a"), sort_array(collect_list($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(2, 2), Row(4, 1))))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), sort_array(collect_set($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
+    )
+  }
 }
