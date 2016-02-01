@@ -340,7 +340,7 @@ abstract class UnaryExpression extends Expression {
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
-   * null, and if not not null, use `f` to generate the expression.
+   * null, and if not null, use `f` to generate the expression.
    *
    * @param f function that accepts the non-null evaluation result name of child and returns Java
    *          code to compute the output.
@@ -349,24 +349,25 @@ abstract class UnaryExpression extends Expression {
       ctx: CodegenContext,
       ev: ExprCode,
       f: String => String): String = {
-    val eval = child.gen(ctx)
+    val childGen = child.gen(ctx)
+    val resultCode = f(childGen.value)
 
-    val declareIsNull = if (nullable) {
-      // If this expression is nullable, which means the `f` may need to change `ev.isNull` even if
-      // child is not nullable, so we make `ev.isNull` a variable here.
-      s"boolean ${ev.isNull} = ${eval.isNull};"
+    if (nullable) {
+      val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
+      s"""
+        ${childGen.code}
+        boolean ${ev.isNull} = ${childGen.isNull};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $nullSafeEval
+      """
     } else {
-      // If this expression is not nullable, which means `ev.isNull` will always be false, thus we
-      // don't need to declare the isNull variable.
       ev.isNull = "false"
-      ""
+      s"""
+        ${childGen.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
     }
-
-    s"""
-      ${eval.code}
-      $declareIsNull
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-    """ + ctx.genNullCheck(child.nullable, eval.isNull)(f(eval.value))
   }
 
   override def sql: String = s"($prettyName(${child.sql}))"
@@ -442,32 +443,34 @@ abstract class BinaryExpression extends Expression {
       ctx: CodegenContext,
       ev: ExprCode,
       f: (String, String) => String): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+    val resultCode = f(leftGen.value, rightGen.value)
 
-    val declareIsNull = if (nullable) {
-      // If this expression is nullable, which means the `f` may need to change `ev.isNull` even if
-      // child is not nullable, so we make `ev.isNull` a variable here.
-      s"boolean ${ev.isNull} = true;"
-    } else {
-      // If this expression is not nullable, which means `ev.isNull` will always be false, thus we
-      // don't need to declare the `ev.isNull` variable.
-      ev.isNull = "false"
-      ""
-    }
-
-    s"""
-      $declareIsNull
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-    """ + eval1.code + ctx.genNullCheck(left.nullable, eval1.isNull) {
-      eval2.code + ctx.genNullCheck(right.nullable, eval2.isNull) {
-        val setNotNull = if (nullable) s"${ev.isNull} = false;" else ""
-        val resultCode = f(eval1.value, eval2.value)
-        s"""
-          $setNotNull // resultCode could change nullability, so this should sit before it.
-          $resultCode
-        """
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
+          rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false; // resultCode could change nullability.
+              $resultCode
+            """
+          }
       }
+
+      s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $nullSafeEval
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${leftGen.code}
+        ${rightGen.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
     }
   }
 
@@ -529,7 +532,7 @@ abstract class TernaryExpression extends Expression {
 
   /**
    * Default behavior of evaluation according to the default nullability of TernaryExpression.
-   * If subclass of BinaryExpression override nullable, probably should also override this.
+   * If subclass of TernaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
     val exprs = children
@@ -555,11 +558,11 @@ abstract class TernaryExpression extends Expression {
     sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
 
   /**
-   * Short hand for generating binary evaluation code.
+   * Short hand for generating ternary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
-   * @param f accepts two variable names and returns Java code to compute the output.
+   * @param f accepts three variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
     ctx: CodegenContext,
@@ -571,44 +574,49 @@ abstract class TernaryExpression extends Expression {
   }
 
   /**
-   * Short hand for generating binary evaluation code.
+   * Short hand for generating ternary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
-   * @param f function that accepts the 2 non-null evaluation result names of children
+   * @param f function that accepts the 3 non-null evaluation result names of children
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
     ctx: CodegenContext,
     ev: ExprCode,
     f: (String, String, String) => String): String = {
-    val evals = children.map(_.gen(ctx))
+    val leftGen = children(0).gen(ctx)
+    val midGen = children(1).gen(ctx)
+    val rightGen = children(2).gen(ctx)
+    val resultCode = f(leftGen.value, midGen.value, rightGen.value)
 
-    val declareIsNull = if (nullable) {
-      // If this expression is nullable, which means the `f` may need to change `ev.isNull` even if
-      // child is not nullable, so we make `ev.isNull` a variable here.
-      s"boolean ${ev.isNull} = true;"
-    } else {
-      // If this expression is not nullable, which means `ev.isNull` will always be false, thus we
-      // don't need to declare the `ev.isNull` variable.
-      ev.isNull = "false"
-      ""
-    }
-
-    s"""
-      $declareIsNull
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-    """ + evals(0).code + ctx.genNullCheck(children(0).nullable, evals(0).isNull) {
-      evals(1).code + ctx.genNullCheck(children(1).nullable, evals(1).isNull) {
-        evals(2).code + ctx.genNullCheck(children(2).nullable, evals(2).isNull) {
-          val setNotNull = if (nullable) s"${ev.isNull} = false;" else ""
-          val resultCode = f(evals(0).value, evals(1).value, evals(2).value)
-          s"""
-            $setNotNull // resultCode could change nullability, so this should sit before it.
-            $resultCode
-          """
-        }
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(children(0).nullable, leftGen.isNull) {
+          midGen.code + ctx.nullSafeExec(children(1).nullable, midGen.isNull) {
+            rightGen.code + ctx.nullSafeExec(children(2).nullable, rightGen.isNull) {
+              s"""
+                ${ev.isNull} = false; // resultCode could change nullability.
+                $resultCode
+              """
+            }
+          }
       }
+
+      s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $nullSafeEval
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${leftGen.code}
+        ${midGen.code}
+        ${rightGen.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
     }
   }
 

@@ -367,21 +367,22 @@ class CodegenContext {
   }
 
   /**
-   * Generates code for adding null check if necessary.
+   * Generates code to do null safe execution, i.e. only execute the code when the input is not
+   * null by adding null check if necessary.
    *
-   * @param nullable we can avoid null check if it's false.
-   * @param isNull the code to check null.
-   * @param execution the code to run execution.
+   * @param nullable used to decide whether we should add null check or not.
+   * @param isNull the code to check if the input is null.
+   * @param execute the code that should only be executed when the input is not null.
    */
-  def genNullCheck(nullable: Boolean, isNull: String)(execution: String): String = {
+  def nullSafeExec(nullable: Boolean, isNull: String)(execute: String): String = {
     if (nullable) {
       s"""
         if (!$isNull) {
-          $execution
+          $execute
         }
       """
     } else {
-      "\n" + execution
+      "\n" + execute
     }
   }
 
