@@ -55,7 +55,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   val idleWorkers = new mutable.Queue[Socket]()
   var lastActivity = 0L
   val virtualEnvSetup = new AtomicBoolean(false)
-  var virtualEnvDir: Option[String] = _
+  var virtualEnvDir: Option[String] = None
   new MonitorThread().start()
 
   var simpleWorkers = new mutable.WeakHashMap[Socket, Process]()
