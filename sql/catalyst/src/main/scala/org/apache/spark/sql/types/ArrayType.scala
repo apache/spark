@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.sql.catalyst.util.ArrayData
+import scala.math.Ordering
+
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.DeveloperApi
-
-import scala.math.Ordering
-
+import org.apache.spark.sql.catalyst.util.{ArrayData => _}
 
 object ArrayType extends AbstractDataType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
