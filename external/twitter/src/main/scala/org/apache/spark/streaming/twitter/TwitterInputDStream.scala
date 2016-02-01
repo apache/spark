@@ -86,8 +86,9 @@ class TwitterReceiver(
       })
 
       query match {
-        case Some(FilterQuery) => newTwitterStream.filter(query.get)
         case None => newTwitterStream.sample()
+        case _ => newTwitterStream.filter(query.get)
+
       }
       setTwitterStream(newTwitterStream)
       logInfo("Twitter receiver started")

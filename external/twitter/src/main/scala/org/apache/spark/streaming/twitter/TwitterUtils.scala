@@ -63,7 +63,7 @@ object TwitterUtils {
       ssc: StreamingContext,
       twitterAuth: Option[Authorization],
       query: FilterQuery,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+      storageLevel: StorageLevel //= StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[Status] = {
     new TwitterInputDStream(ssc, twitterAuth, Some(query), storageLevel)
   }
@@ -105,7 +105,7 @@ object TwitterUtils {
    */
   def createStream(jssc: JavaStreamingContext, query: FilterQuery
                     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None, query)
+    createStream(jssc.ssc, None, query, StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
   /**
@@ -180,7 +180,7 @@ object TwitterUtils {
       twitterAuth: Authorization,
       query: FilterQuery
     ): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, Some(twitterAuth), query)
+    createStream(jssc.ssc, Some(twitterAuth), query, StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
   /**
