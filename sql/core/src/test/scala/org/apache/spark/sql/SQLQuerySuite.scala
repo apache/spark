@@ -2046,6 +2046,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-13056: Null in map value causes NPE") {
+    val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
+    withTempTable("maptest") {
+      df.registerTempTable("maptest")
+      checkAnswer(sql("SELECT value['abc'] FROM maptest"), Row("somestring"))
+      checkAnswer(sql("SELECT value['cba'] FROM maptest"), Row(null))
+    }
+  }
+
   test("hash function") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
     withTempTable("tbl") {
@@ -2055,12 +2064,5 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("SELECT hash(i, j) from tbl")
       )
     }
-  }
-
-  test("SPARK-13056: Null in map value causes NPE") {
-    val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
-    df.registerTempTable("maptest")
-    checkAnswer(sql("SELECT value['abc'] FROM maptest"), Row("somestring"))
-    checkAnswer(sql("SELECT value['cba'] FROM maptest"), Row(null))
   }
 }
