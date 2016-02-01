@@ -327,7 +327,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     ev.isNull = "false"
     val childrenHash = children.map { child =>
       val childGen = child.gen(ctx)
-      childGen.code + generateNullCheck(child.nullable, childGen.isNull) {
+      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
         computeHash(childGen.value, child.dataType, ev.value, ctx)
       }
     }.mkString("\n")
@@ -336,18 +336,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
       int ${ev.value} = $seed;
       $childrenHash
     """
-  }
-
-  private def generateNullCheck(nullable: Boolean, isNull: String)(execution: String): String = {
-    if (nullable) {
-      s"""
-        if (!$isNull) {
-          $execution
-        }
-      """
-    } else {
-      "\n" + execution
-    }
   }
 
   private def nullSafeElementHash(
@@ -359,7 +347,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
       ctx: CodegenContext): String = {
     val element = ctx.freshName("element")
 
-    generateNullCheck(nullable, s"$input.isNullAt($index)") {
+    ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
       s"""
         final ${ctx.javaType(elementType)} $element = ${ctx.getValue(input, elementType, index)};
         ${computeHash(element, elementType, result, ctx)}
