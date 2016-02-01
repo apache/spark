@@ -987,7 +987,7 @@ class TaskInstance(Base):
             logging.info(HR + msg + HR)
             self.start_date = datetime.now()
 
-            if self.state != State.QUEUED and (
+            if not mark_success and self.state != State.QUEUED and (
                     self.pool or self.task.dag.concurrency_reached):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
