@@ -39,7 +39,10 @@ Resource allocation can be configured as follows, based on the cluster type:
   and optionally set `spark.cores.max` to limit each application's resource share as in the standalone mode.
   You should also set `spark.executor.memory` to control the executor memory.
 * **YARN:** The `--num-executors` option to the Spark YARN client controls how many executors it will allocate
-  on the cluster, while `--executor-memory` and `--executor-cores` control the resources per executor.
+  on the cluster (`spark.executor.instances` as configuration property), while `--executor-memory`
+  (`spark.executor.memory` configuration property) and `--executor-cores` (`spark.executor.cores` configuration
+  property) control the resources per executor. For more information, see the
+  [YARN Spark Properties](running-on-yarn.html).
 
 A second option available on Mesos is _dynamic sharing_ of CPU cores. In this mode, each Spark application
 still has a fixed and independent memory allocation (set by `spark.executor.memory`), but when the
@@ -91,7 +94,7 @@ pre-packaged distribution.
 2. Add this jar to the classpath of all `NodeManager`s in your cluster.
 3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
-`org.apache.spark.network.yarn.YarnShuffleService` and `spark.shuffle.service.enabled` to true.
+`org.apache.spark.network.yarn.YarnShuffleService`.
 4. Restart all `NodeManager`s in your cluster.
 
 All other relevant configurations are optional and under the `spark.dynamicAllocation.*` and

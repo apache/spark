@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, AggregateExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -57,7 +57,7 @@ trait CheckAnalysis {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.map(_.name).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns $from")
+            a.failAnalysis(s"cannot resolve '${a.prettyString}' given input columns: [$from]")
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -70,15 +70,32 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
-          case WindowExpression(UnresolvedWindowFunction(name, _), _) =>
-            failAnalysis(
-              s"Could not resolve window function '$name'. " +
-              "Note that, using window functions currently requires a HiveContext")
+          case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
+            failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(windowFunction, windowSpec) if windowSpec.validate.nonEmpty =>
-            // The window spec is not valid.
-            val reason = windowSpec.validate.get
-            failAnalysis(s"Window specification $windowSpec is not valid because $reason")
+          case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
+               SpecifiedWindowFrame(frame,
+                 FrameBoundary(l),
+                 FrameBoundary(h))))
+             if order.isEmpty || frame != RowFrame || l != h =>
+            failAnalysis("An offset window function can only be evaluated in an ordered " +
+              s"row-based window frame with a single offset: $w")
+
+          case w @ WindowExpression(e, s) =>
+            // Only allow window functions with an aggregate expression or an offset window
+            // function.
+            e match {
+              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _ =>
+                failAnalysis(s"Expression '$e' not supported within a window function.")
+            }
+            // Make sure the window specification is valid.
+            s.validate match {
+              case Some(m) =>
+                failAnalysis(s"Window specification $s is not valid because $m")
+              case None => w
+            }
+
         }
 
         operator match {
@@ -172,6 +189,14 @@ trait CheckAnalysis {
                s"but the left table has ${left.output.length} columns and the right has " +
                s"${right.output.length}")
 
+          case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
+            val firstError = s.children.find(_.output.length != s.children.head.output.length).get
+            failAnalysis(
+              s"""
+                |Unions can only be performed on tables with the same number of columns,
+                | but one table has '${firstError.output.length}' columns and another table has
+                | '${s.children.head.output.length}' columns""".stripMargin)
+
           case _ => // Fallbacks to the following checks
         }
 
@@ -189,12 +214,20 @@ trait CheckAnalysis {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
-          // Special handling for cases when self-join introduce duplicate expression ids.
-          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+          case j: Join if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             failAnalysis(
               s"""
                  |Failure when resolving conflicting references in Join:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
+
+          case i: Intersect if !i.duplicateResolved =>
+            val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                  |""".stripMargin)
@@ -204,10 +237,12 @@ trait CheckAnalysis {
               s"unresolved operator ${operator.simpleString}")
 
           case o if o.expressions.exists(!_.deterministic) &&
-            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] & !o.isInstanceOf[Aggregate] =>
+            !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
+            !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>
             // The rule above is used to check Aggregate operator.
             failAnalysis(
-              s"""nondeterministic expressions are only allowed in Project or Filter, found:
+              s"""nondeterministic expressions are only allowed in
+                 |Project, Filter, Aggregate or Window, found:
                  | ${o.expressions.map(_.prettyString).mkString(",")}
                  |in operator ${operator.simpleString}
              """.stripMargin)

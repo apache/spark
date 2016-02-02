@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{TableIdentifier, CatalystConf, EmptyConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, EmptyConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 /**
@@ -45,6 +45,10 @@ trait Catalog {
   def tableExists(tableIdent: TableIdentifier): Boolean
 
   def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
+
+  def setCurrentDatabase(databaseName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Returns tuples of (tableName, isTemporary) for all tables in the given database.
@@ -104,13 +108,15 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     val tableName = getTableName(tableIdent)
     val table = tables.get(tableName)
     if (table == null) {
-      throw new NoSuchTableException
+      throw new AnalysisException("Table not found: " + tableName)
     }
     val tableWithQualifiers = Subquery(tableName, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
-    alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+    alias
+      .map(a => Subquery(a, tableWithQualifiers))
+      .getOrElse(tableWithQualifiers)
   }
 
   override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {

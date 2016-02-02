@@ -36,6 +36,14 @@ class KMeansModel(JavaModel):
         """Get the cluster centers, represented as a list of NumPy arrays."""
         return [c.toArray() for c in self._call_java("clusterCenters")]
 
+    @since("2.0.0")
+    def computeCost(self, dataset):
+        """
+        Return the K-means cost (sum of squared distances of points to their nearest center)
+        for this model on the given data.
+        """
+        return self._call_java("computeCost", dataset)
+
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed):
@@ -53,6 +61,8 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
+    >>> model.computeCost(df)
+    2.000...
     >>> transformed = model.transform(df).select("features", "prediction")
     >>> rows = transformed.collect()
     >>> rows[0].prediction == rows[1].prediction
@@ -63,7 +73,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    # a placeholder to make it appear in the generated doc
     k = Param(Params._dummy(), "k", "number of clusters to create")
     initMode = Param(Params._dummy(), "initMode",
                      "the initialization algorithm. This can be either \"random\" to " +
@@ -80,12 +89,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
-        self.k = Param(self, "k", "number of clusters to create")
-        self.initMode = Param(self, "initMode",
-                              "the initialization algorithm. This can be either \"random\" to " +
-                              "choose random points as initial cluster centers, or \"k-means||\" " +
-                              "to use a parallel variant of k-means++")
-        self.initSteps = Param(self, "initSteps", "steps for k-means initialization mode")
         self._setDefault(k=2, initMode="k-means||", initSteps=5, tol=1e-4, maxIter=20)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)

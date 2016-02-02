@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle._
 
-import org.apache.spark.{Logging => SparkLogging, TaskContext, Accumulator}
-import org.apache.spark.api.python.{PythonRunner, PythonBroadcast, PythonRDD, SerDeUtil}
+import org.apache.spark.{Accumulator, Logging => SparkLogging, TaskContext}
+import org.apache.spark.api.python.{PythonBroadcast, PythonRDD, PythonRunner, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.{MapData, GenericArrayData, ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -143,7 +143,7 @@ object EvaluatePython {
         values(i) = toJava(row.get(i, struct.fields(i).dataType), struct.fields(i).dataType)
         i += 1
       }
-      new GenericInternalRowWithSchema(values, struct)
+      new GenericRowWithSchema(values, struct)
 
     case (a: ArrayData, array: ArrayType) =>
       val values = new java.util.ArrayList[Any](a.numElements())
@@ -199,10 +199,7 @@ object EvaluatePython {
 
     case (c: Long, TimestampType) => c
 
-    case (c: String, StringType) => UTF8String.fromString(c)
-    case (c, StringType) =>
-      // If we get here, c is not a string. Call toString on it.
-      UTF8String.fromString(c.toString)
+    case (c, StringType) => UTF8String.fromString(c.toString)
 
     case (c: String, BinaryType) => c.getBytes("utf-8")
     case (c, BinaryType) if c.getClass.isArray && c.getClass.getComponentType.getName == "byte" => c
@@ -220,7 +217,14 @@ object EvaluatePython {
       ArrayBasedMapData(keys, values)
 
     case (c, StructType(fields)) if c.getClass.isArray =>
-      new GenericInternalRow(c.asInstanceOf[Array[_]].zip(fields).map {
+      val array = c.asInstanceOf[Array[_]]
+      if (array.length != fields.length) {
+        throw new IllegalStateException(
+          s"Input row doesn't have expected number of values required by the schema. " +
+          s"${fields.length} fields are required while ${array.length} values are provided."
+        )
+      }
+      new GenericInternalRow(array.zip(fields).map {
         case (e, f) => fromJava(e, f.dataType)
       })
 
@@ -256,11 +260,11 @@ object EvaluatePython {
   }
 
   /**
-   * Pickler for InternalRow
+   * Pickler for external row.
    */
   private class RowPickler extends IObjectPickler {
 
-    private val cls = classOf[GenericInternalRowWithSchema]
+    private val cls = classOf[GenericRowWithSchema]
 
     // register this to Pickler and Unpickler
     def register(): Unit = {
@@ -275,7 +279,7 @@ object EvaluatePython {
       } else {
         // it will be memorized by Pickler to save some bytes
         pickler.save(this)
-        val row = obj.asInstanceOf[GenericInternalRowWithSchema]
+        val row = obj.asInstanceOf[GenericRowWithSchema]
         // schema should always be same object for memoization
         pickler.save(row.schema)
         out.write(Opcodes.TUPLE1)
@@ -351,10 +355,6 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
   def children: Seq[SparkPlan] = child :: Nil
 
-  override def outputsUnsafeRows: Boolean = false
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = true
-
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
@@ -400,13 +400,14 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
       val unpickle = new Unpickler
       val row = new GenericMutableRow(1)
       val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
 
       outputIterator.flatMap { pickedResult =>
         val unpickledBatch = unpickle.loads(pickedResult)
         unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
       }.map { result =>
         row(0) = EvaluatePython.fromJava(result, udf.dataType)
-        joined(queue.poll(), row)
+        resultProj(joined(queue.poll(), row))
       }
     }
   }

@@ -34,12 +34,17 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   @transient private var sc: SparkContext = _
 
   override def beforeAll() {
+    super.beforeAll()
     sc = new SparkContext("local[2]", "test")
   }
 
   override def afterAll() {
-    LocalSparkContext.stop(sc)
-    sc = null
+    try {
+      LocalSparkContext.stop(sc)
+      sc = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   lazy val zeroPartRdd = new EmptyRDD[Int](sc)

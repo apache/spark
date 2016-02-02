@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import java.io.{ObjectInputStream, IOException}
+import java.io.{IOException, ObjectInputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
@@ -25,13 +25,13 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
 import org.scalatest.concurrent.Eventually.timeout
 import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.{Seconds => ScalaTestSeconds, Span}
 
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.dstream.{DStream, ForEachDStream, InputDStream}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{ManualClock, Utils}
 
@@ -58,8 +58,8 @@ private[streaming] class DummyInputDStream(ssc: StreamingContext) extends InputD
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
  * returns the i_th element at the i_th batch unde manual clock.
  */
-class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
-  extends InputDStream[T](ssc_) {
+class TestInputStream[T: ClassTag](_ssc: StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
+  extends InputDStream[T](_ssc) {
 
   def start() {}
 
