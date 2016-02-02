@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParse
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
