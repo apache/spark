@@ -416,6 +416,11 @@ case class TungstenAggregate(
       }
     }
 
+    // generate hash code for key
+    val hashExpr = FastHash(groupingExpressions)
+    ctx.currentVars = input
+    val hashEval = BindReferences.bindReference(hashExpr, child.output).gen(ctx)
+
     val inputAttr = bufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](bufferAttributes.length) ++ input
     ctx.INPUT_ROW = buffer
@@ -429,7 +434,8 @@ case class TungstenAggregate(
     s"""
      // generate grouping key
      ${keyCode.code}
-     UnsafeRow $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
+     ${hashEval.code}
+     UnsafeRow $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
      if ($buffer == null) {
        // failed to allocate the first page
        throw new OutOfMemoryError("No enough memory for aggregation");

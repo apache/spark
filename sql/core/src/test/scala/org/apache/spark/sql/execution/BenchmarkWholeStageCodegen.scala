@@ -33,6 +33,7 @@ import org.apache.spark.util.Benchmark
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
+    .set("spark.sql.shuffle.partitions", "1")
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
@@ -41,20 +42,20 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("Without codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
-      sqlContext.range(values).filter("(id & 1) = 1").count()
+      sqlContext.range(values).filter("(id & 1) = 1").groupBy().sum().collect()
     }
 
     benchmark.addCase("With codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.range(values).filter("(id & 1) = 1").count()
+      sqlContext.range(values).filter("(id & 1) = 1").groupBy().sum().collect()
     }
 
     /*
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      rang/filter/aggregate:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      rang/filter/aggregate:             Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------------
-      Without codegen             7775.53            26.97         1.00 X
-      With codegen                 342.15           612.94        22.73 X
+      Without codegen                         5488.16            38.21         1.00 X
+      With codegen                             531.08           394.88        10.33 X
     */
     benchmark.run()
   }
@@ -75,8 +76,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    Aggregate w/o codegen                   4254.38             4.93         1.00 X
-    Aggregate w codegen                     2661.45             7.88         1.60 X
+    Aggregate w/o codegen                   3739.83             5.61         1.00 X
+    Aggregate w codegen                     1602.70            13.09         2.33 X
     */
     benchmark.run()
   }
@@ -87,17 +88,47 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.addCase("hash") { iter =>
       var i = 0
       val keyBytes = new Array[Byte](16)
-      val valueBytes = new Array[Byte](16)
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
-      val value = new UnsafeRow(2)
-      value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       var s = 0
       while (i < values) {
         key.setInt(0, i % 1000)
         val h = Murmur3_x86_32.hashUnsafeWords(
-          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, 0)
+          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, 42)
         s += h
+        i += 1
+      }
+    }
+
+    benchmark.addCase("fast hash") { iter =>
+      var i = 0
+      val keyBytes = new Array[Byte](16)
+      val key = new UnsafeRow(1)
+      key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      var s = 0
+      while (i < values) {
+        key.setInt(0, i % 1000)
+        val h = i % 1000
+        s += h
+        i += 1
+      }
+    }
+
+    benchmark.addCase("arrayEqual") { iter =>
+      var i = 0
+      val keyBytes = new Array[Byte](16)
+      val valueBytes = new Array[Byte](16)
+      val key = new UnsafeRow(1)
+      key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      val value = new UnsafeRow(1)
+      value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      value.setInt(0, 555)
+      var s = 0
+      while (i < values) {
+        key.setInt(0, i % 1000)
+        if (key.equals(value)) {
+          s += 1
+        }
         i += 1
       }
     }
@@ -117,14 +148,14 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         val valueBytes = new Array[Byte](16)
         val key = new UnsafeRow(1)
         key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
-        val value = new UnsafeRow(2)
+        val value = new UnsafeRow(1)
         value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
         var i = 0
         while (i < values) {
           key.setInt(0, i % 65536)
-          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, i % 65536)
           if (loc.isDefined) {
-            value.pointTo(loc.getValueAddress.getBaseObject, loc.getValueAddress.getBaseOffset,
+            value.pointTo(loc.getValueBase, loc.getValueOffset,
               loc.getValueLength)
             value.setInt(0, value.getInt(0) + 1)
             i += 1
@@ -138,18 +169,20 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    BytesToBytesMap:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    hash                                     662.06            79.19         1.00 X
-    BytesToBytesMap (off Heap)              2209.42            23.73         0.30 X
-    BytesToBytesMap (on Heap)               2957.68            17.73         0.22 X
+    hash                                     637.85            82.20         1.00 X
+    fast hash                                148.80           352.35         4.29 X
+    arrayEqual                               408.46           128.36         1.56 X
+    BytesToBytesMap (off Heap)              1209.64            43.34         0.53 X
+    BytesToBytesMap (on Heap)               1322.56            39.64         0.48 X
       */
     benchmark.run()
   }
 
   test("benchmark") {
-    // testWholeStage(1024 * 1024 * 200)
+    // testWholeStage(200 << 20)
     // testAggregateWithKey(20 << 20)
-    // testBytesToBytesMap(1024 * 1024 * 50)
+    // testBytesToBytesMap(50 << 20)
   }
 }

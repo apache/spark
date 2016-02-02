@@ -436,3 +436,81 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 }
+
+/**
+  * A function that calculates hash value for a group of expressions, which basically XOR all the
+  * hash code of children expressions together.
+  *
+  * Note: This is used for hash map for aggreagte, designed for performance (has worse
+  * distribution than Murmur3Hash).
+  */
+case class FastHash(children: Seq[Expression]) extends Expression {
+
+  override def dataType: DataType = IntegerType
+
+  override def foldable: Boolean = false
+  override def nullable: Boolean = false
+
+  override def prettyName: String = "fasthash"
+
+  override def eval(input: InternalRow): Any = {
+    throw new UnsupportedOperationException
+  }
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    ev.isNull = "false"
+    val childrenHash = children.map { child =>
+      val childGen = child.gen(ctx)
+      childGen.code + generateNullCheck(child.nullable, childGen.isNull) {
+        computeHash(childGen.value, child.dataType, ev.value, ctx)
+      }
+    }.mkString("\n")
+
+    s"""
+      int ${ev.value} = 42;
+      $childrenHash
+    """
+  }
+
+  private def generateNullCheck(nullable: Boolean, isNull: String)(execution: String): String = {
+    if (nullable) {
+      s"""
+        if (!$isNull) {
+          $execution
+        }
+      """
+    } else {
+      "\n" + execution
+    }
+  }
+
+  private def computeHash(
+      input: String,
+      dataType: DataType,
+      result: String,
+      ctx: CodegenContext): String = {
+    val hasher = classOf[Murmur3_x86_32].getName
+
+    def hashInt(i: String): String = s"$result ^= $i;"
+    def hashLong(l: String): String = s"$result ^= (int) ($l >> 32) ^ $l;"
+    def hashBytes(b: String): String =
+      s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, $result);"
+    def hashObject(o: String): String = s"$result ^= $o.hashCode();"
+
+    dataType match {
+      case NullType => ""
+      case BooleanType => hashInt(s"$input ? 1 : 0")
+      case ByteType | ShortType | IntegerType | DateType => hashInt(input)
+      case LongType | TimestampType => hashLong(input)
+      case FloatType => hashInt(s"Float.floatToIntBits($input)")
+      case DoubleType => hashLong(s"Double.doubleToLongBits($input)")
+      case d: DecimalType if d.precision <= Decimal.MAX_LONG_DIGITS =>
+        hashLong(s"$input.toUnscaledLong()")
+      case BinaryType => hashBytes(input)
+      case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
+      // CalendarIntervalType | StringType | ArrayType | MapType | StructType
+      case _ => hashObject(input)
+    }
+  }
+
+}
