@@ -36,6 +36,12 @@ import org.apache.spark.sql.types._
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+  test("SPARK-12987") {
+    val df = Seq((1, 1)).toDF("a_b", "a.c")
+    val df1 = df.drop("a_b")
+    assert(df1.toString() === "[a.c: int]")
+    }
+
   test("analysis error should be eagerly reported") {
     // Eager analysis.
     withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {

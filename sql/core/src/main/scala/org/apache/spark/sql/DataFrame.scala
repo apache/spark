@@ -1257,7 +1257,8 @@ class DataFrame private[sql](
   def drop(colNames: String*): DataFrame = {
     val resolver = sqlContext.analyzer.resolver
     val remainingCols =
-      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
+      schema.filter(f => colNames.forall(n => !resolver(f.name, n)))
+        .map(f => Column(UnresolvedAttribute(Seq(f.name))))
     if (remainingCols.size == this.schema.size) {
       this
     } else {
