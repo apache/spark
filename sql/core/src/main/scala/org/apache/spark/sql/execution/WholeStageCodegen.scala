@@ -229,6 +229,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
 
         private Object[] references;
         ${ctx.declareMutableStates()}
+
         ${ctx.declareAddedFunctions()}
 
         public GeneratedIterator(Object[] references) {
@@ -240,7 +241,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
          $code
         }
       }
-      """
+      """.trim
 
     // try to compile, helpful for debug
     // println(s"${CodeFormatter.format(source)}")
@@ -277,7 +278,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
       s"""
          | currentRow = $row;
          | return;
-       """.stripMargin
+       """.stripMargin.trim
     } else {
       assert(input != null)
       if (input.nonEmpty) {
@@ -291,13 +292,13 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
            | ${code.code.trim}
            | currentRow = ${code.value};
            | return;
-         """.stripMargin
+         """.stripMargin.trim
       } else {
         // There is no columns
         s"""
            | currentRow = unsafeRow;
            | return;
-         """.stripMargin
+         """.stripMargin.trim
       }
     }
   }
