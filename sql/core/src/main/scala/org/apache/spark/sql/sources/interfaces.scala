@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.streaming.{FileStreamSink, FileStreamSource, Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -130,8 +130,9 @@ trait SchemaRelationProvider {
 trait StreamSourceProvider {
   def createSource(
       sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: Option[StructType]): Source
+      partitionColumns: Option[StructType],
+      dataSchema: Option[StructType],
+      parameters: Map[String, String]): Source
 }
 
 /**
@@ -168,7 +169,7 @@ trait StreamSinkProvider {
  * @since 1.4.0
  */
 @Experimental
-trait HadoopFsRelationProvider {
+trait HadoopFsRelationProvider extends StreamSourceProvider with StreamSinkProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
@@ -194,6 +195,38 @@ trait HadoopFsRelationProvider {
       throw new AnalysisException("Currently we don't support bucketing for this data source.")
     }
     createRelation(sqlContext, paths, dataSchema, partitionColumns, parameters)
+  }
+
+  override def createSource(
+      sqlContext: SQLContext,
+      partitionColumns: Option[StructType],
+      dataSchema: Option[StructType],
+      parameters: Map[String, String]): Source = {
+    val path = parameters("path")
+    val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
+
+    def dataFrameBuilder(files: Array[String]): DataFrame = {
+      val relation = createRelation(
+        sqlContext,
+        files,
+        dataSchema,
+        partitionColumns,
+        bucketSpec = None,
+        parameters)
+      DataFrame(sqlContext, LogicalRelation(relation))
+    }
+
+    new FileStreamSource(sqlContext, metadataPath, path, dataSchema, dataFrameBuilder)
+  }
+
+  override def createSink(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      partitionColumns: Seq[String]): Sink = {
+    val path = parameters("path")
+    val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
+
+    new FileStreamSink(sqlContext, metadataPath, path)
   }
 }
 

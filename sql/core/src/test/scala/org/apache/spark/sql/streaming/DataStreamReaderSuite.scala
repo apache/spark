@@ -33,10 +33,11 @@ object LastOptions {
 class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   override def createSource(
       sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: Option[StructType]): Source = {
+      partitionColumns: Option[StructType],
+      dataSchema: Option[StructType],
+      parameters: Map[String, String]): Source = {
     LastOptions.parameters = parameters
-    LastOptions.schema = schema
+    LastOptions.schema = dataSchema
     new Source {
       override def getNextBatch(start: Option[Offset]): Option[Batch] = None
       override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)

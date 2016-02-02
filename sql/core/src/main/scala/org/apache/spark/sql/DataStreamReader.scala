@@ -100,6 +100,7 @@ class DataStreamReader private[sql](sqlContext: SQLContext) extends Logging {
     val resolved = ResolvedDataSource.createSource(
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
+      partitionColumns = Array.empty[String],
       providerName = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, StreamingRelation(resolved))

@@ -95,6 +95,7 @@ object ResolvedDataSource extends Logging {
   def createSource(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
+      partitionColumns: Array[String],
       providerName: String,
       options: Map[String, String]): Source = {
     val provider = lookupDataSource(providerName).newInstance() match {
@@ -104,7 +105,20 @@ object ResolvedDataSource extends Logging {
           s"Data source $providerName does not support streamed reading")
     }
 
-    provider.createSource(sqlContext, options, userSpecifiedSchema)
+    userSpecifiedSchema match {
+      case Some(schema) => {
+        val maybePartitionsSchema = if (partitionColumns.isEmpty) {
+          None
+        } else {
+          Some(partitionColumnsSchema(
+            schema, partitionColumns, sqlContext.conf.caseSensitiveAnalysis))
+        }
+        val dataSchema =
+          StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
+        provider.createSource(sqlContext, Some(dataSchema), maybePartitionsSchema, options)
+      }
+      case None => provider.createSource(sqlContext, None, None, options)
+    }
   }
 
   def createSink(

@@ -173,6 +173,23 @@ class StreamExecution(
     logDebug(s"Waiting for data, current: $streamProgress")
   }
 
+  /** Clears the indicator that a batch has completed.  Used for testing. */
+  def clearBatchMarker(): Unit = {
+    batchRun = false
+  }
+
+  /**
+   * Awaits the completion of at least one streaming batch. Must be called after `clearBatchMarker`
+   * to guarantee that a new batch has been processed.
+   */
+  def awaitBatchCompletion(): Unit = {
+    while (!batchRun) {
+      awaitBatchLock.synchronized {
+        awaitBatchLock.wait(100)
+      }
+    }
+  }
+
   /**
    * Signals to the thread executing micro-batches that it should stop running after the next
    * batch. This method blocks until the thread stops running.
