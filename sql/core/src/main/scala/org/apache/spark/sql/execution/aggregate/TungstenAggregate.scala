@@ -211,9 +211,9 @@ case class TungstenAggregate(
        |   $doAgg();
        |
        |   // output the result
-       |   $genResult
+       |   ${genResult.trim}
        |
-       |   ${consume(ctx, resultVars)}
+       |   ${consume(ctx, resultVars).trim}
        | }
      """.stripMargin
   }
@@ -242,9 +242,9 @@ case class TungstenAggregate(
     }
     s"""
        | // do aggregate
-       | ${aggVals.map(_.code).mkString("\n")}
+       | ${aggVals.map(_.code).mkString("\n").trim}
        | // update aggregation buffer
-       | ${updates.mkString("")}
+       | ${updates.mkString("\n").trim}
      """.stripMargin
   }
 
@@ -427,7 +427,7 @@ case class TungstenAggregate(
 
     s"""
      // generate grouping key
-     ${keyCode.code}
+     ${keyCode.code.trim}
      UnsafeRow $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
      if ($buffer == null) {
        // failed to allocate the first page
@@ -435,9 +435,9 @@ case class TungstenAggregate(
      }
 
      // evaluate aggregate function
-     ${evals.map(_.code).mkString("\n")}
+     ${evals.map(_.code).mkString("\n").trim}
      // update aggregate buffer
-     ${updates.mkString("\n")}
+     ${updates.mkString("\n").trim}
      """
   }
 
