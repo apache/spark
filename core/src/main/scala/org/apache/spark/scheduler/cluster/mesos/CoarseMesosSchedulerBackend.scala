@@ -62,7 +62,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
-  private[this] val shutdownTimeoutMS = conf.getInt("spark.mesos.coarse.shutdown.ms", 10000)
+  private[this] val shutdownTimeoutMS = conf.getTimeAsMs("spark.mesos.coarse.shutdown.ms", "10s")
     .ensuring(_ >= 0, "spark.mesos.coarse.shutdown.ms must be >= 0")
 
   // Synchronization protected by stateLock
@@ -388,7 +388,8 @@ private[spark] class CoarseMesosSchedulerBackend(
       stopCalled = true
       super.stop()
     }
-    // Wait for finish
+    // Wait for executors to report done, or else mesosDriver.stop() will forcefully kill them.
+    // See SPARK-12330
     val stopwatch = new Stopwatch()
     stopwatch.start()
     // slaveIdsWithExecutors has no memory barrier, so this is eventually consistent
@@ -397,8 +398,9 @@ private[spark] class CoarseMesosSchedulerBackend(
       Thread.sleep(100)
     }
     if (slaveIdsWithExecutors.nonEmpty) {
-      logWarning(s"${slaveIdsWithExecutors.size} executors still running. "
-        + "Proceeding with mesos driver stop.")
+      logWarning(s"Timed out waiting for ${slaveIdsWithExecutors.size} remaining executors "
+        + s"to terminate within $shutdownTimeoutMS ms. This may leave temporary files "
+        + "on the mesos nodes.")
     }
     if (mesosDriver != null) {
       mesosDriver.stop()
