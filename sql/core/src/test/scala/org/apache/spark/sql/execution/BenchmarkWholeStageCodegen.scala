@@ -33,41 +33,40 @@ import org.apache.spark.util.Benchmark
   */
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
+    .set("spark.sql.shuffle.partitions", "1")
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
-  def testWholeStage(values: Int): Unit = {
-    val benchmark = new Benchmark("rang/filter/aggregate", values)
+  def runBenchmark(name: String, values: Int)(f: => Unit): Unit = {
+    val benchmark = new Benchmark(name, values)
 
-    benchmark.addCase("Without codegen") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
-      sqlContext.range(values).filter("(id & 1) = 1").count()
+    Seq(false, true).foreach { enabled =>
+      benchmark.addCase(s"$name codegen=$enabled") { iter =>
+        sqlContext.setConf("spark.sql.codegen.wholeStage", enabled.toString)
+        f
+      }
     }
 
-    benchmark.addCase("With codegen") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.range(values).filter("(id & 1) = 1").count()
-    }
-
-    /*
-      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      rang/filter/aggregate:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-      -------------------------------------------------------------------------------
-      Without codegen             7775.53            26.97         1.00 X
-      With codegen                 342.15           612.94        22.73 X
-    */
     benchmark.run()
   }
 
-  def testAggregateWithKey(values: Int): Unit = {
-    val benchmark = new Benchmark("Aggregate with keys", values)
+  def testWholeStage(values: Int): Unit = {
 
-    benchmark.addCase("Aggregate w/o codegen") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
-      sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+    runBenchmark("rang/filter/sum", values) {
+      sqlContext.range(values).filter("(id & 1) = 1").groupBy().sum().collect()
     }
-    benchmark.addCase(s"Aggregate w codegen") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+    /*
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    rang/filter/aggregate:             Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    -------------------------------------------------------------------------------
+    rang/filter/aggregate codegen=false        12509.22            41.91         1.00 X
+    rang/filter/aggregate codegen=true           846.38           619.45        14.78 X
+    */
+  }
+
+  def testAggregateWithKey(values: Int): Unit = {
+
+    runBenchmark("Aggregate w keys", values) {
       sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
     }
 
@@ -75,10 +74,9 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    Aggregate w/o codegen                   4254.38             4.93         1.00 X
-    Aggregate w codegen                     2661.45             7.88         1.60 X
+    Aggregate w keys codegen=false         2589.00             8.10         1.00 X
+    Aggregate w keys codegen=true          1645.38            12.75         1.57 X
     */
-    benchmark.run()
   }
 
   def testBytesToBytesMap(values: Int): Unit = {
@@ -138,18 +136,18 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+    BytesToBytesMap:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    hash                                     662.06            79.19         1.00 X
-    BytesToBytesMap (off Heap)              2209.42            23.73         0.30 X
-    BytesToBytesMap (on Heap)               2957.68            17.73         0.22 X
+    hash                                     603.61            86.86         1.00 X
+    BytesToBytesMap (off Heap)              3297.39            15.90         0.18 X
+    BytesToBytesMap (on Heap)               3607.09            14.53         0.17 X
       */
     benchmark.run()
   }
 
   test("benchmark") {
-    // testWholeStage(1024 * 1024 * 200)
+    // testWholeStage(500 << 20)
     // testAggregateWithKey(20 << 20)
-    // testBytesToBytesMap(1024 * 1024 * 50)
+    // testBytesToBytesMap(50 << 20)
   }
 }

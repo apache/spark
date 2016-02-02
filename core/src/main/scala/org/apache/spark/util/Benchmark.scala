@@ -99,22 +99,25 @@ private[spark] object Benchmark {
    * the rate of the function.
    */
   def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Int => Unit): Result = {
-    var totalTime = 0L
+    var bestTime = Long.MaxValue
     for (i <- 0 until iters + 1) {
       val start = System.nanoTime()
 
       f(i)
 
       val end = System.nanoTime()
-      if (i != 0) totalTime += end - start
+      val runTime = end - start
+      if (runTime < bestTime) {
+        bestTime = runTime
+      }
 
       if (outputPerIteration) {
         // scalastyle:off
-        println(s"Iteration $i took ${(end - start) / 1000} microseconds")
+        println(s"Iteration $i took ${runTime / 1000} microseconds")
         // scalastyle:on
       }
     }
-    Result(totalTime.toDouble / 1000000 / iters, num * iters / (totalTime.toDouble / 1000))
+    Result(bestTime.toDouble / 1000000, num / (bestTime.toDouble / 1000))
   }
 }
 
