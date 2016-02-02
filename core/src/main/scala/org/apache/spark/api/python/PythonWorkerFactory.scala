@@ -107,6 +107,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   def createVirtualEnv(): Unit = {
     virtualEnvDir = Some(UUID.randomUUID().toString)
+    logInfo("**********current working directory=" + new File(".").getAbsolutePath)
     val pb = new ProcessBuilder(
       Arrays.asList(conf.get("spark.pyspark.virtualenv.path","virtualenv"),
       "-p", pythonExec,
@@ -128,8 +129,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         conf.get("spark.pyspark.virtualenv.requirements")
       else
         conf.get("spark.pyspark.virtualenv.requirements").split("/").last
-    val pb = new ProcessBuilder(Arrays.asList(virtualEnvDir.get + "/bin/pip", "install",
-      "-r" , pyspark_requirement))
+    val pb = new ProcessBuilder(Arrays.asList(virtualEnvDir.get + "/bin/python", "-m", "pip",
+      "install", "-r" , pyspark_requirement))
     val proc = pb.start()
     val stderr = new StreamGobbler(proc.getErrorStream, true)
     stderr.start()
