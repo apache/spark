@@ -81,8 +81,6 @@ _functions = {
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
-    'first': 'Aggregate function: returns the first value in a group.',
-    'last': 'Aggregate function: returns the last value in a group.',
     'count': 'Aggregate function: returns the number of items in a group.',
     'sum': 'Aggregate function: returns the sum of all values in the expression.',
     'avg': 'Aggregate function: returns the average of the values in a group.',
@@ -278,6 +276,18 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
+@since(1.3)
+def first(col, ignorenulls=False):
+    """Aggregate function: returns the first value in a group.
+
+    The function by default returns the first values it sees. It will return the first non-null
+    value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
+    return Column(jc)
+
+
 @since(1.6)
 def input_file_name():
     """Creates a string column for the file name of the current Spark task.
@@ -308,6 +318,18 @@ def isnull(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
+
+
+@since(1.3)
+def last(col, ignorenulls=False):
+    """Aggregate function: returns the last value in a group.
+
+    The function by default returns the last values it sees. It will return the last non-null
+    value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
+    return Column(jc)
 
 
 @since(1.6)

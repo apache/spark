@@ -641,6 +641,16 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
+    def test_first_last_ignorenulls(self):
+        from pyspark.sql import functions
+        df = self.sqlCtx.range(0, 100)
+        df2 = df.select(functions.when(df.id % 3 == 0, None).otherwise(df.id).alias("id"))
+        df3 = df2.select(functions.first(df2.id, False).alias('a'),
+                         functions.first(df2.id, True).alias('b'),
+                         functions.last(df2.id, False).alias('c'),
+                         functions.last(df2.id, True).alias('d'))
+        self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
+
     def test_corr(self):
         import math
         df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()

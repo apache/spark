@@ -35,8 +35,10 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   // Array for each type. Only 1 is populated for any type.
   private byte[] byteData;
+  private short[] shortData;
   private int[] intData;
   private long[] longData;
+  private float[] floatData;
   private double[] doubleData;
 
   // Only set if type is Array.
@@ -105,6 +107,30 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   //
+  // APIs dealing with Booleans
+  //
+
+  @Override
+  public final void putBoolean(int rowId, boolean value) {
+    byteData[rowId] = (byte)((value) ? 1 : 0);
+  }
+
+  @Override
+  public final void putBooleans(int rowId, int count, boolean value) {
+    byte v = (byte)((value) ? 1 : 0);
+    for (int i = 0; i < count; ++i) {
+      byteData[i + rowId] = v;
+    }
+  }
+
+  @Override
+  public final boolean getBoolean(int rowId) {
+    return byteData[rowId] == 1;
+  }
+
+  //
+
+  //
   // APIs dealing with Bytes
   //
 
@@ -129,6 +155,33 @@ public final class OnHeapColumnVector extends ColumnVector {
   public final byte getByte(int rowId) {
     return byteData[rowId];
   }
+
+  //
+  // APIs dealing with Shorts
+  //
+
+  @Override
+  public final void putShort(int rowId, short value) {
+    shortData[rowId] = value;
+  }
+
+  @Override
+  public final void putShorts(int rowId, int count, short value) {
+    for (int i = 0; i < count; ++i) {
+      shortData[i + rowId] = value;
+    }
+  }
+
+  @Override
+  public final void putShorts(int rowId, int count, short[] src, int srcIndex) {
+    System.arraycopy(src, srcIndex, shortData, rowId, count);
+  }
+
+  @Override
+  public final short getShort(int rowId) {
+    return shortData[rowId];
+  }
+
 
   //
   // APIs dealing with Ints
@@ -202,6 +255,31 @@ public final class OnHeapColumnVector extends ColumnVector {
     return longData[rowId];
   }
 
+  //
+  // APIs dealing with floats
+  //
+
+  @Override
+  public final void putFloat(int rowId, float value) { floatData[rowId] = value; }
+
+  @Override
+  public final void putFloats(int rowId, int count, float value) {
+    Arrays.fill(floatData, rowId, rowId + count, value);
+  }
+
+  @Override
+  public final void putFloats(int rowId, int count, float[] src, int srcIndex) {
+    System.arraycopy(src, srcIndex, floatData, rowId, count);
+  }
+
+  @Override
+  public final void putFloats(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+        floatData, Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
+  }
+
+  @Override
+  public final float getFloat(int rowId) { return floatData[rowId]; }
 
   //
   // APIs dealing with doubles
@@ -253,7 +331,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final void loadBytes(Array array) {
+  public final void loadBytes(ColumnVector.Array array) {
     array.byteArray = byteData;
     array.byteArrayOffset = array.offset;
   }
@@ -277,7 +355,7 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   // Spilt this function out since it is the slow path.
   private final void reserveInternal(int newCapacity) {
-    if (this.resultArray != null) {
+    if (this.resultArray != null || DecimalType.isByteArrayDecimalType(type)) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
@@ -286,18 +364,30 @@ public final class OnHeapColumnVector extends ColumnVector {
       }
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
+    } else if (type instanceof BooleanType) {
+      byte[] newData = new byte[newCapacity];
+      if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+      byteData = newData;
     } else if (type instanceof ByteType) {
       byte[] newData = new byte[newCapacity];
       if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
       byteData = newData;
+    } else if (type instanceof ShortType) {
+      short[] newData = new short[newCapacity];
+      if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
+      shortData = newData;
     } else if (type instanceof IntegerType) {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;
-    } else if (type instanceof LongType) {
+    } else if (type instanceof LongType || DecimalType.is64BitDecimalType(type)) {
       long[] newData = new long[newCapacity];
       if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
       longData = newData;
+    } else if (type instanceof FloatType) {
+      float[] newData = new float[newCapacity];
+      if (floatData != null) System.arraycopy(floatData, 0, newData, 0, elementsAppended);
+      floatData = newData;
     } else if (type instanceof DoubleType) {
       double[] newData = new double[newCapacity];
       if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, elementsAppended);
