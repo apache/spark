@@ -197,6 +197,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .read
       .format("csv")
       .option("header", "false")
+      .option("comment", "~")
       .load(testFile(carsMalformedFile))
 
     verifyCars(cars, withHeader = false, checkTypes = false)
