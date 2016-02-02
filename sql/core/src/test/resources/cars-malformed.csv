@@ -1,5 +1,4 @@
 ~ All the rows here are malformed having tokens more than the schema (header).
-
 year,make,model,comment,blank
 "2012","Tesla","S","No comment",,null,null
 
