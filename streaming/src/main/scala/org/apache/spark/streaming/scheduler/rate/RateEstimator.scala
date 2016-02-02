@@ -46,7 +46,7 @@ private[streaming] trait RateEstimator extends Serializable {
 object RateEstimator {
 
   /**
-   * Return a new RateEstimator based on the value of `spark.streaming.RateEstimator`.
+   * Return a new RateEstimator based on the value of `spark.streaming.backpressure.rateEstimator`.
    *
    * The only known estimator right now is `pid`.
    *

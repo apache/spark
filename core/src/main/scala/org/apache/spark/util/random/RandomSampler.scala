@@ -52,45 +52,45 @@ object RandomSampler {
   def newDefaultRNG: Random = new XORShiftRandom
 
   /**
-   * Default maximum gap-sampling fraction.
-   * For sampling fractions <= this value, the gap sampling optimization will be applied.
-   * Above this value, it is assumed that "tradtional" Bernoulli sampling is faster.  The
-   * optimal value for this will depend on the RNG.  More expensive RNGs will tend to make
-   * the optimal value higher.  The most reliable way to determine this value for a new RNG
-   * is to experiment.  When tuning for a new RNG, I would expect a value of 0.5 to be close
-   * in most cases, as an initial guess.
-   */
+  * Default maximum gap-sampling fraction.
+  * For sampling fractions <= this value, the gap sampling optimization will be applied.
+  * Above this value, it is assumed that "tradtional" Bernoulli sampling is faster.  The
+  * optimal value for this will depend on the RNG.  More expensive RNGs will tend to make
+  * the optimal value higher.  The most reliable way to determine this value for a new RNG
+  * is to experiment.  When tuning for a new RNG, I would expect a value of 0.5 to be close
+  * in most cases, as an initial guess.
+  */
   val defaultMaxGapSamplingFraction = 0.4
 
   /**
-   * Default epsilon for floating point numbers sampled from the RNG.
-   * The gap-sampling compute logic requires taking log(x), where x is sampled from an RNG.
-   * To guard against errors from taking log(0), a positive epsilon lower bound is applied.
-   * A good value for this parameter is at or near the minimum positive floating
-   * point value returned by "nextDouble()" (or equivalent), for the RNG being used.
-   */
+  * Default epsilon for floating point numbers sampled from the RNG.
+  * The gap-sampling compute logic requires taking log(x), where x is sampled from an RNG.
+  * To guard against errors from taking log(0), a positive epsilon lower bound is applied.
+  * A good value for this parameter is at or near the minimum positive floating
+  * point value returned by "nextDouble()" (or equivalent), for the RNG being used.
+  */
   val rngEpsilon = 5e-11
 
   /**
-   * Sampling fraction arguments may be results of computation, and subject to floating
-   * point jitter.  I check the arguments with this epsilon slop factor to prevent spurious
-   * warnings for cases such as summing some numbers to get a sampling fraction of 1.000000001
-   */
+  * Sampling fraction arguments may be results of computation, and subject to floating
+  * point jitter.  I check the arguments with this epsilon slop factor to prevent spurious
+  * warnings for cases such as summing some numbers to get a sampling fraction of 1.000000001
+  */
   val roundingEpsilon = 1e-6
 }
 
 /**
- * :: DeveloperApi ::
- * A sampler based on Bernoulli trials for partitioning a data sequence.
- *
- * @param lb lower bound of the acceptance range
- * @param ub upper bound of the acceptance range
- * @param complement whether to use the complement of the range specified, default to false
- * @tparam T item type
- */
+* :: DeveloperApi ::
+* A sampler based on Bernoulli trials for partitioning a data sequence.
+*
+* @param lb lower bound of the acceptance range
+* @param ub upper bound of the acceptance range
+* @param complement whether to use the complement of the range specified, default to false
+* @tparam T item type
+*/
 @DeveloperApi
 class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = false)
-  extends RandomSampler[T, T] {
+extends RandomSampler[T, T] {
 
   /** epsilon slop to avoid failure from floating point jitter. */
   require(
@@ -126,8 +126,8 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
   }
 
   /**
-   *  Return a sampler that is the complement of the range specified of the current sampler.
-   */
+  *  Return a sampler that is the complement of the range specified of the current sampler.
+  */
   def cloneComplement(): BernoulliCellSampler[T] =
     new BernoulliCellSampler[T](lb, ub, !complement)
 
@@ -143,15 +143,15 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
  * @tparam T item type
  */
 @DeveloperApi
-class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] {
+class BernoulliSampler[T: ClassTag](fraction: Double,
+                                    rng: Random = RandomSampler.newDefaultRNG)
+  extends RandomSampler[T, T] {
 
   /** epsilon slop to avoid failure from floating point jitter */
   require(
     fraction >= (0.0 - RandomSampler.roundingEpsilon)
-      && fraction <= (1.0 + RandomSampler.roundingEpsilon),
+    && fraction <= (1.0 + RandomSampler.roundingEpsilon),
     s"Sampling fraction ($fraction) must be on interval [0, 1]")
-
-  private val rng: Random = RandomSampler.newDefaultRNG
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
@@ -174,15 +174,15 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
 /**
  * :: DeveloperApi ::
  * A sampler for sampling with replacement, based on values drawn from Poisson distribution.
- *
- * @param fraction the sampling fraction (with replacement)
- * @param useGapSamplingIfPossible if true, use gap sampling when sampling ratio is low.
- * @tparam T item type
- */
+*
+* @param fraction the sampling fraction (with replacement)
+* @param useGapSamplingIfPossible if true, use gap sampling when sampling ratio is low.
+* @tparam T item type
+*/
 @DeveloperApi
 class PoissonSampler[T: ClassTag](
-    fraction: Double,
-    useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
+  fraction: Double,
+  useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
 
   def this(fraction: Double) = this(fraction, useGapSamplingIfPossible = true)
 
@@ -209,9 +209,9 @@ class PoissonSampler[T: ClassTag](
       new GapSamplingReplacementIterator(items, fraction, rngGap, RandomSampler.rngEpsilon)
     } else {
       items.flatMap { item =>
-        val count = rng.sample()
-        if (count == 0) Iterator.empty else Iterator.fill(count)(item)
-      }
+                     val count = rng.sample()
+                     if (count == 0) Iterator.empty else Iterator.fill(count)(item)
+                   }
     }
   }
 
@@ -221,10 +221,10 @@ class PoissonSampler[T: ClassTag](
 
 private[spark]
 class GapSamplingIterator[T: ClassTag](
-    var data: Iterator[T],
-    f: Double,
-    rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] {
+  var data: Iterator[T],
+  f: Double,
+  rng: Random = RandomSampler.newDefaultRNG,
+  epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] {
 
   require(f > 0.0  &&  f < 1.0, s"Sampling fraction ($f) must reside on open interval (0, 1)")
   require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
@@ -235,17 +235,17 @@ class GapSamplingIterator[T: ClassTag](
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
     data.getClass match {
       case `arrayClass` =>
-        (n: Int) => { data = data.drop(n) }
+      (n: Int) => { data = data.drop(n) }
       case `arrayBufferClass` =>
-        (n: Int) => { data = data.drop(n) }
+      (n: Int) => { data = data.drop(n) }
       case _ =>
-        (n: Int) => {
-          var j = 0
-          while (j < n && data.hasNext) {
-            data.next()
-            j += 1
-          }
+      (n: Int) => {
+        var j = 0
+        while (j < n && data.hasNext) {
+          data.next()
+          j += 1
         }
+      }
     }
   }
 
@@ -275,10 +275,10 @@ class GapSamplingIterator[T: ClassTag](
 
 private[spark]
 class GapSamplingReplacementIterator[T: ClassTag](
-    var data: Iterator[T],
-    f: Double,
-    rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] {
+  var data: Iterator[T],
+  f: Double,
+  rng: Random = RandomSampler.newDefaultRNG,
+  epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] {
 
   require(f > 0.0, s"Sampling fraction ($f) must be > 0")
   require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
@@ -289,17 +289,17 @@ class GapSamplingReplacementIterator[T: ClassTag](
     val arrayBufferClass = ArrayBuffer.empty[T].iterator.getClass
     data.getClass match {
       case `arrayClass` =>
-        (n: Int) => { data = data.drop(n) }
+      (n: Int) => { data = data.drop(n) }
       case `arrayBufferClass` =>
-        (n: Int) => { data = data.drop(n) }
+      (n: Int) => { data = data.drop(n) }
       case _ =>
-        (n: Int) => {
-          var j = 0
-          while (j < n && data.hasNext) {
-            data.next()
-            j += 1
-          }
+      (n: Int) => {
+        var j = 0
+        while (j < n && data.hasNext) {
+          data.next()
+          j += 1
         }
+      }
     }
   }
 
@@ -317,10 +317,10 @@ class GapSamplingReplacementIterator[T: ClassTag](
   }
 
   /**
-   * Skip elements with replication factor zero (i.e. elements that won't be sampled).
-   * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
-   * q is the probabililty of Poisson(0; f)
-   */
+  * Skip elements with replication factor zero (i.e. elements that won't be sampled).
+  * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
+  * q is the probabililty of Poisson(0; f)
+  */
   private def advance(): Unit = {
     val u = math.max(rng.nextDouble(), epsilon)
     val k = (math.log(u) / (-f)).toInt
@@ -335,10 +335,10 @@ class GapSamplingReplacementIterator[T: ClassTag](
   private val q = math.exp(-f)
 
   /**
-   * Sample from Poisson distribution, conditioned such that the sampled value is >= 1.
-   * This is an adaptation from the algorithm for Generating Poisson distributed random variables:
-   * http://en.wikipedia.org/wiki/Poisson_distribution
-   */
+  * Sample from Poisson distribution, conditioned such that the sampled value is >= 1.
+  * This is an adaptation from the algorithm for Generating Poisson distributed random variables:
+  * http://en.wikipedia.org/wiki/Poisson_distribution
+  */
   private def poissonGE1: Int = {
     // simulate that the standard poisson sampling
     // gave us at least one iteration, for a sample of >= 1
