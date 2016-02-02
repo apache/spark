@@ -35,6 +35,7 @@ jquery.dataTables.1.10.4.min.js
 jquery.mustache.js
 jsonFormatter.min.css
 jsonFormatter.min.js
+jsonFormatter.min.js.map
 .*avsc
 .*txt
 .*json
