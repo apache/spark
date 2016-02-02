@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
