@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 
@@ -32,7 +33,7 @@ import org.apache.spark.sql.types._
  */
 case class DescribeCommand(
     table: LogicalPlan,
-    isExtended: Boolean) extends LogicalPlan with Command {
+    isExtended: Boolean) extends LogicalPlan with logical.Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
@@ -59,7 +60,7 @@ case class CreateTableUsing(
     temporary: Boolean,
     options: Map[String, String],
     allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends LogicalPlan with Command {
+    managedIfNoPath: Boolean) extends LogicalPlan with logical.Command {
 
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -67,8 +68,8 @@ case class CreateTableUsing(
 
 /**
  * A node used to support CTAS statements and saveAsTable for the data source API.
- * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
- * can analyze the logical plan that will be used to populate the table.
+ * This node is a [[logical.UnaryNode]] instead of a [[logical.Command]] because we want the
+ * analyzer can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
 case class CreateTableUsingAsSelect(
@@ -79,7 +80,7 @@ case class CreateTableUsingAsSelect(
     bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends logical.UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
@@ -169,8 +170,3 @@ class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
 
   override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
 }
-
-/**
- * The exception thrown from the DDL parser.
- */
-class DDLException(message: String) extends RuntimeException(message)

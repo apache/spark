@@ -56,6 +56,20 @@ class CodegenContext {
   val references: mutable.ArrayBuffer[Any] = new mutable.ArrayBuffer[Any]()
 
   /**
+    * Add an object to `references`, create a class member to access it.
+    *
+    * Returns the name of class member.
+    */
+  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
+    val term = freshName(name)
+    val idx = references.length
+    references += obj
+    val clsName = Option(className).getOrElse(obj.getClass.getName)
+    addMutableState(clsName, term, s"this.$term = ($clsName) references[$idx];")
+    term
+  }
+
+  /**
     * Holding a list of generated columns as input of current operator, will be used by
     * BoundReference to generate code.
     */
@@ -145,13 +159,22 @@ class CodegenContext {
   private val curId = new java.util.concurrent.atomic.AtomicInteger()
 
   /**
+    * A prefix used to generate fresh name.
+    */
+  var freshNamePrefix = ""
+
+  /**
    * Returns a term name that is unique within this instance of a `CodeGenerator`.
    *
    * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
    * function.)
    */
-  def freshName(prefix: String): String = {
-    s"$prefix${curId.getAndIncrement}"
+  def freshName(name: String): String = {
+    if (freshNamePrefix == "") {
+      s"$name${curId.getAndIncrement}"
+    } else {
+      s"${freshNamePrefix}_$name${curId.getAndIncrement}"
+    }
   }
 
   /**
@@ -186,6 +209,39 @@ class CodegenContext {
       case StringType => s"$row.update($ordinal, $value.clone())"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       case _ => s"$row.update($ordinal, $value)"
+    }
+  }
+
+  /**
+    * Update a column in MutableRow from ExprCode.
+    */
+  def updateColumn(
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (dataType.isInstanceOf[DecimalType]) {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             ${setColumn(row, dataType, ordinal, "null")};
+           }
+         """
+      } else {
+        s"""
+           if (!${ev.isNull}) {
+             ${setColumn(row, dataType, ordinal, ev.value)};
+           } else {
+             $row.setNullAt($ordinal);
+           }
+         """
+      }
+    } else {
+      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
     }
   }
 
@@ -346,15 +402,35 @@ class CodegenContext {
   }
 
   /**
-    * Generates code for greater of two expressions.
-    *
-    * @param dataType data type of the expressions
-    * @param c1 name of the variable of expression 1's output
-    * @param c2 name of the variable of expression 2's output
-    */
+   * Generates code for greater of two expressions.
+   *
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
+   */
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
+   * Generates code to do null safe execution, i.e. only execute the code when the input is not
+   * null by adding null check if necessary.
+   *
+   * @param nullable used to decide whether we should add null check or not.
+   * @param isNull the code to check if the input is null.
+   * @param execute the code that should only be executed when the input is not null.
+   */
+  def nullSafeExec(nullable: Boolean, isNull: String)(execute: String): String = {
+    if (nullable) {
+      s"""
+        if (!$isNull) {
+          $execute
+        }
+      """
+    } else {
+      "\n" + execute
+    }
   }
 
   /**

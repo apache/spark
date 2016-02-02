@@ -22,6 +22,7 @@ import java.io.{ObjectInputStream, Serializable}
 import scala.collection.generic.Growable
 import scala.reflect.ClassTag
 
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
 
@@ -66,7 +67,7 @@ class GenericAccumulable[RR, R, T] private[spark] (
     val name: Option[String],
     internal: Boolean,
     private[spark] val countFailedValues: Boolean,
-    @transient process: R => RR,
+    @transient private val process: R => RR,
     private[spark] val consistent: Boolean)
   extends Serializable {
 
@@ -176,6 +177,13 @@ class GenericAccumulable[RR, R, T] private[spark] (
    * Set the accumulator's value. For internal use only.
    */
   private[spark] def setValueAny(newValue: Any): Unit = { setValue(newValue.asInstanceOf[R]) }
+
+  /**
+   * Create an [[AccumulableInfo]] representation of this [[Accumulable]] with the provided values.
+   */
+  private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues, consistent)
+  }
 
   // Called by Java when deserializing an object
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {

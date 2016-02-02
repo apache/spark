@@ -25,7 +25,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -43,6 +42,10 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   private CountMinSketchImpl() {}
 
   CountMinSketchImpl(int depth, int width, int seed) {
+    if (depth <= 0 || width <= 0) {
+      throw new IllegalArgumentException("Depth and width must be both positive");
+    }
+
     this.depth = depth;
     this.width = width;
     this.eps = 2.0 / width;
@@ -51,6 +54,14 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   }
 
   CountMinSketchImpl(double eps, double confidence, int seed) {
+    if (eps <= 0D) {
+      throw new IllegalArgumentException("Relative error must be positive");
+    }
+
+    if (confidence <= 0D || confidence >= 1D) {
+      throw new IllegalArgumentException("Confidence must be within range (0.0, 1.0)");
+    }
+
     // 2/w = eps ; w = 2/eps
     // 1/2^depth <= 1-confidence ; depth >= -log2 (1-confidence)
     this.eps = eps;
@@ -146,7 +157,41 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     }
   }
 
-  private void addString(String item, long count) {
+  @Override
+  public void addString(String item) {
+    addString(item, 1);
+  }
+
+  @Override
+  public void addString(String item, long count) {
+    addBinary(Utils.getBytesFromUTF8String(item), count);
+  }
+
+  @Override
+  public void addLong(long item) {
+    addLong(item, 1);
+  }
+
+  @Override
+  public void addLong(long item, long count) {
+    if (count < 0) {
+      throw new IllegalArgumentException("Negative increments not implemented");
+    }
+
+    for (int i = 0; i < depth; ++i) {
+      table[i][hash(item, i)] += count;
+    }
+
+    totalCount += count;
+  }
+
+  @Override
+  public void addBinary(byte[] item) {
+    addBinary(item, 1);
+  }
+
+  @Override
+  public void addBinary(byte[] item, long count) {
     if (count < 0) {
       throw new IllegalArgumentException("Negative increments not implemented");
     }
@@ -155,18 +200,6 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
 
     for (int i = 0; i < depth; ++i) {
       table[i][buckets[i]] += count;
-    }
-
-    totalCount += count;
-  }
-
-  private void addLong(long item, long count) {
-    if (count < 0) {
-      throw new IllegalArgumentException("Negative increments not implemented");
-    }
-
-    for (int i = 0; i < depth; ++i) {
-      table[i][hash(item, i)] += count;
     }
 
     totalCount += count;

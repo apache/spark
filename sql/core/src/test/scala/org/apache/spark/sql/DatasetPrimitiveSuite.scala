@@ -105,4 +105,26 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       agged,
       "1", "abc", "3", "xyz", "5", "hello")
   }
+
+  test("Arrays and Lists") {
+    checkAnswer(Seq(Seq(1)).toDS(), Seq(1))
+    checkAnswer(Seq(Seq(1.toLong)).toDS(), Seq(1.toLong))
+    checkAnswer(Seq(Seq(1.toDouble)).toDS(), Seq(1.toDouble))
+    checkAnswer(Seq(Seq(1.toFloat)).toDS(), Seq(1.toFloat))
+    checkAnswer(Seq(Seq(1.toByte)).toDS(), Seq(1.toByte))
+    checkAnswer(Seq(Seq(1.toShort)).toDS(), Seq(1.toShort))
+    checkAnswer(Seq(Seq(true)).toDS(), Seq(true))
+    checkAnswer(Seq(Seq("test")).toDS(), Seq("test"))
+    checkAnswer(Seq(Seq(Tuple1(1))).toDS(), Seq(Tuple1(1)))
+
+    checkAnswer(Seq(Array(1)).toDS(), Array(1))
+    checkAnswer(Seq(Array(1.toLong)).toDS(), Array(1.toLong))
+    checkAnswer(Seq(Array(1.toDouble)).toDS(), Array(1.toDouble))
+    checkAnswer(Seq(Array(1.toFloat)).toDS(), Array(1.toFloat))
+    checkAnswer(Seq(Array(1.toByte)).toDS(), Array(1.toByte))
+    checkAnswer(Seq(Array(1.toShort)).toDS(), Array(1.toShort))
+    checkAnswer(Seq(Array(true)).toDS(), Array(true))
+    checkAnswer(Seq(Array("test")).toDS(), Array("test"))
+    checkAnswer(Seq(Array(Tuple1(1))).toDS(), Array(Tuple1(1)))
+  }
 }
