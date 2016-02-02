@@ -33,15 +33,8 @@ private class CodeFormatter {
   private val indentSize = 2
   private var indentString = ""
   private var currentLine = 1
-  private var lastLine: String = _
 
   private def addLine(line: String): Unit = {
-    // ignore continuous empty lines
-    if (line.isEmpty && (lastLine == "")) {
-      return
-    }
-    lastLine = line
-
     val indentChange =
       line.count(c => "({".indexOf(c) >= 0) - line.count(c => ")}".indexOf(c) >= 0)
     val newIndentLevel = math.max(0, indentLevel + indentChange)
