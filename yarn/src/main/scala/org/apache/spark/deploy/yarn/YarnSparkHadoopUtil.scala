@@ -17,13 +17,16 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, IOException}
 import java.lang.reflect.UndeclaredThrowableException
 import java.nio.charset.StandardCharsets.UTF_8
 import java.security.PrivilegedExceptionAction
+import java.text.DateFormat
+import java.util.Date
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 import scala.reflect.runtime._
 import scala.util.Try
@@ -36,6 +39,7 @@ import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
@@ -326,6 +330,55 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     }
   }
 
+  /**
+   * Are the credentials supplied by the environment, rather than a TGT or keytab?
+   * This predicate will always return true in a YARN AM, as the relevant env var is
+   * always set (it is used to pass down the AM/RM token). In the client, if it is true
+   * it means that the application was launched in an Oozie workflow (or similar) with
+   * all tokens created in advance.
+   * @return the path to a credentials file if that is where the credentials came from
+   */
+  def environmentCredentialsFile() : Option[File] = {
+    val location = System.getenv(UserGroupInformation.HADOOP_TOKEN_FILE_LOCATION)
+    if (location != null) {
+      Some(new File(location))
+    } else {
+      None
+    }
+  }
+
+  def dumpTokens(credentials: Credentials): Iterable[String] = {
+    credentials.getAllTokens.map(tokenToString)
+  }
+
+  /**
+   * Convert a token to a string. If its an abstract delegation token
+   *
+   * @param token
+   * @return
+   */
+  def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val buffer =  new StringBuilder(128)
+    buffer.append(token.toString)
+    try {
+      val ti = token.decodeIdentifier
+      buffer.append("; ").append(ti)
+      ti match {
+        case dt: AbstractDelegationTokenIdentifier =>
+          // include human times and the renewer, which the HDFS tokens toString omits
+          buffer.append(s" Renewer: ${dt.getRenewer}")
+          buffer.append(" Issued: ").append(df.format(new Date(dt.getIssueDate)))
+          buffer.append(" Max Date: ").append(df.format(new Date(dt.getMaxDate)))
+        case _ =>
+      }
+    } catch {
+      case e: IOException => {
+        logDebug("Failed to decode $token: $e", e)
+      }
+    }
+    buffer.toString
+  }
 }
 
 object YarnSparkHadoopUtil {
