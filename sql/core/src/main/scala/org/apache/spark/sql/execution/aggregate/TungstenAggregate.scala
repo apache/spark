@@ -510,12 +510,12 @@ case class TungstenAggregate(
       ctx.updateColumn(buffer, dt, i, ev, updateExpr(i).nullable)
     }
 
-    val countTerm = ctx.freshName("count")
-    ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
-    val checkFallback = if (testFallbackStartsAt.isDefined) {
-      s"$countTerm < ${testFallbackStartsAt.get}"
+    val (checkFallback, resetCoulter, incCounter) = if (testFallbackStartsAt.isDefined) {
+      val countTerm = ctx.freshName("fallbackCounter")
+      ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
+      (s"$countTerm < ${testFallbackStartsAt.get}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {
-      "true"
+      ("true", "", "")
     }
 
     // We try to do hash map based in-memory aggregation first. If there is not enough memory (the
@@ -535,14 +535,14 @@ case class TungstenAggregate(
        } else {
          $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
        }
-       $countTerm = 0;
+       $resetCoulter
        $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
        if ($buffer == null) {
          // failed to allocate the first page
          throw new OutOfMemoryError("No enough memory for aggregation");
        }
      }
-     $countTerm += 1;
+     $incCounter
 
      // evaluate aggregate function
      ${evals.map(_.code).mkString("\n")}
