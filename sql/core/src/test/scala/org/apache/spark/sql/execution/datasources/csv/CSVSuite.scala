@@ -122,6 +122,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(exception.getMessage.contains("1-9588-osi"))
   }
 
+  test("non-ascii compatible encoding name") {
+    val exception = intercept[UnsupportedCharsetException] {
+      sqlContext
+        .read
+        .format("csv")
+        .option("charset", "UTF-16")
+        .load(testFile(carsFile8859))
+    }
+
+    assert(exception.getMessage.contains("UTF-16"))
+  }
+
   test("test different encoding") {
     // scalastyle:off
     sqlContext.sql(
