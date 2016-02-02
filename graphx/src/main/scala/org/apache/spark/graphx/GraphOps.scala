@@ -17,13 +17,12 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.graphx.util.FrequencyDistribution
-
 import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.graphx.lib._
+import org.apache.spark.graphx.util.FrequencyDistribution
 import org.apache.spark.rdd.RDD
 
 /**

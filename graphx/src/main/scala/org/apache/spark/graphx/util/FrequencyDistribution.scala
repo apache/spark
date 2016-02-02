@@ -17,9 +17,9 @@
 
 package org.apache.spark.graphx.util
 
-import org.apache.spark.rdd.RDD
-
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.rdd.RDD
 
 private[graphx] trait FrequencyDistribution extends Serializable {
 
