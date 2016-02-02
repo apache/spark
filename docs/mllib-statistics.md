@@ -40,19 +40,7 @@ total count.
 
 Refer to the [`MultivariateStatisticalSummary` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
-
-val observations: RDD[Vector] = ... // an RDD of Vectors
-
-// Compute column summary statistics.
-val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)
-println(summary.mean) // a dense vector containing the mean value for each column
-println(summary.variance) // column-wise variance
-println(summary.numNonzeros) // number of nonzeros in each column
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/SummaryStatisticsExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
