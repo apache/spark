@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteOrder;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.execution.vectorized.ColumnVector.Array;
 import org.apache.spark.sql.types.BooleanType;
 import org.apache.spark.sql.types.ByteType;
 import org.apache.spark.sql.types.DataType;
