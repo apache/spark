@@ -54,12 +54,10 @@ private[spark] object SchemaUtils {
   def appendColumn(
       schema: StructType,
       colName: String,
-      dataType: DataType): StructType = {
+      dataType: DataType,
+      nullable: Boolean = false): StructType = {
     if (colName.isEmpty) return schema
-    val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(colName), s"Column $colName already exists.")
-    val outputFields = schema.fields :+ StructField(colName, dataType, nullable = false)
-    StructType(outputFields)
+    appendColumn(schema, StructField(colName, dataType, nullable))
   }
 
   /**
