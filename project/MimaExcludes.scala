@@ -231,6 +231,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.metadataCleaner"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnDriverEndpoint"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
+      ) ++ Seq (
+        // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
@@ -367,15 +370,9 @@ object MimaExcludes {
         // SPARK-12149 Added new fields to ExecutorSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
-        // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
-        // private class.
-        MimaBuild.excludeSparkClass(
-          "scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint") ++
-      Seq (
-        // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
-        ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.ExecutorSummary.this")
-      )
+      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
+      // private class.
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),

@@ -28,13 +28,17 @@ private[v1] class ExecutorListResource(ui: SparkUI) {
   @GET
   def executorList(): Seq[ExecutorSummary] = {
     val listener = ui.executorsListener
-    val activeStorageStatusList = listener.activeStorageStatusList
-    val deadStorageStatusList = listener.deadStorageStatusList
-    (0 until activeStorageStatusList.size).map { statusId =>
-      ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
-    } ++
-    (0 until deadStorageStatusList.size).map { statusId =>
-      ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
+    listener.synchronized {
+      // The follow codes should be protected by `listener` to make sure no executors will be
+      // removed before we query their status. See SPARK-12784.
+      val activeStorageStatusList = listener.activeStorageStatusList
+      val deadStorageStatusList = listener.deadStorageStatusList
+      (0 until activeStorageStatusList.size).map { statusId =>
+        ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
+      } ++
+      (0 until deadStorageStatusList.size).map { statusId =>
+        ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
+      }
     }
   }
 }
