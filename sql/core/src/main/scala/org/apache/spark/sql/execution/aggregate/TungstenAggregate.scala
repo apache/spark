@@ -198,7 +198,8 @@ case class TungstenAggregate(
     ctx.addNewFunction(doAgg,
       s"""
          | private void $doAgg() throws java.io.IOException {
-         |   // initialize aggregation buffer
+         |   // initialize agg buffer:
+         |   // ${aggregateExpressions.map(_.toCommentSafeString).mkString("[", ", ", "]")}
          |   ${bufVars.map(_.code).mkString("\n")}
          |
          |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
@@ -222,7 +223,7 @@ case class TungstenAggregate(
     // only have DeclarativeAggregate
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val inputAttrs = functions.flatMap(_.aggBufferAttributes) ++ child.output
-    val updateExpr = aggregateExpressions.flatMap { e =>
+    val updateExpr: Seq[Expression] = aggregateExpressions.flatMap { e =>
       e.mode match {
         case Partial | Complete =>
           e.aggregateFunction.asInstanceOf[DeclarativeAggregate].updateExpressions
@@ -241,9 +242,9 @@ case class TungstenAggregate(
        """.stripMargin
     }
     s"""
-       | // do aggregate
+       | // aggregate: ${updateExpr.map(_.toCommentSafeString).mkString("[", ", ", "]")}
        | ${aggVals.map(_.code).mkString("\n")}
-       | // update aggregation buffer
+       | // update agg buffer
        | ${updates.mkString("")}
      """.stripMargin
   }
@@ -426,7 +427,7 @@ case class TungstenAggregate(
     }
 
     s"""
-     // generate grouping key
+     // grouping key: ${groupingExpressions.map(_.toCommentSafeString).mkString("[", ", ", "]")}
      ${keyCode.code}
      UnsafeRow $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
      if ($buffer == null) {
@@ -434,9 +435,9 @@ case class TungstenAggregate(
        throw new OutOfMemoryError("No enough memory for aggregation");
      }
 
-     // evaluate aggregate function
+     // aggregate: ${updateExpr.map(_.toCommentSafeString).mkString("[", ", ", "]")}
      ${evals.map(_.code).mkString("\n")}
-     // update aggregate buffer
+     // update agg buffer
      ${updates.mkString("\n")}
      """
   }

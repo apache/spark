@@ -171,6 +171,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+          // project list: ${expressions.map(_.toCommentSafeString).mkString(", ")}
           $allExpressions
           return mutableRow;
         }

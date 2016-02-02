@@ -332,6 +332,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val code =
       s"""
+        // project list: ${expressions.map(_.toCommentSafeString).mkString("[", ", ", "]")}
         $resetBufferHolder
         $evalSubexpr
         $writeExpressions
