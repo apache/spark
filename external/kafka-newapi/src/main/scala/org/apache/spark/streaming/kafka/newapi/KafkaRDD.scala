@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.kafka.clients.consumer.{ConsumerRecord, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ConsumerRecords, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
@@ -52,9 +52,8 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
     messageHandler: ConsumerRecord[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
 
-  private val KAFKA_DEFAULT_POLL_TIME: String = "100"
-  private val pollTime = kafkaParams.get("spark.kafka.poll.time")
-    .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
+  private val pollTime = kafkaParams.get("spark.kafka.poll.time").map(_.toLong).getOrElse(Long
+    .MaxValue)
 
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map {
@@ -186,23 +185,17 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
         iter = fetchBatch
       }
 
-      if (!iter.hasNext) {
-        if ( requestOffset < part.untilOffset ) {
-          return getNext()
-        }
-        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
+      // Since fetchBatch is a loop until it reads something. iter should have something in it
+      assert(iter.hasNext)
+
+      val item: ConsumerRecord[K, V] = iter.next()
+      if (item.offset >= part.untilOffset) {
+        assert(item.offset == part.untilOffset, errOvershotEnd(item.offset, part))
         finished = true
         null.asInstanceOf[R]
       } else {
-        val item: ConsumerRecord[K, V] = iter.next()
-        if (item.offset >= part.untilOffset) {
-          assert(item.offset == part.untilOffset, errOvershotEnd(item.offset, part))
-          finished = true
-          null.asInstanceOf[R]
-        } else {
-          requestOffset = item.offset() + 1
-          messageHandler(item)
-        }
+        requestOffset = item.offset() + 1
+        messageHandler(item)
       }
     }
   }
