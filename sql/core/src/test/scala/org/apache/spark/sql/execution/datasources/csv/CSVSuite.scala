@@ -192,7 +192,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
   }
 
-  test("test for tokens more than the schema's fields") {
+  test("test for tokens more than the fields in the schema") {
     val cars = sqlContext
       .read
       .format("csv")
