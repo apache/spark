@@ -51,6 +51,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   @transient
   private[this] var _logicalPlan: Option[LogicalPlan] = None
 
+  def logicalPlan: Option[LogicalPlan] = _logicalPlan
+
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of subexpressionEliminationEnabled will be set by the desserializer after the
   // constructor has run.
