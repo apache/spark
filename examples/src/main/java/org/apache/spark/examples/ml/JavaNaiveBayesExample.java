@@ -22,9 +22,9 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.NaiveBayes;
 import org.apache.spark.ml.classification.NaiveBayesModel;
-import org.apache.spark.sql.SQLContext;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.SQLContext;
 // $example off$
 
 /**
