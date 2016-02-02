@@ -125,6 +125,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
         public java.lang.Object apply(java.lang.Object _i) {
           InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+          // project list: ${expressions.map(_.toCommentSafeString).mkString(", ")}
           $evalSubexpr
           $allProjections
           // copy all the results into MutableRow

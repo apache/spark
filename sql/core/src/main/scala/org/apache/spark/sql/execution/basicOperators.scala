@@ -51,6 +51,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     ctx.currentVars = input
     val output = exprs.map(_.gen(ctx))
     s"""
+       | // project list: ${exprs.map(_.toCommentSafeString).mkString("[", ", ", "]")}
        | ${output.map(_.code).mkString("\n")}
        |
        | ${consume(ctx, output)}
@@ -89,11 +90,12 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val expr = ExpressionCanonicalizer.execute(
+    val expr: Expression = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(condition, child.output))
     ctx.currentVars = input
     val eval = expr.gen(ctx)
     s"""
+       | // predicate: ${expr.toCommentSafeString}
        | ${eval.code}
        | if (!${eval.isNull} && ${eval.value}) {
        |   ${consume(ctx, ctx.currentVars)}

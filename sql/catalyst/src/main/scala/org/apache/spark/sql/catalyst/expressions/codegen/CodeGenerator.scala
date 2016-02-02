@@ -36,11 +36,11 @@ import org.apache.spark.util.Utils
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
- * @param code The sequence of statements required to evaluate the expression.
- * @param isNull A term that holds a boolean value representing whether the expression evaluated
- *                 to null.
- * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
- *              valid if `isNull` is set to `true`.
+ * @param code The Java source code required to evaluate the expression.
+ * @param isNull Name of the variable that holds the boolean value representing whether the
+ *               expression evaluated to null.
+ * @param value Name of the variable that holds the (possibly primitive) value of the result
+ *              of the evaluation. Not valid if `isNull` is `true`.
  */
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
