@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -121,6 +122,26 @@ trait SchemaRelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation
+}
+
+/**
+ * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ */
+trait StreamSourceProvider {
+  def createSource(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: Option[StructType]): Source
+}
+
+/**
+ * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ */
+trait StreamSinkProvider {
+  def createSink(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      partitionColumns: Seq[String]): Sink
 }
 
 /**
