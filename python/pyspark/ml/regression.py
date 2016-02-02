@@ -165,13 +165,30 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> ir = IsotonicRegression()
+    >>> ir = IsotonicRegression(weightCol="")
     >>> model = ir.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> ir_path = path + "/ir"
+    >>> ir.save(ir_path)
+    >>> ir2 = IsotonicRegression.load(ir_path)
+    >>> ir2.getIsotonic()
+    True
+    >>> model_path = path + "/ir_model"
+    >>> model.save(model_path)
+    >>> model2 = IsotonicRegressionModel.load(model_path)
+    >>> model.boundaries[0] == model2.boundaries[0]
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
     """
 
     isotonic = \
@@ -373,7 +390,7 @@ class GBTParams(TreeEnsembleParams):
 @inherit_doc
 class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
-                            HasSeed, MLWritable, MLReadable):
+                            HasSeed):
     """
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for regression.
@@ -440,7 +457,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 
 @inherit_doc
-class DecisionTreeModel(JavaModel, MLWritable, MLReadable):
+class DecisionTreeModel(JavaModel):
     """Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
@@ -490,8 +507,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel):
 
 @inherit_doc
 class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
-                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
-                            MLWritable, MLReadable):
+                            RandomForestParams, TreeRegressorParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for regression.
@@ -561,7 +577,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, MLWritable, MLReadable):
+class RandomForestRegressionModel(TreeEnsembleModels):
     """
     Model fitted by RandomForestRegressor.
 
@@ -571,8 +587,7 @@ class RandomForestRegressionModel(TreeEnsembleModels, MLWritable, MLReadable):
 
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
-                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed,
-                   MLWritable, MLReadable):
+                   GBTParams, HasCheckpointInterval, HasStepSize, HasSeed):
     """
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for regression.
@@ -655,7 +670,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, MLWritable, MLReadable):
+class GBTRegressionModel(TreeEnsembleModels):
     """
     Model fitted by GBTRegressor.
 
@@ -678,7 +693,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0), 1.0),
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
-    >>> aftsr = AFTSurvivalRegression()
+    >>> aftsr = AFTSurvivalRegression(quantilesCol="")
     >>> model = aftsr.fit(df)
     >>> model.predict(Vectors.dense(6.3))
     1.0
@@ -692,6 +707,25 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     |  0.0|(1,[],[])|   0.0|       1.0|
     +-----+---------+------+----------+
     ...
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> aftsr_path = path + "/aftsr"
+    >>> aftsr.save(aftsr_path)
+    >>> aftsr2 = AFTSurvivalRegression.load(aftsr_path)
+    >>> aftsr2.getMaxIter()
+    100
+    >>> model_path = path + "/aftsr_model"
+    >>> model.save(model_path)
+    >>> model2 = AFTSurvivalRegressionModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.intercept == model2.intercept
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.6.0
     """
