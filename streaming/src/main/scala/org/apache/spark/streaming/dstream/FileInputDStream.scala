@@ -30,6 +30,8 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamInputInfo
 import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.convert.decorateAsScala._
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -116,8 +118,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   // Map of batch-time to selected file info for the remembered batches
   // This is a concurrent map because it's also accessed in unit tests
-  @transient private[streaming] var batchTimeToSelectedFiles =
-    new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
+  @transient private[streaming] var batchTimeToSelectedFiles = new ConcurrentHashMap[Time, Array[String]].asScala
 
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
@@ -307,8 +308,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
-    batchTimeToSelectedFiles =
-      new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
+    batchTimeToSelectedFiles = new ConcurrentHashMap[Time, Array[String]].asScala
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
   }

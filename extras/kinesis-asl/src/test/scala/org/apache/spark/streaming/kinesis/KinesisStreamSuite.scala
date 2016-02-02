@@ -39,6 +39,8 @@ import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
+import java.util.concurrent.ConcurrentHashMap
+import scala.collection.convert.decorateAsScala._
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
@@ -229,8 +231,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.checkpoint(checkpointDir)
 
     val awsCredentials = KinesisTestUtils.getAWSCredentials()
-    val collectedData = new mutable.HashMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
-      with mutable.SynchronizedMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
+    val collectedData = new ConcurrentHashMap[Time, (Array[SequenceNumberRanges], Seq[Int])].asScala
 
     val kinesisStream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
