@@ -23,6 +23,18 @@ class GoogleCloudStorageDownloadOperator(BaseOperator):
         **kwargs):
         """
         Create a new GoogleCloudStorageDownloadOperator.
+
+        :param bucket: The Google cloud storage bucket where the object is.
+        :type bucket: string
+        :param object: The name of the object to download in the Google cloud
+            storage bucket.
+        :type object: string
+        :param filename: The file path on the local file system (where the
+            operator is being executed) that the file should be downloaded to.
+        :type filename: string
+        :param google_cloud_storage_conn_id: The connection ID to use when
+            connecting to Google cloud storage.
+        :type google_cloud_storage_conn_id: string
         """
         super(GoogleCloudStorageDownloadOperator, self).__init__(*args, **kwargs)
         self.bucket = bucket
