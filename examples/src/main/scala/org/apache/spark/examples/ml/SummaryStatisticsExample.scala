@@ -18,8 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+// $example on$
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+// $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
