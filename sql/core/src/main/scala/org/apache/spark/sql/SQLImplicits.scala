@@ -91,6 +91,9 @@ abstract class SQLImplicits {
   /** @since 1.6.1 */
   implicit def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
 
+  /** @since 1.6.1 */
+  implicit def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+
   // Arrays
 
   /** @since 1.6.1 */
@@ -116,6 +119,10 @@ abstract class SQLImplicits {
 
   /** @since 1.6.1 */
   implicit def newStringArrayEncoder: Encoder[Array[String]] = ExpressionEncoder()
+
+  /** @since 1.6.1 */
+  implicit def newProductArrayEncoder[A <: Product : TypeTag]: Encoder[Array[A]] =
+    ExpressionEncoder()
 
   /**
    * Creates a [[Dataset]] from an RDD.
