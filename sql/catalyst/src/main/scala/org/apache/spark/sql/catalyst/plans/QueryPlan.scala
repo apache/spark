@@ -21,8 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
-  extends TreeNode[PlanType] with PredicateHelper {
+abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
   def output: Seq[Attribute]
@@ -38,6 +37,11 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]]
         constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
   }
 
+  /**
+   * Infers a set of `isNotNull` constraints from a given set of equality/comparison expressions.
+   * For e.g., if an expression is of the form (`a > 5`), this returns a constraint of the form
+   * `isNotNull(a)`
+   */
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints

@@ -87,7 +87,8 @@ case class Generate(
   }
 }
 
-case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+case class Filter(condition: Expression, child: LogicalPlan)
+  extends UnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
   override protected def validConstraints: Set[Expression] = {
@@ -179,12 +180,17 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     Statistics(sizeInBytes = sizeInBytes)
   }
 
-  def rewriteConstraints(
-      planA: LogicalPlan,
-      planB: LogicalPlan,
+  /**
+   * Maps the constraints containing a given (original) sequence of attributes to those with a
+   * given (reference) sequence of attributes. Given the nature of union, we expect that the
+   * mapping between the original and reference sequences are symmetric.
+   */
+  private def rewriteConstraints(
+      reference: Seq[Attribute],
+      original: Seq[Attribute],
       constraints: Set[Expression]): Set[Expression] = {
-    require(planA.output.size == planB.output.size)
-    val attributeRewrites = AttributeMap(planB.output.zip(planA.output))
+    require(reference.size == original.size)
+    val attributeRewrites = AttributeMap(original.zip(reference))
     constraints.map(_ transform {
       case a: Attribute => attributeRewrites(a)
     })
@@ -192,16 +198,17 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
 
   override protected def validConstraints: Set[Expression] = {
     children
-      .map(child => rewriteConstraints(children.head, child, child.constraints))
+      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
       .reduce(_ intersect _)
   }
 }
 
 case class Join(
-  left: LogicalPlan,
-  right: LogicalPlan,
-  joinType: JoinType,
-  condition: Option[Expression]) extends BinaryNode {
+    left: LogicalPlan,
+    right: LogicalPlan,
+    joinType: JoinType,
+    condition: Option[Expression])
+  extends BinaryNode with PredicateHelper {
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -226,12 +233,11 @@ case class Join(
           .union(splitConjunctivePredicates(condition.get).toSet)
       case LeftSemi if condition.isDefined =>
         left.constraints
-          .union(right.constraints)
           .union(splitConjunctivePredicates(condition.get).toSet)
       case Inner =>
         left.constraints.union(right.constraints)
       case LeftSemi =>
-        left.constraints.union(right.constraints)
+        left.constraints
       case LeftOuter =>
         left.constraints
       case RightOuter =>

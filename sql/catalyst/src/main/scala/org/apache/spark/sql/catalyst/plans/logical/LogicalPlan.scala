@@ -301,7 +301,7 @@ abstract class LeafNode extends LogicalPlan {
 /**
  * A logical plan node with single child.
  */
-abstract class UnaryNode extends LogicalPlan with PredicateHelper {
+abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
   override def children: Seq[LogicalPlan] = child :: Nil
