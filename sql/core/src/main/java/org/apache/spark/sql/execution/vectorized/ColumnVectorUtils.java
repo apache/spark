@@ -16,12 +16,15 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.types.CalendarInterval;
 
 import org.apache.commons.lang.NotImplementedException;
 
@@ -59,19 +62,44 @@ public class ColumnVectorUtils {
 
   private static void appendValue(ColumnVector dst, DataType t, Object o) {
     if (o == null) {
-      dst.appendNull();
+      if (t instanceof CalendarIntervalType) {
+        dst.appendStruct(true);
+      } else {
+        dst.appendNull();
+      }
     } else {
-      if (t == DataTypes.ByteType) {
-        dst.appendByte(((Byte)o).byteValue());
+      if (t == DataTypes.BooleanType) {
+        dst.appendBoolean(((Boolean)o).booleanValue());
+      } else if (t == DataTypes.ByteType) {
+        dst.appendByte(((Byte) o).byteValue());
+      } else if (t == DataTypes.ShortType) {
+        dst.appendShort(((Short)o).shortValue());
       } else if (t == DataTypes.IntegerType) {
         dst.appendInt(((Integer)o).intValue());
       } else if (t == DataTypes.LongType) {
         dst.appendLong(((Long)o).longValue());
+      } else if (t == DataTypes.FloatType) {
+        dst.appendFloat(((Float)o).floatValue());
       } else if (t == DataTypes.DoubleType) {
         dst.appendDouble(((Double)o).doubleValue());
       } else if (t == DataTypes.StringType) {
         byte[] b =((String)o).getBytes();
         dst.appendByteArray(b, 0, b.length);
+      } else if (t instanceof DecimalType) {
+        DecimalType dt = (DecimalType)t;
+        Decimal d = Decimal.apply((BigDecimal)o, dt.precision(), dt.scale());
+        if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+          dst.appendLong(d.toUnscaledLong());
+        } else {
+          final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
+          byte[] bytes = integer.toByteArray();
+          dst.appendByteArray(bytes, 0, bytes.length);
+        }
+      } else if (t instanceof CalendarIntervalType) {
+        CalendarInterval c = (CalendarInterval)o;
+        dst.appendStruct(false);
+        dst.getChildColumn(0).appendInt(c.months);
+        dst.getChildColumn(1).appendLong(c.microseconds);
       } else {
         throw new NotImplementedException("Type " + t);
       }

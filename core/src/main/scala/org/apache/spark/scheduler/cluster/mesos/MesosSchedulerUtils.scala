@@ -106,28 +106,37 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
         registerLatch.await()
         return
       }
+      @volatile
+      var error: Option[Exception] = None
 
+      // We create a new thread that will block inside `mesosDriver.run`
+      // until the scheduler exists
       new Thread(Utils.getFormattedClassName(this) + "-mesos-driver") {
         setDaemon(true)
-
         override def run() {
-          mesosDriver = newDriver
           try {
+            mesosDriver = newDriver
             val ret = mesosDriver.run()
             logInfo("driver.run() returned with code " + ret)
             if (ret != null && ret.equals(Status.DRIVER_ABORTED)) {
-              System.exit(1)
+              error = Some(new SparkException("Error starting driver, DRIVER_ABORTED"))
+              markErr()
             }
           } catch {
             case e: Exception => {
               logError("driver.run() failed", e)
-              System.exit(1)
+              error = Some(e)
+              markErr()
             }
           }
         }
       }.start()
 
       registerLatch.await()
+
+      // propagate any error to the calling thread. This ensures that SparkContext creation fails
+      // without leaving a broken context that won't be able to schedule any tasks
+      error.foreach(throw _)
     }
   }
 
@@ -141,6 +150,10 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
   }
 
   protected def markRegistered(): Unit = {
+    registerLatch.countDown()
+  }
+
+  protected def markErr(): Unit = {
     registerLatch.countDown()
   }
 
