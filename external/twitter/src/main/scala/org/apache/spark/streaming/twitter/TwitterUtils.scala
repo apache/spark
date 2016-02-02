@@ -56,15 +56,30 @@ object TwitterUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
-                    ssc: StreamingContext,
-                    filters: Seq[String] = Nil,
-                    storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-                    ): ReceiverInputDStream[Status] = {
+      ssc: StreamingContext,
+      filters: Seq[String],
+      storageLevel: StorageLevel
+      ): ReceiverInputDStream[Status] = {
     val query = new FilterQuery
     if (filters.size > 0) {
       query.track(filters.mkString(","))
     }
     new TwitterInputDStream(ssc, None, Some(query), storageLevel)
+  }
+  /**
+   * Create a input stream that returns tweets received from Twitter.
+   * @param ssc         StreamingContext object
+   * @param filters Set of filter strings to get only those tweets that match them
+   */
+  def createStream(
+      ssc: StreamingContext,
+      filters: Seq[String]
+      ): ReceiverInputDStream[Status] = {
+    val query = new FilterQuery
+    if (filters.size > 0) {
+      query.track(filters.mkString(","))
+    }
+    new TwitterInputDStream(ssc, None, Some(query), StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
   /**
@@ -78,10 +93,10 @@ object TwitterUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
-    ssc: StreamingContext,
-    twitterAuth: Option[Authorization],
-    query: FilterQuery,
-    storageLevel: StorageLevel //= StorageLevel.MEMORY_AND_DISK_SER_2
+      ssc: StreamingContext,
+      twitterAuth: Option[Authorization],
+      query: FilterQuery,
+      storageLevel: StorageLevel //= StorageLevel.MEMORY_AND_DISK_SER_2
   ): ReceiverInputDStream[Status] = {
     new TwitterInputDStream(ssc, twitterAuth, Some(query), storageLevel)
   }
@@ -122,11 +137,11 @@ object TwitterUtils {
    * @param storageLevel Storage level to use for storing the received objects
    */
   def createStream(
-                    ssc: StreamingContext,
-                    query: FilterQuery,
-                    storageLevel: StorageLevel //= StorageLevel.MEMORY_AND_DISK_SER_2
-                    ): ReceiverInputDStream[Status] = {
-    new TwitterInputDStream(ssc, None, Some(query), storageLevel)
+      ssc: StreamingContext,
+      query: FilterQuery,
+      storageLevel: StorageLevel
+      ): ReceiverInputDStream[Status] = {
+    createStream(ssc, None, query, storageLevel)
   }
 
 
@@ -165,8 +180,9 @@ object TwitterUtils {
    * @param jssc     JavaStreamingContext object
    * @param query    Query object to get only those tweets that passes this query
    */
-  def createStream(jssc: JavaStreamingContext, query: FilterQuery
-                    ): JavaReceiverInputDStream[Status] = {
+  def createStream(jssc: JavaStreamingContext,
+       query: FilterQuery
+    ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, None, query, StorageLevel.MEMORY_AND_DISK_SER_2)
   }
 
