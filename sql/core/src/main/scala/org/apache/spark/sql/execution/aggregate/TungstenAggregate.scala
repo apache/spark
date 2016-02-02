@@ -527,6 +527,7 @@ case class TungstenAggregate(
      ${keyCode.code}
      UnsafeRow $buffer = null;
      if ($checkFallback) {
+       // try to get the buffer from hash map
        $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
      }
      if ($buffer == null) {
@@ -536,6 +537,8 @@ case class TungstenAggregate(
          $sorterTerm.merge($hashMapTerm.destructAndCreateExternalSorter());
        }
        $resetCoulter
+       // the hash map had be spilled, it should have enough memory now,
+       // try  to allocate buffer again.
        $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
        if ($buffer == null) {
          // failed to allocate the first page
