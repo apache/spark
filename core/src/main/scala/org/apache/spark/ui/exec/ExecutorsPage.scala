@@ -61,7 +61,6 @@ private[ui] class ExecutorsPage(
         for (statusId <- 0 until listener.activeStorageStatusList.size)
         yield ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
       }
-      val deadExecutorInfo = listener.deadStorageStatusList
       val _deadExecutorInfo = {
         for (statusId <- 0 until listener.deadStorageStatusList.size)
         yield ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
@@ -298,7 +297,7 @@ private[ui] class ExecutorsPage(
       } else {
         ""
       }
-    }>{failedTasks}</td>
+      }>{failedTasks}</td>
     <td>{completedTasks}</td>
     <td>{totalTasks}</td>
     <td sorttable_customkey={totalDuration.toString} style={
@@ -315,7 +314,6 @@ private[ui] class ExecutorsPage(
 
     tableData
   }
-
 }
 
 private[spark] object ExecutorsPage {
