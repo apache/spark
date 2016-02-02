@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo,
-UIRoot}
+  UIRoot}
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.{EnvironmentListener, EnvironmentTab}
@@ -197,7 +197,7 @@ private[spark] object SparkUI {
 
     val environmentListener = new EnvironmentListener
     val storageStatusListener = new StorageStatusListener(conf)
-    val executorsListener = new ExecutorsListener(storageStatusListener)
+    val executorsListener = new ExecutorsListener(storageStatusListener, conf)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 

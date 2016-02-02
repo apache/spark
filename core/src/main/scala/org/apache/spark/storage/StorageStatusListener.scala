@@ -19,8 +19,8 @@ package org.apache.spark.storage
 
 import scala.collection.mutable
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 
 /**

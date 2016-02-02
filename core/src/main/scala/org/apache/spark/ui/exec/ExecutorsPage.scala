@@ -59,11 +59,11 @@ private[ui] class ExecutorsPage(
       // removed before we query their status. See SPARK-12784.
       val _activeExecutorInfo = {
         for (statusId <- 0 until listener.activeStorageStatusList.size)
-        yield ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
+          yield ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
       }
       val _deadExecutorInfo = {
         for (statusId <- 0 until listener.deadStorageStatusList.size)
-        yield ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
+          yield ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
       }
       (_activeExecutorInfo, _deadExecutorInfo)
     }
@@ -108,8 +108,12 @@ private[ui] class ExecutorsPage(
     val content =
       <div class="row">
         <div class="span12">
-          <h4>DeadExecutors({deadExecutorInfo.size})</h4>
-          <h4>Totals for {activeExecutorInfo.size} Active Executors</h4>
+          <h4>Dead Executors({deadExecutorInfo.size})</h4>
+        </div>
+      </div>
+      <div class="row">
+        <div class="span12">
+          <h4>Active Executors({activeExecutorInfo.size})</h4>
           {execSummary(activeExecutorInfo)}
         </div>
       </div>
