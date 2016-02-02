@@ -23,10 +23,10 @@ import scala.collection.JavaConverters._
 import scala.util.Failure
 
 import org.apache.spark.Logging
-import org.apache.spark.rdd.PairRDDFunctions
+import org.apache.spark.rdd.{PairRDDFunctions, RDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.ui.UIUtils
-import org.apache.spark.util.{EventLoop, ThreadUtils, Utils}
+import org.apache.spark.util.{EventLoop, ThreadUtils}
 
 
 private[scheduler] sealed trait JobSchedulerEvent
@@ -210,6 +210,9 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
           s"""Streaming job from <a href="$batchUrl">$batchLinkText</a>""")
         ssc.sc.setLocalProperty(BATCH_TIME_PROPERTY_KEY, job.time.milliseconds.toString)
         ssc.sc.setLocalProperty(OUTPUT_OP_ID_PROPERTY_KEY, job.outputOpId.toString)
+        // Checkpoint all RDDs marked for checkpointing to ensure their lineages are
+        // truncated periodically. Otherwise, we may run into stack overflows (SPARK-6847).
+        ssc.sparkContext.setLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS, "true")
 
         // We need to assign `eventLoop` to a temp variable. Otherwise, because
         // `JobScheduler.stop(false)` may set `eventLoop` to null when this method is running, then
