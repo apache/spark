@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.columnar.SHORT
 import org.apache.spark.sql.execution.columnar.STRING
 import org.apache.spark.sql.types.AtomicType
 import org.apache.spark.util.Benchmark
+import org.apache.spark.util.Utils._
 
 /**
  * Benchmark to decoders using various compression schemes.
@@ -69,8 +70,7 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
       }
       input.rewind()
 
-      val label = s"${scheme.getClass.getSimpleName}(${encoder.compressionRatio.formatted("%.3f")})"
-
+      val label = s"${getFormattedClassName(scheme)}(${encoder.compressionRatio.formatted("%.3f")})"
       benchmark.addCase(label)({ i: Int =>
         val compressedSize = if (encoder.compressedSize == 0) {
           input.remaining()
@@ -103,9 +103,9 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // BOOLEAN Decode:                    Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                      124.98           536.96         1.00 X
-    // RunLengthEncoding$(2.494)                631.37           106.29         0.20 X
-    // BooleanBitSet$(0.125)                   1200.36            55.91         0.10 X
+    // PassThrough(1.000)                       124.98           536.96         1.00 X
+    // RunLengthEncoding(2.494)                 631.37           106.29         0.20 X
+    // BooleanBitSet(0.125)                    1200.36            55.91         0.10 X
     val g = {
       val rng = genLowerSkewData()
       () => (rng().toInt % 2).toByte
@@ -123,8 +123,8 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // SHORT Decode (Lower Skew):         Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                      376.87           178.07         1.00 X
-    // RunLengthEncoding$(1.498)                831.59            80.70         0.45 X
+    // PassThrough(1.000)                       376.87           178.07         1.00 X
+    // RunLengthEncoding(1.498)                 831.59            80.70         0.45 X
     val g1 = genLowerSkewData()
     for (i <- 0 until count) {
       testData.putShort(i * SHORT.defaultSize, g1().toShort)
@@ -134,8 +134,8 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // SHORT Decode (Higher Skew):        Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                      426.83           157.23         1.00 X
-    // RunLengthEncoding$(1.996)                845.56            79.37         0.50 X
+    // PassThrough(1.000)                       426.83           157.23         1.00 X
+    // RunLengthEncoding(1.996)                 845.56            79.37         0.50 X
     val g2 = genHigherSkewData()
     for (i <- 0 until count) {
       testData.putShort(i * SHORT.defaultSize, g2().toShort)
@@ -150,10 +150,10 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // INT Decode(Lower Skew):            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                      325.16           206.39         1.00 X
-    // RunLengthEncoding$(0.997)               1219.44            55.03         0.27 X
-    // DictionaryEncoding$(0.500)               955.51            70.23         0.34 X
-    // IntDelta$(0.250)                        1146.02            58.56         0.28 X
+    // PassThrough(1.000)                       325.16           206.39         1.00 X
+    // RunLengthEncoding(0.997)                1219.44            55.03         0.27 X
+    // DictionaryEncoding(0.500)                955.51            70.23         0.34 X
+    // IntDelta(0.250)                         1146.02            58.56         0.28 X
     val g1 = genLowerSkewData()
     for (i <- 0 until count) {
       testData.putInt(i * INT.defaultSize, g1().toInt)
@@ -163,10 +163,10 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     //   INT Decode(Higher Skew):           Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                     1133.45            59.21         1.00 X
-    // RunLengthEncoding$(1.334)               1399.00            47.97         0.81 X
-    // DictionaryEncoding$(0.501)              1032.87            64.97         1.10 X
-    // IntDelta$(0.250)                         948.02            70.79         1.20 X
+    // PassThrough(1.000)                      1133.45            59.21         1.00 X
+    // RunLengthEncoding(1.334)                1399.00            47.97         0.81 X
+    // DictionaryEncoding(0.501)               1032.87            64.97         1.10 X
+    // IntDelta(0.250)                          948.02            70.79         1.20 X
     val g2 = genHigherSkewData()
     for (i <- 0 until count) {
       testData.putInt(i * INT.defaultSize, g2().toInt)
@@ -181,10 +181,10 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // LONG Decode(Lower Skew):           Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                     1101.07            60.95         1.00 X
-    // RunLengthEncoding$(0.756)               1372.57            48.89         0.80 X
-    // DictionaryEncoding$(0.250)               947.80            70.81         1.16 X
-    // LongDelta$(0.125)                        721.51            93.01         1.53 X
+    // PassThrough(1.000)                      1101.07            60.95         1.00 X
+    // RunLengthEncoding(0.756)                1372.57            48.89         0.80 X
+    // DictionaryEncoding(0.250)                947.80            70.81         1.16 X
+    // LongDelta(0.125)                         721.51            93.01         1.53 X
     val g1 = genLowerSkewData()
     for (i <- 0 until count) {
       testData.putLong(i * LONG.defaultSize, g1().toLong)
@@ -194,10 +194,10 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // LONG Decode(Higher Skew):          Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                      986.71            68.01         1.00 X
-    // RunLengthEncoding$(1.013)               1348.69            49.76         0.73 X
-    // DictionaryEncoding$(0.251)               865.48            77.54         1.14 X
-    // LongDelta$(0.125)                        816.90            82.15         1.21 X
+    // PassThrough(1.000)                       986.71            68.01         1.00 X
+    // RunLengthEncoding(1.013)                1348.69            49.76         0.73 X
+    // DictionaryEncoding(0.251)                865.48            77.54         1.14 X
+    // LongDelta(0.125)                         816.90            82.15         1.21 X
     val g2 = genHigherSkewData()
     for (i <- 0 until count) {
       testData.putLong(i * LONG.defaultSize, g2().toLong)
@@ -214,9 +214,9 @@ object CompressionSchemeBenchmark extends AllCompressionSchemes {
     // Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
     // STRING Decode:                     Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     // -------------------------------------------------------------------------------
-    // PassThrough$(1.000)                     2277.05            29.47         1.00 X
-    // RunLengthEncoding$(0.893)               2624.35            25.57         0.87 X
-    // DictionaryEncoding$(0.167)              2672.28            25.11         0.85 X
+    // PassThrough(1.000)                      2277.05            29.47         1.00 X
+    // RunLengthEncoding(0.893)                2624.35            25.57         0.87 X
+    // DictionaryEncoding(0.167)               2672.28            25.11         0.85 X
     val g = {
       val dataTable = (0 until tableSize).map(_ => RandomStringUtils.randomAlphabetic(strLen))
       val rng = genHigherSkewData()
