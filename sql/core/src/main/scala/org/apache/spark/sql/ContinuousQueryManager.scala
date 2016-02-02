@@ -19,25 +19,31 @@ package org.apache.spark.sql
 
 import scala.collection.mutable
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.execution.streaming.{Sink, StreamExecution}
 
+/**
+ * :: Experimental ::
+ * A class to manage all the [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active
+ * on a [[SQLContext]].
+ */
+@Experimental
 class ContinuousQueryManager {
 
   private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
-    with mutable.SynchronizedMap[String, ContinuousQuery]
-
+  private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
   @volatile
   private var lastTerminatedQuery: ContinuousQuery = null
 
   /** Returns a list of active queries associated with this SQLContext */
-  def active: Array[ContinuousQuery] = synchronized {
+  def active: Array[ContinuousQuery] = activeQueriesLock.synchronized {
     activeQueries.values.toArray
   }
 
   /** Returns an active query from this SQLContext or throws exception if bad name */
-  def get(name: String): ContinuousQuery = synchronized {
+  def get(name: String): ContinuousQuery = activeQueriesLock.synchronized {
     activeQueries.get(name).getOrElse {
       throw new IllegalArgumentException(s"There is no active query with name $name")
     }
@@ -45,7 +51,7 @@ class ContinuousQueryManager {
 
   /**
    * Wait until any of the queries on this SQLContext is terminated, with or without
-   * exceptions. Returns the query that has been stopped.
+   * exceptions. Returns the query that has been terminated.
    */
   def awaitAnyTermination(): ContinuousQuery = {
     awaitTerminationLock.synchronized {
@@ -59,7 +65,7 @@ class ContinuousQueryManager {
 
   /**
    * Wait until any of the queries on this SQLContext is terminated.
-   * Returns the stopped query if any query was stopped.
+   * Returns the stopped query if any query was terminated.
    */
   def awaitAnyTermination(timeoutMs: Long): Option[ContinuousQuery] = {
     val endTime = System.currentTimeMillis + timeoutMs
@@ -75,7 +81,7 @@ class ContinuousQueryManager {
   }
 
   private[sql] def startQuery(name: String, df: DataFrame, sink: Sink): ContinuousQuery = {
-    synchronized {
+    activeQueriesLock.synchronized {
       if(active.contains(name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
@@ -86,11 +92,13 @@ class ContinuousQueryManager {
     }
   }
 
-  private[sql] def notifyQueryTermination(terminatedQuery: ContinuousQuery): Unit = synchronized {
-    activeQueries -= terminatedQuery.name
-    awaitTerminationLock.synchronized {
-      lastTerminatedQuery = terminatedQuery
-      awaitTerminationLock.notifyAll()
+  private[sql] def notifyQueryTermination(terminatedQuery: ContinuousQuery): Unit = {
+    activeQueriesLock.synchronized {
+      activeQueries -= terminatedQuery.name
+      awaitTerminationLock.synchronized {
+        lastTerminatedQuery = terminatedQuery
+        awaitTerminationLock.notifyAll()
+      }
     }
   }
 }

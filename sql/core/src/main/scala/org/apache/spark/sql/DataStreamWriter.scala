@@ -83,6 +83,12 @@ final class DataStreamWriter private[sql](df: DataFrame) {
     this
   }
 
+  /**
+   * Specifies a name to the [[ContinuousQuery]] to be started. This name must be unique among
+   * all the currently active queries in `this` context.
+   *
+   * @since 2.0.0
+   */
   def name(queryName: String): DataStreamWriter = {
     this.name = queryName
     this

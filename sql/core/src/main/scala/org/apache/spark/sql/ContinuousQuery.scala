@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.Experimental
+
 /**
+ * :: Experimental ::
  * A handle to a query that is executing continuously in the background as new data arrives.
  */
+@Experimental
 trait ContinuousQuery {
 
   /** Returns the name of the query */
@@ -39,8 +43,16 @@ trait ContinuousQuery {
   /** Returns current status of the sink. */
   def sinkStatus: SinkStatus
 
+  /**
+   * Waits for the termination of this query, either by `stop` or by any exception.
+   * @throws QueryException, if the query terminated by an exception.
+   */
   def awaitTermination(): Unit
 
+  /**
+   * Waits for the termination of this query, either by `stop` or by any exception.
+   * @throws QueryException, if the query terminated by an exception before `timeoutMs` milliseconds
+   */
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**

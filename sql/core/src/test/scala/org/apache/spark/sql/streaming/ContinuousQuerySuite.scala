@@ -85,7 +85,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
   }
 
   /**
-   * Test the behavior of StandingQuery.awaitTermination.
+   * A [[StreamAction]] to test the behavior of `StandingQuery.awaitTermination()`.
    *
    * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
    * @param timeoutMs         Timeout in milliseconds
@@ -109,11 +109,20 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
 
   object TestAwaitTermination {
 
+    /**
+     * Tests the behavior of `StandingQuery.awaitTermination`.
+     *
+     * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
+     * @param timeoutMs         Timeout in milliseconds
+     *                          When timeoutMs <= 0, awaitTermination() is tested (i.e. w/o timeout)
+     *                          When timeoutMs > 0, awaitTermination(timeoutMs) is tested
+     * @param expectedReturnValue Expected return value when awaitTermination(timeoutMs) is used
+     */
     def assertOnQueryCondition(
-      expectedBehavior: ExpectedBehavior,
-      timeoutMs: Int,
-      expectedReturnValue: Boolean
-    )(q: StreamExecution): Boolean = {
+        expectedBehavior: ExpectedBehavior,
+        timeoutMs: Int,
+        expectedReturnValue: Boolean
+      )(q: StreamExecution): Boolean = {
 
       def awaitTermFunc(): Unit = {
         if (timeoutMs <= 0) {

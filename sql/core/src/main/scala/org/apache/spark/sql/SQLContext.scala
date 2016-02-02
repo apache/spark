@@ -846,7 +846,13 @@ class SQLContext private[sql](
     DataFrame(this, ShowTablesCommand(Some(databaseName)))
   }
 
-  def streams: ContinuousQueryManager = {
+  /**
+   * Returns a [[ContinuousQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   *
+   * @since 2.0.0
+   */
+  def streams(): ContinuousQueryManager = {
     continuousQueryManager
   }
 
