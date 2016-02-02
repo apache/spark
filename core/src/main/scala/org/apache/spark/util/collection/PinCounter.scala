@@ -55,12 +55,12 @@ private[spark] class PinCounter[T] {
   /**
    * Increments the given object's pin count for the current task.
    */
-  def pin(obj: T): Unit = retainForTask(currentTaskAttemptId, obj)
+  def pin(obj: T): Unit = pinForTask(currentTaskAttemptId, obj)
 
   /**
    * Decrements the given object's pin count for the current task.
    */
-  def unpin(obj: T): Unit = releaseForTask(currentTaskAttemptId, obj)
+  def unpin(obj: T): Unit = unpinForTask(currentTaskAttemptId, obj)
 
   private def currentTaskAttemptId: TaskAttemptId = {
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
@@ -69,7 +69,7 @@ private[spark] class PinCounter[T] {
   /**
    * Increments the given object's pin count for the given task.
    */
-  def retainForTask(taskAttemptId: TaskAttemptId, obj: T): Unit = {
+  def pinForTask(taskAttemptId: TaskAttemptId, obj: T): Unit = {
     pinsByTask.get(taskAttemptId).add(obj)
     allPins.add(obj)
   }
@@ -77,7 +77,7 @@ private[spark] class PinCounter[T] {
   /**
    * Decrements the given object's pin count for the given task.
    */
-  def releaseForTask(taskAttemptId: TaskAttemptId, obj: T): Unit = {
+  def unpinForTask(taskAttemptId: TaskAttemptId, obj: T): Unit = {
     val countsForTask = pinsByTask.get(taskAttemptId)
     val newPinCountForTask: Int = countsForTask.remove(obj, 1) - 1
     val newTotalPinCount: Int = allPins.remove(obj, 1) - 1

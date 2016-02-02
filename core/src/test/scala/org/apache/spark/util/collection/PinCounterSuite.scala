@@ -44,18 +44,18 @@ class PinCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("error when releasing more times than retained") {
     intercept[IllegalStateException] {
-      refCounter.releaseForTask(taskAttemptId = 0L, TestBlockId("dummy"))
+      refCounter.unpinForTask(taskAttemptId = 0L, TestBlockId("dummy"))
     }
   }
 
   test("retain and release from a single task") {
     val block = TestBlockId("dummy")
     val taskAttemptId = 0L
-    refCounter.retainForTask(taskAttemptId, block)
+    refCounter.pinForTask(taskAttemptId, block)
     assert(refCounter.getPinCount(block) === 1)
-    refCounter.retainForTask(taskAttemptId, block)
+    refCounter.pinForTask(taskAttemptId, block)
     assert(refCounter.getPinCount(block) === 2)
-    refCounter.releaseForTask(taskAttemptId, block)
+    refCounter.unpinForTask(taskAttemptId, block)
     assert(refCounter.getPinCount(block) === 1)
     refCounter.releaseAllPinsForTask(taskAttemptId)
     assert(refCounter.getPinCount(block) === 0L)
@@ -68,22 +68,22 @@ class PinCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
     val taskA = 0L
     val taskB = 1L
 
-    refCounter.retainForTask(taskA, block)
-    refCounter.retainForTask(taskA, block)
-    refCounter.retainForTask(taskB, block)
-    refCounter.retainForTask(taskB, block)
-    refCounter.retainForTask(taskA, block)
+    refCounter.pinForTask(taskA, block)
+    refCounter.pinForTask(taskA, block)
+    refCounter.pinForTask(taskB, block)
+    refCounter.pinForTask(taskB, block)
+    refCounter.pinForTask(taskA, block)
 
     assert(refCounter.getPinCount(block) === 5)
 
-    refCounter.releaseForTask(taskA, block)
+    refCounter.unpinForTask(taskA, block)
     assert(refCounter.getPinCount(block) === 4)
 
     refCounter.releaseAllPinsForTask(taskA)
     assert(refCounter.getPinCount(block) === 2)
 
-    refCounter.releaseForTask(taskB, block)
-    refCounter.releaseForTask(taskB, block)
+    refCounter.unpinForTask(taskB, block)
+    refCounter.unpinForTask(taskB, block)
     assert(refCounter.getPinCount(block) === 0)
 
     refCounter.releaseAllPinsForTask(taskB)
@@ -97,12 +97,12 @@ class PinCounterSuite extends SparkFunSuite with BeforeAndAfterEach {
     val blockB = TestBlockId("blockB")
     val taskAttemptId = 0L
 
-    refCounter.retainForTask(taskAttemptId, blockA)
+    refCounter.pinForTask(taskAttemptId, blockA)
     assert(refCounter.getPinCount(blockA) === 1)
     assert(refCounter.getPinCount(blockB) === 0)
 
-    refCounter.retainForTask(taskAttemptId, blockB)
-    refCounter.retainForTask(taskAttemptId, blockB)
+    refCounter.pinForTask(taskAttemptId, blockB)
+    refCounter.pinForTask(taskAttemptId, blockB)
     assert(refCounter.getPinCount(blockA) === 1)
     assert(refCounter.getPinCount(blockB) === 2)
 
