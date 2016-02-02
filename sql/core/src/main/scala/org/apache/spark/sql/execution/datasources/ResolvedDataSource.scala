@@ -110,7 +110,8 @@ object ResolvedDataSource extends Logging {
   def createSink(
       sqlContext: SQLContext,
       providerName: String,
-      options: Map[String, String]): Sink = {
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Sink = {
     val provider = lookupDataSource(providerName).newInstance() match {
       case s: StreamSinkProvider => s
       case _ =>
@@ -118,7 +119,7 @@ object ResolvedDataSource extends Logging {
           s"Data source $providerName does not support streamed writing")
     }
 
-    provider.createSink(sqlContext, options)
+    provider.createSink(sqlContext, options, partitionColumns)
   }
 
 

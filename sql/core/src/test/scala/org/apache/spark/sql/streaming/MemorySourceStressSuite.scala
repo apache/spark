@@ -28,6 +28,6 @@ class MemorySourceStressSuite extends StreamTest with SharedSQLContext {
     val input = MemoryStream[Int]
     val mapped = input.toDS().map(_ + 1)
 
-    createStressTest(mapped, AddData(input, _: _*))
+    runStressTest(mapped, AddData(input, _: _*))
   }
 }

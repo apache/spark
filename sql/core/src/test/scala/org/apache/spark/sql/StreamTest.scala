@@ -164,7 +164,7 @@ trait StreamTest extends QueryTest with Timeouts {
     }.mkString("\n")
 
     def currentOffsets =
-      if (currentStream != null) currentStream.currentOffsets.toString else "not started"
+      if (currentStream != null) currentStream.streamProgress.toString else "not started"
 
     def threadState =
       if (currentStream != null && currentStream.microBatchThread.isAlive) "alive" else "dead"
@@ -296,7 +296,7 @@ trait StreamTest extends QueryTest with Timeouts {
    * @param addData and add data action that adds the given numbers to the stream, encoding them
    *                as needed
    */
-  def createStressTest(
+  def runStressTest(
       ds: Dataset[Int],
       addData: Seq[Int] => StreamAction,
       iterations: Int = 100): Unit = {

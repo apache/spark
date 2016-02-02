@@ -79,7 +79,7 @@ final class DataStreamWriter private[sql](df: DataFrame) {
    */
   @scala.annotation.varargs
   def partitionBy(colNames: String*): DataStreamWriter = {
-    this.partitioningColumns = Option(colNames)
+    this.partitioningColumns = colNames
     this
   }
 
@@ -105,18 +105,19 @@ final class DataStreamWriter private[sql](df: DataFrame) {
     val sink = ResolvedDataSource.createSink(
       df.sqlContext,
       source,
-      extraOptions.toMap)
+      extraOptions.toMap,
+      normalizedParCols)
 
     new StreamExecution(df.sqlContext, df.logicalPlan, sink)
   }
 
-  private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { parCols =>
-    parCols.map { col =>
+  private def normalizedParCols: Seq[String] = {
+    partitioningColumns.map { col =>
       df.logicalPlan.output
-          .map(_.name)
-          .find(df.sqlContext.analyzer.resolver(_, col))
-          .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
-              s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
+        .map(_.name)
+        .find(df.sqlContext.analyzer.resolver(_, col))
+        .getOrElse(throw new AnalysisException(s"Partition column $col not found in existing " +
+            s"columns (${df.logicalPlan.output.map(_.name).mkString(", ")})"))
     }
   }
 
@@ -128,6 +129,6 @@ final class DataStreamWriter private[sql](df: DataFrame) {
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 
-  private var partitioningColumns: Option[Seq[String]] = None
+  private var partitioningColumns: Seq[String] = Nil
 
 }

@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.streaming.test
 
-import org.apache.spark.sql.{SQLContext, StreamTest}
+import org.apache.spark.sql.{AnalysisException, SQLContext, StreamTest}
 import org.apache.spark.sql.execution.streaming.{Batch, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 object LastOptions {
   var parameters: Map[String, String] = null
   var schema: Option[StructType] = null
+  var partitionColumns: Seq[String] = Nil
 }
 
 /** Dummy provider: returns no-op source/sink and records options in [[LastOptions]]. */
@@ -38,14 +39,16 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.schema = schema
     new Source {
       override def getNextBatch(start: Option[Offset]): Option[Batch] = None
-      override def schema: StructType = StructType(Nil)
+      override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
     }
   }
 
   override def createSink(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): Sink = {
+      parameters: Map[String, String],
+      partitionColumns: Seq[String]): Sink = {
     LastOptions.parameters = parameters
+    LastOptions.partitionColumns = partitionColumns
     new Sink {
       override def addBatch(batch: Batch): Unit = {}
       override def currentOffset: Option[Offset] = None
@@ -104,6 +107,43 @@ class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+  }
+
+  test("partitioning") {
+    val df = sqlContext.streamFrom
+      .format("org.apache.spark.sql.streaming.test")
+      .open()
+
+    df.streamTo
+      .format("org.apache.spark.sql.streaming.test")
+      .start()
+      .stop()
+    assert(LastOptions.partitionColumns == Nil)
+
+    df.streamTo
+      .format("org.apache.spark.sql.streaming.test")
+      .partitionBy("a")
+      .start()
+      .stop()
+    assert(LastOptions.partitionColumns == Seq("a"))
+
+
+    withSQLConf("spark.sql.caseSensitive" -> "false") {
+      df.streamTo
+        .format("org.apache.spark.sql.streaming.test")
+        .partitionBy("A")
+        .start()
+        .stop()
+      assert(LastOptions.partitionColumns == Seq("a"))
+    }
+
+    intercept[AnalysisException] {
+      df.streamTo
+        .format("org.apache.spark.sql.streaming.test")
+        .partitionBy("b")
+        .start()
+        .stop()
+    }
   }
 
   test("stream paths") {

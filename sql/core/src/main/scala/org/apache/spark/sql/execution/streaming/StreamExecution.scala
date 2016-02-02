@@ -49,7 +49,7 @@ class StreamExecution(
   private val minBatchTime = 10
 
   /** Tracks how much data we have processed from each input source. */
-  private[sql] val currentOffsets = new StreamProgress
+  private[sql] val streamProgress = new StreamProgress
 
   /** All stream sources present the query plan. */
   private val sources =
@@ -67,14 +67,14 @@ class StreamExecution(
 
         assert(sources.size == storedProgress.size)
         sources.zip(storedProgress).foreach { case (source, offset) =>
-          offset.foreach(currentOffsets.update(source, _))
+          offset.foreach(streamProgress.update(source, _))
         }
       case None => // We are starting this stream for the first time.
       case _ => throw new IllegalArgumentException("Expected composite offset from sink")
     }
   }
 
-  logInfo(s"Stream running at $currentOffsets")
+  logInfo(s"Stream running at $streamProgress")
 
   /** When false, signals to the microBatchThread that it should stop running. */
   @volatile private var shouldRun = true
@@ -118,7 +118,7 @@ class StreamExecution(
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
       case StreamingRelation(source, output) =>
-        val prevOffset = currentOffsets.get(source)
+        val prevOffset = streamProgress.get(source)
         val newBatch = source.getNextBatch(prevOffset)
 
         newBatch.map { batch =>
@@ -147,11 +147,11 @@ class StreamExecution(
       val optimizerTime = (System.nanoTime() - optimizerStart).toDouble / 1000000
       logDebug(s"Optimized batch in ${optimizerTime}ms")
 
-      StreamExecution.this.synchronized {
+      streamProgress.synchronized {
         // Update the offsets and calculate a new composite offset
-        newOffsets.foreach(currentOffsets.update)
+        newOffsets.foreach(streamProgress.update)
         val newStreamProgress = logicalPlan.collect {
-          case StreamingRelation(source, _) => currentOffsets.get(source)
+          case StreamingRelation(source, _) => streamProgress.get(source)
         }
         val batchOffset = CompositeOffset(newStreamProgress)
 
@@ -170,7 +170,7 @@ class StreamExecution(
       logInfo(s"Compete up to $newOffsets in ${batchTime}ms")
     }
 
-    logDebug(s"Waiting for data, current: $currentOffsets")
+    logDebug(s"Waiting for data, current: $streamProgress")
   }
 
   /**
@@ -187,8 +187,8 @@ class StreamExecution(
    * least the given `Offset`. This method is indented for use primarily when writing tests.
    */
   def awaitOffset(source: Source, newOffset: Offset): Unit = {
-    def notDone = synchronized {
-      !currentOffsets.contains(source) || currentOffsets(source) < newOffset
+    def notDone = streamProgress.synchronized {
+      !streamProgress.contains(source) || streamProgress(source) < newOffset
     }
 
     while (notDone) {
@@ -201,7 +201,7 @@ class StreamExecution(
   override def toString: String =
     s"""
        |=== Streaming Query ===
-       |CurrentOffsets: $currentOffsets
+       |CurrentOffsets: $streamProgress
        |Thread State: ${microBatchThread.getState}
        |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
        |

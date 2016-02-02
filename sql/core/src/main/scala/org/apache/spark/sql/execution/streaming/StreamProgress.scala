@@ -59,12 +59,9 @@ class StreamProgress {
     currentOffsets.map { case (k, v) => s"$k: $v"}.mkString("{", ",", "}")
 
   override def equals(other: Any): Boolean = other match {
-    case s: StreamProgress =>
-      s.currentOffsets.keys.toSet == currentOffsets.keys.toSet &&
-      s.currentOffsets.forall(w => currentOffsets(w._1) == w._2)
+    case s: StreamProgress => currentOffsets == s.currentOffsets
+    case _ => false
   }
 
-  override def hashCode: Int = {
-    currentOffsets.toSeq.sortBy(_._1.toString).hashCode()
-  }
+  override def hashCode: Int = currentOffsets.hashCode()
 }
