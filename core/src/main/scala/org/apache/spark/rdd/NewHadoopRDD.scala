@@ -130,17 +130,25 @@ class NewHadoopRDD[K, V](
       val conf = getConf
 
       val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val existingBytesRead = inputMetrics.bytesRead
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
-        split.serializableHadoopSplit.value match {
-          case _: FileSplit | _: CombineFileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-          case _ => None
+      val getBytesReadCallback: Option[() => Long] = split.serializableHadoopSplit.value match {
+        case _: FileSplit | _: CombineFileSplit =>
+          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+        case _ => None
+      }
+
+      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+      // task and in the same thread, in which case we need to avoid override values written by
+      // previous partitions (SPARK-13071).
+      def updateBytesRead(): Unit = {
+        getBytesReadCallback.foreach { getBytesRead =>
+          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
-      inputMetrics.setBytesReadCallback(bytesReadCallback)
 
       val format = inputFormatClass.newInstance
       format match {
@@ -182,6 +190,9 @@ class NewHadoopRDD[K, V](
         if (!finished) {
           inputMetrics.incRecordsRead(1)
         }
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
+        }
         (reader.getCurrentKey, reader.getCurrentValue)
       }
 
@@ -201,8 +212,8 @@ class NewHadoopRDD[K, V](
           } finally {
             reader = null
           }
-          if (bytesReadCallback.isDefined) {
-            inputMetrics.updateBytesRead()
+          if (getBytesReadCallback.isDefined) {
+            updateBytesRead()
           } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
                      split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,

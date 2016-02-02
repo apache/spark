@@ -22,7 +22,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 /**
- * A Count-Min sketch is a probabilistic data structure used for summarizing streams of data in
+ * A Count-min sketch is a probabilistic data structure used for summarizing streams of data in
  * sub-linear space.  Currently, supported data types include:
  * <ul>
  *   <li>{@link Byte}</li>
@@ -31,8 +31,7 @@ import java.io.OutputStream;
  *   <li>{@link Long}</li>
  *   <li>{@link String}</li>
  * </ul>
- * Each {@link CountMinSketch} is initialized with a random seed, and a pair
- * of parameters:
+ * A {@link CountMinSketch} is initialized with a random seed, and a pair of parameters:
  * <ol>
  *   <li>relative error (or {@code eps}), and
  *   <li>confidence (or {@code delta})
@@ -49,26 +48,29 @@ import java.io.OutputStream;
  *   <li>{@code w = ceil(-log(1 - confidence) / log(2))}</li>
  * </ul>
  *
- * See http://www.eecs.harvard.edu/~michaelm/CS222/countmin.pdf for technical details,
- * including proofs of the estimates and error bounds used in this implementation.
- *
  * This implementation is largely based on the {@code CountMinSketch} class from stream-lib.
  */
 abstract public class CountMinSketch {
 
   public enum Version {
     /**
-     * {@code CountMinSketch} binary format version 1 (all values written in big-endian order):
-     * - Version number, always 1 (32 bit)
-     * - Total count of added items (64 bit)
-     * - Depth (32 bit)
-     * - Width (32 bit)
-     * - Hash functions (depth * 64 bit)
-     * - Count table
-     *   - Row 0 (width * 64 bit)
-     *   - Row 1 (width * 64 bit)
-     *   - ...
-     *   - Row depth - 1 (width * 64 bit)
+     * {@code CountMinSketch} binary format version 1.  All values written in big-endian order:
+     * <ul>
+     *   <li>Version number, always 1 (32 bit)</li>
+     *   <li>Total count of added items (64 bit)</li>
+     *   <li>Depth (32 bit)</li>
+     *   <li>Width (32 bit)</li>
+     *   <li>Hash functions (depth * 64 bit)</li>
+     *   <li>
+     *     Count table
+     *     <ul>
+     *       <li>Row 0 (width * 64 bit)</li>
+     *       <li>Row 1 (width * 64 bit)</li>
+     *       <li>...</li>
+     *       <li>Row {@code depth - 1} (width * 64 bit)</li>
+     *     </ul>
+     *   </li>
+     * </ul>
      */
     V1(1);
 
@@ -109,14 +111,44 @@ abstract public class CountMinSketch {
   public abstract long totalCount();
 
   /**
-   * Adds 1 to {@code item}.
+   * Increments {@code item}'s count by one.
    */
   public abstract void add(Object item);
 
   /**
-   * Adds {@code count} to {@code item}.
+   * Increments {@code item}'s count by {@code count}.
    */
   public abstract void add(Object item, long count);
+
+  /**
+   * Increments {@code item}'s count by one.
+   */
+  public abstract void addLong(long item);
+
+  /**
+   * Increments {@code item}'s count by {@code count}.
+   */
+  public abstract void addLong(long item, long count);
+
+  /**
+   * Increments {@code item}'s count by one.
+   */
+  public abstract void addString(String item);
+
+  /**
+   * Increments {@code item}'s count by {@code count}.
+   */
+  public abstract void addString(String item, long count);
+
+  /**
+   * Increments {@code item}'s count by one.
+   */
+  public abstract void addBinary(byte[] item);
+
+  /**
+   * Increments {@code item}'s count by {@code count}.
+   */
+  public abstract void addBinary(byte[] item, long count);
 
   /**
    * Returns the estimated frequency of {@code item}.
@@ -136,14 +168,14 @@ abstract public class CountMinSketch {
       throws IncompatibleMergeException;
 
   /**
-   * Writes out this {@link CountMinSketch} to an output stream in binary format.
-   * It is the caller's responsibility to close the stream.
+   * Writes out this {@link CountMinSketch} to an output stream in binary format. It is the caller's
+   * responsibility to close the stream.
    */
   public abstract void writeTo(OutputStream out) throws IOException;
 
   /**
-   * Reads in a {@link CountMinSketch} from an input stream.
-   * It is the caller's responsibility to close the stream.
+   * Reads in a {@link CountMinSketch} from an input stream. It is the caller's responsibility to
+   * close the stream.
    */
   public static CountMinSketch readFrom(InputStream in) throws IOException {
     return CountMinSketchImpl.readFrom(in);
@@ -152,6 +184,10 @@ abstract public class CountMinSketch {
   /**
    * Creates a {@link CountMinSketch} with given {@code depth}, {@code width}, and random
    * {@code seed}.
+   *
+   * @param depth depth of the Count-min Sketch, must be positive
+   * @param width width of the Count-min Sketch, must be positive
+   * @param seed random seed
    */
   public static CountMinSketch create(int depth, int width, int seed) {
     return new CountMinSketchImpl(depth, width, seed);
@@ -160,6 +196,10 @@ abstract public class CountMinSketch {
   /**
    * Creates a {@link CountMinSketch} with given relative error ({@code eps}), {@code confidence},
    * and random {@code seed}.
+   *
+   * @param eps relative error, must be positive
+   * @param confidence confidence, must be positive and less than 1.0
+   * @param seed random seed
    */
   public static CountMinSketch create(double eps, double confidence, int seed) {
     return new CountMinSketchImpl(eps, confidence, seed);

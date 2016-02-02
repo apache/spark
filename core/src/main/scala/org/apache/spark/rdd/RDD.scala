@@ -112,6 +112,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Implemented by subclasses to return the set of partitions in this RDD. This method will only
    * be called once, so it is safe to implement a time-consuming computation in it.
+   *
+   * The partitions in this array must satisfy the following property:
+   *   `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
    */
   protected def getPartitions: Array[Partition]
 
@@ -237,6 +240,10 @@ abstract class RDD[T: ClassTag](
     checkpointRDD.map(_.partitions).getOrElse {
       if (partitions_ == null) {
         partitions_ = getPartitions
+        partitions_.zipWithIndex.foreach { case (partition, index) =>
+          require(partition.index == index,
+            s"partitions($index).partition == ${partition.index}, but it should equal $index")
+        }
       }
       partitions_
     }
@@ -1535,6 +1542,15 @@ abstract class RDD[T: ClassTag](
 
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
+  // Whether to checkpoint all ancestor RDDs that are marked for checkpointing. By default,
+  // we stop as soon as we find the first such RDD, an optimization that allows us to write
+  // less data but is not safe for all workloads. E.g. in streaming we may checkpoint both
+  // an RDD and its parent in every batch, in which case the parent may never be checkpointed
+  // and its lineage never truncated, leading to OOMs in the long run (SPARK-6847).
+  private val checkpointAllMarkedAncestors =
+    Option(sc.getLocalProperty(RDD.CHECKPOINT_ALL_MARKED_ANCESTORS))
+      .map(_.toBoolean).getOrElse(false)
+
   /** Returns the first parent RDD */
   protected[spark] def firstParent[U: ClassTag]: RDD[U] = {
     dependencies.head.rdd.asInstanceOf[RDD[U]]
@@ -1578,6 +1594,13 @@ abstract class RDD[T: ClassTag](
       if (!doCheckpointCalled) {
         doCheckpointCalled = true
         if (checkpointData.isDefined) {
+          if (checkpointAllMarkedAncestors) {
+            // TODO We can collect all the RDDs that needs to be checkpointed, and then checkpoint
+            // them in parallel.
+            // Checkpoint parents first because our lineage will be truncated after we
+            // checkpoint ourselves
+            dependencies.foreach(_.rdd.doCheckpoint())
+          }
           checkpointData.get.checkpoint()
         } else {
           dependencies.foreach(_.rdd.doCheckpoint())
@@ -1696,6 +1719,9 @@ abstract class RDD[T: ClassTag](
  * key-value-pair RDDs, and enabling extra functionalities such as [[PairRDDFunctions.reduceByKey]].
  */
 object RDD {
+
+  private[spark] val CHECKPOINT_ALL_MARKED_ANCESTORS =
+    "spark.checkpoint.checkpointAllMarkedAncestors"
 
   // The following implicit functions were in SparkContext before 1.3 and users had to
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find

@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.parser.ParserConf
 import org.apache.spark.util.Utils
@@ -367,6 +368,14 @@ private[spark] object SQLConf {
           "possible, or you may get wrong result.",
     isPublic = false)
 
+  val CANONICAL_NATIVE_VIEW = booleanConf("spark.sql.nativeView.canonical",
+    defaultValue = Some(true),
+    doc = "When this option and spark.sql.nativeView are both true, Spark SQL tries to handle " +
+          "CREATE VIEW statement using SQL query string generated from view definition logical " +
+          "plan.  If the logical plan doesn't have a SQL representation, we fallback to the " +
+          "original native view implementation.",
+    isPublic = false)
+
   val COLUMN_NAME_OF_CORRUPT_RECORD = stringConf("spark.sql.columnNameOfCorruptRecord",
     defaultValue = Some("_corrupt_record"),
     doc = "The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
@@ -511,7 +520,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf {
+private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -549,6 +558,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   private[spark] def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  private[spark] def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
@@ -618,7 +629,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
     }
-    settings.put(key, value)
+    setConfWithCheck(key, value)
   }
 
   /** Set the given Spark SQL configuration property. */
@@ -626,7 +637,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
     require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
-    settings.put(entry.key, entry.stringConverter(value))
+    setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
@@ -687,6 +698,13 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       (entry.key, entry.defaultValueString, entry.doc)
     }.toSeq
+  }
+
+  private def setConfWithCheck(key: String, value: String): Unit = {
+    if (key.startsWith("spark.") && !key.startsWith("spark.sql.")) {
+      logWarning(s"Attempt to set non-Spark SQL config in SQLConf: key = $key, value = $value")
+    }
+    settings.put(key, value)
   }
 
   private[spark] def unsetConf(key: String): Unit = {
