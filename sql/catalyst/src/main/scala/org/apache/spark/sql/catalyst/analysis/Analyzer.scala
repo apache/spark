@@ -1223,7 +1223,7 @@ object ResolveUpCast extends Rule[LogicalPlan] {
           fail(child, DateType, walkedTypePath)
         case (StringType, to: NumericType) =>
           fail(child, to, walkedTypePath)
-        case _ => Cast(child, dataType)
+        case _ => Cast(child, dataType.asNullable)
       }
     }
   }
