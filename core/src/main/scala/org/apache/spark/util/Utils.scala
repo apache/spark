@@ -2201,9 +2201,9 @@ private[spark] object Utils extends Logging {
    * incompatible. In environments where dynamic allocation is turned on by default,
    * the latter should override the former (SPARK-9092).
    */
-  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+  def isDynamicAllocationEnabled(conf: SparkConf, isLocal: Boolean): Boolean = {
     conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
-      conf.getInt("spark.executor.instances", 0) == 0
+      conf.getInt("spark.executor.instances", 0) == 0 && !isLocal
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {

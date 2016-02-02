@@ -722,15 +722,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("isDynamicAllocationEnabled") {
     val conf = new SparkConf()
-    assert(Utils.isDynamicAllocationEnabled(conf) === false)
+    assert(Utils.isDynamicAllocationEnabled(conf, false) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "false")) === false)
+      conf.set("spark.dynamicAllocation.enabled", "false"), false) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.dynamicAllocation.enabled", "true")) === true)
+      conf.set("spark.dynamicAllocation.enabled", "true"), false) === true)
+    assert(Utils.isDynamicAllocationEnabled(conf, true) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === false)
+      conf.set("spark.executor.instances", "1"), false) === false)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "0")) === true)
+      conf.set("spark.executor.instances", "0"), false) === true)
   }
 
   test("encodeFileNameToURIRawPath") {

@@ -66,7 +66,7 @@ private[spark] class ApplicationMaster(
 
   private val maxNumExecutorFailures = {
     val defaultKey =
-      if (Utils.isDynamicAllocationEnabled(sparkConf)) {
+      if (Utils.isDynamicAllocationEnabled(sparkConf, false)) {
         "spark.dynamicAllocation.maxExecutors"
       } else {
         "spark.executor.instances"
