@@ -1215,8 +1215,8 @@ class DataFrame private[sql](
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val output = queryExecution.analyzed.output
     resolveToIndex(existingName).map {index =>
-      select(output.map(attr =>
-        Column(attr)).updated(index, Column(output(index)).as(newName)) : _*)
+      val renamed = Column(output(index)).as(newName)
+      select(output.map(attr => Column(attr)).updated(index, renamed) : _*)
     }.getOrElse {
       this
     }
@@ -1240,13 +1240,13 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val output = queryExecution.analyzed.output
-    val droppedAttrs = colNames.map(n => resolveToIndex(n)).flatten.map(output)
-    val remainingCols = output.filterNot(droppedAttrs.contains).map(Column(_))
-    if (remainingCols.size == this.schema.size) {
+    val indexesToDrop = colNames.flatMap(resolveToIndex)
+    if (indexesToDrop.isEmpty) {
       this
     } else {
-      this.select(remainingCols: _*)
+      val output = queryExecution.analyzed.output
+      val remainingCols = output.indices.diff(indexesToDrop).map(index => Column(output(index)))
+      select(remainingCols: _*)
     }
   }
 
