@@ -33,15 +33,14 @@ object Utils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
-    val groupingAttributes = groupingExpressions.map(_.toAttribute)
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map {
       expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
     }
 
     SortBasedAggregate(
-      requiredChildDistributionExpressions = Some(groupingAttributes),
-      groupingExpressions = groupingAttributes,
+      requiredChildDistributionExpressions = Some(groupingExpressions),
+      groupingExpressions = groupingExpressions,
       nonCompleteAggregateExpressions = Nil,
       nonCompleteAggregateAttributes = Nil,
       completeAggregateExpressions = completeAggregateExpressions,

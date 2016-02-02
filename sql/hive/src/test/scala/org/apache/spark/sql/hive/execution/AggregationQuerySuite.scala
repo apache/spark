@@ -193,6 +193,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     sqlContext.dropTempTable("emptyTable")
   }
 
+  test("group by function") {
+    Seq((1, 2)).toDF("a", "b").registerTempTable("data")
+
+    checkAnswer(
+      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+      Row(1, Array(2)) :: Nil)
+  }
+
   test("empty table") {
     // If there is no GROUP BY clause and the table is empty, we will generate a single row.
     checkAnswer(
