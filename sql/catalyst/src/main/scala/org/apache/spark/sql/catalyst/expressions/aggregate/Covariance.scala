@@ -39,12 +39,7 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
 
   override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
 
-  override val initialValues: Seq[Expression] = Seq(
-    Literal(0.0),
-    Literal(0.0),
-    Literal(0.0),
-    Literal(0.0)
-  )
+  override val initialValues: Seq[Expression] = Array.fill(4)(Literal(0.0))
 
   override lazy val updateExpressions: Seq[Expression] = {
     val newN = n + Literal(1.0)
@@ -70,9 +65,9 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
     val n2 = n.right
     val newN = n1 + n2
     val dx = xAvg.right - xAvg.left
-    val dxN = If(EqualTo(newN, Literal(0.0)), Literal(0.0), dx / newN)
+    val dxN = If(newN === Literal(0.0), Literal(0.0), dx / newN)
     val dy = yAvg.right - yAvg.left
-    val dyN = If(EqualTo(newN, Literal(0.0)), Literal(0.0), dy / newN)
+    val dyN = If(newN === Literal(0.0), Literal(0.0), dy / newN)
     val newXAvg = xAvg.left + dxN * n2
     val newYAvg = yAvg.left + dyN * n2
     val newCk = ck.left + ck.right + dx * dyN * n1 * n2

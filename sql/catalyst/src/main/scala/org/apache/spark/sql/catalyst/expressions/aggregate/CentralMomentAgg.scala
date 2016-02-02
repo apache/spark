@@ -64,8 +64,7 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
 
   override val aggBufferAttributes = trimHigherOrder(Seq(n, avg, m2, m3, m4))
 
-  override val initialValues: Seq[Expression] =
-    trimHigherOrder(Seq(Literal(0.0), Literal(0.0), Literal(0.0), Literal(0.0), Literal(0.0)))
+  override val initialValues: Seq[Expression] = Array.fill(momentOrder + 1)(Literal(0.0))
 
   override val updateExpressions: Seq[Expression] = {
     val newN = n + Literal(1.0)
@@ -103,7 +102,7 @@ abstract class CentralMomentAgg(child: Expression) extends DeclarativeAggregate 
     val n2 = n.right
     val newN = n1 + n2
     val delta = avg.right - avg.left
-    val deltaN = If(EqualTo(newN, Literal(0.0)), Literal(0.0), delta / newN)
+    val deltaN = If(newN === Literal(0.0), Literal(0.0), delta / newN)
     val newAvg = avg.left + deltaN * n2
 
     // higher order moments computed according to:
