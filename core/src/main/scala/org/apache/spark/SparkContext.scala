@@ -532,7 +532,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     _executorAllocationManager =
-      if (dynamicAllocationEnabled) {
+      if (dynamicAllocationEnabled || _conf.getBoolean("spark.dynamicAllocation.testing", false)) {
         Some(new ExecutorAllocationManager(this, listenerBus, _conf))
       } else {
         None
