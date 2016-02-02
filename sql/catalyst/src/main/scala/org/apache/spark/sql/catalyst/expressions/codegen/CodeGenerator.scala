@@ -402,15 +402,35 @@ class CodegenContext {
   }
 
   /**
-    * Generates code for greater of two expressions.
-    *
-    * @param dataType data type of the expressions
-    * @param c1 name of the variable of expression 1's output
-    * @param c2 name of the variable of expression 2's output
-    */
+   * Generates code for greater of two expressions.
+   *
+   * @param dataType data type of the expressions
+   * @param c1 name of the variable of expression 1's output
+   * @param c2 name of the variable of expression 2's output
+   */
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
     case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
+  }
+
+  /**
+   * Generates code to do null safe execution, i.e. only execute the code when the input is not
+   * null by adding null check if necessary.
+   *
+   * @param nullable used to decide whether we should add null check or not.
+   * @param isNull the code to check if the input is null.
+   * @param execute the code that should only be executed when the input is not null.
+   */
+  def nullSafeExec(nullable: Boolean, isNull: String)(execute: String): String = {
+    if (nullable) {
+      s"""
+        if (!$isNull) {
+          $execute
+        }
+      """
+    } else {
+      "\n" + execute
+    }
   }
 
   /**

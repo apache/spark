@@ -112,8 +112,8 @@ You can optionally configure the cluster further by setting environment variable
   <tr>
     <td><code>SPARK_LOCAL_DIRS</code></td>
     <td>
-    Directory to use for "scratch" space in Spark, including map output files and RDDs that get 
-    stored on disk. This should be on a fast, local disk in your system. It can also be a 
+    Directory to use for "scratch" space in Spark, including map output files and RDDs that get
+    stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
     </td>
   </tr>
@@ -341,23 +341,8 @@ Learn more about getting started with ZooKeeper [here](http://zookeeper.apache.o
 
 **Configuration**
 
-In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env using this configuration:
-
-<table class="table">
-  <tr><th style="width:21%">System property</th><th>Meaning</th></tr>
-  <tr>
-    <td><code>spark.deploy.recoveryMode</code></td>
-    <td>Set to ZOOKEEPER to enable standby Master recovery mode (default: NONE).</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.url</code></td>
-    <td>The ZooKeeper cluster url (e.g., 192.168.1.100:2181,192.168.1.101:2181).</td>
-  </tr>
-  <tr>
-    <td><code>spark.deploy.zookeeper.dir</code></td>
-    <td>The directory in ZooKeeper to store recovery state (default: /spark).</td>
-  </tr>
-</table>
+In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
+For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy]
 
 Possible gotcha: If you have multiple Masters in your cluster but fail to correctly configure the Masters to use ZooKeeper, the Masters will fail to discover each other and think they're all leaders. This will not lead to a healthy cluster state (as all Masters will schedule independently).
 

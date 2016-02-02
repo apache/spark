@@ -954,6 +954,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(expected === actual)
   }
 
+  test("Sorting columns are not in Filter and Project") {
+    checkAnswer(
+      upperCaseData.filter('N > 1).select('N).filter('N < 6).orderBy('L.asc),
+      Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
+  }
+
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {
     val df = sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"b": 1}}""" :: Nil))
