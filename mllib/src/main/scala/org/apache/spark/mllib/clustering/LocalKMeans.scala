@@ -38,14 +38,15 @@ private[mllib] object LocalKMeans extends Logging {
       points: Array[VectorWithNorm],
       weights: Array[Double],
       k: Int,
-      maxIterations: Int
+      maxIterations: Int,
+      vectorFactory: VectorFactory
   ): Array[VectorWithNorm] = {
     val rand = new Random(seed)
     val dimensions = points(0).vector.size
     val centers = new Array[VectorWithNorm](k)
 
     // Initialize centers by sampling using the k-means++ procedure.
-    centers(0) = pickWeighted(rand, points, weights).toDense
+    centers(0) = pickWeighted(rand, points, weights).compact(vectorFactory)
     for (i <- 1 until k) {
       // Pick the next center with a probability proportional to cost under current centers
       val curCenters = centers.view.take(i)
@@ -62,9 +63,9 @@ private[mllib] object LocalKMeans extends Logging {
       if (j == 0) {
         logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
           s" Using duplicate point for center k = $i.")
-        centers(i) = points(0).toDense
+        centers(i) = points(0).compact(vectorFactory)
       } else {
-        centers(i) = points(j - 1).toDense
+        centers(i) = points(j - 1).compact(vectorFactory)
       }
     }
 
@@ -93,7 +94,7 @@ private[mllib] object LocalKMeans extends Logging {
       while (j < k) {
         if (counts(j) == 0.0) {
           // Assign center to a random point
-          centers(j) = points(rand.nextInt(points.length)).toDense
+          centers(j) = points(rand.nextInt(points.length)).compact(vectorFactory)
         } else {
           scal(1.0 / counts(j), sums(j))
           centers(j) = new VectorWithNorm(sums(j))

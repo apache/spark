@@ -54,6 +54,16 @@ private[spark] object BLAS extends Serializable with Logging {
             throw new UnsupportedOperationException(
               s"axpy doesn't support x type ${x.getClass}.")
         }
+      case sy: SparseVector =>
+        x match {
+          case sx: SparseVector =>
+            axpy(a, sx, sy)
+          case dx: DenseVector =>
+            axpy(a, dx, sy)
+          case _ =>
+            throw new UnsupportedOperationException(
+              s"axpy doesn't support x type ${x.getClass}.")
+        }
       case _ =>
         throw new IllegalArgumentException(
           s"axpy only supports adding to a dense vector but got type ${y.getClass}.")
@@ -90,6 +100,74 @@ private[spark] object BLAS extends Serializable with Logging {
         k += 1
       }
     }
+  }
+
+  /**
+    * y += a * x
+    */
+  private def axpy(a: Double, x: DenseVector, y: SparseVector): Unit = {
+    require(x.size == y.size)
+
+    val xIndices = (0 until x.size).filter(i => x(i) != 0.0).toArray
+    val xValues = xIndices.map(i => x(i))
+
+    axpy(a, Vectors.sparse(x.size, xIndices, xValues), y)
+  }
+
+  /**
+    * y += a * x
+    */
+  private def axpy(a: Double, x: SparseVector, y: SparseVector): Unit = {
+    val xSortedIndices = x.indices
+    val xValues = x.values
+
+    val ySortedIndices = y.indices
+    val yValues = y.values
+
+    val newIndices = new Array[Int](xSortedIndices.length + ySortedIndices.length)
+    val newValues = new Array[Double](xValues.length + yValues.length)
+
+    assert(newIndices.length == newValues.length)
+
+    var xj = 0
+    var yj = 0
+    var j = 0
+    var previ = Int.MinValue
+
+    def getAt(indices: Array[Int], j: Int): Int =
+      if (j < indices.length) indices(j) else Int.MaxValue
+
+    while (xj < xSortedIndices.length || yj < ySortedIndices.length) {
+      val xi = getAt(xSortedIndices, xj)
+      val yi = getAt(ySortedIndices, yj)
+
+      val (i, value) = if (xi <= yi) {
+        val vv = a*xValues(xj)
+        xj += 1
+        (xi, vv)
+      }
+      else {
+        val vv = yValues(yj)
+        yj += 1
+        (yi, vv)
+      }
+
+      assert(i >= previ)
+
+      if (previ != i) {
+        newIndices(j) = i
+        newValues(j) = value
+        j += 1
+      }
+      else {
+        assert(newIndices(j - 1) == i)
+        newValues(j - 1) += value
+      }
+
+      previ = i
+    }
+
+    y.reassign(newIndices.slice(0, j), newValues.slice(0, j))
   }
 
   /** Y += a * x */

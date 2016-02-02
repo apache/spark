@@ -64,6 +64,19 @@ class BLASSuite extends SparkFunSuite {
     assert(dx ~== Vectors.dense(0.1, 0.0, -0.2) absTol 1e-15)
   }
 
+  test("axpy(a: Double, x: SparseVector, y: SparseVector)") {
+    val x = new SparseVector(25, Array(0, 2, 4, 7, 8, 15), Array(0.0, 2.0, 4.0, 7.0, 8.0, 15.0))
+    val y = new SparseVector(25, Array(4, 9, 20), Array(4.0, 9.0, 20.0))
+
+    axpy(0.5, x, y)
+
+    val expected = Vectors.sparse(25,
+      Array(0, 2, 4, 7, 8, 9, 15, 20),
+      Array(0.0, 1.0, 6.0, 3.5, 4.0, 9.0, 7.5, 20.0))
+
+    assert(expected ~== y absTol 1e-15)
+  }
+
   test("axpy") {
     val alpha = 0.1
     val sx = Vectors.sparse(3, Array(0, 2), Array(1.0, -2.0))
@@ -79,14 +92,22 @@ class BLASSuite extends SparkFunSuite {
     axpy(alpha, dx, dy2)
     assert(dy2 ~== expected absTol 1e-15)
 
-    val sy = Vectors.sparse(4, Array(0, 1), Array(2.0, 1.0))
+    val sy1 = Vectors.dense(dy).toSparse
+    axpy(alpha, sx, sy1)
+    assert(sy1 ~== expected absTol 1e-15)
+
+    val sy2 = Vectors.dense(dy).toSparse
+    axpy(alpha, dx, sy2)
+    assert(sy2 ~== expected absTol 1e-15)
+
+    val largerSy = Vectors.sparse(4, Array(0, 1), Array(2.0, 1.0))
 
     intercept[IllegalArgumentException] {
-      axpy(alpha, sx, sy)
+      axpy(alpha, sx, largerSy)
     }
 
     intercept[IllegalArgumentException] {
-      axpy(alpha, dx, sy)
+      axpy(alpha, dx, largerSy)
     }
 
     withClue("vector sizes must match") {

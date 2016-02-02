@@ -700,21 +700,37 @@ object DenseVector {
  * A sparse vector represented by an index array and an value array.
  *
  * @param size size of the vector.
- * @param indices index array, assume to be strictly increasing.
- * @param values value array, must have the same length as the index array.
+ * @param sortedIndices index array, assume to be strictly increasing.
+ * @param sortedValues value array, must have the same length as the index array.
  */
 @Since("1.0.0")
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 class SparseVector @Since("1.0.0") (
     @Since("1.0.0") override val size: Int,
-    @Since("1.0.0") val indices: Array[Int],
-    @Since("1.0.0") val values: Array[Double]) extends Vector {
+    @Since("1.0.0") private var sortedIndices: Array[Int],
+    @Since("1.0.0") private var sortedValues: Array[Double]) extends Vector {
 
-  require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
-    s" indices match the dimension of the values. You provided ${indices.length} indices and " +
-    s" ${values.length} values.")
-  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
-    s"which exceeds the specified vector size ${size}.")
+  require(allRequirements())
+
+  def allRequirements(): Boolean = {
+    require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
+      s" indices match the dimension of the values. You provided ${indices.length} indices and " +
+      s" ${values.length} values.")
+    require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+      s"which exceeds the specified vector size ${size}.")
+
+    true
+  }
+
+  def reassign(newSortedIndices: Array[Int], newValues: Array[Double]): Unit = {
+    sortedIndices = newSortedIndices
+    sortedValues = newValues
+    require(allRequirements())
+  }
+
+  def indices: Array[Int] = sortedIndices
+
+  def values: Array[Double] = sortedValues
 
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"

@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -45,7 +45,9 @@ class KMeans private (
     private var initializationMode: String,
     private var initializationSteps: Int,
     private var epsilon: Double,
-    private var seed: Long) extends Serializable with Logging {
+    private var seed: Long,
+    private var vectorFactory: VectorFactory = DenseVectorFactory.instance
+                     ) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
@@ -176,6 +178,13 @@ class KMeans private (
     this
   }
 
+  def getVectorFactory: VectorFactory = vectorFactory
+
+  def setVectorFactory(vectorFactory: VectorFactory): this.type = {
+    this.vectorFactory = vectorFactory
+    this
+  }
+
   // Initial cluster centers can be provided as a KMeansModel object rather than using the
   // random or k-means|| initializationMode
   private var initialModel: Option[KMeansModel] = None
@@ -282,7 +291,8 @@ class KMeans private (
         val k = thisActiveCenters(0).length
         val dims = thisActiveCenters(0)(0).vector.size
 
-        val sums = Array.fill(runs, k)(Vectors.zeros(dims))
+//        val sums = Array.fill(runs, k)(Vectors.zeros(dims))
+        val sums = Array.fill(runs, k)(vectorFactory.zeros(dims))
         val counts = Array.fill(runs, k)(0L)
 
         points.foreach { point =>
@@ -376,7 +386,8 @@ class KMeans private (
     // Initialize each run's first center to a random point.
     val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
-    val newCenters = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
+//    val newCenters = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
+    val newCenters = Array.tabulate(runs)(r => ArrayBuffer(sample(r).compact(vectorFactory)))
 
     /** Merges new centers to centers. */
     def mergeNewCenters(): Unit = {
@@ -436,7 +447,8 @@ class KMeans private (
       }.collect()
       mergeNewCenters()
       chosen.foreach { case (p, rs) =>
-        rs.foreach(newCenters(_) += p.toDense)
+//        rs.foreach(newCenters(_) += p.toDense)
+        rs.foreach(newCenters(_) += p)
       }
       step += 1
     }
@@ -459,7 +471,7 @@ class KMeans private (
     val finalCenters = (0 until runs).par.map { r =>
       val myCenters = centers(r).toArray
       val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
-      LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30)
+      LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30, vectorFactory)
     }
 
     finalCenters.toArray
@@ -488,6 +500,7 @@ object KMeans {
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
    * @param seed random seed value for cluster initialization
+   * @param vectorFactory provide factory to use for creating the vectors representing the centroids
    */
   @Since("1.3.0")
   def train(
@@ -496,12 +509,14 @@ object KMeans {
       maxIterations: Int,
       runs: Int,
       initializationMode: String,
-      seed: Long): KMeansModel = {
+      seed: Long,
+      vectorFactory: VectorFactory = DenseVectorFactory.instance): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
       .setSeed(seed)
+      .setVectorFactory(vectorFactory)
       .run(data)
   }
 
@@ -617,5 +632,33 @@ class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable 
   def this(array: Array[Double]) = this(Vectors.dense(array))
 
   /** Converts the vector to a dense vector. */
-  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+//  def toDense: VectorWithNorm = new VectorWithNorm(Vectors.dense(vector.toArray), norm)
+
+  def compact(fact: VectorFactory): VectorWithNorm = new VectorWithNorm(fact.compact(vector), norm)
+}
+
+trait VectorFactory extends Serializable {
+  def zeros(size: Int): Vector
+
+  def compact(vec: Vector): Vector
+}
+
+class DenseVectorFactory private() extends VectorFactory {
+  override def zeros(size: Int): Vector = Vectors.zeros(size)
+
+  override def compact(vec: Vector): Vector = vec.toDense
+}
+
+object DenseVectorFactory {
+  val instance = new DenseVectorFactory
+}
+
+class SmartVectorFactory private() extends VectorFactory {
+  override def zeros(size: Int): Vector = new SparseVector(size, Array.empty, Array.empty)
+
+  override def compact(vec: Vector): Vector = vec.compressed
+}
+
+object SmartVectorFactory {
+  val instance = new SmartVectorFactory
 }
