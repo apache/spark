@@ -219,7 +219,7 @@ object StateSpec {
       mappingFunction: JFunction3[KeyType, Optional[ValueType], State[StateType], MappedType]):
     StateSpec[KeyType, ValueType, StateType, MappedType] = {
     val wrappedFunc = (k: KeyType, v: Option[ValueType], s: State[StateType]) => {
-      mappingFunction.call(k, Optional.fromNullable(v.get), s)
+      mappingFunction.call(k, JavaUtils.optionToOptional(v), s)
     }
     StateSpec.function(wrappedFunc)
   }
