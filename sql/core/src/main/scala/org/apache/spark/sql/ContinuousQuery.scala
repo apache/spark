@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * A handle to a query that is executing continuously in the background as new data arrives.
+ * @since 2.0.0
  */
 @Experimental
 trait ContinuousQuery {

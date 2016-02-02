@@ -26,6 +26,8 @@ import org.apache.spark.sql.execution.streaming.{Sink, StreamExecution}
  * :: Experimental ::
  * A class to manage all the [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active
  * on a [[SQLContext]].
+ * 
+ * @since 2.0.0
  */
 @Experimental
 class ContinuousQueryManager {

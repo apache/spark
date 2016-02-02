@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.streaming.{Offset, Source}
  *
  * @param description     Description of the source corresponding to this status
  * @param offset          Current offset of the source, if known
+ * @since 2.0.0
  */
 @Experimental
 class SourceStatus private[sql] (

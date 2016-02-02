@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.streaming.Offset
  * @param cause       Internal cause of this exception
  * @param startOffset Starting offset (if known) of the range of data in which exception occurred
  * @param endOffset   Ending offset (if known) of the range of data in exception occurred
+ * @since 2.0.0
  */
 @Experimental
 class QueryException private[sql](
