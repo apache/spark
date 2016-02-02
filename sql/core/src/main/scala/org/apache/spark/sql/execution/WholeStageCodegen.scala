@@ -26,12 +26,19 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.util.Utils
 
 /**
   * An interface for those physical operators that support codegen.
   */
 trait CodegenSupport extends SparkPlan {
+
+  /** Prefix used in the current operator's variable names. */
+  private def variablePrefix: String = this match {
+    case _: TungstenAggregate => "agg"
+    case _ => nodeName.toLowerCase
+  }
 
   /**
     * Whether this SparkPlan support whole stage codegen or not.
@@ -53,7 +60,7 @@ trait CodegenSupport extends SparkPlan {
     */
   def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
-    ctx.freshNamePrefix = nodeName
+    ctx.freshNamePrefix = variablePrefix
     doProduce(ctx)
   }
 
@@ -94,7 +101,7 @@ trait CodegenSupport extends SparkPlan {
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
-    ctx.freshNamePrefix = nodeName
+    ctx.freshNamePrefix = variablePrefix
     if (row != null) {
       ctx.currentVars = null
       ctx.INPUT_ROW = row
