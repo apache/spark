@@ -34,13 +34,11 @@ import org.apache.spark.streaming.kafka.newapi._
  *                       if the current offset does not exist any more on the server
  *                       earliest: automatically reset the offset to the earliest offset
  *                       latest: automatically reset the offset to the latest offset
- *   <batch interval> is the time interval at which streaming data will be divided into batches
  *   <pollTimeout> is time, in milliseconds, spent waiting in Kafka consumer poll
  *                 if data is not available
  * Example:
  *    $ bin/run-example streaming.kafka.newapi.examples.DirectNewKafkaWordCount \
- *    broker1-host:port,broker2-host:port topic1,topic2 my-consumer-group latest batch-interval \
- *    pollTimeout
+ *    broker1-host:port,broker2-host:port topic1,topic2 my-consumer-group latest pollTimeout
  *
  */
 object DirectNewKafkaWordCount {
@@ -58,8 +56,6 @@ object DirectNewKafkaWordCount {
                             |                                to the earliest offset
                             |                      latest: automatically reset the offset
                             |                              to the latest offset
-                            |  <batch interval> is the time interval at which
-                            |                   streaming data will be divided into batches
                             |  <pollTimeout> is time, in milliseconds, spent waiting in
                             |                Kafka consumer poll if data is not available
                             |
@@ -69,11 +65,11 @@ object DirectNewKafkaWordCount {
 
     // StreamingExamples.setStreamingLogLevels()
 
-    val Array(brokers, topics, groupId, offsetReset, batchInterval, pollTimeout) = args
+    val Array(brokers, topics, groupId, offsetReset, pollTimeout) = args
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setAppName("Direct Kafka Wordcount (New Consumer API)")
-    val ssc = new StreamingContext(sparkConf, Seconds(batchInterval.toInt))
+    val ssc = new StreamingContext(sparkConf, Seconds(2))
 
     // Create direct kafka stream with brokers and topics
     val topicsSet = topics.split(",").toSet
