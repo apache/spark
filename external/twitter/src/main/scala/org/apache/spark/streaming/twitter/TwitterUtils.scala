@@ -66,6 +66,7 @@ object TwitterUtils {
     }
     new TwitterInputDStream(ssc, None, Some(query), storageLevel)
   }
+
   /**
    * Create a input stream that returns tweets received from Twitter.
    * @param ssc         StreamingContext object
@@ -96,7 +97,7 @@ object TwitterUtils {
       ssc: StreamingContext,
       twitterAuth: Option[Authorization],
       query: FilterQuery,
-      storageLevel: StorageLevel //= StorageLevel.MEMORY_AND_DISK_SER_2
+      storageLevel: StorageLevel
   ): ReceiverInputDStream[Status] = {
     new TwitterInputDStream(ssc, twitterAuth, Some(query), storageLevel)
   }
@@ -143,7 +144,6 @@ object TwitterUtils {
       ): ReceiverInputDStream[Status] = {
     createStream(ssc, None, query, storageLevel)
   }
-
 
   /**
    * Create a input stream that returns tweets received from Twitter using Twitter4J's default
