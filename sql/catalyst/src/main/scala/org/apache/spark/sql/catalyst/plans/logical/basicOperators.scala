@@ -91,10 +91,7 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override protected def validConstraints: Set[Expression] = {
-    val newConstraint = splitConjunctivePredicates(condition)
-      .filter(_.references.subsetOf(outputSet))
-      .toSet
-    newConstraint.union(child.constraints)
+    child.constraints.union(splitConjunctivePredicates(condition).toSet)
   }
 }
 
@@ -221,35 +218,20 @@ case class Join(
     }
   }
 
-  private def constructIsNotNullConstraints(condition: Expression): Set[Expression] = {
-    // Currently we only propagate constraints if the condition consists of equality
-    // and ranges. For all other cases, we return an empty set of constraints
-    splitConjunctivePredicates(condition).map {
-      case EqualTo(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case GreaterThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThan(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case LessThanOrEqual(l, r) =>
-        Set(IsNotNull(l), IsNotNull(r))
-      case _ =>
-        Set.empty[Expression]
-    }.foldLeft(Set.empty[Expression])(_ union _.toSet)
-  }
-
   override protected def validConstraints: Set[Expression] = {
     joinType match {
       case Inner if condition.isDefined =>
         left.constraints
           .union(right.constraints)
-          .union(constructIsNotNullConstraints(condition.get))
+          .union(splitConjunctivePredicates(condition.get).toSet)
       case LeftSemi if condition.isDefined =>
         left.constraints
           .union(right.constraints)
-          .union(constructIsNotNullConstraints(condition.get))
+          .union(splitConjunctivePredicates(condition.get).toSet)
+      case Inner =>
+        left.constraints.union(right.constraints)
+      case LeftSemi =>
+        left.constraints.union(right.constraints)
       case LeftOuter =>
         left.constraints
       case RightOuter =>
@@ -258,8 +240,6 @@ case class Join(
         Set.empty[Expression]
     }
   }
-
-  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
