@@ -438,9 +438,9 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
 }
 
 /**
-  * An expression that will print the value of child to stderr (used for debugging codegen).
+  * Print the result of an expression to stderr (used for debugging codegen).
   */
-case class Echo(child: Expression) extends UnaryExpression {
+case class PrintToStderr(child: Expression) extends UnaryExpression {
 
   override def dataType: DataType = child.dataType
 
@@ -449,7 +449,7 @@ case class Echo(child: Expression) extends UnaryExpression {
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     nullSafeCodeGen(ctx, ev, c =>
       s"""
-         | System.err.println($c);
+         | System.err.println("Result of ${child.simpleString} is " + $c);
          | ${ev.value} = $c;
        """.stripMargin)
   }

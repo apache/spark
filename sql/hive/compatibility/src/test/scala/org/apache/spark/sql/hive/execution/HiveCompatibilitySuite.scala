@@ -325,8 +325,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_partitions_ignore_protection",
     "protectmode",
 
-    // Difference accuracy (we are better)
-    "udaf_covar_pop",
+    // Hive returns null rather than NaN when n = 1
     "udaf_covar_samp",
 
     // Spark parser treats numerical literals differently: it creates decimals instead of doubles.
@@ -884,6 +883,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "type_cast_1",
     "type_widening",
     "udaf_collect_set",
+    "udaf_covar_pop",
     "udaf_histogram_numeric",
     "udf2",
     "udf5",

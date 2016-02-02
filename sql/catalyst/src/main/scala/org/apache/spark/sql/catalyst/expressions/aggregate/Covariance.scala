@@ -24,7 +24,6 @@ import org.apache.spark.sql.types._
 /**
  * Compute the covariance between two expressions.
  * When applied on empty data (i.e., count is zero), it returns NULL.
- *
  */
 abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggregate {
 
@@ -33,73 +32,59 @@ abstract class Covariance(x: Expression, y: Expression) extends DeclarativeAggre
   override def dataType: DataType = DoubleType
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType)
 
-  protected val count = AttributeReference("count", DoubleType, nullable = false)()
+  protected val n = AttributeReference("n", DoubleType, nullable = false)()
   protected val xAvg = AttributeReference("xAvg", DoubleType, nullable = false)()
   protected val yAvg = AttributeReference("yAvg", DoubleType, nullable = false)()
   protected val ck = AttributeReference("ck", DoubleType, nullable = false)()
 
-  override val aggBufferAttributes: Seq[AttributeReference] = Seq(count, xAvg, yAvg, ck)
+  override val aggBufferAttributes: Seq[AttributeReference] = Seq(n, xAvg, yAvg, ck)
 
   override val initialValues: Seq[Expression] = Seq(
-    /* count = */ Literal(0.0),
-    /* xAvg = */ Literal(0.0),
-    /* yAvg = */ Literal(0.0),
-    /* ck = */ Literal(0.0)
+    Literal(0.0),
+    Literal(0.0),
+    Literal(0.0),
+    Literal(0.0)
   )
 
   override lazy val updateExpressions: Seq[Expression] = {
-    val n = count + Literal(1.0)
+    val newN = n + Literal(1.0)
     val dx = x - xAvg
     val dy = y - yAvg
-    val dyN = dy / n
-    val newXAvg = xAvg + dx / n
+    val dyN = dy / newN
+    val newXAvg = xAvg + dx / newN
     val newYAvg = yAvg + dyN
-    val newCk = ck + dx * (dy - dyN)
+    val newCk = ck + dx * (y - newYAvg)
 
-    val isNull = Or(IsNull(x), IsNull(y))
-    if (x.nullable || y.nullable) {
-      Seq(
-        /* count = */ If(isNull, count, n),
-        /* xAvg = */ If(isNull, xAvg, newXAvg),
-        /* yAvg = */ If(isNull, yAvg, newYAvg),
-        /* ck = */ If(isNull, ck, newCk)
-      )
-    } else {
-      Seq(
-        /* count = */ n,
-        /* xAvg = */ newXAvg,
-        /* yAvg = */ newYAvg,
-        /* ck = */ newCk
-      )
-    }
+    val isNull = IsNull(x) || IsNull(y)
+    Seq(
+      If(isNull, n, newN),
+      If(isNull, xAvg, newXAvg),
+      If(isNull, yAvg, newYAvg),
+      If(isNull, ck, newCk)
+    )
   }
 
   override val mergeExpressions: Seq[Expression] = {
 
-    val n1 = count.left
-    val n2 = count.right
-    val n = n1 + n2
+    val n1 = n.left
+    val n2 = n.right
+    val newN = n1 + n2
     val dx = xAvg.right - xAvg.left
-    val dxN = If(EqualTo(n, Literal(0.0)), Literal(0.0), dx / n)
+    val dxN = If(EqualTo(newN, Literal(0.0)), Literal(0.0), dx / newN)
     val dy = yAvg.right - yAvg.left
-    val dyN = If(EqualTo(n, Literal(0.0)), Literal(0.0), dy / n)
+    val dyN = If(EqualTo(newN, Literal(0.0)), Literal(0.0), dy / newN)
     val newXAvg = xAvg.left + dxN * n2
     val newYAvg = yAvg.left + dyN * n2
     val newCk = ck.left + ck.right + dx * dyN * n1 * n2
 
-    Seq(
-      /* count = */ n,
-      /* xAvg = */ newXAvg,
-      /* yAvg = */ newYAvg,
-      /* ck = */ newCk
-    )
+    Seq(newN, newXAvg, newYAvg, newCk)
   }
 }
 
 case class CovPopulation(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
-    If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
-      ck / count)
+    If(n === Literal(0.0), Literal.create(null, DoubleType),
+      ck / n)
   }
   override def prettyName: String = "covar_pop"
 }
@@ -107,9 +92,9 @@ case class CovPopulation(left: Expression, right: Expression) extends Covariance
 
 case class CovSample(left: Expression, right: Expression) extends Covariance(left, right) {
   override val evaluateExpression: Expression = {
-    If(EqualTo(count, Literal(0.0)), Literal.create(null, DoubleType),
-      If(EqualTo(count, Literal(1.0)), Literal(Double.NaN),
-        ck / (count - Literal(1.0))))
+    If(n === Literal(0.0), Literal.create(null, DoubleType),
+      If(n === Literal(1.0), Literal(Double.NaN),
+        ck / (n - Literal(1.0))))
   }
   override def prettyName: String = "covar_samp"
 }

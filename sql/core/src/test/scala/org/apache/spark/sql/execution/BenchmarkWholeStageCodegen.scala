@@ -59,9 +59,9 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  def testStddev(values: Int): Unit = {
+  def testStatFunctions(values: Int): Unit = {
 
-    val benchmark = new Benchmark("stddev", values)
+    val benchmark = new Benchmark("stat functions", values)
 
     benchmark.addCase("stddev w/o codegen") { iter =>
       sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
@@ -85,7 +85,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
 
     /**
-    Using ImperativeAggregate:
+      Using ImperativeAggregate (as implemented in Spark 1.6):
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
@@ -196,7 +196,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  test("benchmark") {
+  // These benchmark are skipped in normal build
+  ignore("benchmark") {
     // testWholeStage(200 << 20)
     // testStddev(20 << 20)
     // testAggregateWithKey(20 << 20)
