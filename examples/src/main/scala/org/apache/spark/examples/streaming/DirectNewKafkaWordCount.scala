@@ -16,7 +16,7 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.streaming.kafka.newapi.examples
+package org.apache.spark.examples.streaming
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
 
