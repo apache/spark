@@ -67,6 +67,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   private def checkPrunedAnswers(
       bucketSpec: BucketSpec,
       bucketValues: Seq[Integer],
+      filterCondition: Column,
       bucketedDataFrame: DataFrame,
       expectedAnswer: DataFrame): Unit = {
 
@@ -81,26 +82,26 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
 
     // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
-    val rdd = bucketedDataFrame.queryExecution.executedPlan.find(_.isInstanceOf[PhysicalRDD])
+    val rdd = bucketedDataFrame.filter(filterCondition).queryExecution
+      .executedPlan.find(_.isInstanceOf[PhysicalRDD])
     assert(rdd.isDefined)
 
-    val checkBucketId = rdd.get.execute().map(_.copy()).mapPartitions(iter => {
-      iter.map(row =>
-        DataSourceStrategy.getBucketId(
-          bucketColumn, numBuckets, row.get(bucketColumnIndex, bucketColumn.dataType)))})
-    // Check if all the returned rows are from the non-pruned buckets
-    assert(checkBucketId.collect().forall(matchedBuckets.get))
+    val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+      if (matchedBuckets.get(index % numBuckets)) Iterator(true) else Iterator(iter.isEmpty)
+    }
+    // checking if all the pruned buckets are empty
+    assert(checkedResult.collect().forall(_ == true))
 
     checkAnswer(
-      expectedAnswer
+      expectedAnswer.filter(filterCondition)
         .orderBy(expectedAnswer.logicalPlan.output.map(attr => Column(attr)) : _*),
-      bucketedDataFrame
+      bucketedDataFrame.filter(filterCondition)
         .orderBy(bucketedDataFrame.logicalPlan.output.map(attr => Column(attr)) : _*))
   }
 
   test("read partitioning bucketed tables with bucket pruning filters") {
     withTable("bucketed_table") {
-      val numBuckets = 50
+      val numBuckets = 8
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -114,25 +115,25 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
-          hiveContext.table("bucketed_table")
-            .select("i", "j", "k").filter($"j" === j),
-          df.select("i", "j", "k").filter($"j" === j))
+          filterCondition = $"j" === j,
+          hiveContext.table("bucketed_table").select("i", "j", "k"),
+          df)
 
         // Case 2: EqualNullSafe
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
-          hiveContext.table("bucketed_table")
-            .select("i", "j", "k").filter($"j" <=> j),
-          df.select("i", "j", "k").filter($"j" <=> j))
+          filterCondition = $"j" <=> j,
+          hiveContext.table("bucketed_table").select("i", "j", "k"),
+          df)
 
         // Case 3: In
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = Seq(j, j + 1, j + 2, j + 3),
-          hiveContext.table("bucketed_table")
-            .select("i", "j", "k").filter($"j".isin(j, j + 1, j + 2, j + 3)),
-          df.select("i", "j", "k").filter($"j".isin(j, j + 1, j + 2, j + 3)))
+          filterCondition = $"j".isin(j, j + 1, j + 2, j + 3),
+          hiveContext.table("bucketed_table").select("i", "j", "k"),
+          df)
       }
     }
   }
@@ -151,9 +152,9 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
-          hiveContext.table("bucketed_table")
-            .select("i", "j", "k").filter($"j" === j),
-          df.select("i", "j", "k").filter($"j" === j))
+          filterCondition = $"j" === j,
+          hiveContext.table("bucketed_table").select("i", "j", "k"),
+          df)
       }
     }
   }
@@ -173,15 +174,17 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = null :: Nil,
-        hiveContext.table("bucketed_table").select("n", "s").filter($"s".isNull),
-        nullStrings.select("n", "s").filter($"s".isNull))
+        filterCondition = $"s".isNull,
+        hiveContext.table("bucketed_table").select("n", "s"),
+        nullStrings)
 
       // Case 2: <=> null
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = null :: Nil,
-        hiveContext.table("bucketed_table").select("n", "s").filter($"s" <=> null),
-        nullStrings.select("n", "s").filter($"s" <=> null))
+        filterCondition = $"s" <=> null,
+        hiveContext.table("bucketed_table").select("n", "s"),
+        nullStrings)
     }
   }
 
@@ -200,16 +203,16 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
-          hiveContext.table("bucketed_table")
-            .select("i", "j", "k").filter($"j" === j && $"k" > $"j"),
-          df.select("i", "j", "k").filter($"j" === j && $"k" > $"j"))
+          filterCondition = $"j" === j && $"k" > $"j",
+          hiveContext.table("bucketed_table").select("i", "j", "k"),
+          df)
 
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
-          hiveContext.table("bucketed_table")
-            .select("i", "j", "k").filter($"j" === j && $"i" > j % 5),
-          df.select("i", "j", "k").filter($"j" === j && $"i" > j % 5))
+          filterCondition = $"j" === j && $"i" > j % 5,
+          hiveContext.table("bucketed_table").select("i", "j", "k"),
+          df)
       }
     }
   }
