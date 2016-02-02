@@ -67,8 +67,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   synchronized {
     if (conf.getBoolean("spark.pyspark.virtualenv.enabled", false) && !virtualEnvSetup.get()) {
-      createVirtualEnv()
-      initVirutalEnv()
+      setupVirtualEnv()
       virtualEnvSetup.set(true)
     }
   }
@@ -105,32 +104,27 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   }
 
 
-  def createVirtualEnv(): Unit = {
+  def setupVirtualEnv(): Unit = {
     virtualEnvDir = Some(UUID.randomUUID().toString)
     logInfo("**********current working directory=" + new File(".").getAbsolutePath)
-    val pb = new ProcessBuilder(
-      Arrays.asList(conf.get("spark.pyspark.virtualenv.path","virtualenv"),
+    logInfo("Starting creating virtualenv")
+    execCommand(Arrays.asList(conf.get("spark.pyspark.virtualenv.path","virtualenv"),
       "-p", pythonExec,
       "--no-site-packages", virtualEnvDir.get))
-    val proc = pb.start()
-    val stderr = new StreamGobbler(proc.getErrorStream, true)
-    stderr.start()
-    val stdin = new StreamGobbler(proc.getInputStream, false)
-    stdin.start()
-    val exitCode = proc.waitFor()
-    if (exitCode != 0) {
-      throw new RuntimeException(stdin.output + "\n" + stderr.output)
-    }
-  }
-
-  def initVirutalEnv(): Unit = {
+    logInfo("Complete creating virtualenv")
+    logInfo("Starting initing virtualenv")
     val pyspark_requirement =
       if (conf.get("spark.master").contains("local"))
         conf.get("spark.pyspark.virtualenv.requirements")
       else
         conf.get("spark.pyspark.virtualenv.requirements").split("/").last
-    val pb = new ProcessBuilder(Arrays.asList(virtualEnvDir.get + "/bin/python", "-m", "pip",
+    execCommand(Arrays.asList(virtualEnvDir.get + "/bin/python", "-m", "pip",
       "install", "-r" , pyspark_requirement))
+    logInfo("Finish initing virtualenv")
+  }
+
+  def execCommand(commands: java.util.List[String]): Unit ={
+    val pb = new ProcessBuilder(commands)
     val proc = pb.start()
     val stderr = new StreamGobbler(proc.getErrorStream, true)
     stderr.start()
