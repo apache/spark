@@ -26,7 +26,7 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 
 if __name__ == "__main__":
 
-    sc = SparkContext(appName="multilayer_perceptron_classification_example")
+    sc = SparkContext(appName="naive_bayes_example")
     sqlContext = SQLContext(sc)
 
     # $example on$
@@ -37,10 +37,7 @@ if __name__ == "__main__":
     splits = data.randomSplit([0.6, 0.4], 1234)
     train = splits[0]
     test = splits[1]
-    # specify layers for the neural network:
-    # input layer of size 4 (features), two intermediate of size 5 and 4
-    # and output of size 3 (classes)
-    layers = [4, 5, 4, 3]
+
     # create the trainer and set its parameters
     trainer = NaiveBayes(smoothing=1.0, modelType="multinomial")
 

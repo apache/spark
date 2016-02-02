@@ -28,7 +28,7 @@ import org.apache.spark.sql.SQLContext;
 // $example off$
 
 /**
- * An example for Multilayer Perceptron Classification.
+ * An example for Naive Bayes Classification.
  */
 public class JavaNaiveBayesExample {
 
