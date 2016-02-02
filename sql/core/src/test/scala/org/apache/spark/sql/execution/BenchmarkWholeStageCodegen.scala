@@ -59,6 +59,55 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
+  def testStatFunctions(values: Int): Unit = {
+
+    val benchmark = new Benchmark("stat functions", values)
+
+    benchmark.addCase("stddev w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("stddev w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    benchmark.addCase("kurtosis w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).groupBy().agg("id" -> "kurtosis").collect()
+    }
+
+    benchmark.addCase("kurtosis w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).groupBy().agg("id" -> "kurtosis").collect()
+    }
+
+
+    /**
+      Using ImperativeAggregate (as implemented in Spark 1.6):
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      stddev w/o codegen                      2019.04            10.39         1.00 X
+      stddev w codegen                        2097.29            10.00         0.96 X
+      kurtosis w/o codegen                    2108.99             9.94         0.96 X
+      kurtosis w codegen                      2090.69            10.03         0.97 X
+
+      Using DeclarativeAggregate:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      stddev w/o codegen                       989.22            21.20         1.00 X
+      stddev w codegen                         352.35            59.52         2.81 X
+      kurtosis w/o codegen                    3636.91             5.77         0.27 X
+      kurtosis w codegen                       369.25            56.79         2.68 X
+      */
+    benchmark.run()
+  }
+
   def testAggregateWithKey(values: Int): Unit = {
     val benchmark = new Benchmark("Aggregate with keys", values)
 
@@ -147,8 +196,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  test("benchmark") {
-    // testWholeStage(1024 * 1024 * 200)
+  // These benchmark are skipped in normal build
+  ignore("benchmark") {
+    // testWholeStage(200 << 20)
+    // testStddev(20 << 20)
     // testAggregateWithKey(20 << 20)
     // testBytesToBytesMap(1024 * 1024 * 50)
   }

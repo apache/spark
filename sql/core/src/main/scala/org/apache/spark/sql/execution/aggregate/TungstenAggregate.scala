@@ -240,7 +240,6 @@ case class TungstenAggregate(
          | ${bufVars(i).value} = ${ev.value};
        """.stripMargin
     }
-
     s"""
        | // do aggregate
        | ${aggVals.map(_.code).mkString("\n")}
