@@ -106,7 +106,7 @@ private[ui] class ExecutorsPage(
       </table>
     }
 
-    val content = {
+    val content =
       <div class="row">
         <div class="span12">
           <h4>DeadExecutors({deadExecutorInfo.size})</h4>
@@ -114,13 +114,12 @@ private[ui] class ExecutorsPage(
           {execSummary(activeExecutorInfo)}
         </div>
       </div>
-        <div class = "row">
-          <div class="span12">
-            <h4>Executors</h4>
-            {execTable}
-          </div>
+      <div class = "row">
+        <div class="span12">
+          <h4>Executors</h4>
+          {execTable}
         </div>
-    }
+      </div>;
 
     UIUtils.headerSparkPage("Executors", content, parent)
   }
@@ -255,14 +254,13 @@ private[ui] class ExecutorsPage(
   }
 
   private def taskData(
-                        maxTasks: Int,
-                        activeTasks: Int,
-                        failedTasks: Int,
-                        completedTasks: Int,
-                        totalTasks: Int,
-                        totalDuration: Long,
-                        totalGCTime: Long):
-  Seq[Node] = {
+      maxTasks: Int,
+      activeTasks: Int,
+      failedTasks: Int,
+      completedTasks: Int,
+      totalTasks: Int,
+      totalDuration: Long,
+      totalGCTime: Long): Seq[Node] = {
     // Determine Color Opacity from 0.5-1
     // activeTasks range from 0 to maxTasks
     val activeTasksAlpha =
@@ -287,33 +285,33 @@ private[ui] class ExecutorsPage(
       }
 
     val tableData =
-      <td style={
-          if (activeTasks > 0) {
-            "background:hsla(240, 100%, 50%, " + activeTasksAlpha + ");color:white"
-          } else {
-            ""
-          }
-          }>{activeTasks}</td>
-        <td style={
-            if (failedTasks > 0) {
-              "background:hsla(0, 100%, 50%, " + failedTasksAlpha + ");color:white"
-            } else {
-              ""
-            }
-            }>{failedTasks}</td>
-        <td>{completedTasks}</td>
-        <td>{totalTasks}</td>
-        <td sorttable_customkey={totalDuration.toString} style={
-        // Red if GC time over GCTimePercent of total time
-        if (totalGCTime > GCTimePercent * totalDuration) {
-          "background:hsla(0, 100%, 50%, " + totalDurationAlpha + ");color:white"
-        } else {
-          ""
-        }
-        }>
-          {Utils.msDurationToString(totalDuration)}
-          ({Utils.msDurationToString(totalGCTime)})
-        </td>;
+    <td style={
+      if (activeTasks > 0) {
+        "background:hsla(240, 100%, 50%, " + activeTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+      }>{activeTasks}</td>
+    <td style={
+      if (failedTasks > 0) {
+        "background:hsla(0, 100%, 50%, " + failedTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+    }>{failedTasks}</td>
+    <td>{completedTasks}</td>
+    <td>{totalTasks}</td>
+    <td sorttable_customkey={totalDuration.toString} style={
+      // Red if GC time over GCTimePercent of total time
+      if (totalGCTime > GCTimePercent * totalDuration) {
+        "background:hsla(0, 100%, 50%, " + totalDurationAlpha + ");color:white"
+      } else {
+        ""
+      }
+    }>
+      {Utils.msDurationToString(totalDuration)}
+      ({Utils.msDurationToString(totalGCTime)})
+    </td>;
 
     tableData
   }

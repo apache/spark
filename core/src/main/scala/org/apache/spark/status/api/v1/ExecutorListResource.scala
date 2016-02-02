@@ -35,9 +35,6 @@ private[v1] class ExecutorListResource(ui: SparkUI) {
       val deadStorageStatusList = listener.deadStorageStatusList
       (0 until activeStorageStatusList.size).map { statusId =>
         ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
-      } ++
-      (0 until deadStorageStatusList.size).map { statusId =>
-        ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
       }
     }
   }
