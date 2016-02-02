@@ -68,22 +68,22 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       bucketSpec: BucketSpec,
       bucketValues: Seq[Integer],
       filterCondition: Column,
-      bucketedDataFrame: DataFrame,
-      expectedAnswer: DataFrame): Unit = {
+      originalDataFrame: DataFrame): Unit = {
 
+    val bucketedDataFrame = hiveContext.table("bucketed_table").select("i", "j", "k")
     val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
     // Limit: bucket pruning only works when the bucket column has one and only one column
     assert(bucketColumnNames.length == 1)
     val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
-    val bucketColumn = bucketedDataFrame.schema.toAttributes.head
+    val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
     val matchedBuckets = new BitSet(numBuckets)
     bucketValues.foreach { value =>
       matchedBuckets.set(DataSourceStrategy.getBucketId(bucketColumn, numBuckets, value))
     }
 
     // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
-    val rdd = bucketedDataFrame.filter(filterCondition).queryExecution
-      .executedPlan.find(_.isInstanceOf[PhysicalRDD])
+    val rdd = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
+      .find(_.isInstanceOf[PhysicalRDD])
     assert(rdd.isDefined)
 
     val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
@@ -93,10 +93,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     assert(checkedResult.collect().forall(_ == true))
 
     checkAnswer(
-      expectedAnswer.filter(filterCondition)
-        .orderBy(expectedAnswer.logicalPlan.output.map(attr => Column(attr)) : _*),
-      bucketedDataFrame.filter(filterCondition)
-        .orderBy(bucketedDataFrame.logicalPlan.output.map(attr => Column(attr)) : _*))
+      bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
+      originalDataFrame.filter(filterCondition).orderBy("i", "j", "k"))
   }
 
   test("read partitioning bucketed tables with bucket pruning filters") {
@@ -116,7 +114,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
           bucketSpec,
           bucketValues = j :: Nil,
           filterCondition = $"j" === j,
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
           df)
 
         // Case 2: EqualNullSafe
@@ -124,7 +121,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
           bucketSpec,
           bucketValues = j :: Nil,
           filterCondition = $"j" <=> j,
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
           df)
 
         // Case 3: In
@@ -132,7 +128,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
           bucketSpec,
           bucketValues = Seq(j, j + 1, j + 2, j + 3),
           filterCondition = $"j".isin(j, j + 1, j + 2, j + 3),
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
           df)
       }
     }
@@ -153,7 +148,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
           bucketSpec,
           bucketValues = j :: Nil,
           filterCondition = $"j" === j,
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
           df)
       }
     }
@@ -162,29 +156,28 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   test("read partitioning bucketed tables having null in bucketing key") {
     withTable("bucketed_table") {
       val numBuckets = 8
-      val bucketSpec = BucketSpec(numBuckets, Seq("s"), Nil)
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      val nullDF = Seq((1, "str", 3), (1, null, 5), (1, "test", 5)).toDF("i", "j", "k")
       // json does not support predicate push-down, and thus json is used here
-      nullStrings.write
+      nullDF.write
         .format("json")
-        .partitionBy("n")
-        .bucketBy(numBuckets, "s")
+        .partitionBy("i")
+        .bucketBy(numBuckets, "j")
         .saveAsTable("bucketed_table")
 
       // Case 1: isNull
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = null :: Nil,
-        filterCondition = $"s".isNull,
-        hiveContext.table("bucketed_table").select("n", "s"),
-        nullStrings)
+        filterCondition = $"j".isNull,
+        nullDF)
 
       // Case 2: <=> null
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = null :: Nil,
-        filterCondition = $"s" <=> null,
-        hiveContext.table("bucketed_table").select("n", "s"),
-        nullStrings)
+        filterCondition = $"j" <=> null,
+        nullDF)
     }
   }
 
@@ -204,14 +197,12 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
           bucketSpec,
           bucketValues = j :: Nil,
           filterCondition = $"j" === j && $"k" > $"j",
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
           df)
 
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = j :: Nil,
           filterCondition = $"j" === j && $"i" > j % 5,
-          hiveContext.table("bucketed_table").select("i", "j", "k"),
           df)
       }
     }
