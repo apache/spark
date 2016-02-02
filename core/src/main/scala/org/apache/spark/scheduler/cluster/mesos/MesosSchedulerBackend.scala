@@ -125,7 +125,7 @@ private[spark] class MesosSchedulerBackend(
 
     val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri.isEmpty) {
-      val executorPath = new File(executorSparkHome, "/bin/spark-class").getCanonicalPath
+      val executorPath = new File(executorSparkHome, "/bin/spark-class").getPath
       command.setValue(s"$prefixEnv $executorPath $executorBackendName")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
@@ -375,6 +375,7 @@ private[spark] class MesosSchedulerBackend(
   override def error(d: SchedulerDriver, message: String) {
     inClassLoader() {
       logError("Mesos error: " + message)
+      markErr()
       scheduler.error(message)
     }
   }
