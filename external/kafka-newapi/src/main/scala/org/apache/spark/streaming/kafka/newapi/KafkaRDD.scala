@@ -52,7 +52,7 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
     messageHandler: ConsumerRecord[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
 
-  private val KAFKA_DEFAULT_POLL_TIME: String = "0"
+  private val KAFKA_DEFAULT_POLL_TIME: String = "100"
   private val pollTime = kafkaParams.get("spark.kafka.poll.time")
     .getOrElse(KAFKA_DEFAULT_POLL_TIME).toInt
 
@@ -169,7 +169,10 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
 
     private def fetchBatch: Iterator[ConsumerRecord[K, V]] = {
       consumer.seek(new TopicPartition(part.topic, part.partition), requestOffset)
-      val recs = consumer.poll(pollTime)
+      var recs: ConsumerRecords[K, V] = null
+      do {
+        recs = consumer.poll(pollTime)
+      } while (recs.isEmpty && requestOffset < part.untilOffset)
       recs.records(new TopicPartition(part.topic, part.partition)).iterator().asScala
     }
 
