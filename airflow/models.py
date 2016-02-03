@@ -2614,11 +2614,35 @@ class Variable(Base):
 
     id = Column(Integer, primary_key=True)
     key = Column(String(ID_LEN), unique=True)
-    val = Column(Text)
+    _val = Column('val', Text)
+    is_encrypted = Column(Boolean, unique=False, default=False)
 
     def __repr__(self):
-        return '{} : {}'.format(self.key, self.val)
+        # Hiding the value
+        return '{} : {}'.format(self.key, self._val)
 
+    def get_val(self):
+        if self._val and self.is_encrypted:
+            if not ENCRYPTION_ON:
+                raise AirflowException(
+                    "Can't decrypt _val, configuration is missing")
+            return FERNET.decrypt(bytes(self._val, 'utf-8')).decode()
+        else:
+            return self._val
+
+    def set_val(self, value):
+        if value:
+            try:
+                self._val = FERNET.encrypt(bytes(value, 'utf-8')).decode()
+                self.is_encrypted = True
+            except NameError:
+                self._val = value
+                self.is_encrypted = False
+
+    @declared_attr
+    def val(cls):
+        return synonym('_val',
+                       descriptor=property(cls.get_val, cls.set_val))
     @classmethod
     @provide_session
     def get(cls, key, default_var=None, deserialize_json=False, session=None):

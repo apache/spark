@@ -1864,10 +1864,15 @@ admin.add_view(mv)
 class VariableView(wwwutils.LoginMixin, AirflowModelView):
     verbose_name = "Variable"
     verbose_name_plural = "Variables"
-    column_list = ('key',)
+    form_columns = (
+        'key',
+        'val',
+    )
+    column_list = ('key', 'is_encrypted',)
     column_filters = ('key', 'val')
     column_searchable_list = ('key', 'val')
     form_widget_args = {
+        'is_encrypted': {'disabled': True},
         'val': {
             'rows': 20,
         }
