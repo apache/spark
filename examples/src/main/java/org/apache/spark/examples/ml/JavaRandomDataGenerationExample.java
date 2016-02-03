@@ -18,40 +18,44 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
+import org.apache.spark.SparkContext;
+import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
-import org.apache.spark.mllib.stat.Statistics;
+import static org.apache.spark.mllib.random.RandomRDDs.*;
 // $example off$
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
 
-public class JavaSummaryStatisticsExample {
+public class JavaRandomDataGenerationExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaSummaryStatisticsExample");
+        SparkConf conf = new SparkConf().setAppName("JavaRandomDataGenerationExample");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-        Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
-        Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
-        Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
 
-        JavaRDD<Vector> mat = jsc.parallelize(Arrays.asList(v1, v2, v3)); // an RDD of Vectors
+        // @note: todo
 
-        // Compute column summary statistics.
-        MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
-        System.out.println(summary.mean()); // a dense vector containing the mean value for each column
-        System.out.println(summary.variance()); // column-wise variance
-        System.out.println(summary.numNonzeros()); // number of nonzeros in each column
+        // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+        // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+        JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
+        // Apply a transform to get a random double RDD following `N(1, 4)`.
+        JavaDoubleRDD v = u.map(
+                new Function<Double, Double>() {
+                    public Double call(Double x) {
+                        return 1.0 + 2.0 * x;
+                    }
+                });
+
         // $example off$
 
         jsc.stop();
     }
 }
+

@@ -19,35 +19,38 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.stat.KernelDensity
+import org.apache.spark.rdd.RDD
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
-object SummaryStatisticsExample {
+object KernelDensityEstimationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("SummaryStatisticsExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("KernelDensityEstimationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    val v1 = Vectors.dense(1.0, 10.0, 100.0)
-    val v2 = Vectors.dense(2.0, 20.0, 200.0)
-    val v3 = Vectors.dense(3.0, 30.0, 300.0)
 
-    val observations = sc.parallelize(Seq(v1, v2, v3))
+    // @note: todo
 
-    // Compute column summary statistics.
-    val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)
-    println(summary.mean) // a dense vector containing the mean value for each column
-    println(summary.variance) // column-wise variance
-    println(summary.numNonzeros) // number of nonzeros in each column
+    val data: RDD[Double] = ... // an RDD of sample data
+
+    // Construct the density estimator with the sample data and a standard deviation for the Gaussian
+    // kernels
+    val kd = new KernelDensity()
+      .setSample(data)
+      .setBandwidth(3.0)
+
+    // Find density estimates for the given values
+    val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
     // $example off$
 
     sc.stop()
   }
 }
 // scalastyle:on println
+

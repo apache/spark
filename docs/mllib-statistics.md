@@ -52,24 +52,7 @@ total count.
 
 Refer to the [`MultivariateStatisticalSummary` Java docs](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html) for details on the API.
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
-import org.apache.spark.mllib.stat.Statistics;
-
-JavaSparkContext jsc = ...
-
-JavaRDD<Vector> mat = ... // an RDD of Vectors
-
-// Compute column summary statistics.
-MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
-System.out.println(summary.mean()); // a dense vector containing the mean value for each column
-System.out.println(summary.variance()); // column-wise variance
-System.out.println(summary.numNonzeros()); // number of nonzeros in each column
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaSummaryStatisticsExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -80,20 +63,7 @@ total count.
 
 Refer to the [`MultivariateStatisticalSummary` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.stat import Statistics
-
-sc = ... # SparkContext
-
-mat = ... # an RDD of Vectors
-
-# Compute column summary statistics.
-summary = Statistics.colStats(mat)
-print(summary.mean())
-print(summary.variance())
-print(summary.numNonzeros())
-
-{% endhighlight %}
+{% include_example python/ml/summary_statistics_example.py %}
 </div>
 
 </div>
@@ -112,27 +82,7 @@ an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` resp
 
 Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.stat.Statistics
-
-val sc: SparkContext = ...
-
-val seriesX: RDD[Double] = ... // a series
-val seriesY: RDD[Double] = ... // must have the same number of partitions and cardinality as seriesX
-
-// compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a 
-// method is not specified, Pearson's method will be used by default. 
-val correlation: Double = Statistics.corr(seriesX, seriesY, "pearson")
-
-val data: RDD[Vector] = ... // note that each Vector is a row and not a column
-
-// calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
-// If a method is not specified, Pearson's method will be used by default. 
-val correlMatrix: Matrix = Statistics.corr(data, "pearson")
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/CorrelationsExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -142,28 +92,7 @@ a `JavaRDD<Vector>`, the output will be a `Double` or the correlation `Matrix` r
 
 Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Statistics.html) for details on the API.
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.*;
-import org.apache.spark.mllib.stat.Statistics;
-
-JavaSparkContext jsc = ...
-
-JavaDoubleRDD seriesX = ... // a series
-JavaDoubleRDD seriesY = ... // must have the same number of partitions and cardinality as seriesX
-
-// compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a 
-// method is not specified, Pearson's method will be used by default. 
-Double correlation = Statistics.corr(seriesX.srdd(), seriesY.srdd(), "pearson");
-
-JavaRDD<Vector> data = ... // note that each Vector is a row and not a column
-
-// calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
-// If a method is not specified, Pearson's method will be used by default. 
-Matrix correlMatrix = Statistics.corr(data.rdd(), "pearson");
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaCorrelationsExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -173,24 +102,7 @@ an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` resp
 
 Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.stat import Statistics
-
-sc = ... # SparkContext
-
-seriesX = ... # a series
-seriesY = ... # must have the same number of partitions and cardinality as seriesX
-
-# Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a 
-# method is not specified, Pearson's method will be used by default. 
-print(Statistics.corr(seriesX, seriesY, method="pearson"))
-
-data = ... # an RDD of Vectors
-# calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
-# If a method is not specified, Pearson's method will be used by default. 
-print(Statistics.corr(data, method="pearson"))
-
-{% endhighlight %}
+{% include_example python/ml/correlations_example.py %}
 </div>
 
 </div>
@@ -216,21 +128,7 @@ fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K
 keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample 
 size, whereas sampling with replacement requires two additional passes.
 
-{% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.PairRDDFunctions
-
-val sc: SparkContext = ...
-
-val data = ... // an RDD[(K, V)] of any key value pairs
-val fractions: Map[K, Double] = ... // specify the exact fraction desired from each key
-
-// Get an exact sample from each stratum
-val approxSample = data.sampleByKey(withReplacement = false, fractions)
-val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/StratifiedSamplingExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -240,22 +138,7 @@ fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K
 keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample 
 size, whereas sampling with replacement requires two additional passes.
 
-{% highlight java %}
-import java.util.Map;
-
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-
-JavaSparkContext jsc = ...
-
-JavaPairRDD<K, V> data = ... // an RDD of any key value pairs
-Map<K, Object> fractions = ... // specify the exact fraction desired from each key
-
-// Get an exact sample from each stratum
-JavaPairRDD<K, V> approxSample = data.sampleByKey(false, fractions);
-JavaPairRDD<K, V> exactSample = data.sampleByKeyExact(false, fractions);
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaStratifiedSamplingExample.java %}
 </div>
 <div data-lang="python" markdown="1">
 [`sampleByKey()`](api/python/pyspark.html#pyspark.RDD.sampleByKey) allows users to
@@ -265,16 +148,7 @@ set of keys.
 
 *Note:* `sampleByKeyExact()` is currently not supported in Python.
 
-{% highlight python %}
-
-sc = ... # SparkContext
-
-data = ... # an RDD of any key value pairs
-fractions = ... # specify the exact fraction desired from each key as a dictionary
-
-approxSample = data.sampleByKey(False, fractions);
-
-{% endhighlight %}
+{% include_example python/ml/stratified_sampling_example.py %}
 </div>
 
 </div>
@@ -296,41 +170,7 @@ independence tests.
 run Pearson's chi-squared tests. The following example demonstrates how to run and interpret 
 hypothesis tests.
 
-{% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.stat.Statistics._
-
-val sc: SparkContext = ...
-
-val vec: Vector = ... // a vector composed of the frequencies of events
-
-// compute the goodness of fit. If a second vector to test against is not supplied as a parameter, 
-// the test runs against a uniform distribution.  
-val goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-println(goodnessOfFitTestResult) // summary of the test including the p-value, degrees of freedom, 
-                                 // test statistic, the method used, and the null hypothesis.
-
-val mat: Matrix = ... // a contingency matrix
-
-// conduct Pearson's independence test on the input contingency matrix
-val independenceTestResult = Statistics.chiSqTest(mat) 
-println(independenceTestResult) // summary of the test including the p-value, degrees of freedom...
-
-val obs: RDD[LabeledPoint] = ... // (feature, label) pairs.
-
-// The contingency table is constructed from the raw (feature, label) pairs and used to conduct
-// the independence test. Returns an array containing the ChiSquaredTestResult for every feature 
-// against the label.
-val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)
-var i = 1
-featureTestResults.foreach { result =>
-    println(s"Column $i:\n$result")
-    i += 1
-} // summary of the test 
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/HypothesisTestingExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -340,44 +180,7 @@ hypothesis tests.
 
 Refer to the [`ChiSqTestResult` Java docs](api/java/org/apache/spark/mllib/stat/test/ChiSqTestResult.html) for details on the API.
 
-{% highlight java %}
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.*;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.stat.Statistics;
-import org.apache.spark.mllib.stat.test.ChiSqTestResult;
-
-JavaSparkContext jsc = ...
-
-Vector vec = ... // a vector composed of the frequencies of events
-
-// compute the goodness of fit. If a second vector to test against is not supplied as a parameter, 
-// the test runs against a uniform distribution.  
-ChiSqTestResult goodnessOfFitTestResult = Statistics.chiSqTest(vec);
-// summary of the test including the p-value, degrees of freedom, test statistic, the method used, 
-// and the null hypothesis.
-System.out.println(goodnessOfFitTestResult);
-
-Matrix mat = ... // a contingency matrix
-
-// conduct Pearson's independence test on the input contingency matrix
-ChiSqTestResult independenceTestResult = Statistics.chiSqTest(mat);
-// summary of the test including the p-value, degrees of freedom...
-System.out.println(independenceTestResult);
-
-JavaRDD<LabeledPoint> obs = ... // an RDD of labeled points
-
-// The contingency table is constructed from the raw (feature, label) pairs and used to conduct
-// the independence test. Returns an array containing the ChiSquaredTestResult for every feature 
-// against the label.
-ChiSqTestResult[] featureTestResults = Statistics.chiSqTest(obs.rdd());
-int i = 1;
-for (ChiSqTestResult result : featureTestResults) {
-    System.out.println("Column " + i + ":");
-    System.out.println(result); // summary of the test
-    i++;
-}
+{% include_example java/org/apache/spark/examples/ml/JavaHypothesisTestingExample.java %}
 
 {% endhighlight %}
 </div>
@@ -389,39 +192,7 @@ hypothesis tests.
 
 Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
 
-{% highlight python %}
-from pyspark import SparkContext
-from pyspark.mllib.linalg import Vectors, Matrices
-from pyspark.mllib.regresssion import LabeledPoint
-from pyspark.mllib.stat import Statistics
-
-sc = SparkContext()
-
-vec = Vectors.dense(...) # a vector composed of the frequencies of events
-
-# compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
-# the test runs against a uniform distribution.
-goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-print(goodnessOfFitTestResult) # summary of the test including the p-value, degrees of freedom,
-                               # test statistic, the method used, and the null hypothesis.
-
-mat = Matrices.dense(...) # a contingency matrix
-
-# conduct Pearson's independence test on the input contingency matrix
-independenceTestResult = Statistics.chiSqTest(mat)
-print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom...
-
-obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
-
-# The contingency table is constructed from an RDD of LabeledPoint and used to conduct
-# the independence test. Returns an array containing the ChiSquaredTestResult for every feature
-# against the label.
-featureTestResults = Statistics.chiSqTest(obs)
-
-for i, result in enumerate(featureTestResults):
-    print("Column $d:" % (i + 1))
-    print(result)
-{% endhighlight %}
+{% include_example python/ml/hypothesis_testing_example.py %}
 </div>
 
 </div>
@@ -443,21 +214,7 @@ and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.stat.Statistics
-
-val data: RDD[Double] = ... // an RDD of sample data
-
-// run a KS test for the sample versus a standard normal distribution
-val testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
-println(testResult) // summary of the test including the p-value, test statistic,
-                    // and null hypothesis
-                    // if our p-value indicates significance, we can reject the null hypothesis
-
-// perform a KS test using a cumulative distribution function of our making
-val myCDF: Double => Double = ...
-val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/HypothesisTestingKolmogorovSmirnovTestExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -467,23 +224,7 @@ and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Statistics.html) for details on the API.
 
-{% highlight java %}
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-
-import org.apache.spark.mllib.stat.Statistics;
-import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
-
-JavaSparkContext jsc = ...
-JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.2, 1.0, ...));
-KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
-// summary of the test including the p-value, test statistic,
-// and null hypothesis
-// if our p-value indicates significance, we can reject the null hypothesis
-System.out.println(testResult);
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaHypothesisTestingKolmogorovSmirnovTestExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -493,19 +234,7 @@ and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.stat import Statistics
-
-parallelData = sc.parallelize([1.0, 2.0, ... ])
-
-# run a KS test for the sample versus a standard normal distribution
-testResult = Statistics.kolmogorovSmirnovTest(parallelData, "norm", 0, 1)
-print(testResult) # summary of the test including the p-value, test statistic,
-                  # and null hypothesis
-                  # if our p-value indicates significance, we can reject the null hypothesis
-# Note that the Scala functionality of calling Statistics.kolmogorovSmirnovTest with
-# a lambda to calculate the CDF is not made available in the Python API
-{% endhighlight %}
+{% include_example python/ml/hypothesis_testing_kolmogorov_smirnov_test_example.py %}
 </div>
 </div>
 
@@ -550,18 +279,7 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.random.RandomRDDs._
-
-val sc: SparkContext = ...
-
-// Generate a random double RDD that contains 1 million i.i.d. values drawn from the
-// standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-val u = normalRDD(sc, 1000000L, 10)
-// Apply a transform to get a random double RDD following `N(1, 4)`.
-val v = u.map(x => 1.0 + 2.0 * x)
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/RandomDataGenerationExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -572,24 +290,7 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Java docs](api/java/org/apache/spark/mllib/random/RandomRDDs) for details on the API.
 
-{% highlight java %}
-import org.apache.spark.SparkContext;
-import org.apache.spark.api.JavaDoubleRDD;
-import static org.apache.spark.mllib.random.RandomRDDs.*;
-
-JavaSparkContext jsc = ...
-
-// Generate a random double RDD that contains 1 million i.i.d. values drawn from the
-// standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
-// Apply a transform to get a random double RDD following `N(1, 4)`.
-JavaDoubleRDD v = u.map(
-  new Function<Double, Double>() {
-    public Double call(Double x) {
-      return 1.0 + 2.0 * x;
-    }
-  });
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaRandomDataGenerationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -600,17 +301,7 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.random import RandomRDDs
-
-sc = ... # SparkContext
-
-# Generate a random double RDD that contains 1 million i.i.d. values drawn from the
-# standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-u = RandomRDDs.normalRDD(sc, 1000000L, 10)
-# Apply a transform to get a random double RDD following `N(1, 4)`.
-v = u.map(lambda x: 1.0 + 2.0 * x)
-{% endhighlight %}
+{% include_example python/ml/random_data_generation_example.py %}
 </div>
 </div>
 
@@ -632,21 +323,7 @@ to do so.
 
 Refer to the [`KernelDensity` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.stat.KernelDensity
-import org.apache.spark.rdd.RDD
-
-val data: RDD[Double] = ... // an RDD of sample data
-
-// Construct the density estimator with the sample data and a standard deviation for the Gaussian
-// kernels
-val kd = new KernelDensity()
-  .setSample(data)
-  .setBandwidth(3.0)
-
-// Find density estimates for the given values
-val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/ml/KernelDensityEstimationExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -656,21 +333,7 @@ to do so.
 
 Refer to the [`KernelDensity` Java docs](api/java/org/apache/spark/mllib/stat/KernelDensity.html) for details on the API.
 
-{% highlight java %}
-import org.apache.spark.mllib.stat.KernelDensity;
-import org.apache.spark.rdd.RDD;
-
-RDD<Double> data = ... // an RDD of sample data
-
-// Construct the density estimator with the sample data and a standard deviation for the Gaussian
-// kernels
-KernelDensity kd = new KernelDensity()
-  .setSample(data)
-  .setBandwidth(3.0);
-
-// Find density estimates for the given values
-double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/ml/JavaKernelDensityEstimationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -680,20 +343,7 @@ to do so.
 
 Refer to the [`KernelDensity` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.stat import KernelDensity
-
-data = ... # an RDD of sample data
-
-# Construct the density estimator with the sample data and a standard deviation for the Gaussian
-# kernels
-kd = KernelDensity()
-kd.setSample(data)
-kd.setBandwidth(3.0)
-
-# Find density estimates for the given values
-densities = kd.estimate([-1.0, 2.0, 5.0])
-{% endhighlight %}
+{% include_example python/ml/kernel_density_estimation_example.py %}
 </div>
 
 </div>

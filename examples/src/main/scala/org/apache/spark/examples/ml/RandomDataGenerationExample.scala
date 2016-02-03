@@ -19,35 +19,34 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.random.RandomRDDs._
+
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
-object SummaryStatisticsExample {
+object RandomDataGenerationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("SummaryStatisticsExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("RandomDataGenerationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    val v1 = Vectors.dense(1.0, 10.0, 100.0)
-    val v2 = Vectors.dense(2.0, 20.0, 200.0)
-    val v3 = Vectors.dense(3.0, 30.0, 300.0)
 
-    val observations = sc.parallelize(Seq(v1, v2, v3))
+    // @note: todo
 
-    // Compute column summary statistics.
-    val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)
-    println(summary.mean) // a dense vector containing the mean value for each column
-    println(summary.variance) // column-wise variance
-    println(summary.numNonzeros) // number of nonzeros in each column
+    // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+    // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+    val u = normalRDD(sc, 1000000L, 10)
+    // Apply a transform to get a random double RDD following `N(1, 4)`.
+    val v = u.map(x => 1.0 + 2.0 * x)
+
     // $example off$
 
     sc.stop()
   }
 }
 // scalastyle:on println
+
