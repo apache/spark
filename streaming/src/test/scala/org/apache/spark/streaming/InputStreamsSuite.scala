@@ -24,7 +24,7 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{SynchronizedBuffer, SynchronizedQueue}
+import scala.collection.mutable.SynchronizedQueue
 import scala.language.postfixOps
 
 import com.google.common.io.Files
