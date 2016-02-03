@@ -211,9 +211,9 @@ case class TungstenAggregate(
        |   $doAgg();
        |
        |   // output the result
-       |   $genResult
+       |   ${genResult.trim}
        |
-       |   ${consume(ctx, resultVars)}
+       |   ${consume(ctx, resultVars).trim}
        | }
      """.stripMargin
   }
@@ -242,9 +242,9 @@ case class TungstenAggregate(
     }
     s"""
        | // do aggregate
-       | ${aggVals.map(_.code).mkString("\n")}
+       | ${aggVals.map(_.code).mkString("\n").trim}
        | // update aggregation buffer
-       | ${updates.mkString("")}
+       | ${updates.mkString("\n").trim}
      """.stripMargin
   }
 
@@ -471,6 +471,8 @@ case class TungstenAggregate(
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
        UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        $outputCode
+
+       if (shouldStop()) return;
      }
 
      $iterTerm.close();
@@ -480,7 +482,7 @@ case class TungstenAggregate(
      """
   }
 
-  private def doConsumeWithKeys( ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
 
     // create grouping key
     ctx.currentVars = input
@@ -523,7 +525,7 @@ case class TungstenAggregate(
     // Finally, sort the spilled aggregate buffers by key, and merge them together for same key.
     s"""
      // generate grouping key
-     ${keyCode.code}
+     ${keyCode.code.trim}
      UnsafeRow $buffer = null;
      if ($checkFallback) {
        // try to get the buffer from hash map
@@ -547,9 +549,9 @@ case class TungstenAggregate(
      $incCounter
 
      // evaluate aggregate function
-     ${evals.map(_.code).mkString("\n")}
+     ${evals.map(_.code).mkString("\n").trim}
      // update aggregate buffer
-     ${updates.mkString("\n")}
+     ${updates.mkString("\n").trim}
      """
   }
 

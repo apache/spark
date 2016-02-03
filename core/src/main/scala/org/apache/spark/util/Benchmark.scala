@@ -60,19 +60,21 @@ private[spark] class Benchmark(
     }
     println
 
-    val firstRate = results.head.avgRate
+    val firstBest = results.head.bestMs
+    val firstAvg = results.head.avgMs
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
-    printf("%-30s %16s %12s %13s %10s\n", name + ":", "median Time(ms)", "Rate(M/s)", "Per Row(ns)",
-      "Relative")
-    println("-------------------------------------------------------------------------------------")
-    results.zip(benchmarks).foreach { r =>
-      printf("%-30s %16s %10s %14s %10s\n",
-        r._2.name,
-        "%10.2f" format r._1.avgMs,
-        "%10.2f" format r._1.avgRate,
-        "%6.2f" format (1000 / r._1.avgRate),
-        "%6.2f X" format (r._1.avgRate / firstRate))
+    printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+      "Per Row(ns)", "Relative")
+    println("-----------------------------------------------------------------------------------" +
+      "--------")
+    results.zip(benchmarks).foreach { case (result, benchmark) =>
+      printf("%-35s %16s %12s %13s %10s\n",
+        benchmark.name,
+        "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
+        "%10.1f" format result.bestRate,
+        "%6.1f" format (1000 / result.bestRate),
+        "%3.1fX" format (firstBest / result.bestMs))
     }
     println
     // scalastyle:on
@@ -81,7 +83,7 @@ private[spark] class Benchmark(
 
 private[spark] object Benchmark {
   case class Case(name: String, fn: Int => Unit)
-  case class Result(avgMs: Double, avgRate: Double)
+  case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
 
   /**
    * This should return a user helpful processor information. Getting at this depends on the OS.
@@ -120,8 +122,9 @@ private[spark] object Benchmark {
         // scalastyle:on
       }
     }
-    val result = runTimes.sortBy(x => x).apply(iters / 2).toDouble
-    Result(result / 1000000, num / (result / 1000))
+    val best = runTimes.min
+    val avg = runTimes.sum / iters
+    Result(avg / 1000000, num / (best / 1000), best / 1000000)
   }
 }
 

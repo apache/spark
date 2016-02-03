@@ -21,6 +21,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.functions._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -50,28 +51,30 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  def testWholeStage(values: Int): Unit = {
-
-    runBenchmark("rang/filter/sum", values) {
-      sqlContext.range(values).filter("(id & 1) = 1").groupBy().sum().collect()
+  // These benchmark are skipped in normal build
+  test("whole stage codegen") {
+    val N = 500 << 20
+    runBenchmark("rang/filter/sum", N) {
+      sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
     }
     /*
-      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      rang/filter/sum:                median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------
-      rang/filter/sum codegen=false          12823.55      40.88          24.46     1.00 X
-      rang/filter/sum codegen=true             831.80     630.30           1.59    15.42 X
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    rang/filter/sum:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    rang/filter/sum codegen=false          14332 / 16646         36.0          27.8       1.0X
+    rang/filter/sum codegen=true              845 /  940        620.0           1.6      17.0X
     */
   }
 
-  def testStatFunctions(values: Int): Unit = {
+  test("stat functions") {
+    val N = 100 << 20
 
-    runBenchmark("stddev", values) {
-      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    runBenchmark("stddev", N) {
+      sqlContext.range(N).groupBy().agg("id" -> "stddev").collect()
     }
 
-    runBenchmark("kurtosis", values) {
-      sqlContext.range(values).groupBy().agg("id" -> "kurtosis").collect()
+    runBenchmark("kurtosis", N) {
+      sqlContext.range(N).groupBy().agg("id" -> "kurtosis").collect()
     }
 
 
@@ -89,36 +92,56 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       Using DeclarativeAggregate:
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      stddev:                         median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------
-      stddev codegen=false                    1644.14      12.76          78.40     1.00 X
-      stddev codegen=true                      349.35      60.03          16.66     4.71 X
+      stddev:                             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------------
+      stddev codegen=false                     5630 / 5776         18.0          55.6       1.0X
+      stddev codegen=true                      1259 / 1314         83.0          12.0       4.5X
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-      kurtosis:                         median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      -------------------------------------------------------------------------------------
-      kurtosis codegen=false                    3491.49       6.01         166.49     1.00 X
-      kurtosis codegen=true                      561.54      37.35          26.78     6.22 X
+      kurtosis:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------------
+      kurtosis codegen=false                 14847 / 15084          7.0         142.9       1.0X
+      kurtosis codegen=true                    1652 / 2124         63.0          15.9       9.0X
       */
   }
 
-  def testAggregateWithKey(values: Int): Unit = {
+  ignore("aggregate with keys") {
+    val N = 20 << 20
 
-    runBenchmark("Aggregate w keys", values) {
-      sqlContext.range(values).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+    runBenchmark("Aggregate w keys", N) {
+      sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
     }
 
     /*
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Aggregate w keys:               median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------
-    Aggregate w keys codegen=false          2390.44       8.77         113.99     1.00 X
-    Aggregate w keys codegen=true           1669.62      12.56          79.61     1.43 X
+    Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Aggregate w keys codegen=false           2402 / 2551          8.0         125.0       1.0X
+    Aggregate w keys codegen=true            1620 / 1670         12.0          83.3       1.5X
     */
   }
 
-  def testBytesToBytesMap(values: Int): Unit = {
-    val benchmark = new Benchmark("BytesToBytesMap", values)
+  ignore("broadcast hash join") {
+    val N = 20 << 20
+    val dim = broadcast(sqlContext.range(1 << 16).selectExpr("id as k", "cast(id as string) as v"))
+
+    runBenchmark("BroadcastHashJoin", N) {
+      sqlContext.range(N).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+
+    /*
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    BroadcastHashJoin:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    BroadcastHashJoin codegen=false          4405 / 6147          4.0         250.0       1.0X
+    BroadcastHashJoin codegen=true           1857 / 1878         11.0          90.9       2.4X
+    */
+  }
+
+  ignore("hash and BytesToBytesMap") {
+    val N = 50 << 20
+
+    val benchmark = new Benchmark("BytesToBytesMap", N)
 
     benchmark.addCase("hash") { iter =>
       var i = 0
@@ -129,7 +152,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       val value = new UnsafeRow(2)
       value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       var s = 0
-      while (i < values) {
+      while (i < N) {
         key.setInt(0, i % 1000)
         val h = Murmur3_x86_32.hashUnsafeWords(
           key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, 0)
@@ -156,7 +179,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         val value = new UnsafeRow(2)
         value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
         var i = 0
-        while (i < values) {
+        while (i < N) {
           key.setInt(0, i % 65536)
           val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
           if (loc.isDefined) {
@@ -174,20 +197,12 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    BytesToBytesMap:                median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------
-    hash                                     663.70      78.99          12.66     1.00 X
-    BytesToBytesMap (off Heap)              3389.42      15.47          64.65     0.20 X
-    BytesToBytesMap (on Heap)               3476.07      15.08          66.30     0.19 X
+    BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    hash                                      628 /  661         83.0          12.0       1.0X
+    BytesToBytesMap (off Heap)               3292 / 3408         15.0          66.7       0.2X
+    BytesToBytesMap (on Heap)                3349 / 4267         15.0          66.7       0.2X
       */
     benchmark.run()
-  }
-
-  // These benchmark are skipped in normal build
-  test("benchmark") {
-    // testWholeStage(200 << 20)
-    // testStatFunctions(20 << 20)
-    // testAggregateWithKey(20 << 20)
-    // testBytesToBytesMap(50 << 20)
   }
 }
