@@ -14,7 +14,7 @@ import airflow
 from airflow import jobs, settings, utils
 from airflow import configuration
 from airflow.executors import DEFAULT_EXECUTOR
-from airflow.models import DagBag, TaskInstance, DagPickle, DagRun
+from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun
 from airflow.utils import AirflowException, State
 
 DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
@@ -100,6 +100,23 @@ def trigger_dag(args):
         session.add(trigger)
         logging.info("Created {}".format(trigger))
     session.commit()
+
+
+def dag_state(args):
+    dagbag = DagBag(process_subdir(args.subdir))
+    if args.dag_id not in dagbag.dags:
+        raise AirflowException('dag_id could not be found')
+    dag = dagbag.dags[args.dag_id]
+
+    if args.pause or args.un_pause is not None:
+        session = settings.Session()
+        dm = session.query(DagModel).filter(
+            DagModel.dag_id == dag.dag_id).first()
+        dm.is_paused = args.pause or args.un_pause
+        session.commit()
+
+    msg = "Dag: {}, paused: {}".format(dag, str(dag.is_paused))
+    print(msg)
 
 
 def run(args):
@@ -529,6 +546,23 @@ def get_parser():
         "-r", "--run_id",
         help="Helps to indentify this run")
     parser_trigger_dag.set_defaults(func=trigger_dag)
+
+    ht = "Get or set the state of a DAG"
+    parser_dag_state = subparsers.add_parser('dag_state', help=ht)
+    parser_dag_state.add_argument("dag_id", help="The id of the dag to check")
+    parser_dag_state.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=DAGS_FOLDER)
+    dag_state_pause_group = parser_dag_state.add_mutually_exclusive_group()
+    dag_state_pause_group.add_argument(
+        "-p", "--pause",
+        help="Pause this dag",
+        action="store_true")
+    dag_state_pause_group.add_argument(
+        "-u", "--un-pause",
+        help="Unpause this dag",
+        action="store_false")
+    parser_dag_state.set_defaults(func=dag_state)
 
     ht = "Run a single task instance"
     parser_run = subparsers.add_parser('run', help=ht)

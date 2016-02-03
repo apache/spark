@@ -605,6 +605,21 @@ class CliTests(unittest.TestCase):
             'task_state', 'example_bash_operator', 'runme_0',
             DEFAULT_DATE.isoformat()]))
 
+    def test_dag_state(self):
+        for dag_id in self.dagbag.dags.keys():
+            args = self.parser.parse_args(['dag_state', dag_id])
+            cli.dag_state(args)
+
+        args = self.parser.parse_args([
+            'dag_state', 'example_bash_operator', '--pause'])
+        cli.dag_state(args)
+        assert self.dagbag.dags['example_bash_operator'].is_paused in [True, 1]
+
+        args = self.parser.parse_args([
+            'dag_state', 'example_bash_operator', '--un-pause'])
+        cli.dag_state(args)
+        assert self.dagbag.dags['example_bash_operator'].is_paused in [False, 0]
+
     def test_backfill(self):
         cli.backfill(self.parser.parse_args([
             'backfill', 'example_bash_operator',
