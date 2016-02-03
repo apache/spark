@@ -204,12 +204,9 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val sqlParser: ParserInterface = new SparkSQLParser(new SparkQl(conf))
+  protected[sql] val sqlParser: ParserInterface = new SparkQl(conf)
 
-  @transient
-  protected[sql] val ddlParser: DDLParser = new DDLParser(sqlParser)
-
-  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
+  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String):
     org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
@@ -596,6 +593,14 @@ class SQLContext private[sql](
    */
   @Experimental
   def read: DataFrameReader = new DataFrameReader(this)
+
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataStreamReader]] than can be used to access data continuously as it arrives.
+   */
+  @Experimental
+  def streamFrom: DataStreamReader = new DataStreamReader(this)
 
   /**
    * :: Experimental ::

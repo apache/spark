@@ -139,7 +139,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       code should be (HttpServletResponse.SC_OK)
       jsonOpt should be ('defined)
       errOpt should be (None)
-      val json = jsonOpt.get
+      val jsonOrg = jsonOpt.get
+
+      // SPARK-10873 added the lastUpdated field for each application's attempt,
+      // the REST API returns the last modified time of EVENT LOG file for this field.
+      // It is not applicable to hard-code this dynamic field in a static expected file,
+      // so here we skip checking the lastUpdated field's value (setting it as "").
+      val json = if (jsonOrg.indexOf("lastUpdated") >= 0) {
+        val subStrings = jsonOrg.split(",")
+        for (i <- subStrings.indices) {
+          if (subStrings(i).indexOf("lastUpdated") >= 0) {
+            subStrings(i) = "\"lastUpdated\":\"\""
+          }
+        }
+        subStrings.mkString(",")
+      } else {
+        jsonOrg
+      }
+
       val exp = IOUtils.toString(new FileInputStream(
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
@@ -159,18 +176,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     (1 to 2).foreach { attemptId => doDownloadTest("local-1430917381535", Some(attemptId)) }
   }
 
-  test("download legacy logs - all attempts") {
-    doDownloadTest("local-1426533911241", None, legacy = true)
-  }
-
-  test("download legacy logs - single  attempts") {
-    (1 to 2). foreach {
-      attemptId => doDownloadTest("local-1426533911241", Some(attemptId), legacy = true)
-    }
-  }
-
   // Test that the files are downloaded correctly, and validate them.
-  def doDownloadTest(appId: String, attemptId: Option[Int], legacy: Boolean = false): Unit = {
+  def doDownloadTest(appId: String, attemptId: Option[Int]): Unit = {
 
     val url = attemptId match {
       case Some(id) =>
@@ -188,22 +195,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     var entry = zipStream.getNextEntry
     entry should not be null
     val totalFiles = {
-      if (legacy) {
-        attemptId.map { x => 3 }.getOrElse(6)
-      } else {
-        attemptId.map { x => 1 }.getOrElse(2)
-      }
+      attemptId.map { x => 1 }.getOrElse(2)
     }
     var filesCompared = 0
     while (entry != null) {
       if (!entry.isDirectory) {
         val expectedFile = {
-          if (legacy) {
-            val splits = entry.getName.split("/")
-            new File(new File(logDir, splits(0)), splits(1))
-          } else {
-            new File(logDir, entry.getName)
-          }
+          new File(logDir, entry.getName)
         }
         val expected = Files.toString(expectedFile, Charsets.UTF_8)
         val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
@@ -239,30 +237,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "got \"foo\""))
 
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
-  }
-
-  test("generate history page with relative links") {
-    val historyServer = mock[HistoryServer]
-    val request = mock[HttpServletRequest]
-    val ui = mock[SparkUI]
-    val link = "/history/app1"
-    val info = new ApplicationHistoryInfo("app1", "app1",
-      List(ApplicationAttemptInfo(None, 0, 2, 1, "xxx", true)))
-    when(historyServer.getApplicationList()).thenReturn(Seq(info))
-    when(ui.basePath).thenReturn(link)
-    when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
-    val page = new HistoryPage(historyServer)
-
-    // when
-    val response = page.render(request)
-
-    // then
-    val links = response \\ "a"
-    val justHrefs = for {
-      l <- links
-      attrs <- l.attribute("href")
-    } yield (attrs.toString)
-    justHrefs should contain (UIUtils.prependBaseUri(resource = link))
   }
 
   test("relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
