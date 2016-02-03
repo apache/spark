@@ -186,7 +186,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives.  The returned [[ContinuousQuery]] object can be used to interact with
+   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
@@ -197,7 +197,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives.  The returned [[ContinuousQuery]] object can be used to interact with
+   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
@@ -284,7 +284,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * The given column name may not be equal to any of the existing column names if we were in
-   * case-insensitive context.  Normalize the given column name to the real one so that we don't
+   * case-insensitive context. Normalize the given column name to the real one so that we don't
    * need to care about case sensitivity afterwards.
    */
   private def normalize(columnName: String, columnType: String): String = {
