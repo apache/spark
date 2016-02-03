@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.lang3.SystemUtils
 
@@ -62,13 +63,15 @@ private[spark] class Benchmark(
     val firstRate = results.head.avgRate
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
-    printf("%-30s %16s %16s %14s\n", name + ":", "Avg Time(ms)", "Avg Rate(M/s)", "Relative Rate")
-    println("-------------------------------------------------------------------------------")
+    printf("%-30s %16s %12s %13s %10s\n", name + ":", "median Time(ms)", "Rate(M/s)", "Per Row(ns)",
+      "Relative")
+    println("-------------------------------------------------------------------------------------")
     results.zip(benchmarks).foreach { r =>
-      printf("%-30s %16s %16s %14s\n",
+      printf("%-30s %16s %10s %14s %10s\n",
         r._2.name,
         "%10.2f" format r._1.avgMs,
         "%10.2f" format r._1.avgRate,
+        "%6.2f" format (1000 / r._1.avgRate),
         "%6.2f X" format (r._1.avgRate / firstRate))
     }
     println
@@ -99,7 +102,7 @@ private[spark] object Benchmark {
    * the rate of the function.
    */
   def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Int => Unit): Result = {
-    var bestTime = Long.MaxValue
+    val runTimes = ArrayBuffer[Long]()
     for (i <- 0 until iters + 1) {
       val start = System.nanoTime()
 
@@ -107,8 +110,8 @@ private[spark] object Benchmark {
 
       val end = System.nanoTime()
       val runTime = end - start
-      if (runTime < bestTime) {
-        bestTime = runTime
+      if (i > 0) {
+        runTimes += runTime
       }
 
       if (outputPerIteration) {
@@ -117,7 +120,8 @@ private[spark] object Benchmark {
         // scalastyle:on
       }
     }
-    Result(bestTime.toDouble / 1000000, num / (bestTime.toDouble / 1000))
+    val result = runTimes.sortBy(x => x).apply(iters / 2).toDouble
+    Result(result / 1000000, num / (result / 1000))
   }
 }
 

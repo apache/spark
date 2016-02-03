@@ -56,11 +56,11 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       sqlContext.range(values).filter("(id & 1) = 1").groupBy().sum().collect()
     }
     /*
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    rang/filter/aggregate:             Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    rang/filter/aggregate codegen=false        12509.22            41.91         1.00 X
-    rang/filter/aggregate codegen=true           846.38           619.45        14.78 X
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      rang/filter/sum:                median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------
+      rang/filter/sum codegen=false          12823.55      40.88          24.46     1.00 X
+      rang/filter/sum codegen=true             831.80     630.30           1.59    15.42 X
     */
   }
 
@@ -72,10 +72,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /*
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Aggregate with keys:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    Aggregate w keys codegen=false         2589.00             8.10         1.00 X
-    Aggregate w keys codegen=true          1645.38            12.75         1.57 X
+    Aggregate w keys:               median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------
+    Aggregate w keys codegen=false          2390.44       8.77         113.99     1.00 X
+    Aggregate w keys codegen=true           1669.62      12.56          79.61     1.43 X
     */
   }
 
@@ -136,18 +136,18 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     /**
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    BytesToBytesMap:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    hash                                     603.61            86.86         1.00 X
-    BytesToBytesMap (off Heap)              3297.39            15.90         0.18 X
-    BytesToBytesMap (on Heap)               3607.09            14.53         0.17 X
+    BytesToBytesMap:                median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------
+    hash                                     663.70      78.99          12.66     1.00 X
+    BytesToBytesMap (off Heap)              3389.42      15.47          64.65     0.20 X
+    BytesToBytesMap (on Heap)               3476.07      15.08          66.30     0.19 X
       */
     benchmark.run()
   }
 
-  test("benchmark") {
-    // testWholeStage(500 << 20)
-    // testAggregateWithKey(20 << 20)
-    // testBytesToBytesMap(50 << 20)
+  ignore("benchmark") {
+//    testWholeStage(500 << 20)
+//    testAggregateWithKey(20 << 20)
+//    testBytesToBytesMap(50 << 20)
   }
 }
