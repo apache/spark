@@ -23,7 +23,7 @@ import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{future, Await, ExecutionContext, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.{Random, Try}
@@ -42,6 +42,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2Test.copyToTempLocation
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -362,7 +363,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       try {
         // Start a very-long-running query that will take hours to finish, then cancel it in order
         // to demonstrate that cancellation works.
-        val f = future {
+        val f = Future {
           statement.executeQuery(
             "SELECT COUNT(*) FROM test_map " +
             List.fill(10)("join test_map").mkString(" "))
@@ -380,7 +381,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         // Cancellation is a no-op if spark.sql.hive.thriftServer.async=false
         statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
         try {
-          val sf = future {
+          val sf = Future {
             statement.executeQuery(
               "SELECT COUNT(*) FROM test_map " +
                 List.fill(4)("join test_map").mkString(" ")
@@ -412,12 +413,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement(
       {
         statement =>
-          val jarFile =
-            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-              .split("/")
-              .mkString(File.separator)
-
-          statement.executeQuery(s"ADD JAR $jarFile")
+          val jarURL = copyToTempLocation(
+            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar")
+          statement.executeQuery(s"ADD JAR $jarURL")
       },
 
       {
@@ -488,18 +486,16 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
-  // TODO: enable this
-  ignore("SPARK-11595 ADD JAR with input path having URL scheme") {
+  test("SPARK-11595 ADD JAR with input path having URL scheme") {
     withJdbcStatement { statement =>
-      val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-      val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+      val jarURL = copyToTempLocation("../hive/src/test/resources/TestUDTF.jar").toURI.toURL
 
-      Seq(
-        s"ADD JAR $jarURL",
+      statement.execute(s"ADD JAR $jarURL")
+      statement.execute(
         s"""CREATE TEMPORARY FUNCTION udtf_count2
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
          """.stripMargin
-      ).foreach(statement.execute)
+      )
 
       val rs1 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
 
@@ -547,22 +543,20 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   override protected def extraConf: Seq[String] =
     "--conf spark.sql.hive.thriftServer.singleSession=true" :: Nil
 
-  // TODO: enable this
-  ignore("test single session") {
+  test("test single session") {
     withMultipleConnectionJdbcStatement(
       { statement =>
-        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+        val jarURL = copyToTempLocation("../hive/src/test/resources/TestUDTF.jar").toURI.toURL
 
         // Configurations and temporary functions added in this session should be visible to all
         // the other sessions.
-        Seq(
-          "SET foo=bar",
-          s"ADD JAR $jarURL",
+        statement.execute("SET foo=bar")
+        statement.execute(s"ADD JAR $jarURL")
+        statement.execute(
           s"""CREATE TEMPORARY FUNCTION udtf_count2
-              |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+             |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
            """.stripMargin
-        ).foreach(statement.execute)
+        )
       },
 
       { statement =>
@@ -697,6 +691,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       Files.write(
         """log4j.rootCategory=DEBUG, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
+          |log4j.appender.console.threshold=DEBUG
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
           |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
@@ -788,6 +783,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val builder = new ProcessBuilder(command: _*)
       val captureOutput = (line: String) => diagnosisBuffer.synchronized {
         diagnosisBuffer += line
+        logInfo(line)
 
         successLines.foreach { r =>
           if (line.contains(r)) {
@@ -796,7 +792,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         }
       }
 
-        val process = builder.start()
+      val process = builder.start()
 
       new ProcessOutputCapturer(process.getInputStream, captureOutput).start()
       new ProcessOutputCapturer(process.getErrorStream, captureOutput).start()
@@ -871,5 +867,14 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     } finally {
       super.afterAll()
     }
+  }
+}
+
+object HiveThriftServer2Test {
+  def copyToTempLocation(from: String): File = {
+    val fromFile = new File(from.split("/").mkString(File.separator))
+    val toLocation = new File(Utils.createTempDir(), fromFile.getName)
+    Files.copy(fromFile, toLocation)
+    toLocation
   }
 }
