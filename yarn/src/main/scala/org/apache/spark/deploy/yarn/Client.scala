@@ -370,7 +370,9 @@ private[spark] class Client(
       YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
       YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
       // list all credentials at debug; useful for diagnostics.
-      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+      if (credentials != null) {
+        logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+      }
     } else {
       // credentials coming from environment variables -do not attempt to obtain any
       // more. Logging the current credentials helps identify Oozie setup problems here.

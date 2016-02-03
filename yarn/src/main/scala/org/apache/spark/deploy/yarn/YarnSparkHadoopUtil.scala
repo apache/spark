@@ -350,10 +350,14 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   /**
    * Dump the credentials's tokens to string values.
    * @param credentials credentials
-   * @return an iterator over the string values.
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
    */
   def dumpTokens(credentials: Credentials): Iterable[String] = {
-    credentials.getAllTokens.asScala.map(tokenToString)
+    if (credentials != null) {
+      credentials.getAllTokens.asScala.map(tokenToString)
+    } else {
+      Seq()
+    }
   }
 
   /**
