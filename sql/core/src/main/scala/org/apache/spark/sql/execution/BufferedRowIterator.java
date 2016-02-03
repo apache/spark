@@ -55,6 +55,8 @@ public class BufferedRowIterator {
 
   /**
    * Returns whether `processNext()` should stop processing next row from `input` or not.
+   *
+   * If it returns true, the caller should exit the loop (return from processNext()).
    */
   protected boolean shouldStop() {
     return !currentRows.isEmpty();
