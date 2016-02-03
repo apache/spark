@@ -456,15 +456,15 @@ class Analyzer(
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
-        val newOrdering = ordering.map(order =>
-          resolveExpression(order, child, throws = false).asInstanceOf[SortOrder])
+        val newOrdering =
+          ordering.map(order => resolveExpression(order, child).asInstanceOf[SortOrder])
         Sort(newOrdering, global, child)
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
       case g @ Generate(generator, join, outer, qualifier, output, child)
         if child.resolved && !generator.resolved =>
-        val newG = resolveExpression(generator, child)
+        val newG = resolveExpression(generator, child, throws = true)
         if (newG.fastEquals(generator)) {
           g
         } else {
@@ -511,7 +511,7 @@ class Analyzer(
         case b: BoundReference => attributes(b.ordinal)
       }
 
-      resolveExpression(unbound, LocalRelation(attributes)) transform {
+      resolveExpression(unbound, LocalRelation(attributes), throws = true) transform {
         case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
           val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
           if (outer == null) {
@@ -542,7 +542,7 @@ class Analyzer(
       exprs.exists(_.collect { case _: Star => true }.nonEmpty)
   }
 
-  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = true) = {
+  private def resolveExpression(expr: Expression, plan: LogicalPlan, throws: Boolean = false) = {
     // Resolve expression in one round.
     // If throws == false or the desired attribute doesn't exist
     // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
@@ -650,9 +650,8 @@ class Analyzer(
         ordering: Seq[SortOrder],
         plan: LogicalPlan,
         child: LogicalPlan): (Seq[SortOrder], Seq[Attribute]) = {
-      val newOrdering = ordering.map(order =>
-        resolveExpression(order, child, throws = false).asInstanceOf[SortOrder]
-      )
+      val newOrdering =
+        ordering.map(order => resolveExpression(order, child).asInstanceOf[SortOrder])
       // Construct a set that contains all of the attributes that we need to evaluate the
       // ordering.
       val requiredAttributes = AttributeSet(newOrdering).filter(_.resolved)
