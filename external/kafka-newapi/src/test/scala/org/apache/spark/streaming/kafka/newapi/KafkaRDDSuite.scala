@@ -65,8 +65,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "10000")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
@@ -110,8 +109,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     val kc = new KafkaCluster(kafkaParams)
 

@@ -76,7 +76,6 @@ public class JavaKafkaRDDSuite implements Serializable {
       "org.apache.kafka.common.serialization.StringDeserializer");
     kafkaParams.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
       "org.apache.kafka.common.serialization.StringDeserializer");
-    kafkaParams.put("spark.kafka.poll.time", "1000");
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),

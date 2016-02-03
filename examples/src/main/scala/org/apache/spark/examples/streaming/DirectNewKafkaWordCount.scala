@@ -34,19 +34,17 @@ import org.apache.spark.streaming.kafka.newapi._
  *                       if the current offset does not exist any more on the server
  *                       earliest: automatically reset the offset to the earliest offset
  *                       latest: automatically reset the offset to the latest offset
- *   <pollTimeout> is time, in milliseconds, spent waiting in Kafka consumer poll
- *                 if data is not available
  * Example:
  *    $ bin/run-example streaming.DirectNewKafkaWordCount broker1-host:port,broker2-host:port \
- *    topic1,topic2 my-consumer-group latest pollTimeout
+ *    topic1,topic2 my-consumer-group earliest
  *
  */
 object DirectNewKafkaWordCount {
   def main(args: Array[String]) {
-    if (args.length < 5) {
+    if (args.length < 4) {
       System.err.println(s"""
                             |Usage: DirectNewKafkaWordCount <brokers> <topics> <groupId> \
-                            |<auto.offset.reset> <pollTimeout>
+                            |<auto.offset.reset>
                             |  <brokers> is a list of one or more Kafka brokers
                             |  <topics> is a list of one or more kafka topics to consume from
                             |  <groupId> is the name of kafka consumer group (can be arbitrary)
@@ -57,16 +55,13 @@ object DirectNewKafkaWordCount {
                             |                                to the earliest offset
                             |                      latest: automatically reset the offset
                             |                              to the latest offset
-                            |  <pollTimeout> is time, in milliseconds, spent waiting in
-                            |                Kafka consumer poll if data is not available
-                            |
         """.stripMargin)
       System.exit(1)
     }
 
     // StreamingExamples.setStreamingLogLevels()
 
-    val Array(brokers, topics, groupId, offsetReset, pollTimeout) = args
+    val Array(brokers, topics, groupId, offsetReset) = args
 
     // Create context with 2 second batch interval
     val sparkConf = new SparkConf().setAppName("Direct Kafka Wordcount (New Consumer API)")
@@ -82,8 +77,8 @@ object DirectNewKafkaWordCount {
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> offsetReset,
-      ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG -> "false",
-      "spark.kafka.poll.time" -> pollTimeout)
+      ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG -> "false"
+    )
     val messages = KafkaUtils.createDirectStream[String, String](ssc, kafkaParams, topicsSet)
 
     // Get the lines, split them into words, count the words and print

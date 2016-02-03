@@ -52,8 +52,7 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
     messageHandler: ConsumerRecord[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
 
-  private val pollTime = kafkaParams.get("spark.kafka.poll.time").map(_.toLong).getOrElse(Long
-    .MaxValue)
+  private val pollTime = sc.getConf.getLong("spark.kafka.poll.time", 1000L)
 
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map {

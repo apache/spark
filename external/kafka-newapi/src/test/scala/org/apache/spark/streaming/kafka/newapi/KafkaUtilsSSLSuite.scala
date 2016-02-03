@@ -75,8 +75,7 @@ class KafkaUtilsSSLSuite extends SparkFunSuite with BeforeAndAfterAll {
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     val kafkaParamsWithSSL = KafkaUtils.addSSLOptions(kafkaParams, sc)
 

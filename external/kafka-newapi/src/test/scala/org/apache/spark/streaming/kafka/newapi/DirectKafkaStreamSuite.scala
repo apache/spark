@@ -95,8 +95,7 @@ class DirectKafkaStreamSuite
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val stream = withClue("Error creating direct stream") {
@@ -155,8 +154,7 @@ class DirectKafkaStreamSuite
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100")
+        "org.apache.kafka.common.serialization.StringDeserializer")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
       kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).getOrElse(0)
@@ -203,8 +201,7 @@ class DirectKafkaStreamSuite
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "100")
+        "org.apache.kafka.common.serialization.StringDeserializer")
     val kc = new KafkaCluster(kafkaParams)
     def getLatestOffset(): Long = {
       kc.getLatestOffsets(Set(topicPartition)).get(topicPartition).getOrElse(0)
@@ -252,8 +249,7 @@ class DirectKafkaStreamSuite
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
@@ -342,8 +338,7 @@ class DirectKafkaStreamSuite
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     import DirectKafkaStreamSuite._
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
@@ -382,8 +377,7 @@ class DirectKafkaStreamSuite
       ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG ->
         "org.apache.kafka.common.serialization.StringDeserializer",
       ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG ->
-        "org.apache.kafka.common.serialization.StringDeserializer",
-      "spark.kafka.poll.time" -> "1000")
+        "org.apache.kafka.common.serialization.StringDeserializer")
 
     val batchIntervalMilliseconds = 100
     val estimator = new ConstantEstimator(100)
