@@ -23,6 +23,8 @@ class ASTNodeSuite extends SparkFunSuite {
     val inputs = Seq(
       ("add jar", "file:///tmp/ab/TestUDTF.jar"),
       ("add jar", "file:///tmp/a@b/TestUDTF.jar"),
+      ("add jar", "c:\\windows32\\TestUDTF.jar"),
+      ("add jar", "some \nbad\t\tfile\r\n.\njar"),
       ("ADD JAR", "@*#&@(!#@$^*!@^@#(*!@#"),
       ("SET", "foo=bar"),
       ("SET", "foo*)(@#^*@&!#^=bar")
