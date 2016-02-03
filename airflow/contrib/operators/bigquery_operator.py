@@ -13,7 +13,14 @@ class BigQueryOperator(BaseOperator):
     ui_color = '#e4f0e8'
 
     @apply_defaults
-    def __init__(self, bql, destination_dataset_table = False, write_disposition = 'WRITE_EMPTY', bigquery_conn_id='bigquery_default', *args, **kwargs):
+    def __init__(self,
+                 bql,
+                 destination_dataset_table = False,
+                 write_disposition = 'WRITE_EMPTY',
+                 bigquery_conn_id='bigquery_default',
+                 sub=None,
+                 *args,
+                 **kwargs):
         """
         Create a new BigQueryOperator.
 
@@ -32,8 +39,9 @@ class BigQueryOperator(BaseOperator):
         self.destination_dataset_table = destination_dataset_table
         self.write_disposition = write_disposition
         self.bigquery_conn_id = bigquery_conn_id
+        self.sub = sub
 
     def execute(self, context):
         logging.info('Executing: %s', str(self.bql))
-        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id)
+        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, sub=self.sub)
         hook.run(self.bql, self.destination_dataset_table, self.write_disposition)

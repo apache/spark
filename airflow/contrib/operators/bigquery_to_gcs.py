@@ -21,7 +21,8 @@ class BigQueryToCloudStorageOperator(BaseOperator):
         export_format='CSV', 
         field_delimiter=',', 
         print_header=True, 
-        bigquery_conn_id='bigquery_default', 
+        bigquery_conn_id='bigquery_default',
+        sub=None,
         *args, 
         **kwargs):
         """
@@ -58,10 +59,11 @@ class BigQueryToCloudStorageOperator(BaseOperator):
         self.field_delimiter = field_delimiter
         self.print_header = print_header
         self.bigquery_conn_id = bigquery_conn_id
+        self.sub = sub
 
     def execute(self, context):
         logging.info('Executing extract of %s into: %s', self.source_dataset_table, self.destination_cloud_storage_uris)
-        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id)
+        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, sub=self.sub)
         hook.run_extract(
             self.source_dataset_table,
             self.destination_cloud_storage_uris,
