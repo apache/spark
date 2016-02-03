@@ -156,8 +156,8 @@ case class Alias(child: Expression, name: String, isGenerated: Boolean = false)(
 
   override def toAttribute: Attribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata, isGenerated)(
-        exprId, qualifiers)
+      AttributeReference(name, child.dataType, child.nullable, metadata)(
+        exprId, qualifiers, isGenerated)
     } else {
       UnresolvedAttribute(name)
     }
@@ -202,10 +202,10 @@ case class AttributeReference(
     name: String,
     dataType: DataType,
     nullable: Boolean = true,
-    override val metadata: Metadata = Metadata.empty,
-    isGenerated: Boolean = false)(
+    override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
-    val qualifiers: Seq[String] = Nil)
+    val qualifiers: Seq[String] = Nil,
+    val isGenerated: Boolean = false)
   extends Attribute with Unevaluable {
 
   /**
@@ -242,7 +242,8 @@ case class AttributeReference(
   }
 
   override def newInstance(): AttributeReference =
-    AttributeReference(name, dataType, nullable, metadata, isGenerated)(qualifiers = qualifiers)
+    AttributeReference(name, dataType, nullable, metadata)(
+      qualifiers = qualifiers, isGenerated = isGenerated)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -251,7 +252,7 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata, isGenerated)(exprId, qualifiers)
+      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifiers, isGenerated)
     }
   }
 
@@ -259,7 +260,7 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable, metadata, isGenerated)(exprId, qualifiers)
+      AttributeReference(newName, dataType, nullable, metadata)(exprId, qualifiers, isGenerated)
     }
   }
 
@@ -270,7 +271,7 @@ case class AttributeReference(
     if (newQualifiers.toSet == qualifiers.toSet) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata, isGenerated)(exprId, newQualifiers)
+      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifiers, isGenerated)
     }
   }
 
@@ -278,7 +279,7 @@ case class AttributeReference(
     if (exprId == newExprId) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata, isGenerated)(newExprId, qualifiers)
+      AttributeReference(name, dataType, nullable, metadata)(newExprId, qualifiers, isGenerated)
     }
   }
 
