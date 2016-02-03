@@ -18,10 +18,13 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
 
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.unsafe.Platform;
 
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.api.Binary;
 
 /**
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
@@ -52,15 +55,53 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
-  public void readIntegers(int total, ColumnVector c, int rowId) {
+  public final void readIntegers(int total, ColumnVector c, int rowId) {
     c.putIntsLittleEndian(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
     offset += 4 * total;
   }
 
   @Override
-  public int readInteger() {
+  public final void readLongs(int total, ColumnVector c, int rowId) {
+    c.putLongsLittleEndian(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 8 * total;
+  }
+
+  @Override
+  public final void readBytes(int total, ColumnVector c, int rowId) {
+    for (int i = 0; i < total; i++) {
+      // Bytes are stored as a 4-byte little endian int. Just read the first byte.
+      // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
+      c.putInt(rowId + i, buffer[offset]);
+      offset += 4;
+    }
+  }
+
+  @Override
+  public final int readInteger() {
     int v = Platform.getInt(buffer, offset);
     offset += 4;
     return v;
+  }
+
+  @Override
+  public final long readLong() {
+    long v = Platform.getLong(buffer, offset);
+    offset += 8;
+    return v;
+  }
+
+  @Override
+  public final byte readByte() {
+    return (byte)readInteger();
+  }
+
+  @Override
+  public final void readBinary(int total, ColumnVector v, int rowId) {
+    for (int i = 0; i < total; i++) {
+      int len = readInteger();
+      int start = offset;
+      offset += len;
+      v.putByteArray(rowId + i, buffer, start - Platform.BYTE_ARRAY_OFFSET, len);
+    }
   }
 }
