@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{CatalystConf, EmptyConf, TableIdentifier}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
@@ -47,6 +47,10 @@ trait Catalog {
   def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
 
   def setCurrentDatabase(databaseName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
+  def runNativeCommand(sql: String): Seq[Row] = {
     throw new UnsupportedOperationException
   }
 

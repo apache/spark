@@ -418,3 +418,32 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq.empty
 }
+
+case class CreateDataBase(
+    databaseName: String,
+    allowExisting: Boolean,
+    path: Option[String],
+    comment: Option[String],
+    props: Map[String, String])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class CreateFunction(
+    functionName: String,
+    asName: String,
+    resourcesMap: Map[String, String],
+    isTemp: Boolean)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}

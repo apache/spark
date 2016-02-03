@@ -107,8 +107,6 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
 
-    "TOK_CREATEDATABASE",
-    "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
     "TOK_CREATEMACRO",
     "TOK_CREATEROLE",

@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.ql.metadata._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SaveMode, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -714,6 +714,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
   override def setCurrentDatabase(databaseName: String): Unit = {
     client.setCurrentDatabase(databaseName)
+  }
+
+  override def runNativeCommand(sql: String): Seq[Row] = {
+    hive.runSqlHive(sql).map(Row(_))
   }
 }
 

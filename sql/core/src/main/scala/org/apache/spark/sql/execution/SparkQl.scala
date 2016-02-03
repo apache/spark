@@ -62,6 +62,61 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val tableIdent = extractTableIdent(nameParts)
         RefreshTable(tableIdent)
 
+      case Token("TOK_CREATEDATABASE", Token(databaseName, Nil) :: createDatabaseArgs) =>
+        val Seq(
+          allowExisting,
+          dbLocation,
+          databaseComment,
+          dbprops) = getClauses(Seq(
+          "TOK_IFNOTEXISTS",
+          "TOK_DATABASELOCATION",
+          "TOK_DATABASECOMMENT",
+          "TOK_DATABASEPROPERTIES"), createDatabaseArgs)
+
+        val location = dbLocation.map {
+          case Token("TOK_DATABASELOCATION", Token(loc, Nil) :: Nil) => unquoteString(loc)
+        }
+        val comment = databaseComment.map {
+          case Token("TOK_DATABASECOMMENT", Token(comment, Nil) :: Nil) => unquoteString(comment)
+        }
+        val props: Map[String, String] = dbprops.toSeq.flatMap {
+          case Token("TOK_DATABASEPROPERTIES", propList) =>
+            propList.flatMap {
+              case Token("TOK_DBPROPLIST", props) =>
+                props.map {
+                  case Token("TOK_TABLEPROPERTY", keysAndValue) =>
+                    val key = keysAndValue.init.map(x => unquoteString(x.text)).mkString(".")
+                    val value = unquoteString(keysAndValue.last.text)
+                    (key, value)
+                }
+            }
+        }.toMap
+
+        CreateDataBase(databaseName, allowExisting.isDefined, location, comment, props)(node.source)
+
+      case Token("TOK_CREATEFUNCTION", func :: as :: createFuncArgs) =>
+        val funcName = func.map(x => unquoteString(x.text)).mkString(".")
+        val asName = unquoteString(as.text)
+        val Seq(
+          rList,
+          temp) = getClauses(Seq(
+          "TOK_RESOURCE_LIST",
+          "TOK_TEMPORARY"), createFuncArgs)
+
+        val resourcesMap: Map[String, String] = rList.toSeq.flatMap {
+          case Token("TOK_RESOURCE_LIST", resources) =>
+            resources.map {
+              case Token("TOK_RESOURCE_URI", rType :: Token(rPath, Nil) :: Nil) =>
+                val resourceType = rType match {
+                  case Token("TOK_JAR", Nil) => "jar"
+                  case Token("TOK_FILE", Nil) => "file"
+                  case Token("TOK_ARCHIVE", Nil) => "archive"
+                }
+                (resourceType, unquoteString(rPath))
+            }
+        }.toMap
+        CreateFunction(funcName, asName, resourcesMap, temp.isDefined)(node.source)
+
       case Token("TOK_CREATETABLEUSING", createTableArgs) =>
         val Seq(
           temp,
