@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Throwables
@@ -84,7 +84,7 @@ private[streaming] class ReceiverSupervisorImpl(
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
           logInfo(s"Received a new rate limit: $eps.")
-          registeredBlockGenerators.foreach { bg =>
+          registeredBlockGenerators.asScala.foreach { bg =>
             bg.updateRate(eps)
           }
       }
@@ -198,7 +198,7 @@ private[streaming] class ReceiverSupervisorImpl(
     stoppedGenerators.foreach(registeredBlockGenerators.remove(_))
 
     val newBlockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
-    registeredBlockGenerators += newBlockGenerator
+    registeredBlockGenerators.add(newBlockGenerator)
     newBlockGenerator
   }
 
