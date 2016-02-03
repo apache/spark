@@ -19,8 +19,6 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.rdd.RDD
 
 // $example off$
 import org.apache.spark.sql.SQLContext
@@ -36,7 +34,7 @@ object HypothesisTestingKolmogorovSmirnovTestExample {
 
     // $example on$
     // @note: todo
-
+/*
     val data: RDD[Double] = ... // an RDD of sample data
 
     // run a KS test for the sample versus a standard normal distribution
@@ -50,7 +48,7 @@ object HypothesisTestingKolmogorovSmirnovTestExample {
     val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
 
     // $example off$
-
+*/
     sc.stop()
   }
 }

@@ -42,7 +42,7 @@ public class JavaHypothesisTestingExample {
         // $example on$
 
         // @note: todo
-
+/*
         Vector vec = ... // a vector composed of the frequencies of events
 
         // compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
@@ -73,7 +73,7 @@ public class JavaHypothesisTestingExample {
         }
 
         // $example off$
-
+*/
         jsc.stop();
     }
 }

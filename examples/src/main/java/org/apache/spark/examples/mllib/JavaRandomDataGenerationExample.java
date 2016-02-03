@@ -39,7 +39,7 @@ public class JavaRandomDataGenerationExample {
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-
+/*
         // @note: todo
 
         // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
@@ -54,7 +54,7 @@ public class JavaRandomDataGenerationExample {
                 });
 
         // $example off$
-
+*/
         jsc.stop();
     }
 }

@@ -36,7 +36,7 @@ public class JavaKernelDensityEstimationExample {
         SparkConf conf = new SparkConf().setAppName("JavaKernelDensityEstimationExample");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
-
+/*
         // $example on$
 
         // @note: todo
@@ -52,7 +52,7 @@ public class JavaKernelDensityEstimationExample {
         // Find density estimates for the given values
         double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
         // $example off$
-
+*/
         jsc.stop();
     }
 }

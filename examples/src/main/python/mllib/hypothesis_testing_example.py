@@ -36,30 +36,30 @@ if __name__ == "__main__":
 
     # @note: todo
 
-    vec = Vectors.dense(...) # a vector composed of the frequencies of events
-
-    # compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
-    # the test runs against a uniform distribution.
-    goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-    print(goodnessOfFitTestResult) # summary of the test including the p-value, degrees of freedom,
-    # test statistic, the method used, and the null hypothesis.
-
-    mat = Matrices.dense(...) # a contingency matrix
-
-    # conduct Pearson's independence test on the input contingency matrix
-    independenceTestResult = Statistics.chiSqTest(mat)
-    print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom...
-
-    obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
-
-    # The contingency table is constructed from an RDD of LabeledPoint and used to conduct
-    # the independence test. Returns an array containing the ChiSquaredTestResult for every feature
-    # against the label.
-    featureTestResults = Statistics.chiSqTest(obs)
-
-    for i, result in enumerate(featureTestResults):
-        print("Column $d:" % (i + 1))
-        print(result)
+    # vec = Vectors.dense(...) # a vector composed of the frequencies of events
+    #
+    # # compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
+    # # the test runs against a uniform distribution.
+    # goodnessOfFitTestResult = Statistics.chiSqTest(vec)
+    # print(goodnessOfFitTestResult) # summary of the test including the p-value, degrees of freedom,
+    # # test statistic, the method used, and the null hypothesis.
+    #
+    # mat = Matrices.dense(...) # a contingency matrix
+    #
+    # # conduct Pearson's independence test on the input contingency matrix
+    # independenceTestResult = Statistics.chiSqTest(mat)
+    # print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom...
+    #
+    # obs = sc.parallelize(...)  # LabeledPoint(feature, label) .
+    #
+    # # The contingency table is constructed from an RDD of LabeledPoint and used to conduct
+    # # the independence test. Returns an array containing the ChiSquaredTestResult for every feature
+    # # against the label.
+    # featureTestResults = Statistics.chiSqTest(obs)
+    #
+    # for i, result in enumerate(featureTestResults):
+    #     print("Column $d:" % (i + 1))
+    #     print(result)
 
     # $example off$
 

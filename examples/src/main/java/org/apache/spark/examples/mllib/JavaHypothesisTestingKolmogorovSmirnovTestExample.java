@@ -41,7 +41,7 @@ public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-
+/*
         // @note: todo
 
         JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.2, 1.0, ...));
@@ -52,7 +52,7 @@ public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
         System.out.println(testResult);
 
         // $example off$
-
+*/
         jsc.stop();
     }
 }

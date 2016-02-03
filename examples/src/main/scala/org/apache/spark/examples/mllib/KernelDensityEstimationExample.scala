@@ -19,8 +19,6 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.mllib.stat.KernelDensity
-import org.apache.spark.rdd.RDD
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
@@ -32,7 +30,7 @@ object KernelDensityEstimationExample {
     val conf = new SparkConf().setAppName("KernelDensityEstimationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-
+/*
     // $example on$
 
     // @note: todo
@@ -48,7 +46,7 @@ object KernelDensityEstimationExample {
     // Find density estimates for the given values
     val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
     // $example off$
-
+*/
     sc.stop()
   }
 }

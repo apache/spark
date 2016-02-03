@@ -19,7 +19,6 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.mllib.random.RandomRDDs._
 
 // $example off$
 import org.apache.spark.sql.SQLContext
@@ -32,7 +31,7 @@ object RandomDataGenerationExample {
     val conf = new SparkConf().setAppName("RandomDataGenerationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-
+/*
     // $example on$
 
     // @note: todo
@@ -44,7 +43,7 @@ object RandomDataGenerationExample {
     val v = u.map(x => 1.0 + 2.0 * x)
 
     // $example off$
-
+*/
     sc.stop()
   }
 }

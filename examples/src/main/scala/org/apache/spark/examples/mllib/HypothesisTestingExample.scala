@@ -19,9 +19,6 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.rdd.RDD
 
 // $example off$
 import org.apache.spark.sql.SQLContext
@@ -34,7 +31,7 @@ object HypothesisTestingExample {
     val conf = new SparkConf().setAppName("HypothesisTestingExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-
+/*
     // $example on$
     // @note: todo
     val vec: Vector = ... // a vector composed of the frequencies of events
@@ -64,7 +61,7 @@ object HypothesisTestingExample {
     } // summary of the test
 
     // $example off$
-
+*/
     sc.stop()
   }
 }
