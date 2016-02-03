@@ -37,10 +37,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def columns: Seq[Node] = {
     <th>Output Op Id</th>
       <th>Description</th>
-      <th>Duration</th>
+      <th>Output Op Duration</th>
       <th>Status</th>
       <th>Job Id</th>
-      <th>Duration</th>
+      <th>Job Duration</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
       <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
       <th>Error</th>
