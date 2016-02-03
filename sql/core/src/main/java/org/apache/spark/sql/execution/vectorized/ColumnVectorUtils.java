@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.Date;
 import java.util.Iterator;
 import java.util.List;
 
@@ -100,6 +101,9 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         dst.getChildColumn(0).appendInt(c.months);
         dst.getChildColumn(1).appendLong(c.microseconds);
+      } else if (t instanceof DateType) {
+        Date date = (Date)o;
+        dst.appendInt((int)date.getTime());
       } else {
         throw new NotImplementedException("Type " + t);
       }
