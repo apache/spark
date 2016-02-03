@@ -30,7 +30,7 @@ import org.apache.spark.util.Benchmark
 object HashBenchmark {
 
   def test(name: String, schema: StructType, iters: Int): Unit = {
-    val numRows = 1024 * 8
+    val numRows = 512
 
     val generator = RandomDataGenerator.forType(schema, nullable = false).get
     val encoder = RowEncoder(schema)
@@ -74,10 +74,10 @@ object HashBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Hash For simple:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    interpreted version                       41.23           203.44         1.00 X
-    codegen version                           82.63           101.52         0.50 X
+    interpreted version                      531.53           252.51         1.00 X
+    codegen version                         1228.31           109.27         0.43 X
      */
-    test("simple", simple, 1024)
+    test("simple", simple, 1024 * 256)
 
     val normal = new StructType()
       .add("null", NullType)
@@ -98,10 +98,10 @@ object HashBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Hash For normal:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    interpreted version                     4102.27             0.26         1.00 X
-    codegen version                         1049.29             1.00         3.91 X
+    interpreted version                     2187.63             0.96         1.00 X
+    codegen version                         1693.21             1.24         1.29 X
      */
-    test("normal", normal, 128)
+    test("normal", normal, 1024 * 4)
 
     val arrayOfInt = ArrayType(IntegerType)
     val array = new StructType()
@@ -111,10 +111,10 @@ object HashBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Hash For array:                    Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    interpreted version                     9610.97             0.05         1.00 X
-    codegen version                        15688.23             0.03         0.61 X
+    interpreted version                     3290.06             0.08         1.00 X
+    codegen version                         6674.07             0.04         0.49 X
      */
-    test("array", array, 64)
+    test("array", array, 512)
 
     val mapOfInt = MapType(IntegerType, IntegerType)
     val map = new StructType()
@@ -124,9 +124,9 @@ object HashBenchmark {
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     Hash For map:                      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
     -------------------------------------------------------------------------------
-    interpreted version                    67008.33             0.01         1.00 X
-    codegen version                         9253.44             0.06         7.24 X
+    interpreted version                    64709.73             0.00         1.00 X
+    codegen version                         8019.04             0.02         8.07 X
      */
-    test("map", map, 64)
+    test("map", map, 256)
   }
 }
