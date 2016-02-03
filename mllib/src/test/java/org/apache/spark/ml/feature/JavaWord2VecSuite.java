@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,15 +51,15 @@ public class JavaWord2VecSuite {
 
   @Test
   public void testJavaWord2Vec() {
-    JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
-      RowFactory.create(Lists.newArrayList("Hi I heard about Spark".split(" "))),
-      RowFactory.create(Lists.newArrayList("I wish Java could use case classes".split(" "))),
-      RowFactory.create(Lists.newArrayList("Logistic regression models are neat".split(" ")))
-    ));
     StructType schema = new StructType(new StructField[]{
       new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
-    DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
+    DataFrame documentDF = sqlContext.createDataFrame(
+      Arrays.asList(
+        RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
+        RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
+        RowFactory.create(Arrays.asList("Logistic regression models are neat".split(" ")))),
+      schema);
 
     Word2Vec word2Vec = new Word2Vec()
       .setInputCol("text")

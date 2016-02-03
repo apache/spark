@@ -17,9 +17,8 @@
 
 package org.apache.spark.ml.param;
 
+import java.util.Arrays;
 import java.util.List;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.ml.util.Identifiable$;
 
@@ -89,18 +88,15 @@ public class JavaTestParams extends JavaParams {
     myIntParam_ = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
     myDoubleParam_ = new DoubleParam(this, "myDoubleParam", "this is a double param",
       ParamValidators.inRange(0.0, 1.0));
-    List<String> validStrings = Lists.newArrayList("a", "b");
+    List<String> validStrings = Arrays.asList("a", "b");
     myStringParam_ = new Param<String>(this, "myStringParam", "this is a string param",
       ParamValidators.inArray(validStrings));
     myDoubleArrayParam_ =
       new DoubleArrayParam(this, "myDoubleArrayParam", "this is a double param");
 
     setDefault(myIntParam(), 1);
-    setDefault(myIntParam().w(1));
     setDefault(myDoubleParam(), 0.5);
-    setDefault(myIntParam().w(1), myDoubleParam().w(0.5));
     setDefault(myDoubleArrayParam(), new double[] {1.0, 2.0});
-    setDefault(myDoubleArrayParam().w(new double[] {1.0, 2.0}));
   }
 
   @Override

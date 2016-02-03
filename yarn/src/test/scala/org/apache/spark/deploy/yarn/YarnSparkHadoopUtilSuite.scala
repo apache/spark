@@ -18,22 +18,25 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
+import java.lang.reflect.InvocationTargetException
 
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.metadata.HiveException
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.scalatest.Matchers
 
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
-import org.apache.spark.util.Utils
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
-
-class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging {
+class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
+  with ResetSystemProperties {
 
   val hasBash =
     try {
@@ -233,4 +236,79 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       }
     assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
   }
+
+  test("check different hadoop utils based on env variable") {
+    try {
+      System.setProperty("SPARK_YARN_MODE", "true")
+      assert(SparkHadoopUtil.get.getClass === classOf[YarnSparkHadoopUtil])
+      System.setProperty("SPARK_YARN_MODE", "false")
+      assert(SparkHadoopUtil.get.getClass === classOf[SparkHadoopUtil])
+    } finally {
+      System.clearProperty("SPARK_YARN_MODE")
+    }
+  }
+
+  test("Obtain tokens For HiveMetastore") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hive.metastore.kerberos.principal", "bob")
+    // thrift picks up on port 0 and bails out, without trying to talk to endpoint
+    hadoopConf.set("hive.metastore.uris", "http://localhost:0")
+    val util = new YarnSparkHadoopUtil
+    assertNestedHiveException(intercept[InvocationTargetException] {
+      util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
+    })
+    assertNestedHiveException(intercept[InvocationTargetException] {
+      util.obtainTokenForHiveMetastore(hadoopConf)
+    })
+  }
+
+  private def assertNestedHiveException(e: InvocationTargetException): Throwable = {
+    val inner = e.getCause
+    if (inner == null) {
+      fail("No inner cause", e)
+    }
+    if (!inner.isInstanceOf[HiveException]) {
+      fail("Not a hive exception", inner)
+    }
+    inner
+  }
+
+  test("Obtain tokens For HBase") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hbase.security.authentication", "kerberos")
+    val util = new YarnSparkHadoopUtil
+    intercept[ClassNotFoundException] {
+      util.obtainTokenForHBaseInner(hadoopConf)
+    }
+    util.obtainTokenForHBase(hadoopConf) should be (None)
+  }
+
+  // This test needs to live here because it depends on isYarnMode returning true, which can only
+  // happen in the YARN module.
+  test("security manager token generation") {
+    try {
+      System.setProperty("SPARK_YARN_MODE", "true")
+      val initial = SparkHadoopUtil.get
+        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
+      assert(initial === null || initial.length === 0)
+
+      val conf = new SparkConf()
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+        .set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
+      val sm = new SecurityManager(conf)
+
+      val generated = SparkHadoopUtil.get
+        .getSecretKeyFromUserCredentials(SecurityManager.SECRET_LOOKUP_KEY)
+      assert(generated != null)
+      val genString = new Text(generated).toString()
+      assert(genString != "unused")
+      assert(sm.getSecretKey() === genString)
+    } finally {
+      // removeSecretKey() was only added in Hadoop 2.6, so instead we just set the secret
+      // to an empty string.
+      SparkHadoopUtil.get.addSecretKeyToUserCredentials(SecurityManager.SECRET_LOOKUP_KEY, "")
+      System.clearProperty("SPARK_YARN_MODE")
+    }
+  }
+
 }

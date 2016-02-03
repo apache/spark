@@ -18,6 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -25,16 +26,7 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[clustering] case class TestRow(features: Vector)
 
-object KMeansSuite {
-  def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
-    val sc = sql.sparkContext
-    val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
-      .map(v => new TestRow(v))
-    sql.createDataFrame(rdd)
-  }
-}
-
-class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
+class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
   @transient var dataset: DataFrame = _
@@ -52,10 +44,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(kmeans.getFeaturesCol === "features")
     assert(kmeans.getPredictionCol === "prediction")
     assert(kmeans.getMaxIter === 20)
-    assert(kmeans.getRuns === 1)
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 5)
-    assert(kmeans.getEpsilon === 1e-4)
+    assert(kmeans.getTol === 1e-4)
   }
 
   test("set parameters") {
@@ -64,21 +55,19 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setFeaturesCol("test_feature")
       .setPredictionCol("test_prediction")
       .setMaxIter(33)
-      .setRuns(7)
       .setInitMode(MLlibKMeans.RANDOM)
       .setInitSteps(3)
       .setSeed(123)
-      .setEpsilon(1e-3)
+      .setTol(1e-3)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
     assert(kmeans.getPredictionCol === "test_prediction")
     assert(kmeans.getMaxIter === 33)
-    assert(kmeans.getRuns === 7)
     assert(kmeans.getInitMode === MLlibKMeans.RANDOM)
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
-    assert(kmeans.getEpsilon === 1e-3)
+    assert(kmeans.getTol === 1e-3)
   }
 
   test("parameters validation") {
@@ -90,9 +79,6 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     intercept[IllegalArgumentException] {
       new KMeans().setInitSteps(0)
-    }
-    intercept[IllegalArgumentException] {
-      new KMeans().setRuns(0)
     }
   }
 
@@ -110,5 +96,35 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
     val clusters = transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
+    assert(model.computeCost(dataset) < 0.1)
   }
+
+  test("read/write") {
+    def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
+      assert(model.clusterCenters === model2.clusterCenters)
+    }
+    val kmeans = new KMeans()
+    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+  }
+}
+
+object KMeansSuite {
+  def generateKMeansData(sql: SQLContext, rows: Int, dim: Int, k: Int): DataFrame = {
+    val sc = sql.sparkContext
+    val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
+      .map(v => new TestRow(v))
+    sql.createDataFrame(rdd)
+  }
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "k" -> 3,
+    "maxIter" -> 2,
+    "tol" -> 0.01
+  )
 }

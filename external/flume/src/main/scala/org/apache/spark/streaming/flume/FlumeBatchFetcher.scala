@@ -16,7 +16,6 @@
  */
 package org.apache.spark.streaming.flume
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Throwables
@@ -155,7 +154,7 @@ private[flume] class FlumeBatchFetcher(receiver: FlumePollingReceiver) extends R
     val buffer = new ArrayBuffer[SparkFlumeEvent](events.size())
     var j = 0
     while (j < events.size()) {
-      val event = events(j)
+      val event = events.get(j)
       val sparkFlumeEvent = new SparkFlumeEvent()
       sparkFlumeEvent.event.setBody(event.getBody)
       sparkFlumeEvent.event.setHeaders(event.getHeaders)

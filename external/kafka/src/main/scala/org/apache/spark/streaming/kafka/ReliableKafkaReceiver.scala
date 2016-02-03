@@ -18,10 +18,10 @@
 package org.apache.spark.streaming.kafka
 
 import java.util.Properties
-import java.util.concurrent.{ThreadPoolExecutor, ConcurrentHashMap}
+import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor}
 
-import scala.collection.{Map, mutable}
-import scala.reflect.{ClassTag, classTag}
+import scala.collection.{mutable, Map}
+import scala.reflect.{classTag, ClassTag}
 
 import kafka.common.TopicAndPartition
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
@@ -96,7 +96,7 @@ class ReliableKafkaReceiver[
     blockOffsetMap = new ConcurrentHashMap[StreamBlockId, Map[TopicAndPartition, Long]]()
 
     // Initialize the block generator for storing Kafka message.
-    blockGenerator = new BlockGenerator(new GeneratedBlockHandler, streamId, conf)
+    blockGenerator = supervisor.createBlockGenerator(new GeneratedBlockHandler)
 
     if (kafkaParams.contains(AUTO_OFFSET_COMMIT) && kafkaParams(AUTO_OFFSET_COMMIT) == "true") {
       logWarning(s"$AUTO_OFFSET_COMMIT should be set to false in ReliableKafkaReceiver, " +

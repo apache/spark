@@ -21,7 +21,8 @@ import java.io.Serializable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.unsafe.memory.TaskMemoryManager
+import org.apache.spark.memory.TaskMemoryManager
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.util.TaskCompletionListener
 
 
@@ -58,6 +59,14 @@ object TaskContext {
    * Unset the thread local TaskContext. Internal to Spark.
    */
   protected[spark] def unset(): Unit = taskContext.remove()
+
+  /**
+   * An empty task context that does not represent an actual task.
+   */
+  private[spark] def empty(): TaskContextImpl = {
+    new TaskContextImpl(0, 0, 0, 0, null, null)
+  }
+
 }
 
 
@@ -86,13 +95,11 @@ abstract class TaskContext extends Serializable {
    */
   def isInterrupted(): Boolean
 
-  @deprecated("use isRunningLocally", "1.2.0")
-  def runningLocally(): Boolean
-
   /**
    * Returns true if the task is running locally in the driver program.
-   * @return
+   * @return false
    */
+  @deprecated("Local execution was removed, so this always returns false", "2.0.0")
   def isRunningLocally(): Boolean
 
   /**
@@ -110,16 +117,6 @@ abstract class TaskContext extends Serializable {
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
   /**
-   * Adds a callback function to be executed on task completion. An example use
-   * is for HadoopRDD to register a callback to close the input stream.
-   * Will be called in any situation - success, failure, or cancellation.
-   *
-   * @param f Callback function.
-   */
-  @deprecated("use addTaskCompletionListener", "1.2.0")
-  def addOnCompleteCallback(f: () => Unit)
-
-  /**
    * The ID of the stage that this task belong to.
    */
   def stageId(): Int
@@ -135,18 +132,22 @@ abstract class TaskContext extends Serializable {
    */
   def attemptNumber(): Int
 
-  @deprecated("use attemptNumber", "1.3.0")
-  def attemptId(): Long
-
   /**
    * An ID that is unique to this task attempt (within the same SparkContext, no two task attempts
    * will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
    */
   def taskAttemptId(): Long
 
-  /** ::DeveloperApi:: */
   @DeveloperApi
   def taskMetrics(): TaskMetrics
+
+  /**
+   * ::DeveloperApi::
+   * Returns all metrics sources with the given name which are associated with the instance
+   * which runs the task. For more information see [[org.apache.spark.metrics.MetricsSystem!]].
+   */
+  @DeveloperApi
+  def getMetricsSources(sourceName: String): Seq[Source]
 
   /**
    * Returns the manager for this task's managed memory.
@@ -159,15 +160,4 @@ abstract class TaskContext extends Serializable {
    */
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
 
-  /**
-   * Return the local values of internal accumulators that belong to this task. The key of the Map
-   * is the accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectInternalAccumulators(): Map[Long, Any]
-
-  /**
-   * Return the local values of accumulators that belong to this task. The key of the Map is the
-   * accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectAccumulators(): Map[Long, Any]
 }

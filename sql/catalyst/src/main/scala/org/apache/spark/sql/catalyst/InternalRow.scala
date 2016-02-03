@@ -17,91 +17,60 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * An abstract class for row used internal in Spark SQL, which only contain the columns as
  * internal types.
  */
-abstract class InternalRow extends Row {
+abstract class InternalRow extends SpecializedGetters with Serializable {
 
-  // This is only use for test
-  override def getString(i: Int): String = {
-    val str = getAs[UTF8String](i)
-    if (str != null) str.toString else null
-  }
+  def numFields: Int
 
-  // These expensive API should not be used internally.
-  final override def getDecimal(i: Int): java.math.BigDecimal =
-    throw new UnsupportedOperationException
-  final override def getDate(i: Int): java.sql.Date =
-    throw new UnsupportedOperationException
-  final override def getTimestamp(i: Int): java.sql.Timestamp =
-    throw new UnsupportedOperationException
-  final override def getSeq[T](i: Int): Seq[T] = throw new UnsupportedOperationException
-  final override def getList[T](i: Int): java.util.List[T] = throw new UnsupportedOperationException
-  final override def getMap[K, V](i: Int): scala.collection.Map[K, V] =
-    throw new UnsupportedOperationException
-  final override def getJavaMap[K, V](i: Int): java.util.Map[K, V] =
-    throw new UnsupportedOperationException
-  final override def getStruct(i: Int): Row = throw new UnsupportedOperationException
-  final override def getAs[T](fieldName: String): T = throw new UnsupportedOperationException
-  final override def getValuesMap[T](fieldNames: Seq[String]): Map[String, T] =
-    throw new UnsupportedOperationException
-
-  // A default implementation to change the return type
-  override def copy(): InternalRow = this
+  // This is only use for test and will throw a null pointer exception if the position is null.
+  def getString(ordinal: Int): String = getUTF8String(ordinal).toString
 
   /**
-   * Returns true if we can check equality for these 2 rows.
-   * Equality check between external row and internal row is not allowed.
-   * Here we do this check to prevent call `equals` on internal row with external row.
+   * Make a copy of the current [[InternalRow]] object.
    */
-  protected override def canEqual(other: Row) = other.isInstanceOf[InternalRow]
+  def copy(): InternalRow
 
-  // Custom hashCode function that matches the efficient code generated version.
-  override def hashCode: Int = {
-    var result: Int = 37
+  /** Returns true if there are any NULL values in this row. */
+  def anyNull: Boolean
+
+  /* ---------------------- utility methods for Scala ---------------------- */
+
+  /**
+   * Return a Scala Seq representing the row. Elements are placed in the same order in the Seq.
+   */
+  def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
+    val len = numFields
+    assert(len == fieldTypes.length)
+
+    val values = new Array[Any](len)
     var i = 0
-    while (i < length) {
-      val update: Int =
-        if (isNullAt(i)) {
-          0
-        } else {
-          get(i) match {
-            case b: Boolean => if (b) 0 else 1
-            case b: Byte => b.toInt
-            case s: Short => s.toInt
-            case i: Int => i
-            case l: Long => (l ^ (l >>> 32)).toInt
-            case f: Float => java.lang.Float.floatToIntBits(f)
-            case d: Double =>
-              val b = java.lang.Double.doubleToLongBits(d)
-              (b ^ (b >>> 32)).toInt
-            case a: Array[Byte] => java.util.Arrays.hashCode(a)
-            case other => other.hashCode()
-          }
-        }
-      result = 37 * result + update
+    while (i < len) {
+      values(i) = get(i, fieldTypes(i))
       i += 1
     }
-    result
+    values
   }
+
+  def toSeq(schema: StructType): Seq[Any] = toSeq(schema.map(_.dataType))
 }
 
 object InternalRow {
   /**
-   * This method can be used to construct a [[Row]] with the given values.
+   * This method can be used to construct a [[InternalRow]] with the given values.
    */
   def apply(values: Any*): InternalRow = new GenericInternalRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * This method can be used to construct a [[InternalRow]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): InternalRow = new GenericInternalRow(values.toArray)
 
-  /** Returns an empty row. */
+  /** Returns an empty [[InternalRow]]. */
   val empty = apply()
 }

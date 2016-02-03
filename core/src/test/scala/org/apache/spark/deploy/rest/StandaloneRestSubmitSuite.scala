@@ -24,16 +24,16 @@ import javax.servlet.http.HttpServletResponse
 import scala.collection.mutable
 
 import com.google.common.base.Charsets
-import org.scalatest.BeforeAndAfterEach
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
+import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
+import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
-import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
-import org.apache.spark.deploy.master.DriverState._
 
 /**
  * Tests for the REST application submission protocol used in standalone cluster mode.
@@ -43,8 +43,12 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var server: Option[RestSubmissionServer] = None
 
   override def afterEach() {
-    rpcEnv.foreach(_.shutdown())
-    server.foreach(_.stop())
+    try {
+      rpcEnv.foreach(_.shutdown())
+      server.foreach(_.stop())
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("construct submit request") {
@@ -364,6 +368,18 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     val conn3 = sendHttpRequest(statusRequestPath, "GET")
     intercept[SubmitRestProtocolException] { client.readResponse(conn3) } // empty response
     assert(conn3.getResponseCode === HttpServletResponse.SC_INTERNAL_SERVER_ERROR)
+  }
+
+  test("client does not send 'SPARK_ENV_LOADED' env var by default") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_ENV_LOADED" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("client includes mesos env vars") {
+    val environmentVariables = Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1", "OTHER_VAR" -> "1")
+    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1", "MESOS_VAR" -> "1"))
   }
 
   /* --------------------- *

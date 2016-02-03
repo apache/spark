@@ -17,7 +17,7 @@
 
 package org.apache.spark.unsafe.memory;
 
-import org.apache.spark.unsafe.PlatformDependent;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * A simple {@link MemoryAllocator} that uses {@code Unsafe} to allocate off-heap memory.
@@ -26,7 +26,7 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
   @Override
   public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    long address = PlatformDependent.UNSAFE.allocateMemory(size);
+    long address = Platform.allocateMemory(size);
     return new MemoryBlock(null, address, size);
   }
 
@@ -34,6 +34,6 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
   public void free(MemoryBlock memory) {
     assert (memory.obj == null) :
       "baseObject not null; are you trying to use the off-heap allocator to free on-heap memory?";
-    PlatformDependent.UNSAFE.freeMemory(memory.offset);
+    Platform.freeMemory(memory.offset);
   }
 }

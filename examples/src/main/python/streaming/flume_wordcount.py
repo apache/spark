@@ -23,8 +23,9 @@
  https://flume.apache.org/documentation.html
 
  and then run the example
-    `$ bin/spark-submit --jars external/flume-assembly/target/scala-*/\
-      spark-streaming-flume-assembly-*.jar examples/src/main/python/streaming/flume_wordcount.py \
+    `$ bin/spark-submit --jars \
+      external/flume-assembly/target/scala-*/spark-streaming-flume-assembly-*.jar \
+      examples/src/main/python/streaming/flume_wordcount.py \
       localhost 12345
 """
 from __future__ import print_function

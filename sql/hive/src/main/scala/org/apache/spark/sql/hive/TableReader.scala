@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.hive
 
+import java.util
+
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveStorageHandler, HiveUtils, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 
@@ -54,10 +56,10 @@ private[hive] sealed trait TableReader {
  */
 private[hive]
 class HadoopTableReader(
-    @transient attributes: Seq[Attribute],
-    @transient relation: MetastoreRelation,
-    @transient sc: HiveContext,
-    @transient hiveExtraConf: HiveConf)
+    @transient private val attributes: Seq[Attribute],
+    @transient private val relation: MetastoreRelation,
+    @transient private val sc: HiveContext,
+    hiveExtraConf: HiveConf)
   extends TableReader with Logging {
 
   // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
@@ -287,6 +289,29 @@ class HadoopTableReader(
   }
 }
 
+private[hive] object HiveTableUtil {
+
+  // copied from PlanUtils.configureJobPropertiesForStorageHandler(tableDesc)
+  // that calls Hive.get() which tries to access metastore, but it's not valid in runtime
+  // it would be fixed in next version of hive but till then, we should use this instead
+  def configureJobPropertiesForStorageHandler(
+      tableDesc: TableDesc, jobConf: JobConf, input: Boolean) {
+    val property = tableDesc.getProperties.getProperty(META_TABLE_STORAGE)
+    val storageHandler = HiveUtils.getStorageHandler(jobConf, property)
+    if (storageHandler != null) {
+      val jobProperties = new util.LinkedHashMap[String, String]
+      if (input) {
+        storageHandler.configureInputJobProperties(tableDesc, jobProperties)
+      } else {
+        storageHandler.configureOutputJobProperties(tableDesc, jobProperties)
+      }
+      if (!jobProperties.isEmpty) {
+        tableDesc.setJobProperties(jobProperties)
+      }
+    }
+  }
+}
+
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
@@ -295,7 +320,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
   def initializeLocalJobConfFunc(path: String, tableDesc: TableDesc)(jobConf: JobConf) {
     FileInputFormat.setInputPaths(jobConf, Seq[Path](new Path(path)): _*)
     if (tableDesc != null) {
-      PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc)
+      HiveTableUtil.configureJobPropertiesForStorageHandler(tableDesc, jobConf, true)
       Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf)
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
@@ -355,6 +380,9 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
         case oi: DoubleObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) => row.setDouble(ordinal, oi.get(value))
         case oi: HiveVarcharObjectInspector =>
+          (value: Any, row: MutableRow, ordinal: Int) =>
+            row.update(ordinal, UTF8String.fromString(oi.getPrimitiveJavaObject(value).getValue))
+        case oi: HiveCharObjectInspector =>
           (value: Any, row: MutableRow, ordinal: Int) =>
             row.update(ordinal, UTF8String.fromString(oi.getPrimitiveJavaObject(value).getValue))
         case oi: HiveDecimalObjectInspector =>

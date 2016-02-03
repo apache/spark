@@ -24,7 +24,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.{DataType, StructField, StructType}
  * This should be inherited by the class which implements model instances.
  */
 @DeveloperApi
+@Since("1.3.0")
 trait Saveable {
 
   /**
@@ -50,6 +51,7 @@ trait Saveable {
    * @param path  Path specifying the directory in which to save this model.
    *              If the directory already exists, this method throws an exception.
    */
+  @Since("1.3.0")
   def save(sc: SparkContext, path: String): Unit
 
   /** Current version of model save/load format. */
@@ -64,6 +66,7 @@ trait Saveable {
  * This should be inherited by an object paired with the model class.
  */
 @DeveloperApi
+@Since("1.3.0")
 trait Loader[M <: Saveable] {
 
   /**
@@ -75,6 +78,7 @@ trait Loader[M <: Saveable] {
    * @param path  Path specifying the directory to which the model was saved.
    * @return  Model instance
    */
+  @Since("1.3.0")
   def load(sc: SparkContext, path: String): M
 
 }

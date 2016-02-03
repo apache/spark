@@ -6,23 +6,19 @@ The following directories and files are used for Parquet compatibility tests:
 .
 ├── README.md                   # This file
 ├── avro
-│   ├── parquet-compat.avdl     # Testing Avro IDL
-│   └── parquet-compat.avpr     # !! NO TOUCH !! Protocol file generated from parquet-compat.avdl
+│   ├── *.avdl                  # Testing Avro IDL(s)
+│   └── *.avpr                  # !! NO TOUCH !! Protocol files generated from Avro IDL(s)
 ├── gen-java                    # !! NO TOUCH !! Generated Java code
 ├── scripts
-│   └── gen-code.sh             # Script used to generate Java code for Thrift and Avro
+│   ├── gen-avro.sh             # Script used to generate Java code for Avro
+│   └── gen-thrift.sh           # Script used to generate Java code for Thrift
 └── thrift
-    └── parquet-compat.thrift   # Testing Thrift schema
+    └── *.thrift                # Testing Thrift schema(s)
 ```
-
-Generated Java code are used in the following test suites:
-
-- `org.apache.spark.sql.parquet.ParquetAvroCompatibilitySuite`
-- `org.apache.spark.sql.parquet.ParquetThriftCompatibilitySuite`
 
 To avoid code generation during build time, Java code generated from testing Thrift schema and Avro IDL are also checked in.
 
-When updating the testing Thrift schema and Avro IDL, please run `gen-code.sh` to update all the generated Java code.
+When updating the testing Thrift schema and Avro IDL, please run `gen-avro.sh` and `gen-thrift.sh` accordingly to update generated Java code.
 
 ## Prerequisites
 

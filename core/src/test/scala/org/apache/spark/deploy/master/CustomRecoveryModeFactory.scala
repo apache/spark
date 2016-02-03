@@ -99,7 +99,7 @@ object CustomPersistenceEngine {
   @volatile var lastInstance: Option[CustomPersistenceEngine] = None
 }
 
-class CustomLeaderElectionAgent(val masterActor: LeaderElectable) extends LeaderElectionAgent {
-  masterActor.electedLeader()
+class CustomLeaderElectionAgent(val masterInstance: LeaderElectable) extends LeaderElectionAgent {
+  masterInstance.electedLeader()
 }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.optimization
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Random
 
 import org.scalatest.Matchers
@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{MLUtils, LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext, MLUtils}
 import org.apache.spark.mllib.util.TestingUtils._
 
 object GradientDescentSuite {
@@ -35,7 +35,7 @@ object GradientDescentSuite {
       scale: Double,
       nPoints: Int,
       seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateGDInput(offset, scale, nPoints, seed))
+    generateGDInput(offset, scale, nPoints, seed).asJava
   }
 
   // Generate input of the form Y = logistic(offset + scale * X)

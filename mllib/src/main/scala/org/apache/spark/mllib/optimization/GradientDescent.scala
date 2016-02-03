@@ -19,12 +19,12 @@ package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseVector => BDV, norm}
+import breeze.linalg.{norm, DenseVector => BDV}
 
-import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.Logging
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 
 /**
@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.{Vectors, Vector}
  * @param gradient Gradient function to be used.
  * @param updater Updater to be used to update weights after every iteration.
  */
-class GradientDescent private[mllib] (private var gradient: Gradient, private var updater: Updater)
+class GradientDescent private[spark] (private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var stepSize: Double = 1.0
@@ -81,11 +81,13 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
    * Set the convergence tolerance. Default 0.001
    * convergenceTol is a condition which decides iteration termination.
    * The end of iteration is decided based on below logic.
-   * - If the norm of the new solution vector is >1, the diff of solution vectors
-   *   is compared to relative tolerance which means normalizing by the norm of
-   *   the new solution vector.
-   * - If the norm of the new solution vector is <=1, the diff of solution vectors
-   *   is compared to absolute tolerance which is not normalizing.
+   *
+   *  - If the norm of the new solution vector is >1, the diff of solution vectors
+   *    is compared to relative tolerance which means normalizing by the norm of
+   *    the new solution vector.
+   *  - If the norm of the new solution vector is <=1, the diff of solution vectors
+   *    is compared to absolute tolerance which is not normalizing.
+   *
    * Must be between 0.0 and 1.0 inclusively.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
@@ -235,7 +237,7 @@ object GradientDescent extends Logging {
 
       if (miniBatchSize > 0) {
         /**
-         * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+         * lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
         stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
@@ -264,6 +266,9 @@ object GradientDescent extends Logging {
 
   }
 
+  /**
+   * Alias of [[runMiniBatchSGD]] with convergenceTol set to default value of 0.001.
+   */
   def runMiniBatchSGD(
       data: RDD[(Double, Vector)],
       gradient: Gradient,

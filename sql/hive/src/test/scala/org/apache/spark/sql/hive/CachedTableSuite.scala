@@ -19,22 +19,23 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SaveMode, AnalysisException, DataFrame, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 
-class CachedTableSuite extends QueryTest {
+class CachedTableSuite extends QueryTest with TestHiveSingleton {
+  import hiveContext._
 
   def rddIdOf(tableName: String): Int = {
-    val executedPlan = table(tableName).queryExecution.executedPlan
-    executedPlan.collect {
+    val plan = table(tableName).queryExecution.sparkPlan
+    plan.collect {
       case InMemoryColumnarTableScan(_, _, relation) =>
         relation.cachedColumnBuffers.id
       case _ =>
-        fail(s"Table $tableName is not cached\n" + executedPlan)
+        fail(s"Table $tableName is not cached\n" + plan)
     }.head
   }
 
@@ -95,18 +96,18 @@ class CachedTableSuite extends QueryTest {
 
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
-      TestHive.uncacheTable("src")
+      hiveContext.uncacheTable("src")
     }
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
-    TestHive.sql("CACHE TABLE src")
+    sql("CACHE TABLE src")
     assertCached(table("src"))
-    assert(TestHive.isCached("src"), "Table 'src' should be cached")
+    assert(hiveContext.isCached("src"), "Table 'src' should be cached")
 
-    TestHive.sql("UNCACHE TABLE src")
+    sql("UNCACHE TABLE src")
     assertCached(table("src"), 0)
-    assert(!TestHive.isCached("src"), "Table 'src' should not be cached")
+    assert(!hiveContext.isCached("src"), "Table 'src' should not be cached")
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
@@ -202,5 +203,15 @@ class CachedTableSuite extends QueryTest {
 
     sql("DROP TABLE refreshTable")
     Utils.deleteRecursively(tempPath)
+  }
+
+  test("SPARK-11246 cache parquet table") {
+    sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
+
+    cacheTable("cachedTable")
+    val sparkPlan = sql("SELECT * FROM cachedTable").queryExecution.sparkPlan
+    assert(sparkPlan.collect { case e: InMemoryColumnarTableScan => e }.size === 1)
+
+    sql("DROP TABLE cachedTable")
   }
 }

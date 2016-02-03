@@ -17,30 +17,30 @@
 
 package org.apache.spark.streaming
 
-import java.io.{File, BufferedWriter, OutputStreamWriter}
-import java.net.{Socket, SocketException, ServerSocket}
+import java.io.{BufferedWriter, File, OutputStreamWriter}
+import java.net.{ServerSocket, Socket, SocketException}
 import java.nio.charset.Charset
-import java.util.concurrent.{CountDownLatch, Executors, TimeUnit, ArrayBlockingQueue}
+import java.util.concurrent.{ArrayBlockingQueue, CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer, SynchronizedQueue}
 import scala.language.postfixOps
 
 import com.google.common.io.Files
-import org.apache.hadoop.io.{Text, LongWritable}
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListener}
-import org.apache.spark.util.{ManualClock, Utils}
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.scheduler.{StreamingListener, StreamingListenerBatchCompleted}
+import org.apache.spark.util.{ManualClock, Utils}
 
 class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
@@ -75,6 +75,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
           fail("Timeout: cannot finish all batches in 30 seconds")
         }
+
+        // Ensure progress listener has been notified of all events
+        ssc.sparkContext.listenerBus.waitUntilEmpty(500)
 
         // Verify all "InputInfo"s have been reported
         assert(ssc.progressListener.numTotalReceivedRecords === input.size)
@@ -203,28 +206,28 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val numTotalRecords = numThreads * numRecordsPerThread
     val testReceiver = new MultiThreadTestReceiver(numThreads, numRecordsPerThread)
     MultiThreadTestReceiver.haveAllThreadsFinished = false
+    val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
+    def output: ArrayBuffer[Long] = outputBuffer.flatMap(x => x)
 
     // set up the network stream using the test receiver
-    val ssc = new StreamingContext(conf, batchDuration)
-    val networkStream = ssc.receiverStream[Int](testReceiver)
-    val countStream = networkStream.count
-    val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
-    val outputStream = new TestOutputStream(countStream, outputBuffer)
-    def output: ArrayBuffer[Long] = outputBuffer.flatMap(x => x)
-    outputStream.register()
-    ssc.start()
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      val networkStream = ssc.receiverStream[Int](testReceiver)
+      val countStream = networkStream.count
 
-    // Let the data from the receiver be received
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    val startTime = System.currentTimeMillis()
-    while((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
-      System.currentTimeMillis() - startTime < 5000) {
-      Thread.sleep(100)
-      clock.advance(batchDuration.milliseconds)
+      val outputStream = new TestOutputStream(countStream, outputBuffer)
+      outputStream.register()
+      ssc.start()
+
+      // Let the data from the receiver be received
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      val startTime = System.currentTimeMillis()
+      while ((!MultiThreadTestReceiver.haveAllThreadsFinished || output.sum < numTotalRecords) &&
+        System.currentTimeMillis() - startTime < 5000) {
+        Thread.sleep(100)
+        clock.advance(batchDuration.milliseconds)
+      }
+      Thread.sleep(1000)
     }
-    Thread.sleep(1000)
-    logInfo("Stopping context")
-    ssc.stop()
 
     // Verify whether data received was as expected
     logInfo("--------------------------------")
@@ -236,30 +239,30 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("queue input stream - oneAtATime = true") {
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val queue = new SynchronizedQueue[RDD[String]]()
-    val queueStream = ssc.queueStream(queue, oneAtATime = true)
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    val outputStream = new TestOutputStream(queueStream, outputBuffer)
-    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
-    outputStream.register()
-    ssc.start()
-
-    // Setup data queued into the stream
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+    def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
 
-    val inputIterator = input.toIterator
-    for (i <- 0 until input.size) {
-      // Enqueue more than 1 item per tick but they should dequeue one at a time
-      inputIterator.take(2).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
-      clock.advance(batchDuration.milliseconds)
+    // Set up the streaming context and input streams
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      val queue = new SynchronizedQueue[RDD[String]]()
+      val queueStream = ssc.queueStream(queue, oneAtATime = true)
+      val outputStream = new TestOutputStream(queueStream, outputBuffer)
+      outputStream.register()
+      ssc.start()
+
+      // Setup data queued into the stream
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+
+      val inputIterator = input.toIterator
+      for (i <- 0 until input.size) {
+        // Enqueue more than 1 item per tick but they should dequeue one at a time
+        inputIterator.take(2).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
+        clock.advance(batchDuration.milliseconds)
+      }
+      Thread.sleep(1000)
     }
-    Thread.sleep(1000)
-    logInfo("Stopping context")
-    ssc.stop()
 
     // Verify whether data received was as expected
     logInfo("--------------------------------")
@@ -279,33 +282,33 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("queue input stream - oneAtATime = false") {
-    // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
-    val queue = new SynchronizedQueue[RDD[String]]()
-    val queueStream = ssc.queueStream(queue, oneAtATime = false)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-    val outputStream = new TestOutputStream(queueStream, outputBuffer)
     def output: ArrayBuffer[Seq[String]] = outputBuffer.filter(_.size > 0)
-    outputStream.register()
-    ssc.start()
-
-    // Setup data queued into the stream
-    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = Seq(Seq("1", "2", "3"), Seq("4", "5"))
 
-    // Enqueue the first 3 items (one by one), they should be merged in the next batch
-    val inputIterator = input.toIterator
-    inputIterator.take(3).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
-    clock.advance(batchDuration.milliseconds)
-    Thread.sleep(1000)
+    // Set up the streaming context and input streams
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+      val queue = new SynchronizedQueue[RDD[String]]()
+      val queueStream = ssc.queueStream(queue, oneAtATime = false)
+      val outputStream = new TestOutputStream(queueStream, outputBuffer)
+      outputStream.register()
+      ssc.start()
 
-    // Enqueue the remaining items (again one by one), merged in the final batch
-    inputIterator.foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
-    clock.advance(batchDuration.milliseconds)
-    Thread.sleep(1000)
-    logInfo("Stopping context")
-    ssc.stop()
+      // Setup data queued into the stream
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+
+      // Enqueue the first 3 items (one by one), they should be merged in the next batch
+      val inputIterator = input.toIterator
+      inputIterator.take(3).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
+      clock.advance(batchDuration.milliseconds)
+      Thread.sleep(1000)
+
+      // Enqueue the remaining items (again one by one), merged in the final batch
+      inputIterator.foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
+      clock.advance(batchDuration.milliseconds)
+      Thread.sleep(1000)
+    }
 
     // Verify whether data received was as expected
     logInfo("--------------------------------")
@@ -325,27 +328,31 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("test track the number of input stream") {
-    val ssc = new StreamingContext(conf, batchDuration)
+    withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
 
-    class TestInputDStream extends InputDStream[String](ssc) {
-      def start() { }
-      def stop() { }
-      def compute(validTime: Time): Option[RDD[String]] = None
+      class TestInputDStream extends InputDStream[String](ssc) {
+        def start() {}
+
+        def stop() {}
+
+        def compute(validTime: Time): Option[RDD[String]] = None
+      }
+
+      class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
+        def getReceiver: Receiver[String] = null
+      }
+
+      // Register input streams
+      val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
+      val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
+
+      assert(ssc.graph.getInputStreams().length ==
+        receiverInputStreams.length + inputStreams.length)
+      assert(ssc.graph.getReceiverInputStreams().length == receiverInputStreams.length)
+      assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
+      assert(ssc.graph.getInputStreams().map(_.id) === Array.tabulate(5)(i => i))
+      assert(receiverInputStreams.map(_.id) === Array(0, 1))
     }
-
-    class TestReceiverInputDStream extends ReceiverInputDStream[String](ssc) {
-      def getReceiver: Receiver[String] = null
-    }
-
-    // Register input streams
-    val receiverInputStreams = Array(new TestReceiverInputDStream, new TestReceiverInputDStream)
-    val inputStreams = Array(new TestInputDStream, new TestInputDStream, new TestInputDStream)
-
-    assert(ssc.graph.getInputStreams().length == receiverInputStreams.length + inputStreams.length)
-    assert(ssc.graph.getReceiverInputStreams().length == receiverInputStreams.length)
-    assert(ssc.graph.getReceiverInputStreams() === receiverInputStreams)
-    assert(ssc.graph.getInputStreams().map(_.id) === Array.tabulate(5)(i => i))
-    assert(receiverInputStreams.map(_.id) === Array(0, 1))
   }
 
   def testFileStream(newFilesOnly: Boolean) {

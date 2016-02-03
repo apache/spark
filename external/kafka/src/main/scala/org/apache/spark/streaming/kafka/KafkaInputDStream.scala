@@ -22,7 +22,7 @@ import java.util.Properties
 import scala.collection.Map
 import scala.reflect.{classTag, ClassTag}
 
-import kafka.consumer.{KafkaStream, Consumer, ConsumerConfig, ConsumerConnector}
+import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
@@ -48,12 +48,12 @@ class KafkaInputDStream[
   V: ClassTag,
   U <: Decoder[_]: ClassTag,
   T <: Decoder[_]: ClassTag](
-    @transient ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     useReliableReceiver: Boolean,
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
+  ) extends ReceiverInputDStream[(K, V)](_ssc) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
     if (!useReliableReceiver) {

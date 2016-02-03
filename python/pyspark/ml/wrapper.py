@@ -15,25 +15,14 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta
+from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Estimator, Transformer, Model
+from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
-
-
-def _jvm():
-    """
-    Returns the JVM view associated with SparkContext. Must be called
-    after SparkContext is initialized.
-    """
-    jvm = SparkContext._jvm
-    if jvm:
-        return jvm
-    else:
-        raise AttributeError("Cannot load _jvm from SparkContext. Is SparkContext initialized?")
 
 
 @inherit_doc
@@ -110,6 +99,7 @@ class JavaEstimator(Estimator, JavaWrapper):
 
     __metaclass__ = ABCMeta
 
+    @abstractmethod
     def _create_model(self, java_model):
         """
         Creates a model from the input Java model reference.
@@ -119,6 +109,7 @@ class JavaEstimator(Estimator, JavaWrapper):
     def _fit_java(self, dataset):
         """
         Fits a Java model to the input dataset.
+
         :param dataset: input dataset, which is an instance of
                         :py:class:`pyspark.sql.DataFrame`
         :param params: additional params (overwriting embedded values)
@@ -136,7 +127,8 @@ class JavaEstimator(Estimator, JavaWrapper):
 class JavaTransformer(Transformer, JavaWrapper):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
-    implementations.
+    implementations. Subclasses should ensure they have the transformer Java object
+    available as _java_obj.
     """
 
     __metaclass__ = ABCMeta
@@ -156,15 +148,24 @@ class JavaModel(Model, JavaTransformer):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, java_model):
+    def __init__(self, java_model=None):
         """
         Initialize this instance with a Java model object.
         Subclasses should call this constructor, initialize params,
         and then call _transformer_params_from_java.
+
+        This instance can be instantiated without specifying java_model,
+        it will be assigned after that, but this scenario only used by
+        :py:class:`JavaMLReader` to load models.  This is a bit of a
+        hack, but it is easiest since a proper fix would require
+        MLReader (in pyspark.ml.util) to depend on these wrappers, but
+        these wrappers depend on pyspark.ml.util (both directly and via
+        other ML classes).
         """
         super(JavaModel, self).__init__()
-        self._java_obj = java_model
-        self.uid = java_model.uid()
+        if java_model is not None:
+            self._java_obj = java_model
+            self.uid = java_model.uid()
 
     def copy(self, extra=None):
         """
@@ -172,14 +173,16 @@ class JavaModel(Model, JavaTransformer):
         extra params. This implementation first calls Params.copy and
         then make a copy of the companion Java model with extra params.
         So both the Python wrapper and the Java model get copied.
+
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
         if extra is None:
             extra = dict()
         that = super(JavaModel, self).copy(extra)
-        that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-        that._transfer_params_to_java()
+        if self._java_obj is not None:
+            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+            that._transfer_params_to_java()
         return that
 
     def _call_java(self, name, *args):

@@ -27,8 +27,8 @@ import org.apache.spark.util.Utils
 private[spark]
 class CartesianPartition(
     idx: Int,
-    @transient rdd1: RDD[_],
-    @transient rdd2: RDD[_],
+    @transient private val rdd1: RDD[_],
+    @transient private val rdd2: RDD[_],
     s1Index: Int,
     s2Index: Int
   ) extends Partition {
@@ -50,7 +50,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
     var rdd2 : RDD[U])
-  extends RDD[Pair[T, U]](sc, Nil)
+  extends RDD[(T, U)](sc, Nil)
   with Serializable {
 
   val numPartitionsInRdd2 = rdd2.partitions.length

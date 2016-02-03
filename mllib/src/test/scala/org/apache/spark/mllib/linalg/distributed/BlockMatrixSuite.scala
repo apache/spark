@@ -22,7 +22,7 @@ import java.{util => ju}
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrices, Matrix}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -233,6 +233,24 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(largeC.numRows() === largeA.numRows())
     assert(largeC.numCols() === largeB.numCols())
     assert(localC ~== result absTol 1e-8)
+  }
+
+  test("simulate multiply") {
+    val blocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 1.0))))
+    val rdd = sc.parallelize(blocks, 2)
+    val B = new BlockMatrix(rdd, colPerPart, rowPerPart)
+    val resultPartitioner = GridPartitioner(gridBasedMat.numRowBlocks, B.numColBlocks,
+      math.max(numPartitions, 2))
+    val (destinationsA, destinationsB) = gridBasedMat.simulateMultiply(B, resultPartitioner)
+    assert(destinationsA((0, 0)) === Set(0))
+    assert(destinationsA((0, 1)) === Set(2))
+    assert(destinationsA((1, 0)) === Set(0))
+    assert(destinationsA((1, 1)) === Set(2))
+    assert(destinationsA((2, 1)) === Set(3))
+    assert(destinationsB((0, 0)) === Set(0))
+    assert(destinationsB((1, 1)) === Set(2, 3))
   }
 
   test("validate") {

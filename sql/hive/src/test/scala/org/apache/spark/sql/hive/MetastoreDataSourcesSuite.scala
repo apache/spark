@@ -17,23 +17,18 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import java.io.{File, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.InvalidInputException
 
-import org.apache.spark.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
-import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
-import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.LogicalRelation
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -41,9 +36,9 @@ import org.apache.spark.util.Utils
 /**
  * Tests for persisting tables created though the data sources API into the metastore.
  */
-class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeAndAfterAll
-  with Logging {
-  override val sqlContext = TestHive
+class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+  import hiveContext._
+  import hiveContext.implicits._
 
   var jsonFilePath: String = _
 
@@ -373,7 +368,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
            |)
          """.stripMargin)
 
-      val expectedPath = catalog.hiveDefaultTableFilePath("ctasJsonTable")
+      val expectedPath = catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
       val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
@@ -464,24 +459,21 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
 
           checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
 
-          // Right now, we cannot append to an existing JSON table.
-          intercept[RuntimeException] {
-            df.write.mode(SaveMode.Append).saveAsTable("savedJsonTable")
-          }
-
           // We can overwrite it.
           df.write.mode(SaveMode.Overwrite).saveAsTable("savedJsonTable")
           checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
 
           // When the save mode is Ignore, we will do nothing when the table already exists.
           df.select("b").write.mode(SaveMode.Ignore).saveAsTable("savedJsonTable")
-          assert(df.schema === table("savedJsonTable").schema)
+          // TODO in ResolvedDataSource, will convert the schema into nullable = true
+          // hence the df.schema is not exactly the same as table("savedJsonTable").schema
+          // assert(df.schema === table("savedJsonTable").schema)
           checkAnswer(sql("SELECT * FROM savedJsonTable"), df)
 
           // Drop table will also delete the data.
           sql("DROP TABLE savedJsonTable")
-          intercept[InvalidInputException] {
-            read.json(catalog.hiveDefaultTableFilePath("savedJsonTable"))
+          intercept[IOException] {
+            read.json(catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
           }
         }
 
@@ -556,7 +548,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
                 "org.apache.spark.sql.json",
                 schema,
                 Map.empty[String, String])
-            }.getMessage.contains("'path' must be specified for json data."),
+            }.getMessage.contains("key not found: path"),
             "We should complain that path is not specified.")
         }
       }
@@ -564,10 +556,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
   }
 
   test("scan a parquet table created through a CTAS statement") {
-    withSQLConf(
-      HiveContext.CONVERT_METASTORE_PARQUET.key -> "true",
-      SQLConf.PARQUET_USE_DATA_SOURCE_API.key -> "true") {
-
+    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 
@@ -582,9 +571,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: ParquetRelation2) => // OK
+            case LogicalRelation(p: ParquetRelation, _, _) => // OK
             case _ =>
-              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation2]}")
+              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
           }
         }
       }
@@ -715,9 +704,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
 
         // Manually create a metastore data source table.
         catalog.createDataSourceTable(
-          tableName = "wide_schema",
+          tableIdent = TableIdentifier("wide_schema"),
           userSpecifiedSchema = Some(schema),
           partitionColumns = Array.empty[String],
+          bucketSpec = None,
           provider = "json",
           options = Map("path" -> "just a dummy path"),
           isExternal = false)
@@ -745,7 +735,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
           "EXTERNAL" -> "FALSE"),
         tableType = ManagedTable,
         serdeProperties = Map(
-          "path" -> catalog.hiveDefaultTableFilePath(tableName)))
+          "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName))))
 
       catalog.client.createTable(hiveTable)
 
@@ -755,7 +745,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
     }
   }
 
-  test("Saving partition columns information") {
+  test("Saving partitionBy columns information") {
     val df = (1 to 10).map(i => (i, i + 1, s"str$i", s"str${i + 1}")).toDF("a", "b", "c", "d")
     val tableName = s"partitionInfo_${System.currentTimeMillis()}"
 
@@ -764,15 +754,73 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
       invalidateTable(tableName)
       val metastoreTable = catalog.client.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
+
+      val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
+      assert(numPartCols == 2)
+
       val actualPartitionColumns =
         StructType(
-          metastoreTable.partitionColumns.map(c =>
-            StructField(c.name, HiveMetastoreTypes.toDataType(c.hiveType))))
+          (0 until numPartCols).map { index =>
+            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.partCol.$index"))
+          })
       // Make sure partition columns are correctly stored in metastore.
       assert(
         expectedPartitionColumns.sameType(actualPartitionColumns),
         s"Partitions columns stored in metastore $actualPartitionColumns is not the " +
           s"partition columns defined by the saveAsTable operation $expectedPartitionColumns.")
+
+      // Check the content of the saved table.
+      checkAnswer(
+        table(tableName).select("c", "b", "d", "a"),
+        df.select("c", "b", "d", "a"))
+    }
+  }
+
+  test("Saving information for sortBy and bucketBy columns") {
+    val df = (1 to 10).map(i => (i, i + 1, s"str$i", s"str${i + 1}")).toDF("a", "b", "c", "d")
+    val tableName = s"bucketingInfo_${System.currentTimeMillis()}"
+
+    withTable(tableName) {
+      df.write
+        .format("parquet")
+        .bucketBy(8, "d", "b")
+        .sortBy("c")
+        .saveAsTable(tableName)
+      invalidateTable(tableName)
+      val metastoreTable = catalog.client.getTable("default", tableName)
+      val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
+      val expectedSortByColumns = StructType(df.schema("c") :: Nil)
+
+      val numBuckets = metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt
+      assert(numBuckets == 8)
+
+      val numBucketCols = metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt
+      assert(numBucketCols == 2)
+
+      val numSortCols = metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt
+      assert(numSortCols == 1)
+
+      val actualBucketByColumns =
+        StructType(
+          (0 until numBucketCols).map { index =>
+            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.bucketCol.$index"))
+          })
+      // Make sure bucketBy columns are correctly stored in metastore.
+      assert(
+        expectedBucketByColumns.sameType(actualBucketByColumns),
+        s"Partitions columns stored in metastore $actualBucketByColumns is not the " +
+          s"partition columns defined by the saveAsTable operation $expectedBucketByColumns.")
+
+      val actualSortByColumns =
+        StructType(
+          (0 until numSortCols).map { index =>
+            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.sortCol.$index"))
+          })
+      // Make sure sortBy columns are correctly stored in metastore.
+      assert(
+        expectedSortByColumns.sameType(actualSortByColumns),
+        s"Partitions columns stored in metastore $actualSortByColumns is not the " +
+          s"partition columns defined by the saveAsTable operation $expectedSortByColumns.")
 
       // Check the content of the saved table.
       checkAnswer(
@@ -851,5 +899,37 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with BeforeA
       Row("ttt3", false))
     sqlContext.sql("""use default""")
     sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
+  }
+
+  test("skip hive metadata on table creation") {
+    val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
+
+    catalog.createDataSourceTable(
+      tableIdent = TableIdentifier("not_skip_hive_metadata"),
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      bucketSpec = None,
+      provider = "parquet",
+      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "false"),
+      isExternal = false)
+
+    // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
+    // each column of the table is of native type StringType.
+    assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
+      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == StringType))
+
+    catalog.createDataSourceTable(
+      tableIdent = TableIdentifier("skip_hive_metadata"),
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      bucketSpec = None,
+      provider = "parquet",
+      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "true"),
+      isExternal = false)
+
+    // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
+    // the table has a column type as array of StringType.
+    assert(catalog.client.getTable("default", "skip_hive_metadata").schema
+      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == ArrayType(StringType)))
   }
 }

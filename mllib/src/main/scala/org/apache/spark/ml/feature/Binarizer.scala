@@ -17,12 +17,12 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructType}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  */
 @Experimental
 final class Binarizer(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("binarizer"))
 
@@ -41,6 +41,7 @@ final class Binarizer(override val uid: String)
    * Param for threshold used to binarize continuous features.
    * The features greater than the threshold, will be binarized to 1.0.
    * The features equal to or less than the threshold, will be binarized to 0.0.
+   * Default: 0.0
    * @group param
    */
   val threshold: DoubleParam =
@@ -71,6 +72,7 @@ final class Binarizer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
 
     val inputFields = schema.fields
@@ -85,4 +87,11 @@ final class Binarizer(override val uid: String)
   }
 
   override def copy(extra: ParamMap): Binarizer = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object Binarizer extends DefaultParamsReadable[Binarizer] {
+
+  @Since("1.6.0")
+  override def load(path: String): Binarizer = super.load(path)
 }

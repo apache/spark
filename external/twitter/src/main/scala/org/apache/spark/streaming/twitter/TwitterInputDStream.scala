@@ -19,13 +19,13 @@ package org.apache.spark.streaming.twitter
 
 import twitter4j._
 import twitter4j.auth.Authorization
-import twitter4j.conf.ConfigurationBuilder
 import twitter4j.auth.OAuthAuthorization
+import twitter4j.conf.ConfigurationBuilder
 
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.Logging
 import org.apache.spark.streaming.receiver.Receiver
 
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
@@ -39,11 +39,11 @@ import org.apache.spark.streaming.receiver.Receiver
 */
 private[streaming]
 class TwitterInputDStream(
-    @transient ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[Status](ssc_)  {
+  ) extends ReceiverInputDStream[Status](_ssc)  {
 
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
@@ -87,7 +87,7 @@ class TwitterReceiver(
 
       val query = new FilterQuery
       if (filters.size > 0) {
-        query.track(filters.toArray)
+        query.track(filters.mkString(","))
         newTwitterStream.filter(query)
       } else {
         newTwitterStream.sample()

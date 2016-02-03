@@ -64,7 +64,7 @@ To run Spark interactively in a R interpreter, use `bin/sparkR`:
     ./bin/sparkR --master local[2]
 
 Example applications are also provided in R. For example,
-    
+
     ./bin/spark-submit examples/src/main/r/dataframe.R
 
 # Launching on a Cluster
@@ -73,7 +73,6 @@ The Spark [cluster mode overview](cluster-overview.html) explains the key concep
 Spark can run both by itself, or over several existing cluster managers. It currently provides several
 options for deployment:
 
-* [Amazon EC2](ec2-scripts.html): our EC2 scripts let you launch a cluster in about 5 minutes
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
@@ -87,10 +86,9 @@ options for deployment:
   in all supported languages (Scala, Java, Python, R)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
+  * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
-  * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model
 
 **API Docs:**
 
@@ -104,7 +102,7 @@ options for deployment:
 * [Cluster Overview](cluster-overview.html): overview of concepts and components when running on a cluster
 * [Submitting Applications](submitting-applications.html): packaging and deploying applications
 * Deployment modes:
-  * [Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
+  * [Amazon EC2](https://github.com/amplab/spark-ec2): scripts that let you launch a cluster on EC2 in about 5 minutes
   * [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
@@ -118,7 +116,6 @@ options for deployment:
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
-* [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
 * Integration with other storage systems:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system

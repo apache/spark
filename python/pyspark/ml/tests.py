@@ -20,6 +20,10 @@ Unit tests for Spark ML Python APIs.
 """
 
 import sys
+try:
+    import xmlrunner
+except ImportError:
+    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -30,14 +34,22 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
-from pyspark.sql import DataFrame, SQLContext
+from shutil import rmtree
+import tempfile
+
+from pyspark.ml import Estimator, Model, Pipeline, Transformer
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.regression import LinearRegression
+from pyspark.ml.tuning import ParamGridBuilder, CrossValidator, CrossValidatorModel
 from pyspark.ml.util import keyword_only
-from pyspark.ml import Estimator, Model, Pipeline, Transformer
-from pyspark.ml.feature import *
 from pyspark.mllib.linalg import DenseVector
+from pyspark.sql import DataFrame, SQLContext, Row
+from pyspark.sql.functions import rand
+from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
 class MockDataset(DataFrame):
@@ -83,6 +95,27 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+class ParamTypeConversionTests(PySparkTestCase):
+    """
+    Test that param type conversion happens.
+    """
+
+    def test_int_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.sc.parallelize([
+            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
+        lr = LogisticRegression(elasticNetParam=0)
+        lr.fit(df)
+        lr.setElasticNetParam(0)
+        lr.fit(df)
+
+    def test_invalid_to_float(self):
+        from pyspark.mllib.linalg import Vectors
+        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
+        lr = LogisticRegression(elasticNetParam=0)
+        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
 
 
 class PipelineTests(PySparkTestCase):
@@ -156,11 +189,23 @@ class OtherTestParams(HasMaxIter, HasInputCol, HasSeed):
 
 class ParamTests(PySparkTestCase):
 
+    def test_copy_new_parent(self):
+        testParams = TestParams()
+        # Copying an instantiated param should fail
+        with self.assertRaises(ValueError):
+            testParams.maxIter._copy_new_parent(testParams)
+        # Copying a dummy param should succeed
+        TestParams.maxIter._copy_new_parent(testParams)
+        maxIter = testParams.maxIter
+        self.assertEqual(maxIter.name, "maxIter")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
+        self.assertTrue(maxIter.parent == testParams.uid)
+
     def test_param(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
-        self.assertEqual(maxIter.doc, "max number of iterations (>= 0)")
+        self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
     def test_params(self):
@@ -179,7 +224,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(testParams.getMaxIter(), 10)
         testParams.setMaxIter(100)
         self.assertTrue(testParams.isSet(maxIter))
-        self.assertEquals(testParams.getMaxIter(), 100)
+        self.assertEqual(testParams.getMaxIter(), 100)
 
         self.assertTrue(testParams.hasParam(inputCol))
         self.assertFalse(testParams.hasDefault(inputCol))
@@ -192,11 +237,11 @@ class ParamTests(PySparkTestCase):
         testParams._setDefault(seed=41)
         testParams.setSeed(43)
 
-        self.assertEquals(
+        self.assertEqual(
             testParams.explainParams(),
-            "\n".join(["inputCol: input column name (undefined)",
-                       "maxIter: max number of iterations (>= 0) (default: 10, current: 100)",
-                       "seed: random seed (default: 41, current: 43)"]))
+            "\n".join(["inputCol: input column name. (undefined)",
+                       "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
+                       "seed: random seed. (default: 41, current: 43)"]))
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -255,14 +300,138 @@ class FeatureTests(PySparkTestCase):
     def test_ngram(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
-            ([["a", "b", "c", "d", "e"]])], ["input"])
+            Row(input=["a", "b", "c", "d", "e"])])
         ngram0 = NGram(n=4, inputCol="input", outputCol="output")
         self.assertEqual(ngram0.getN(), 4)
         self.assertEqual(ngram0.getInputCol(), "input")
         self.assertEqual(ngram0.getOutputCol(), "output")
         transformedDF = ngram0.transform(dataset)
-        self.assertEquals(transformedDF.head().output, ["a b c d", "b c d e"])
+        self.assertEqual(transformedDF.head().output, ["a b c d", "b c d e"])
+
+    def test_stopwordsremover(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([Row(input=["a", "panda"])])
+        stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
+        # Default
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, ["panda"])
+        # Custom
+        stopwords = ["panda"]
+        stopWordRemover.setStopWords(stopwords)
+        self.assertEqual(stopWordRemover.getInputCol(), "input")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, ["a"])
+
+
+class HasInducedError(Params):
+
+    def __init__(self):
+        super(HasInducedError, self).__init__()
+        self.inducedError = Param(self, "inducedError",
+                                  "Uniformly-distributed error added to feature")
+
+    def getInducedError(self):
+        return self.getOrDefault(self.inducedError)
+
+
+class InducedErrorModel(Model, HasInducedError):
+
+    def __init__(self):
+        super(InducedErrorModel, self).__init__()
+
+    def _transform(self, dataset):
+        return dataset.withColumn("prediction",
+                                  dataset.feature + (rand(0) * self.getInducedError()))
+
+
+class InducedErrorEstimator(Estimator, HasInducedError):
+
+    def __init__(self, inducedError=1.0):
+        super(InducedErrorEstimator, self).__init__()
+        self._set(inducedError=inducedError)
+
+    def _fit(self, dataset):
+        model = InducedErrorModel()
+        self._copyValues(model)
+        return model
+
+
+class CrossValidatorTests(PySparkTestCase):
+
+    def test_fit_minimize_metric(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="rmse")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        bestModel = cvModel.bestModel
+        bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
+
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
+                         "Best model should have zero induced error")
+        self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
+
+    def test_fit_maximize_metric(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="r2")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        cv = CrossValidator(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        bestModel = cvModel.bestModel
+        bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
+
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
+                         "Best model should have zero induced error")
+        self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
+
+
+class PersistenceTest(PySparkTestCase):
+
+    def test_linear_regression(self):
+        lr = LinearRegression(maxIter=1)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/lr"
+        lr.save(lr_path)
+        lr2 = LinearRegression.load(lr_path)
+        self.assertEqual(lr2.uid, lr2.maxIter.parent,
+                         "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
+                         % (lr2.uid, lr2.maxIter.parent))
+        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
+                         "Loaded LinearRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
-    unittest.main()
+    from pyspark.ml.tests import *
+    if xmlrunner:
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+    else:
+        unittest.main()

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.immutable.Set
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
@@ -103,11 +103,11 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     val instance: org.apache.hadoop.mapreduce.InputFormat[_, _] =
       ReflectionUtils.newInstance(inputFormatClazz.asInstanceOf[Class[_]], conf).asInstanceOf[
         org.apache.hadoop.mapreduce.InputFormat[_, _]]
-    val job = new Job(conf)
+    val job = Job.getInstance(conf)
 
     val retval = new ArrayBuffer[SplitInfo]()
     val list = instance.getSplits(job)
-    for (split <- list) {
+    for (split <- list.asScala) {
       retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, split)
     }
 

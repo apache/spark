@@ -50,9 +50,9 @@ public class DataTypes {
   public static final DataType TimestampType = TimestampType$.MODULE$;
 
   /**
-   * Gets the IntervalType object.
+   * Gets the CalendarIntervalType object.
    */
-  public static final DataType IntervalType = IntervalType$.MODULE$;
+  public static final DataType CalendarIntervalType = CalendarIntervalType$.MODULE$;
 
   /**
    * Gets the DoubleType object.
@@ -111,12 +111,18 @@ public class DataTypes {
     return new ArrayType(elementType, containsNull);
   }
 
+  /**
+   * Creates a DecimalType by specifying the precision and scale.
+   */
   public static DecimalType createDecimalType(int precision, int scale) {
     return DecimalType$.MODULE$.apply(precision, scale);
   }
 
+  /**
+   * Creates a DecimalType with default precision and scale, which are 10 and 0.
+   */
   public static DecimalType createDecimalType() {
-    return DecimalType$.MODULE$.Unlimited();
+    return DecimalType$.MODULE$.USER_DEFAULT();
   }
 
   /**

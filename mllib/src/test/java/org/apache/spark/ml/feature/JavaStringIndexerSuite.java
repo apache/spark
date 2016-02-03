@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -56,9 +57,9 @@ public class JavaStringIndexerSuite {
       createStructField("id", IntegerType, false),
       createStructField("label", StringType, false)
     });
-    JavaRDD<Row> rdd = jsc.parallelize(
-      Arrays.asList(c(0, "a"), c(1, "b"), c(2, "c"), c(3, "a"), c(4, "a"), c(5, "c")));
-    DataFrame dataset = sqlContext.createDataFrame(rdd, schema);
+    List<Row> data = Arrays.asList(
+      cr(0, "a"), cr(1, "b"), cr(2, "c"), cr(3, "a"), cr(4, "a"), cr(5, "c"));
+    DataFrame dataset = sqlContext.createDataFrame(data, schema);
 
     StringIndexer indexer = new StringIndexer()
       .setInputCol("label")
@@ -66,12 +67,12 @@ public class JavaStringIndexerSuite {
     DataFrame output = indexer.fit(dataset).transform(dataset);
 
     Assert.assertArrayEquals(
-      new Row[] { c(0, 0.0), c(1, 2.0), c(2, 1.0), c(3, 0.0), c(4, 0.0), c(5, 1.0) },
+      new Row[] { cr(0, 0.0), cr(1, 2.0), cr(2, 1.0), cr(3, 0.0), cr(4, 0.0), cr(5, 1.0) },
       output.orderBy("id").select("id", "labelIndex").collect());
   }
 
   /** An alias for RowFactory.create. */
-  private Row c(Object... values) {
+  private Row cr(Object... values) {
     return RowFactory.create(values);
   }
 }
