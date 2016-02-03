@@ -322,7 +322,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
-
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
     val childrenHash = children.map { child =>
@@ -437,6 +436,7 @@ case class FastHash(children: Seq[Expression]) extends Expression {
   override def dataType: DataType = IntegerType
 
   override def foldable: Boolean = false
+
   override def nullable: Boolean = false
 
   override def prettyName: String = "fasthash"
@@ -461,10 +461,10 @@ case class FastHash(children: Seq[Expression]) extends Expression {
   }
 
   private def computeHash(
-      input: String,
-      dataType: DataType,
-      result: String,
-      ctx: CodegenContext): String = {
+    input: String,
+    dataType: DataType,
+    result: String,
+    ctx: CodegenContext): String = {
     val hasher = classOf[Murmur3_x86_32].getName
 
     def hashInt(i: String): String = s"$result ^= $i;"
@@ -488,5 +488,22 @@ case class FastHash(children: Seq[Expression]) extends Expression {
       case _ => hashObject(input)
     }
   }
+}
 
+/**
+  * Print the result of an expression to stderr (used for debugging codegen).
+  */
+case class PrintToStderr(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+
+  protected override def nullSafeEval(input: Any): Any = input
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         | System.err.println("Result of ${child.simpleString} is " + $c);
+         | ${ev.value} = $c;
+       """.stripMargin)
+  }
 }

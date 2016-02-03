@@ -93,9 +93,14 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
       BindReferences.bindReference(condition, child.output))
     ctx.currentVars = input
     val eval = expr.gen(ctx)
+    val nullCheck = if (expr.nullable) {
+      s"!${eval.isNull} &&"
+    } else {
+      s""
+    }
     s"""
        | ${eval.code}
-       | if (!${eval.isNull} && ${eval.value}) {
+       | if ($nullCheck ${eval.value}) {
        |   ${consume(ctx, ctx.currentVars)}
        | }
      """.stripMargin

@@ -305,6 +305,8 @@ abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
   override def children: Seq[LogicalPlan] = child :: Nil
+
+  override protected def validConstraints: Set[Expression] = child.constraints
 }
 
 /**
