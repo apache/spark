@@ -197,7 +197,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
       assert(thread.isAlive === false)
     }
     assert(blockGenerator.isStopped() === true) // generator has finally been completely stopped
-    assert(listener.pushedData === data, "All data not pushed by stop()")
+    assert(listener.pushedData.asScala.toSeq === data, "All data not pushed by stop()")
   }
 
   test("block push errors are reported") {
