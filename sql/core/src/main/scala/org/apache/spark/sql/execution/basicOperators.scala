@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{HashPartitioner, SparkEnv}
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD, ShuffledRDD}
-import org.apache.spark.shuffle.sort.SortShuffleManager
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.MutablePair
 import org.apache.spark.util.random.PoissonSampler
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
@@ -37,7 +34,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def upstream(): RDD[InternalRow] = {
+    override def upstream(): RDD[InternalRow] = {
     child.asInstanceOf[CodegenSupport].upstream()
   }
 
@@ -297,102 +294,6 @@ case class Union(children: Seq[SparkPlan]) extends SparkPlan {
 
   protected override def doExecute(): RDD[InternalRow] =
     sparkContext.union(children.map(_.execute()))
-}
-
-/**
- * Take the first `limit` elements and return the to the driver.
- */
-case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException("Should not invoke doExecute() on CollectLimit.")
-  }
-}
-
-/**
- * Take the first `limit` elements.
- *
- * @param global if true, then this operator will take the first `limit` elements of the entire
- *               input. If false, it will take the first `limit` elements of each partition.
- * @param limit the number of elements to take.
-*  @param child the input data source.
- */
-case class Limit(global: Boolean, limit: Int, child: SparkPlan) extends UnaryNode {
-  override def requiredChildDistribution: List[Distribution] = {
-    if (global) {
-      AllTuples :: Nil
-    } else {
-      UnspecifiedDistribution :: Nil
-    }
-  }
-  override def output: Seq[Attribute] = child.output
-
-  override def executeTake(n: Int): Array[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "Should not invoke executeTake() on Limit; use CollectLimit instead.")
-  }
-
-  override def executeCollect(): Array[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "Should not invoke executeCollect() on Limit; use CollectLimit instead.")
-  }
-
-  protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
-    iter.take(limit)
-  }
-}
-
-/**
- * Take the first limit elements as defined by the sortOrder, and do projection if needed.
- * This is logically equivalent to having a Limit operator after a [[Sort]] operator,
- * or having a [[Project]] operator between them.
- * This could have been named TopK, but Spark's top operator does the opposite in ordering
- * so we name it TakeOrdered to avoid confusion.
- */
-case class TakeOrderedAndProject(
-    limit: Int,
-    sortOrder: Seq[SortOrder],
-    projectList: Option[Seq[NamedExpression]],
-    child: SparkPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = {
-    val projectOutput = projectList.map(_.map(_.toAttribute))
-    projectOutput.getOrElse(child.output)
-  }
-
-  override def outputPartitioning: Partitioning = SinglePartition
-
-  // We need to use an interpreted ordering here because generated orderings cannot be serialized
-  // and this ordering needs to be created on the driver in order to be passed into Spark core code.
-  private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
-
-  private def collectData(): Array[InternalRow] = {
-    val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
-    if (projectList.isDefined) {
-      val proj = UnsafeProjection.create(projectList.get, child.output)
-      data.map(r => proj(r).copy())
-    } else {
-      data
-    }
-  }
-
-  override def executeCollect(): Array[InternalRow] = {
-    collectData()
-  }
-
-  // TODO: Terminal split should be implemented differently from non-terminal split.
-  // TODO: Pick num splits based on |limit|.
-  protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(collectData(), 1)
-
-  override def outputOrdering: Seq[SortOrder] = sortOrder
-
-  override def simpleString: String = {
-    val orderByString = sortOrder.mkString("[", ",", "]")
-    val outputString = output.mkString("[", ",", "]")
-
-    s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"
-  }
 }
 
 /**
