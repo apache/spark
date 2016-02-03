@@ -38,6 +38,7 @@ trait CodegenSupport extends SparkPlan {
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
     case _: TungstenAggregate => "agg"
+    case _: BroadcastHashJoin => "bhj"
     case _ => nodeName.toLowerCase
   }
 
@@ -259,7 +260,6 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     CodeGenerator.compile(source)
 
     plan.upstream().mapPartitions { iter =>
-
       val clazz = CodeGenerator.compile(source)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
       buffer.setInput(iter)

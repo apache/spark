@@ -26,6 +26,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
+import org.apache.spark.sql.functions._
 
 /**
   * Benchmark to measure whole stage codegen performance.
@@ -149,8 +150,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       BroadcastHashJoin:                 Avg Time(ms)    Avg Rate(M/s)  Relative Rate
       -------------------------------------------------------------------------------
-      BroadcastHashJoin w/o codegen           3053.41             3.43         1.00 X
-      BroadcastHashJoin w codegen             1028.40            10.20         2.97 X
+      BroadcastHashJoin w/o codegen           5317.47             9.86         1.00 X
+      BroadcastHashJoin w codegen              965.90            54.28         5.51 X
     */
     benchmark.run()
   }
@@ -227,6 +228,6 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     // testStatFunctions(20 << 20)
     // testAggregateWithKey(20 << 20)
     // testBytesToBytesMap(50 << 20)
-    // testBroadcastHashJoin(10 << 20)
+    // testBroadcastHashJoin(50 << 20)
   }
 }
