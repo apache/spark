@@ -64,6 +64,44 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     */
   }
 
+  def testStatFunctions(values: Int): Unit = {
+
+    runBenchmark("stddev", values) {
+      sqlContext.range(values).groupBy().agg("id" -> "stddev").collect()
+    }
+
+    runBenchmark("kurtosis", values) {
+      sqlContext.range(values).groupBy().agg("id" -> "kurtosis").collect()
+    }
+
+
+    /**
+      Using ImperativeAggregate (as implemented in Spark 1.6):
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      stddev w/o codegen                      2019.04            10.39         1.00 X
+      stddev w codegen                        2097.29            10.00         0.96 X
+      kurtosis w/o codegen                    2108.99             9.94         0.96 X
+      kurtosis w codegen                      2090.69            10.03         0.97 X
+
+      Using DeclarativeAggregate:
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      stddev:                         median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------
+      stddev codegen=false                    1644.14      12.76          78.40     1.00 X
+      stddev codegen=true                      349.35      60.03          16.66     4.71 X
+
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      kurtosis:                         median Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------
+      kurtosis codegen=false                    3491.49       6.01         166.49     1.00 X
+      kurtosis codegen=true                      561.54      37.35          26.78     6.22 X
+      */
+  }
+
   def testAggregateWithKey(values: Int): Unit = {
 
     runBenchmark("Aggregate w keys", values) {
@@ -145,9 +183,11 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  ignore("benchmark") {
-//    testWholeStage(500 << 20)
-//    testAggregateWithKey(20 << 20)
-//    testBytesToBytesMap(50 << 20)
+  // These benchmark are skipped in normal build
+  test("benchmark") {
+    // testWholeStage(200 << 20)
+    // testStatFunctions(20 << 20)
+    // testAggregateWithKey(20 << 20)
+    // testBytesToBytesMap(50 << 20)
   }
 }
