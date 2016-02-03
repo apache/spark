@@ -571,7 +571,7 @@ private[hive] class ClientWrapper(
   }
 
   def addJar(path: String): Unit = {
-   try {
+    try {
        URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory);
     } catch {
        // Factory can only be set once per JVM
