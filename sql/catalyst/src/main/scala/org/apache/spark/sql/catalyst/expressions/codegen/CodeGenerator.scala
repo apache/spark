@@ -160,6 +160,7 @@ class CodegenContext {
     * The map from a variable name to it's next ID.
     */
   private val freshNameIds = new mutable.HashMap[String, Int]
+  freshNameIds += INPUT_ROW -> 1
 
   /**
     * A prefix used to generate fresh name.
