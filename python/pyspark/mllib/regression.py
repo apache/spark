@@ -661,7 +661,7 @@ class IsotonicRegression(object):
     Only univariate (single feature) algorithm supported.
 
     Sequential PAV implementation based on:
-    
+
       Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
       "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
       Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
