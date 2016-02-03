@@ -21,6 +21,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.functions._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -130,6 +131,30 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
+  def testBroadcastHashJoin(values: Int): Unit = {
+    val benchmark = new Benchmark("BroadcastHashJoin", values)
+
+    val dim = broadcast(sqlContext.range(1 << 16).selectExpr("id as k", "cast(id as string) as v"))
+
+    benchmark.addCase("BroadcastHashJoin w/o codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sqlContext.range(values).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+    benchmark.addCase(s"BroadcastHashJoin w codegen") { iter =>
+      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
+      sqlContext.range(values).join(dim, (col("id") % 60000) === col("k")).count()
+    }
+
+    /*
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      BroadcastHashJoin:                 Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+      -------------------------------------------------------------------------------
+      BroadcastHashJoin w/o codegen           3053.41             3.43         1.00 X
+      BroadcastHashJoin w codegen             1028.40            10.20         2.97 X
+    */
+    benchmark.run()
+  }
+
   def testBytesToBytesMap(values: Int): Unit = {
     val benchmark = new Benchmark("BytesToBytesMap", values)
 
@@ -201,6 +226,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     // testWholeStage(200 << 20)
     // testStatFunctions(20 << 20)
     // testAggregateWithKey(20 << 20)
-    // testBytesToBytesMap(1024 * 1024 * 50)
+    // testBytesToBytesMap(50 << 20)
+    // testBroadcastHashJoin(10 << 20)
   }
 }

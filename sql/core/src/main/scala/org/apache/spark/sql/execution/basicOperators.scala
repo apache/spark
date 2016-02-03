@@ -237,6 +237,8 @@ case class Range(
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
+      |
+      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }
