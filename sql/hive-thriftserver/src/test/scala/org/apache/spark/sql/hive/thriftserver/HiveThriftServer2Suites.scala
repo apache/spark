@@ -23,7 +23,7 @@ import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{future, Await, ExecutionContext, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.{Random, Try}
@@ -362,7 +362,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       try {
         // Start a very-long-running query that will take hours to finish, then cancel it in order
         // to demonstrate that cancellation works.
-        val f = future {
+        val f = Future {
           statement.executeQuery(
             "SELECT COUNT(*) FROM test_map " +
             List.fill(10)("join test_map").mkString(" "))
@@ -380,7 +380,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         // Cancellation is a no-op if spark.sql.hive.thriftServer.async=false
         statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
         try {
-          val sf = future {
+          val sf = Future {
             statement.executeQuery(
               "SELECT COUNT(*) FROM test_map " +
                 List.fill(4)("join test_map").mkString(" ")
@@ -494,12 +494,12 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val jarPath = "../hive/src/test/resources/TestUDTF.jar"
       val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
 
-      Seq(
-        s"ADD JAR $jarURL",
+      statement.execute(s"ADD JAR $jarURL")
+      statement.execute(
         s"""CREATE TEMPORARY FUNCTION udtf_count2
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
          """.stripMargin
-      ).foreach(statement.execute)
+      )
 
       val rs1 = statement.executeQuery("DESCRIBE FUNCTION udtf_count2")
 
@@ -556,13 +556,13 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
 
         // Configurations and temporary functions added in this session should be visible to all
         // the other sessions.
-        Seq(
-          "SET foo=bar",
-          s"ADD JAR $jarURL",
+        statement.execute("SET foo=bar")
+        statement.execute(s"ADD JAR $jarURL")
+        statement.execute(
           s"""CREATE TEMPORARY FUNCTION udtf_count2
-              |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+             |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
            """.stripMargin
-        ).foreach(statement.execute)
+        )
       },
 
       { statement =>
@@ -697,6 +697,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       Files.write(
         """log4j.rootCategory=DEBUG, console
           |log4j.appender.console=org.apache.log4j.ConsoleAppender
+          |log4j.appender.console.threshold=DEBUG
           |log4j.appender.console.target=System.err
           |log4j.appender.console.layout=org.apache.log4j.PatternLayout
           |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
@@ -788,6 +789,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
       val builder = new ProcessBuilder(command: _*)
       val captureOutput = (line: String) => diagnosisBuffer.synchronized {
         diagnosisBuffer += line
+        logInfo(line)
 
         successLines.foreach { r =>
           if (line.contains(r)) {
@@ -796,7 +798,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
         }
       }
 
-        val process = builder.start()
+      val process = builder.start()
 
       new ProcessOutputCapturer(process.getInputStream, captureOutput).start()
       new ProcessOutputCapturer(process.getErrorStream, captureOutput).start()
