@@ -222,7 +222,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("collapse redundant repartitions") {
+  test("collapse adjacent repartitions") {
     val doubleRepartitioned = testData.repartition(10).repartition(20).coalesce(5)
     def countRepartitions(plan: LogicalPlan): Int = plan.collect { case r: Repartition => r }.length
     assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
