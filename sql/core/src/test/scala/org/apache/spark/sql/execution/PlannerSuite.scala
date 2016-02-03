@@ -181,6 +181,12 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("terminal limits use CollectLimit") {
+    val query = testData.select('value).limit(2)
+    val planned = query.queryExecution.sparkPlan
+    assert(planned.isInstanceOf[CollectLimit])
+  }
+
   test("PartitioningCollection") {
     withTempTable("normal", "small", "tiny") {
       testData.registerTempTable("normal")
@@ -422,7 +428,7 @@ class PlannerSuite extends SharedSQLContext {
       fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
     }
   }
- 
+
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
     // Number of partitions differ
@@ -441,14 +447,6 @@ class PlannerSuite extends SharedSQLContext {
     if (outputPlan.collect { case e: Exchange => true }.size == 1) {
       fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
     }
-  }
-
- test("efficient physical planning of terminal limit operators") {
-   val planner = sqlContext.planner
-   import planner._
-    val query = ReturnAnswer(testData.select('value).limit(2).logicalPlan)
-    val planned = BasicOperators(query)
-    assert(planned.head.isInstanceOf[CollectLimit])
   }
 
   // ---------------------------------------------------------------------------------------------
