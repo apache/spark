@@ -134,9 +134,7 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = withHiveState {
-    SessionState.get().getConf
-  }
+  def conf: HiveConf = SessionState.get().getConf
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)
