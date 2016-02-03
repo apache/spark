@@ -165,7 +165,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
-    >>> ir = IsotonicRegression(weightCol="")
+    >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
@@ -693,7 +693,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0), 1.0),
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
-    >>> aftsr = AFTSurvivalRegression(quantilesCol="")
+    >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
     >>> model.predict(Vectors.dense(6.3))
     1.0
