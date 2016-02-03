@@ -194,17 +194,10 @@ class InMemoryCatalog extends Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  override def createPartition(
+  override def createPartitions(
       db: String,
       table: String,
-      part: TablePartition): Unit = synchronized {
-    throw new UnsupportedOperationException
-  }
-
-  override def dropPartition(
-      db: String,
-      table: String,
-      part: TablePartition): Unit = synchronized {
+      parts: Seq[TablePartition]): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
@@ -215,46 +208,25 @@ class InMemoryCatalog extends Catalog {
     throw new UnsupportedOperationException
   }
 
-  override def renamePartition(
-      db: String,
-      table: String,
-      oldName: String,
-      newName: String): Unit = synchronized {
-    throw new UnsupportedOperationException
-  }
-
   override def getPartition(
       db: String,
       table: String,
-      part: String): TablePartition = synchronized {
-    throw new UnsupportedOperationException
-  }
-
-  override def getPartitions(
-      db: String,
-      table: String,
-      parts: Seq[String]): Seq[TablePartition] = synchronized {
+      spec: Map[String, String]): TablePartition = synchronized {
     throw new UnsupportedOperationException
   }
 
   override def alterPartition(
       db: String,
       table: String,
-      part: TablePartition): Unit = synchronized {
-    throw new UnsupportedOperationException
-  }
-
-  override def alterPartitions(
-      db: String,
-      table: String,
-      parts: Seq[TablePartition]): Unit = synchronized {
+      spec: Map[String, String],
+      newPart: TablePartition): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
   override def listPartitions(
       db: String,
       table: String,
-      pattern: String): Seq[String] = synchronized {
+      pattern: String): Seq[TablePartition] = synchronized {
     throw new UnsupportedOperationException
   }
 

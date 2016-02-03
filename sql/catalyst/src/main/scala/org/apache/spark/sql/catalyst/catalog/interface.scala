@@ -68,23 +68,19 @@ abstract class Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  def createPartition(db: String, table: String, part: TablePartition): Unit
-
-  def dropPartition(db: String, table: String, part: TablePartition): Unit
+  def createPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
 
   def dropPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
 
-  def renamePartition(db: String, table: String, oldName: String, newName: String): Unit
+  def getPartition(db: String, table: String, spec: Map[String, String]): TablePartition
 
-  def getPartition(db: String, table: String, part: String): TablePartition
+  def alterPartition(
+      db: String,
+      table: String,
+      spec: Map[String, String],
+      newPart: TablePartition): Unit
 
-  def getPartitions(db: String, table: String, parts: Seq[String]): Seq[TablePartition]
-
-  def alterPartition(db: String, table: String, part: TablePartition): Unit
-
-  def alterPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
-
-  def listPartitions(db: String, table: String, pattern: String): Seq[String]
+  def listPartitions(db: String, table: String, pattern: String): Seq[TablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
@@ -141,11 +137,11 @@ case class Column(
 /**
  * A partition (Hive style) defined in the catalog.
  *
- * @param values values for the partition columns
+ * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  */
 case class TablePartition(
-  values: Seq[String],
+  spec: Map[String, String],
   storage: StorageFormat
 )
 
