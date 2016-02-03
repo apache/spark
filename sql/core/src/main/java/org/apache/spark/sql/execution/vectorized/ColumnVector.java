@@ -763,7 +763,12 @@ public abstract class ColumnVector {
   /**
    * Returns the elements appended.
    */
-  public int getElementsAppended() { return elementsAppended; }
+  public final int getElementsAppended() { return elementsAppended; }
+
+  /**
+   * Returns true if this column is an array.
+   */
+  public final boolean isArray() { return resultArray != null; }
 
   /**
    * Maximum number of rows that can be stored in this column.
