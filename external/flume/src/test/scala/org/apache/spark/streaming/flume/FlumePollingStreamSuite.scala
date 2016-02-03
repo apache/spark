@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
@@ -102,8 +103,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
         utils.eventsPerBatch, 5)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
+    val outputBuffer = new ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
     outputStream.register()
 
@@ -115,7 +115,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
       // The eventually is required to ensure that all data in the batch has been processed.
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        val flattenOutputBuffer = outputBuffer.flatten
+        val flattenOutputBuffer = outputBuffer.asScala.toSeq.flatten
         val headers = flattenOutputBuffer.map(_.event.getHeaders.asScala.map {
           case (key, value) => (key.toString, value.toString)
         }).map(_.asJava)

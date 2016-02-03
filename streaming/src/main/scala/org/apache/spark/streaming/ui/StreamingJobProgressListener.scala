@@ -21,7 +21,7 @@ import java.util.{LinkedHashMap, Map => JMap, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, Queue, SynchronizedBuffer}
+import scala.collection.mutable.{HashMap, Queue}
 
 import org.apache.spark.scheduler._
 import org.apache.spark.streaming.{StreamingContext, Time}
