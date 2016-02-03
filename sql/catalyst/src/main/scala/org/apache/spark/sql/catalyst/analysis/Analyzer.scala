@@ -413,10 +413,11 @@ class Analyzer(
             case UnresolvedAlias(f @ UnresolvedFunction(_, args, _), _) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
               UnresolvedAlias(child = f.copy(children = newChildren)) :: Nil
-            case Alias(f @ UnresolvedFunction(_, args, _), name, isGenerated)
+            case a @ Alias(f @ UnresolvedFunction(_, args, _), name)
                 if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
-              Alias(child = f.copy(children = newChildren), name, isGenerated)() :: Nil
+              Alias(child = f.copy(children = newChildren), name)(
+                isGenerated = a.isGenerated) :: Nil
             case UnresolvedAlias(c @ CreateArray(args), _) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child, resolver)
@@ -491,7 +492,7 @@ class Analyzer(
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
       expressions.map {
-        case a: Alias => Alias(a.child, a.name, a.isGenerated)()
+        case a: Alias => Alias(a.child, a.name)(isGenerated = a.isGenerated)
         case other => other
       }
     }
@@ -701,7 +702,7 @@ class Analyzer(
         val aggregatedCondition =
           Aggregate(
             grouping,
-            Alias(havingCondition, "havingCondition", isGenerated = true)() :: Nil,
+            Alias(havingCondition, "havingCondition")(isGenerated = Some(true)) :: Nil,
             child)
         val resolvedOperator = execute(aggregatedCondition)
         def resolvedAggregateFilter =
@@ -728,7 +729,7 @@ class Analyzer(
         try {
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
           val aliasedOrdering =
-            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder", isGenerated = true)())
+            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = Some(true)))
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -749,7 +750,7 @@ class Analyzer(
           val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
             case (evaluated, order) =>
               val index = originalAggExprs.indexWhere {
-                case Alias(child, _, _) => child semanticEquals evaluated.child
+                case Alias(child, _) => child semanticEquals evaluated.child
                 case other => other semanticEquals evaluated.child
               }
 
@@ -841,12 +842,12 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name, _) if g.resolved && g.elementTypes.size > 1 =>
+        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
           // If not given the default names, and the TGF with multiple output columns
           failAnalysis(
             s"""Expect multiple names given for ${g.getClass.getName},
                |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name, _) if g.resolved => Some((g, name :: Nil))
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
         case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
         case _ => None
       }
@@ -1026,7 +1027,7 @@ class Analyzer(
         // We need to use transformDown because we want to trigger
         // "case alias @ Alias(window: WindowExpression, _)" first.
         _.transformDown {
-          case alias @ Alias(window: WindowExpression, _, _) =>
+          case alias @ Alias(window: WindowExpression, _) =>
             // If a WindowExpression has an assigned alias, just use it.
             extractedWindowExprBuffer += alias
             alias.toAttribute
@@ -1159,7 +1160,7 @@ class Analyzer(
           leafNondeterministic.map { e =>
             val ne = e match {
               case n: NamedExpression => n
-              case _ => Alias(e, "_nondeterministic", isGenerated = true)()
+              case _ => Alias(e, "_nondeterministic")(isGenerated = Some(true))
             }
             new TreeNodeRef(e) -> ne
           }
@@ -1274,14 +1275,14 @@ object CleanupAliases extends Rule[LogicalPlan] {
       case c: CreateStructUnsafe if !stop =>
         stop = true
         c.copy(children = c.children.map(trimNonTopLevelAliases))
-      case Alias(child, _, _) if !stop => child
+      case Alias(child, _) if !stop => child
     }
   }
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      Alias(trimAliases(a.child), a.name, a.isGenerated)(
-        a.exprId, a.qualifiers, a.explicitMetadata)
+      Alias(trimAliases(a.child), a.name)(
+        a.exprId, a.qualifiers, a.explicitMetadata, a.isGenerated)
     case other => trimAliases(other)
   }
 
@@ -1314,7 +1315,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
         case c: CreateStructUnsafe if !stop =>
           stop = true
           c.copy(children = c.children.map(trimNonTopLevelAliases))
-        case Alias(child, _, _) if !stop => child
+        case Alias(child, _) if !stop => child
       }
   }
 }

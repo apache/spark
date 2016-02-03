@@ -72,16 +72,19 @@ object PhysicalOperation extends PredicateHelper {
     }
 
   private def collectAliases(fields: Seq[Expression]): Map[Attribute, Expression] = fields.collect {
-    case a @ Alias(child, _, _) => a.toAttribute -> child
+    case a @ Alias(child, _) => a.toAttribute -> child
   }.toMap
 
   private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
-      case a @ Alias(ref: AttributeReference, name, isGenerated) =>
-        aliases.get(ref).map(Alias(_, name, isGenerated)(a.exprId, a.qualifiers)).getOrElse(a)
+      case a @ Alias(ref: AttributeReference, name) =>
+        aliases.get(ref)
+          .map(Alias(_, name)(a.exprId, a.qualifiers, isGenerated = a.isGenerated))
+          .getOrElse(a)
 
       case a: AttributeReference =>
-        aliases.get(a).map(Alias(_, a.name, a.isGenerated)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifiers, isGenerated = a.isGenerated)).getOrElse(a)
     }
   }
 }

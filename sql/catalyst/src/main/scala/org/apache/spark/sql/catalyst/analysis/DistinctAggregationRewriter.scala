@@ -127,7 +127,7 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
     if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
       val gid =
-        new AttributeReference("gid", IntegerType, false)(isGenerated = true)
+        new AttributeReference("gid", IntegerType, false)(isGenerated = Some(true))
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
         case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()
