@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, Metadata}
 
 /**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
@@ -126,7 +126,8 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
     // Aggregation strategy can handle the query with single distinct
     if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
-      val gid = new AttributeReference("gid", IntegerType, false)()
+      val gid =
+        new AttributeReference("gid", IntegerType, false, Metadata.empty, isGenerated = true)()
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
         case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()

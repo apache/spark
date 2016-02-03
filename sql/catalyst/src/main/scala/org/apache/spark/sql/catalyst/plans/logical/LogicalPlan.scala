@@ -139,7 +139,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       case a: Alias =>
         // As the root of the expression, Alias will always take an arbitrary exprId, we need
         // to erase that for equality testing.
-        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+        val cleanedExprId = Alias(a.child, a.name, a.isGenerated)(ExprId(-1), a.qualifiers)
         BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
       case other => BindReferences.bindReference(other, input, allowFailures = true)
     }
