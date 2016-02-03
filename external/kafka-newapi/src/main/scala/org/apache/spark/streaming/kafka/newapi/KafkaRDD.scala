@@ -185,17 +185,20 @@ class KafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark] (
         iter = fetchBatch
       }
 
-      // Since fetchBatch is a loop until it reads something. iter should have something in it
-      assert(iter.hasNext)
-
-      val item: ConsumerRecord[K, V] = iter.next()
-      if (item.offset >= part.untilOffset) {
-        assert(item.offset == part.untilOffset, errOvershotEnd(item.offset, part))
+      if (!iter.hasNext) {
+        assert(requestOffset == part.untilOffset, errRanOutBeforeEnd(part))
         finished = true
         null.asInstanceOf[R]
       } else {
-        requestOffset = item.offset() + 1
-        messageHandler(item)
+        val item: ConsumerRecord[K, V] = iter.next()
+        if (item.offset >= part.untilOffset) {
+          assert(item.offset == part.untilOffset, errOvershotEnd(item.offset, part))
+          finished = true
+          null.asInstanceOf[R]
+        } else {
+          requestOffset = item.offset() + 1
+          messageHandler(item)
+        }
       }
     }
   }
