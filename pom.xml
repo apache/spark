@@ -147,7 +147,7 @@
     <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
-    <chill.version>0.5.0</chill.version>
+    <chill.version>0.7.2</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
