@@ -35,6 +35,10 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
   import testImplicits._
 
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+  private val nullDF = (for {
+    i <- 0 to 50
+    s <- Seq(null, "a", "b", "c", "d", "e", "f", null, "g")
+  } yield (i % 5, s, i % 13)).toDF("i", "j", "k")
 
   test("read bucketed data") {
     withTable("bucketed_table") {
@@ -157,7 +161,6 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     withTable("bucketed_table") {
       val numBuckets = 8
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
-      val nullDF = Seq((1, "str", 3), (1, null, 5), (1, "test", 5)).toDF("i", "j", "k")
       // json does not support predicate push-down, and thus json is used here
       nullDF.write
         .format("json")
