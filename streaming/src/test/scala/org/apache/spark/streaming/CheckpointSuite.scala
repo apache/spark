@@ -895,7 +895,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Iterable[Seq[V]] =
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long):
+      Iterable[Seq[V]] =
   {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.getTimeMillis())
