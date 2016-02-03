@@ -467,9 +467,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
             if (areEqual) {
               return;
             } else {
-              //if (enablePerfMetrics) {
+              if (enablePerfMetrics) {
                 numHashCollisions++;
-              //}
+              }
             }
           }
         }

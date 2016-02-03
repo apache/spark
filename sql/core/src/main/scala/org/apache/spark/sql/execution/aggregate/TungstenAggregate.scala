@@ -535,7 +535,7 @@ case class TungstenAggregate(
      UnsafeRow $buffer = null;
      if ($checkFallback) {
        // try to get the buffer from hash map
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
+       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
      }
      if ($buffer == null) {
        if ($sorterTerm == null) {
@@ -546,7 +546,7 @@ case class TungstenAggregate(
        $resetCoulter
        // the hash map had be spilled, it should have enough memory now,
        // try  to allocate buffer again.
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
+       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
        if ($buffer == null) {
          // failed to allocate the first page
          throw new OutOfMemoryError("No enough memory for aggregation");

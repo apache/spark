@@ -229,8 +229,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
           key.setInt(0, i % 65536)
           val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, i % 65536)
           if (loc.isDefined) {
-            value.pointTo(loc.getValueBase, loc.getValueOffset,
-              loc.getValueLength)
+            value.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
             value.setInt(0, value.getInt(0) + 1)
             i += 1
           } else {
@@ -255,10 +254,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   // These benchmark are skipped in normal build
-  ignore("benchmark") {
+  test("benchmark") {
     // testWholeStage(200 << 20)
     // testStatFunctions(20 << 20)
-    // testAggregateWithKey(20 << 20)
+    testAggregateWithKey(20 << 20)
     // testBytesToBytesMap(50 << 20)
     // testBroadcastHashJoin(10 << 20)
   }
