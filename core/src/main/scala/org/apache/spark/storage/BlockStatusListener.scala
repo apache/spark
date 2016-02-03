@@ -44,37 +44,52 @@ private[spark] case class ExecutorStreamBlockStatus(
 
 }
 
+/**
+ * The aggregated status of broadcast blocks in a cluster
+ */
+private[spark] case class BroadcastBlockStatus(name: String, blocks: Seq[BlockUIData]) {
+
+  def totalMemSize: Long = blocks.map(_.memSize).sum
+
+  def totalDiskSize: Long = blocks.map(_.diskSize).sum
+
+  def numBroadcastBlocks: Int = blocks.size
+
+}
+
 private[spark] class BlockStatusListener extends SparkListener {
 
   private val blockManagers =
     new mutable.HashMap[BlockManagerId, mutable.HashMap[BlockId, BlockUIData]]
 
+  private def isBlockMonitored(blockId: BlockId): Boolean = {
+    blockId.isInstanceOf[StreamBlockId] || blockId.isInstanceOf[BroadcastBlockId]
+  }
+
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = {
     val blockId = blockUpdated.blockUpdatedInfo.blockId
-    if (!blockId.isInstanceOf[StreamBlockId]) {
-      // Now we only monitor StreamBlocks
-      return
-    }
-    val blockManagerId = blockUpdated.blockUpdatedInfo.blockManagerId
-    val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
-    val memSize = blockUpdated.blockUpdatedInfo.memSize
-    val diskSize = blockUpdated.blockUpdatedInfo.diskSize
+    if (isBlockMonitored(blockId)) {
+      val blockManagerId = blockUpdated.blockUpdatedInfo.blockManagerId
+      val storageLevel = blockUpdated.blockUpdatedInfo.storageLevel
+      val memSize = blockUpdated.blockUpdatedInfo.memSize
+      val diskSize = blockUpdated.blockUpdatedInfo.diskSize
 
-    synchronized {
-      // Drop the update info if the block manager is not registered
-      blockManagers.get(blockManagerId).foreach { blocksInBlockManager =>
-        if (storageLevel.isValid) {
-          blocksInBlockManager.put(blockId,
-            BlockUIData(
-              blockId,
-              blockManagerId.hostPort,
-              storageLevel,
-              memSize,
-              diskSize)
-          )
-        } else {
-          // If isValid is not true, it means we should drop the block.
-          blocksInBlockManager -= blockId
+      synchronized {
+        // Drop the update info if the block manager is not registered
+        blockManagers.get(blockManagerId).foreach { blocksInBlockManager =>
+          if (storageLevel.isValid) {
+            blocksInBlockManager.put(blockId,
+              BlockUIData(
+                blockId,
+                blockManagerId.hostPort,
+                storageLevel,
+                memSize,
+                diskSize)
+            )
+          } else {
+            // If isValid is not true, it means we should drop the block.
+            blocksInBlockManager -= blockId
+          }
         }
       }
     }
@@ -94,7 +109,26 @@ private[spark] class BlockStatusListener extends SparkListener {
   def allExecutorStreamBlockStatus: Seq[ExecutorStreamBlockStatus] = synchronized {
     blockManagers.map { case (blockManagerId, blocks) =>
       ExecutorStreamBlockStatus(
-        blockManagerId.executorId, blockManagerId.hostPort, blocks.values.toSeq)
+        blockManagerId.executorId,
+        blockManagerId.hostPort,
+        blocks.filterKeys(_.isInstanceOf[StreamBlockId]).values.toSeq)
+    }.toSeq
+  }
+
+  def allBroadcastBlockStatus: Seq[BroadcastBlockStatus] = synchronized {
+    // Extract broadcast blocks and group them by the `broadcastId` value
+    val broadcastBlocks = blockManagers.toSeq.flatMap { case (blockManagerId, blocks) =>
+        blocks.toSeq.flatMap { case (key, value) =>
+          key.toString match {
+            case BlockId.BROADCAST(broadcastId, field) =>
+              Some((BroadcastBlockId(broadcastId.toLong).name, value))
+            case _ =>
+              None
+          }
+        }
+      }
+    broadcastBlocks.groupBy(_._1).map { case (key, blocks) =>
+      BroadcastBlockStatus(key, blocks.map(_._2))
     }.toSeq
   }
 }

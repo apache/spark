@@ -31,6 +31,7 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content = rddTable(listener.rddInfoList) ++
+      broadcastBlockTable(listener.allBroadcastBlockStatus.sortBy(_.name)) ++
       receiverBlockTables(listener.allExecutorStreamBlockStatus.sortBy(_.executorId))
     UIUtils.headerSparkPage("Storage", content, parent)
   }
@@ -71,6 +72,46 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td sorttable_customkey={rdd.memSize.toString}>{Utils.bytesToString(rdd.memSize)}</td>
       <td sorttable_customkey={rdd.diskSize.toString} >{Utils.bytesToString(rdd.diskSize)}</td>
+    </tr>
+    // scalastyle:on
+  }
+
+  private[storage] def broadcastBlockTable(statuses: Seq[BroadcastBlockStatus]): Seq[Node] = {
+    if (statuses.isEmpty) {
+      // Don't show the tables if there is no broadcast block
+      Nil
+    } else {
+      <div>
+        <h4>Broadcast Variables</h4>
+        {UIUtils.listingTable(broadcastTableHeader, broadcastRow, statuses,
+        id = Some("storage-by-broadcast-blocks"))}
+      </div>
+    }
+  }
+
+  /** Header fields for the broadcast block table */
+  private val broadcastTableHeader = Seq(
+    "Name",
+    "Broadcast Blocks",
+    "Size in Memory",
+    "Size on Disk")
+
+  /** Render an HTML row representing a broadcast variable */
+  private def broadcastRow(statuses: BroadcastBlockStatus): Seq[Node] = {
+    // scalastyle:off
+    <tr>
+      <td>
+        {statuses.name}
+      </td>
+      <td>
+        {statuses.numBroadcastBlocks.toString}
+      </td>
+      <td sorttable_customkey={statuses.totalMemSize.toString}>
+        {Utils.bytesToString(statuses.totalMemSize)}
+      </td>
+      <td sorttable_customkey={statuses.totalDiskSize.toString}>
+        {Utils.bytesToString(statuses.totalDiskSize)}
+      </td>
     </tr>
     // scalastyle:on
   }
