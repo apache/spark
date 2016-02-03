@@ -96,7 +96,7 @@ private[hive] object HiveSerDe {
   }
 }
 
-private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: HiveContext)
+private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
   extends Catalog with Logging {
 
   val conf = hive.conf
@@ -327,7 +327,14 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
+    val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
     val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.relation) match {
+      case _ if skipHiveMetadata =>
+        val message =
+          s"Persisting partitioned data source relation $qualifiedTableName into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
+        (None, message)
+
       case (Some(serde), relation: HadoopFsRelation)
         if relation.paths.length == 1 && relation.partitionColumns.isEmpty =>
         val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
@@ -572,25 +579,24 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
 
-      case CreateViewAsSelect(table, child, allowExisting, replace, sql) =>
-        if (conf.nativeView) {
-          if (allowExisting && replace) {
-            throw new AnalysisException(
-              "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
-          }
-
-          val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
-
-          execution.CreateViewAsSelect(
-            table.copy(
-              specifiedDatabase = Some(dbName),
-              name = tblName),
-            child.output,
-            allowExisting,
-            replace)
-        } else {
-          HiveNativeCommand(sql)
+      case CreateViewAsSelect(table, child, allowExisting, replace, sql) if conf.nativeView =>
+        if (allowExisting && replace) {
+          throw new AnalysisException(
+            "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
         }
+
+        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
+
+        execution.CreateViewAsSelect(
+          table.copy(
+            specifiedDatabase = Some(dbName),
+            name = tblName),
+          child,
+          allowExisting,
+          replace)
+
+      case CreateViewAsSelect(table, child, allowExisting, replace, sql) =>
+        HiveNativeCommand(sql)
 
       case p @ CreateTableAsSelect(table, child, allowExisting) =>
         val schema = if (table.schema.nonEmpty) {
@@ -705,6 +711,10 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
   }
 
   override def unregisterAllTables(): Unit = {}
+
+  override def setCurrentDatabase(databaseName: String): Unit = {
+    client.setCurrentDatabase(databaseName)
+  }
 }
 
 /**

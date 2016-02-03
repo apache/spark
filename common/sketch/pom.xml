@@ -21,19 +21,26 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
+    <artifactId>spark-parent_2.11</artifactId>
     <version>2.0.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-sketch_2.10</artifactId>
+  <artifactId>spark-sketch_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Sketch</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>sketch</sbt.project.name>
   </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+    </dependency>
+  </dependencies>
 
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>

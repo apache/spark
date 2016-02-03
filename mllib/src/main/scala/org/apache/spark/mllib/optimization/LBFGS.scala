@@ -69,6 +69,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
     this
   }
 
+  /*
+   * Get the convergence tolerance of iterations.
+   */
+  private[mllib] def getConvergenceTol(): Double = {
+    this.convergenceTol
+  }
+
   /**
    * Set the maximal number of iterations for L-BFGS. Default 100.
    * @deprecated use [[LBFGS#setNumIterations]] instead
@@ -87,11 +94,25 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   }
 
   /**
+   * Get the maximum number of iterations for L-BFGS. Defaults to 100.
+   */
+  private[mllib] def getNumIterations(): Int = {
+    this.maxNumIterations
+  }
+
+  /**
    * Set the regularization parameter. Default 0.0.
    */
   def setRegParam(regParam: Double): this.type = {
     this.regParam = regParam
     this
+  }
+
+  /**
+   * Get the regularization parameter.
+   */
+  private[mllib] def getRegParam(): Double = {
+    this.regParam
   }
 
   /**
@@ -111,6 +132,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   def setUpdater(updater: Updater): this.type = {
     this.updater = updater
     this
+  }
+
+  /**
+   * Returns the updater, limited to internal use.
+   */
+  private[mllib] def getUpdater(): Updater = {
+    updater
   }
 
   override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {

@@ -46,6 +46,10 @@ trait Catalog {
 
   def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
 
+  def setCurrentDatabase(databaseName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
+
   /**
    * Returns tuples of (tableName, isTemporary) for all tables in the given database.
    * isTemporary is a Boolean value indicates if a table is a temporary or not.

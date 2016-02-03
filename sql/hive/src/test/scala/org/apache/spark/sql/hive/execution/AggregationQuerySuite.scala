@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -190,6 +191,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.sql("DROP TABLE IF EXISTS agg3")
     sqlContext.dropTempTable("emptyTable")
+  }
+
+  test("group by function") {
+    Seq((1, 2)).toDF("a", "b").registerTempTable("data")
+
+    checkAnswer(
+      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+      Row(1, Array(2)) :: Nil)
   }
 
   test("empty table") {
@@ -879,7 +888,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         RandomDataGenerator.forType(
           dataType = schemaForGenerator,
           nullable = true,
-          seed = Some(System.nanoTime()))
+          new Random(System.nanoTime()))
       val dataGenerator =
         maybeDataGenerator
           .getOrElse(fail(s"Failed to create data generator for schema $schemaForGenerator"))
