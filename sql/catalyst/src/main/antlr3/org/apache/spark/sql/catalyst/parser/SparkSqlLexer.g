@@ -483,3 +483,7 @@ COMMENT
     { $channel=HIDDEN; }
   ;
 
+/* Prevent that the lexer swallows unknown characters. */
+ANY
+ :.
+ ;
