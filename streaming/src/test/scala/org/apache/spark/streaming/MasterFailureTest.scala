@@ -216,8 +216,8 @@ object MasterFailureTest extends Logging {
 
     while(!isLastOutputGenerated && !isTimedOut) {
       // Get the output buffer
-      val outputBuffer = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
-      def output = outputBuffer.asScala.flatMap(x => x)
+      val outputQueue = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
+      def output = outputQueue.asScala.flatMap(x => x)
 
       // Start the thread to kill the streaming after some time
       killed = false
