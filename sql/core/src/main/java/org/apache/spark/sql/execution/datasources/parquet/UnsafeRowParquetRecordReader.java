@@ -875,7 +875,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
               "could not read page in col " + descriptor +
                   " as the dictionary was missing for encoding " + dataEncoding);
         }
-        if (vectorizedDecode() {
+        if (vectorizedDecode()) {
           if (dataEncoding != Encoding.PLAIN_DICTIONARY &&
               dataEncoding != Encoding.RLE_DICTIONARY) {
             throw new NotImplementedException("Unsupported encoding: " + dataEncoding);
