@@ -16,46 +16,38 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.SparkContext
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.stat.Statistics
-import org.apache.spark.rdd.RDD
-
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
 
-object HypothesisTestingKolmogorovSmirnovTestExample {
+object SummaryStatisticsExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("HypothesisTestingKolmogorovSmirnovTestExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("SummaryStatisticsExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    // @note: todo
+    val v1 = Vectors.dense(1.0, 10.0, 100.0)
+    val v2 = Vectors.dense(2.0, 20.0, 200.0)
+    val v3 = Vectors.dense(3.0, 30.0, 300.0)
 
-    val data: RDD[Double] = ... // an RDD of sample data
+    val observations = sc.parallelize(Seq(v1, v2, v3))
 
-    // run a KS test for the sample versus a standard normal distribution
-    val testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0, 1)
-    println(testResult) // summary of the test including the p-value, test statistic,
-    // and null hypothesis
-    // if our p-value indicates significance, we can reject the null hypothesis
-
-    // perform a KS test using a cumulative distribution function of our making
-    val myCDF: Double => Double = ...
-    val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
-
+    // Compute column summary statistics.
+    val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)
+    println(summary.mean) // a dense vector containing the mean value for each column
+    println(summary.variance) // column-wise variance
+    println(summary.numNonzeros) // number of nonzeros in each column
     // $example off$
 
     sc.stop()
   }
 }
 // scalastyle:on println
-

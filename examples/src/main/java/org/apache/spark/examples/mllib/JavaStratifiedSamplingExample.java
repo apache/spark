@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.ml;
+package org.apache.spark.examples.mllib;
 
 // $example on$
-import java.util.Arrays;
-
-import org.apache.spark.api.java.JavaDoubleRDD;
+import java.util.Map;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-
-import org.apache.spark.mllib.stat.Statistics;
-import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaSparkContext;
 // $example off$
 
 import org.apache.spark.SparkConf;
@@ -33,27 +31,22 @@ import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
 
-public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
+public class JavaStratifiedSamplingExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample");
+        SparkConf conf = new SparkConf().setAppName("JavaStratifiedSamplingExample");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-
-        // @note: todo
-
-        JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.2, 1.0, ...));
-        KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
-        // summary of the test including the p-value, test statistic,
-        // and null hypothesis
-        // if our p-value indicates significance, we can reject the null hypothesis
-        System.out.println(testResult);
-
+//        JavaPairRDD<K, V> data = ... // an RDD of any key value pairs
+//        Map<K, Object> fractions = ... // specify the exact fraction desired from each key
+//
+//        // Get an exact sample from each stratum
+//        JavaPairRDD<K, V> approxSample = data.sampleByKey(false, fractions);
+//        JavaPairRDD<K, V> exactSample = data.sampleByKeyExact(false, fractions);
         // $example off$
 
         jsc.stop();
     }
 }
-

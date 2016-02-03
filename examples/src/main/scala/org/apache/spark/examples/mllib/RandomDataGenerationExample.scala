@@ -16,36 +16,37 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.mllib.random.RandomRDDs._
+
 // $example off$
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.{SparkConf, SparkContext}
 
-
-object StratifiedSamplingExample {
+object RandomDataGenerationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("StratifiedSamplingExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("RandomDataGenerationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    // @note: I don't know how to use class "import org.apache.spark.rdd.PairRDDFunctions"
-    val data = sc.parallelize(Seq((1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f'))) // an RDD[(K, V)] of any key value pairs
-    val fractions =  Map(1 -> 1.0, 2 -> 2.0, 3 -> 3.0)// specify the exact fraction desired from each key
 
-    // Get an exact sample from each stratum
-    val approxSample = data.sampleByKey(withReplacement = false, fractions)
-    val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
+    // @note: todo
 
-    println(approxSample.toString)
-    println(exactSample.toString)
+    // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+    // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+    val u = normalRDD(sc, 1000000L, 10)
+    // Apply a transform to get a random double RDD following `N(1, 4)`.
+    val v = u.map(x => 1.0 + 2.0 * x)
+
     // $example off$
 
     sc.stop()
   }
 }
 // scalastyle:on println
+

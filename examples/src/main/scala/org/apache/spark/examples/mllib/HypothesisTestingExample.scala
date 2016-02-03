@@ -16,13 +16,11 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.stat.Statistics._
 import org.apache.spark.rdd.RDD
 
 // $example off$

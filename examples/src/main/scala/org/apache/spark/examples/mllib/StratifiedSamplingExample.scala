@@ -16,41 +16,36 @@
  */
 
 // scalastyle:off println
-package org.apache.spark.examples.ml
+package org.apache.spark.examples.mllib
 
 // $example on$
-import org.apache.spark.mllib.stat.KernelDensity
-import org.apache.spark.rdd.RDD
+import org.apache.spark.{SparkConf, SparkContext}
 // $example off$
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
-object KernelDensityEstimationExample {
+
+object StratifiedSamplingExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("KernelDensityEstimationExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("StratifiedSamplingExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
     // $example on$
+    // @note: I don't know how to use class "import org.apache.spark.rdd.PairRDDFunctions"
+    val data = sc.parallelize(Seq((1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f'))) // an RDD[(K, V)] of any key value pairs
+    val fractions =  Map(1 -> 1.0, 2 -> 2.0, 3 -> 3.0)// specify the exact fraction desired from each key
 
-    // @note: todo
+    // Get an exact sample from each stratum
+    val approxSample = data.sampleByKey(withReplacement = false, fractions)
+    val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
 
-    val data: RDD[Double] = ... // an RDD of sample data
-
-    // Construct the density estimator with the sample data and a standard deviation for the Gaussian
-    // kernels
-    val kd = new KernelDensity()
-      .setSample(data)
-      .setBandwidth(3.0)
-
-    // Find density estimates for the given values
-    val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
+    println(approxSample.toString)
+    println(exactSample.toString)
     // $example off$
 
     sc.stop()
   }
 }
 // scalastyle:on println
-

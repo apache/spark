@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.ml;
+package org.apache.spark.examples.mllib;
 
 // $example on$
 import org.apache.spark.api.java.JavaRDD;

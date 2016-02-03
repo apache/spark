@@ -40,7 +40,7 @@ total count.
 
 Refer to the [`MultivariateStatisticalSummary` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.MultivariateStatisticalSummary) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/SummaryStatisticsExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/SummaryStatisticsExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -52,7 +52,7 @@ total count.
 
 Refer to the [`MultivariateStatisticalSummary` Java docs](api/java/org/apache/spark/mllib/stat/MultivariateStatisticalSummary.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaSummaryStatisticsExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaSummaryStatisticsExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -63,7 +63,7 @@ total count.
 
 Refer to the [`MultivariateStatisticalSummary` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.MultivariateStatisticalSummary) for more details on the API.
 
-{% include_example python/ml/summary_statistics_example.py %}
+{% include_example python/mllib/summary_statistics_example.py %}
 </div>
 
 </div>
@@ -82,7 +82,7 @@ an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` resp
 
 Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/CorrelationsExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/CorrelationsExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -92,7 +92,7 @@ a `JavaRDD<Vector>`, the output will be a `Double` or the correlation `Matrix` r
 
 Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Statistics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaCorrelationsExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaCorrelationsExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -102,7 +102,7 @@ an `RDD[Vector]`, the output will be a `Double` or the correlation `Matrix` resp
 
 Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
 
-{% include_example python/ml/correlations_example.py %}
+{% include_example python/mllib/correlations_example.py %}
 </div>
 
 </div>
@@ -128,7 +128,7 @@ fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K
 keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample 
 size, whereas sampling with replacement requires two additional passes.
 
-{% include_example scala/org/apache/spark/examples/ml/StratifiedSamplingExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/StratifiedSamplingExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -138,7 +138,7 @@ fraction for key $k$, $n_k$ is the number of key-value pairs for key $k$, and $K
 keys. Sampling without replacement requires one additional pass over the RDD to guarantee sample 
 size, whereas sampling with replacement requires two additional passes.
 
-{% include_example java/org/apache/spark/examples/ml/JavaStratifiedSamplingExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaStratifiedSamplingExample.java %}
 </div>
 <div data-lang="python" markdown="1">
 [`sampleByKey()`](api/python/pyspark.html#pyspark.RDD.sampleByKey) allows users to
@@ -148,7 +148,7 @@ set of keys.
 
 *Note:* `sampleByKeyExact()` is currently not supported in Python.
 
-{% include_example python/ml/stratified_sampling_example.py %}
+{% include_example python/mllib/stratified_sampling_example.py %}
 </div>
 
 </div>
@@ -170,7 +170,7 @@ independence tests.
 run Pearson's chi-squared tests. The following example demonstrates how to run and interpret 
 hypothesis tests.
 
-{% include_example scala/org/apache/spark/examples/ml/HypothesisTestingExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/HypothesisTestingExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -180,7 +180,7 @@ hypothesis tests.
 
 Refer to the [`ChiSqTestResult` Java docs](api/java/org/apache/spark/mllib/stat/test/ChiSqTestResult.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaHypothesisTestingExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaHypothesisTestingExample.java %}
 
 {% endhighlight %}
 </div>
@@ -192,7 +192,7 @@ hypothesis tests.
 
 Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
 
-{% include_example python/ml/hypothesis_testing_example.py %}
+{% include_example python/mllib/hypothesis_testing_example.py %}
 </div>
 
 </div>
@@ -214,7 +214,7 @@ and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.Statistics) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/HypothesisTestingKolmogorovSmirnovTestExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/HypothesisTestingKolmogorovSmirnovTestExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -224,7 +224,7 @@ and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Java docs](api/java/org/apache/spark/mllib/stat/Statistics.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaHypothesisTestingKolmogorovSmirnovTestExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaHypothesisTestingKolmogorovSmirnovTestExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -234,7 +234,7 @@ and interpret the hypothesis tests.
 
 Refer to the [`Statistics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.Statistics) for more details on the API.
 
-{% include_example python/ml/hypothesis_testing_kolmogorov_smirnov_test_example.py %}
+{% include_example python/mllib/hypothesis_testing_kolmogorov_smirnov_test_example.py %}
 </div>
 </div>
 
@@ -279,7 +279,7 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/RandomDataGenerationExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/RandomDataGenerationExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -290,7 +290,7 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Java docs](api/java/org/apache/spark/mllib/random/RandomRDDs) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaRandomDataGenerationExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRandomDataGenerationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -301,7 +301,7 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) for more details on the API.
 
-{% include_example python/ml/random_data_generation_example.py %}
+{% include_example python/mllib/random_data_generation_example.py %}
 </div>
 </div>
 
@@ -323,7 +323,7 @@ to do so.
 
 Refer to the [`KernelDensity` Scala docs](api/scala/index.html#org.apache.spark.mllib.stat.KernelDensity) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/KernelDensityEstimationExample.scala %}
+{% include_example scala/org/apache/spark/examples/mllib/KernelDensityEstimationExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -333,7 +333,7 @@ to do so.
 
 Refer to the [`KernelDensity` Java docs](api/java/org/apache/spark/mllib/stat/KernelDensity.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaKernelDensityEstimationExample.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaKernelDensityEstimationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -343,7 +343,7 @@ to do so.
 
 Refer to the [`KernelDensity` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.stat.KernelDensity) for more details on the API.
 
-{% include_example python/ml/kernel_density_estimation_example.py %}
+{% include_example python/mllib/kernel_density_estimation_example.py %}
 </div>
 
 </div>

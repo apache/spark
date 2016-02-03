@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.ml;
+package org.apache.spark.examples.mllib;
 
 // $example on$
-import java.util.Map;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.stat.KernelDensity;
+import org.apache.spark.rdd.RDD;
 // $example off$
 
 import org.apache.spark.SparkConf;
@@ -31,22 +30,30 @@ import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
 
-public class JavaStratifiedSamplingExample {
+public class JavaKernelDensityEstimationExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaStratifiedSamplingExample");
+        SparkConf conf = new SparkConf().setAppName("JavaKernelDensityEstimationExample");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-//        JavaPairRDD<K, V> data = ... // an RDD of any key value pairs
-//        Map<K, Object> fractions = ... // specify the exact fraction desired from each key
-//
-//        // Get an exact sample from each stratum
-//        JavaPairRDD<K, V> approxSample = data.sampleByKey(false, fractions);
-//        JavaPairRDD<K, V> exactSample = data.sampleByKeyExact(false, fractions);
+
+        // @note: todo
+
+        RDD<Double> data = ... // an RDD of sample data
+
+        // Construct the density estimator with the sample data and a standard deviation for the Gaussian
+        // kernels
+        KernelDensity kd = new KernelDensity()
+                .setSample(data)
+                .setBandwidth(3.0);
+
+        // Find density estimates for the given values
+        double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
         // $example off$
 
         jsc.stop();
     }
 }
+
