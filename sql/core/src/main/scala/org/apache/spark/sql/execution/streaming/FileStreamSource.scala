@@ -65,17 +65,21 @@ class FileStreamSource(
     new LongOffset(maxBatchFile)
   }
 
+  def currentOffset: LongOffset = synchronized {
+    new LongOffset(maxBatchFile)
+  }
+
   /**
    * Returns the next batch of data that is available after `start`, if any is available.
    */
   override def getNextBatch(start: Option[Offset]): Option[Batch] = {
-    val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(0L)
+    val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
     val end = fetchMaxOffset()
     val endId = end.offset
 
-    val batchFiles = (startId to endId).filter(_ >= 0).map(i => s"$metadataPath/$i")
-    if (!(batchFiles.isEmpty || start == Some(end))) {
-      logDebug(s"Producing files from batches $start:$endId")
+    val batchFiles = (startId + 1 to endId).filter(_ >= 0).map(i => s"$metadataPath/$i")
+    if (batchFiles.nonEmpty) {
+      logDebug(s"Producing files from batches ${startId + 1}:$endId")
       logDebug(s"Batch files: $batchFiles")
 
       // Probably does not need to be a spark job...
@@ -89,10 +93,6 @@ class FileStreamSource(
     } else {
       None
     }
-  }
-
-  def restart(): FileStreamSource = {
-    new FileStreamSource(sqlContext, metadataPath, path, dataSchema, dataFrameBuilder)
   }
 
   private def sparkContext = sqlContext.sparkContext

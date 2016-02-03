@@ -21,7 +21,8 @@ import java.io.File
 
 import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.datasources.ResolvedDataSource
+import org.apache.spark.sql.execution.streaming.{FileStreamSource, Offset}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -29,109 +30,102 @@ class FileStreamSourceSuite extends StreamTest with SharedSQLContext {
 
   import testImplicits._
 
+  case class AddTextFileData(source: FileStreamSource, content: String, src: File, tmp: File)
+    extends AddData {
+
+    override def addData(): Offset = {
+      val file = Utils.tempFileWith(new File(tmp, "text"))
+      stringToFile(file, content).renameTo(new File(src, file.getName))
+      source.currentOffset + 1
+    }
+  }
+
+  case class AddParquetFileData(
+      source: FileStreamSource,
+      content: Seq[String],
+      src: File,
+      tmp: File) extends AddData {
+
+    override def addData(): Offset = {
+      val file = Utils.tempFileWith(new File(tmp, "parquet"))
+      content.toDS().toDF().write.parquet(file.getCanonicalPath)
+      file.renameTo(new File(src, file.getName))
+      source.currentOffset + 1
+    }
+  }
+
   test("read from text files") {
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
-    val dest = Utils.createTempDir("streaming.dest")
 
-    val df =
-      sqlContext
-        .streamFrom
-        .format("text")
-        .open(src.getCanonicalPath)
+    val textSource = ResolvedDataSource.createSource(
+      sqlContext,
+      userSpecifiedSchema = None,
+      providerName = "text",
+      options = Map("path" -> src.getCanonicalPath)).asInstanceOf[FileStreamSource]
+    val df = textSource.toDF().filter($"value" contains "keep")
+    val filtered = df
 
-    val filtered = df.filter($"value" contains "keep")
+    testStream(filtered)(
+      AddTextFileData(textSource, "drop1\nkeep2\nkeep3", src, tmp),
+      CheckAnswer("keep2", "keep3"),
+      AddTextFileData(textSource, "drop4\nkeep5\nkeep6", src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+      AddTextFileData(textSource, "drop7\nkeep8\nkeep9", src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+    )
 
-    val runningQuery =
-      filtered
-        .streamTo
-        .format("text")
-        .start(dest.getCanonicalPath).asInstanceOf[StreamExecution]
-
-    // Add a file atomically
-    stringToFile(new File(tmp, "1"), "drop1\nkeep2\nkeep3").renameTo(new File(src, "1"))
-
-    // Make sure at least one batch finish after adding the file
-    runningQuery.clearBatchMarker()
-    runningQuery.awaitBatchCompletion()
-
-    val output = sqlContext.read.text(dest.getCanonicalPath).as[String]
-    checkAnswer(output, "keep2", "keep3")
-
-    runningQuery.stop()
     Utils.deleteRecursively(src)
-    Utils.deleteRecursively(dest)
+    Utils.deleteRecursively(tmp)
   }
 
   test("read from json files") {
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
-    val dest = Utils.createTempDir("streaming.dest")
 
-    val df =
-      sqlContext
-        .streamFrom
-        .format("json")
-        .open(src.getCanonicalPath)
+    val textSource = ResolvedDataSource.createSource(
+      sqlContext,
+      userSpecifiedSchema = None,
+      providerName = "json",
+      options = Map("path" -> src.getCanonicalPath)).asInstanceOf[FileStreamSource]
+    val df = textSource.toDF().filter($"value" contains "keep")
+    val filtered = df
 
-    val filtered = df.filter($"value" contains "keep")
+    testStream(filtered)(
+      AddTextFileData(textSource, "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}", src, tmp),
+      CheckAnswer("keep2", "keep3"),
+      AddTextFileData(textSource, "{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+      AddTextFileData(textSource, "{'c': 'drop7'}\n{'c': 'keep8'}\n{'c': 'keep9'}", src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+    )
 
-    val runningQuery =
-      filtered
-        .streamTo
-        .format("text")
-        .start(dest.getCanonicalPath).asInstanceOf[StreamExecution]
-
-    // Add a file atomically
-    stringToFile(new File(tmp, "1"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
-      .renameTo(new File(src, "1"))
-
-    // Make sure at least one batch finish after adding the file
-    runningQuery.clearBatchMarker()
-    runningQuery.awaitBatchCompletion()
-
-    val output = sqlContext.read.text(dest.getCanonicalPath).as[String]
-    checkAnswer(output, "keep2", "keep3")
-
-    runningQuery.stop()
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
-    Utils.deleteRecursively(dest)
   }
 
   test("read from parquet files") {
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
-    val dest = Utils.createTempDir("streaming.dest")
 
-    val df =
-      sqlContext
-        .streamFrom
-        .format("parquet")
-        .open(src.getCanonicalPath)
+    val fileSource = ResolvedDataSource.createSource(
+      sqlContext,
+      userSpecifiedSchema = None,
+      providerName = "parquet",
+      options = Map("path" -> src.getCanonicalPath)).asInstanceOf[FileStreamSource]
+    val df = fileSource.toDF().filter($"value" contains "keep")
+    val filtered = df
 
-    val filtered = df.filter($"value" contains "keep")
+    testStream(filtered)(
+      AddParquetFileData(fileSource, Seq("drop1", "keep2", "keep3"), src, tmp),
+      CheckAnswer("keep2", "keep3"),
+      AddParquetFileData(fileSource, Seq("drop4", "keep5", "keep6"), src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+      AddParquetFileData(fileSource, Seq("drop7", "keep8", "keep9"), src, tmp),
+      CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
+    )
 
-    val runningQuery =
-      filtered
-        .streamTo
-        .format("text")
-        .start(dest.getCanonicalPath).asInstanceOf[StreamExecution]
-
-    // Add a file atomically
-    Seq("drop1", "keep2", "keep3").toDS().toDF().write.parquet(new File(tmp, "1").getCanonicalPath)
-    new File(tmp, "1").renameTo(new File(src, "1"))
-
-    // Make sure at least one batch finish after adding the file
-    runningQuery.clearBatchMarker()
-    runningQuery.awaitBatchCompletion()
-
-    val output = sqlContext.read.text(dest.getCanonicalPath).as[String]
-    checkAnswer(output, "keep2", "keep3")
-
-    runningQuery.stop()
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
-    Utils.deleteRecursively(dest)
   }
 }
