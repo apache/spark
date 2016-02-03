@@ -53,7 +53,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
   private val driverCoresKey = "spark.driver.cores"
   private val amCoresKey = "spark.yarn.am.cores"
-  private val isDynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(sparkConf, false)
+  private val isDynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
 
   parseArgs(args.toList)
   loadEnvironmentArgs()

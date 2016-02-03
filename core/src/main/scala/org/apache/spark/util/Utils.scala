@@ -2195,15 +2195,25 @@ private[spark] object Utils extends Logging {
     isInDirectory(parent, child.getParentFile)
   }
 
+  def isLocal(conf: SparkConf): Boolean = {
+    val master: String = conf.get("spark.master", "")
+    master == "local" || master.startsWith("local[")
+  }
+
   /**
    * Return whether dynamic allocation is enabled in the given conf
    * Dynamic allocation and explicitly setting the number of executors are inherently
    * incompatible. In environments where dynamic allocation is turned on by default,
    * the latter should override the former (SPARK-9092).
    */
-  def isDynamicAllocationEnabled(conf: SparkConf, isLocal: Boolean): Boolean = {
+  def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
+    if (conf.getInt("spark.executor.instances", 0) != 0
+      && conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+    }
     conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
-      conf.getInt("spark.executor.instances", 0) == 0 && !isLocal
+      conf.getInt("spark.executor.instances", 0) == 0 &&
+      (!isLocal(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {

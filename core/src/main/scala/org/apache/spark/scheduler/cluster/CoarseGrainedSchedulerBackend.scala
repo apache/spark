@@ -355,7 +355,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * allocation is enabled.
    * */
   protected def reset(): Unit = synchronized {
-    if (Utils.isDynamicAllocationEnabled(conf, false)) {
+    if (Utils.isDynamicAllocationEnabled(conf)) {
       numPendingExecutors = 0
       executorsPendingToRemove.clear()
 
