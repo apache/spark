@@ -43,12 +43,13 @@ import org.apache.spark.streaming.kafka.newapi._
  */
 object DirectNewKafkaWordCount {
   def main(args: Array[String]) {
-    if (args.length < 2) {
+    if (args.length < 5) {
       System.err.println(s"""
-                            |Usage: DirectNewKafkaWordCount <brokers> <topics>
+                            |Usage: DirectNewKafkaWordCount <brokers> <topics> <groupId> \
+                            |<auto.offset.reset> <pollTimeout>
                             |  <brokers> is a list of one or more Kafka brokers
                             |  <topics> is a list of one or more kafka topics to consume from
-                            |  <groupId> is the name of kafka consumer group
+                            |  <groupId> is the name of kafka consumer group (can be arbitrary)
                             |  <auto.offset.reset> What to do when there is no initial offset
                             |                      in Kafka or if the current offset does not exist
                             |                      any more on the server
