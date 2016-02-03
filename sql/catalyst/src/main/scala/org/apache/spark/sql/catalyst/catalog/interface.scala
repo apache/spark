@@ -36,10 +36,7 @@ abstract class Catalog {
 
   def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
 
-  def dropDatabase(
-    db: String,
-    ignoreIfNotExists: Boolean,
-    cascade: Boolean): Unit
+  def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
   def alterDatabase(db: String, dbDefinition: Database): Unit
 
@@ -71,11 +68,23 @@ abstract class Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  // TODO: need more functions for partitioning.
+  def createPartition(db: String, table: String, part: TablePartition): Unit
+
+  def dropPartition(db: String, table: String, part: TablePartition): Unit
+
+  def dropPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
+
+  def renamePartition(db: String, table: String, oldName: String, newName: String): Unit
+
+  def getPartition(db: String, table: String, part: String): TablePartition
+
+  def getPartitions(db: String, table: String, parts: Seq[String]): Seq[TablePartition]
 
   def alterPartition(db: String, table: String, part: TablePartition): Unit
 
   def alterPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
+
+  def listPartitions(db: String, table: String, pattern: String): Seq[String]
 
   // --------------------------------------------------------------------------
   // Functions

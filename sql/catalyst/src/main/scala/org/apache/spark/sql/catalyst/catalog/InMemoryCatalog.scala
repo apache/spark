@@ -88,9 +88,9 @@ class InMemoryCatalog extends Catalog {
   }
 
   override def dropDatabase(
-    db: String,
-    ignoreIfNotExists: Boolean,
-    cascade: Boolean): Unit = synchronized {
+      db: String,
+      ignoreIfNotExists: Boolean,
+      cascade: Boolean): Unit = synchronized {
     if (catalog.contains(db)) {
       if (!cascade) {
         // If cascade is false, make sure the database is empty.
@@ -133,8 +133,10 @@ class InMemoryCatalog extends Catalog {
   // Tables
   // --------------------------------------------------------------------------
 
-  override def createTable(db: String, tableDefinition: Table, ifNotExists: Boolean)
-  : Unit = synchronized {
+  override def createTable(
+      db: String,
+      tableDefinition: Table,
+      ifNotExists: Boolean): Unit = synchronized {
     assertDbExists(db)
     if (existsTable(db, tableDefinition.name)) {
       if (!ifNotExists) {
@@ -145,8 +147,10 @@ class InMemoryCatalog extends Catalog {
     }
   }
 
-  override def dropTable(db: String, table: String, ignoreIfNotExists: Boolean)
-  : Unit = synchronized {
+  override def dropTable(
+      db: String,
+      table: String,
+      ignoreIfNotExists: Boolean): Unit = synchronized {
     assertDbExists(db)
     if (existsTable(db, table)) {
       catalog(db).tables.remove(table)
@@ -190,13 +194,67 @@ class InMemoryCatalog extends Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  override def alterPartition(db: String, table: String, part: TablePartition)
-  : Unit = synchronized {
+  override def createPartition(
+      db: String,
+      table: String,
+      part: TablePartition): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
-  override def alterPartitions(db: String, table: String, parts: Seq[TablePartition])
-  : Unit = synchronized {
+  override def dropPartition(
+      db: String,
+      table: String,
+      part: TablePartition): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def dropPartitions(
+      db: String,
+      table: String,
+      parts: Seq[TablePartition]): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def renamePartition(
+      db: String,
+      table: String,
+      oldName: String,
+      newName: String): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def getPartition(
+      db: String,
+      table: String,
+      part: String): TablePartition = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def getPartitions(
+      db: String,
+      table: String,
+      parts: Seq[String]): Seq[TablePartition] = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def alterPartition(
+      db: String,
+      table: String,
+      part: TablePartition): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def alterPartitions(
+      db: String,
+      table: String,
+      parts: Seq[TablePartition]): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
+
+  override def listPartitions(
+      db: String,
+      table: String,
+      pattern: String): Seq[String] = synchronized {
     throw new UnsupportedOperationException
   }
 
@@ -222,8 +280,10 @@ class InMemoryCatalog extends Catalog {
     catalog(db).functions.remove(funcName)
   }
 
-  override def alterFunction(db: String, funcName: String, funcDefinition: Function)
-    : Unit = synchronized {
+  override def alterFunction(
+      db: String,
+      funcName: String,
+      funcDefinition: Function): Unit = synchronized {
     assertFunctionExists(db, funcName)
     if (funcName != funcDefinition.name) {
       // Also a rename; remove the old one and add the new one back
