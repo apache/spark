@@ -103,8 +103,12 @@ abstract class Expression extends TreeNode[Expression] {
       val value = ctx.freshName("value")
       val ve = ExprCode("", isNull, value)
       ve.code = genCode(ctx, ve)
-      // Add `this` in the comment.
-      ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+      if (ve.code != "") {
+        // Add `this` in the comment.
+        ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+      } else {
+        ve
+      }
     }
   }
 

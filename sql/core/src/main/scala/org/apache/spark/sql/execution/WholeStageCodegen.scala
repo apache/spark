@@ -170,8 +170,8 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     s"""
        | while (input.hasNext()) {
        |   InternalRow $row = (InternalRow) input.next();
-       |   ${columns.map(_.code).mkString("\n")}
-       |   ${consume(ctx, columns)}
+       |   ${columns.map(_.code).mkString("\n").trim}
+       |   ${consume(ctx, columns).trim}
        | }
      """.stripMargin
   }
@@ -236,15 +236,16 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
 
         private Object[] references;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public GeneratedIterator(Object[] references) {
-         this.references = references;
-         ${ctx.initMutableStates()}
+          this.references = references;
+          ${ctx.initMutableStates()}
         }
 
+        ${ctx.declareAddedFunctions()}
+
         protected void processNext() throws java.io.IOException {
-         $code
+          ${code.trim}
         }
       }
       """

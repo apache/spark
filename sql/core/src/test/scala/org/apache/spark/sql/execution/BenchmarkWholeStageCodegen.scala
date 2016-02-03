@@ -199,7 +199,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   // These benchmark are skipped in normal build
   ignore("benchmark") {
     // testWholeStage(200 << 20)
-    // testStddev(20 << 20)
+    // testStatFunctions(20 << 20)
     // testAggregateWithKey(20 << 20)
     // testBytesToBytesMap(1024 * 1024 * 50)
   }
