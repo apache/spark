@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
 import org.apache.spark.util.Utils
 
 /**
@@ -172,6 +173,9 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
        |   InternalRow $row = (InternalRow) input.next();
        |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
+       |   if (shouldStop()) {
+       |     return;
+       |   }
        | }
      """.stripMargin
   }
@@ -283,8 +287,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRow = $row;
-         | return;
+         | currentRows.add($row.copy());
        """.stripMargin
     } else {
       assert(input != null)
@@ -297,14 +300,12 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
            | ${code.code.trim}
-           | currentRow = ${code.value};
-           | return;
+           | currentRows.add(${code.value}.copy());
          """.stripMargin
       } else {
         // There is no columns
         s"""
-           | currentRow = unsafeRow;
-           | return;
+           | currentRows.add(unsafeRow);
          """.stripMargin
       }
     }
@@ -371,6 +372,11 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
 
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
+            // The build side can't be compiled together
+            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
+              b.copy(left = apply(left))
+            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
+              b.copy(right = apply(right))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input
