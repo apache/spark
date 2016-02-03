@@ -179,8 +179,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "unresolved attributes with a generated name",
     testRelation2.groupBy('a)(max('b))
-    .where(sum('b) > 0)
-    .orderBy('havingCondition.asc),
+      .where(sum('b) > 0)
+      .orderBy('havingCondition.asc),
     "cannot resolve" :: "havingCondition" :: Nil)
 
   errorTest(
