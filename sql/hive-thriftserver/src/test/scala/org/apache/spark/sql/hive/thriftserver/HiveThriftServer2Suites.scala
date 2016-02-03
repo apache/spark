@@ -42,6 +42,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2Test.copyToTempLocation
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -412,12 +413,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     withMultipleConnectionJdbcStatement(
       {
         statement =>
-          val jarFile =
-            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
-              .split("/")
-              .mkString(File.separator)
-
-          statement.executeQuery(s"ADD JAR $jarFile")
+          val jarURL = copyToTempLocation(
+            "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar")
+          statement.executeQuery(s"ADD JAR $jarURL")
       },
 
       {
@@ -490,8 +488,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
 
   test("SPARK-11595 ADD JAR with input path having URL scheme") {
     withJdbcStatement { statement =>
-      val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-      val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+      val jarURL = copyToTempLocation("../hive/src/test/resources/TestUDTF.jar").toURI.toURL
 
       statement.execute(s"ADD JAR $jarURL")
       statement.execute(
@@ -549,8 +546,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
   test("test single session") {
     withMultipleConnectionJdbcStatement(
       { statement =>
-        val jarPath = "../hive/src/test/resources/TestUDTF.jar"
-        val jarURL = s"file://${System.getProperty("user.dir")}/$jarPath"
+        val jarURL = copyToTempLocation("../hive/src/test/resources/TestUDTF.jar").toURI.toURL
 
         // Configurations and temporary functions added in this session should be visible to all
         // the other sessions.
@@ -871,5 +867,14 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     } finally {
       super.afterAll()
     }
+  }
+}
+
+object HiveThriftServer2Test {
+  def copyToTempLocation(from: String): File = {
+    val fromFile = new File(from.split("/").mkString(File.separator))
+    val toLocation = new File(Utils.createTempDir(), fromFile.getName)
+    Files.copy(fromFile, toLocation)
+    toLocation
   }
 }
