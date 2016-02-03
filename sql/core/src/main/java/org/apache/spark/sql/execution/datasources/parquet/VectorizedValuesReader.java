@@ -24,12 +24,17 @@ import org.apache.spark.sql.execution.vectorized.ColumnVector;
  * TODO: merge this into parquet-mr.
  */
 public interface VectorizedValuesReader {
+  byte readByte();
   int readInteger();
+  long readLong();
 
   /*
    * Reads `total` values into `c` start at `c[rowId]`
    */
+  void readBytes(int total, ColumnVector c, int rowId);
   void readIntegers(int total, ColumnVector c, int rowId);
+  void readLongs(int total, ColumnVector c, int rowId);
+  void readBinary(int total, ColumnVector c, int rowId);
 
   // TODO: add all the other parquet types.
 
