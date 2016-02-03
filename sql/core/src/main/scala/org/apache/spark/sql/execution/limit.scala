@@ -23,6 +23,22 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 
 
+/**
+ * Take the first `limit` elements and collect them to a single partition.
+ *
+ * This operator will be used when a logical `Limit` operation is the final operator in an
+ * logical plan, which happens when the user is collecting results back to the driver.
+ */
+case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = SinglePartition
+  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
+  protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(executeCollect(), 1)
+}
+
+/**
+ * Helper trait which defines methods that are shared by both [[LocalLimit]] and [[GlobalLimit]].
+ */
 trait BaseLimit extends UnaryNode {
   val limit: Int
   override def output: Seq[Attribute] = child.output
@@ -42,24 +58,14 @@ trait BaseLimit extends UnaryNode {
 }
 
 /**
- * Take the first `limit` elements and return the to the driver.
+ * Take the first `limit` elements of each child partition, but do not collect or shuffle them.
  */
-case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
-  override def outputPartitioning: Partitioning = SinglePartition
-  override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  protected override def doExecute(): RDD[InternalRow] = {
-    sparkContext.parallelize(executeCollect())
-  }
+case class LocalLimit(limit: Int, child: SparkPlan) extends BaseLimit {
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
 
 /**
- * Take the first `limit` elements of each partition.
- */
-case class LocalLimit(limit: Int, child: SparkPlan) extends BaseLimit
-
-/**
- * Take the first `limit` elements of the child operator's output.
+ * Take the first `limit` elements of the child's single output partition.
  */
 case class GlobalLimit(limit: Int, child: SparkPlan) extends BaseLimit {
   override def requiredChildDistribution: List[Distribution] = AllTuples :: Nil
