@@ -83,6 +83,7 @@ class InputMetrics private (
 
   // Once incBytesRead & intRecordsRead is ready to be removed from the public API
   // we can remove the internal versions and make the previous public API private.
+  // This has been done to suppress warnings when building.
   @deprecated("incrementing input metrics is for internal use only", "2.0.0")
   def incBytesRead(v: Long): Unit = _bytesRead.add(v)
   private[spark] def incBytesReadInternal(v: Long): Unit = _bytesRead.add(v)
