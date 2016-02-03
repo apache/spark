@@ -84,15 +84,19 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     Row(user=2, item=0, prediction=-1.5018409490585327)
     >>> import os, tempfile
     >>> path = tempfile.mkdtemp()
-    >>> ALS_path = path + "/als"
-    >>> als.save(ALS_path)
-    >>> als2 = ALS.load(ALS_path)
+    >>> als_path = path + "/als"
+    >>> als.save(als_path)
+    >>> als2 = ALS.load(als_path)
     >>> als.getMaxIter()
     5
     >>> model_path = path + "/als_model"
     >>> model.save(model_path)
     >>> model2 = ALSModel.load(model_path)
     >>> model.rank == model2.rank
+    True
+    >>> sorted(model.userFactors.collect()) == sorted(model2.userFactors.collect())
+    True
+    >>> sorted(model.itemFactors.collect()) == sorted(model2.itemFactors.collect())
     True
     >>> from shutil import rmtree
     >>> try:
