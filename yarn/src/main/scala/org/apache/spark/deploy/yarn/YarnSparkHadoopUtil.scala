@@ -26,7 +26,7 @@ import java.util.Date
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.reflect.runtime._
 import scala.util.Try
@@ -347,19 +347,25 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     }
   }
 
+  /**
+   * Dump the credentials's tokens to string values.
+   * @param credentials credentials
+   * @return an iterator over the string values.
+   */
   def dumpTokens(credentials: Credentials): Iterable[String] = {
-    credentials.getAllTokens.map(tokenToString)
+    credentials.getAllTokens.asScala.map(tokenToString)
   }
 
   /**
-   * Convert a token to a string. If its an abstract delegation token
-   *
-   * @param token
-   * @return
+   * Convert a token to a string. If its an abstract delegation token,
+   * attempt to unmarshall it and then print more details, including
+   * timestamps in human-readable form.
+   * @param token token to convert to a string
+   * @return a printable string value.
    */
   def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
     val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
-    val buffer =  new StringBuilder(128)
+    val buffer = new StringBuilder(128)
     buffer.append(token.toString)
     try {
       val ti = token.decodeIdentifier
@@ -367,9 +373,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       ti match {
         case dt: AbstractDelegationTokenIdentifier =>
           // include human times and the renewer, which the HDFS tokens toString omits
-          buffer.append(s" Renewer: ${dt.getRenewer}")
-          buffer.append(" Issued: ").append(df.format(new Date(dt.getIssueDate)))
-          buffer.append(" Max Date: ").append(df.format(new Date(dt.getMaxDate)))
+          buffer.append(s"; Renewer: ${dt.getRenewer}")
+          buffer.append("; Issued: ").append(df.format(new Date(dt.getIssueDate)))
+          buffer.append("; Max Date: ").append(df.format(new Date(dt.getMaxDate)))
         case _ =>
       }
     } catch {
