@@ -34,7 +34,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-    override def upstream(): RDD[InternalRow] = {
+  override def upstream(): RDD[InternalRow] = {
     child.asInstanceOf[CodegenSupport].upstream()
   }
 
