@@ -117,15 +117,20 @@ joinToken
 @init { gParent.pushMsg("join type specifier", state); }
 @after { gParent.popMsg(state); }
     :
-      KW_JOIN                      -> TOK_JOIN
-    | KW_INNER KW_JOIN             -> TOK_JOIN
-    | COMMA                        -> TOK_JOIN
-    | KW_CROSS KW_JOIN             -> TOK_CROSSJOIN
-    | KW_LEFT  (KW_OUTER)? KW_JOIN -> TOK_LEFTOUTERJOIN
-    | KW_RIGHT (KW_OUTER)? KW_JOIN -> TOK_RIGHTOUTERJOIN
-    | KW_FULL  (KW_OUTER)? KW_JOIN -> TOK_FULLOUTERJOIN
-    | KW_LEFT KW_SEMI KW_JOIN      -> TOK_LEFTSEMIJOIN
-    | KW_ANTI KW_JOIN              -> TOK_ANTIJOIN
+      KW_JOIN                                 -> TOK_JOIN
+    | KW_INNER KW_JOIN                        -> TOK_JOIN
+    | KW_NATURAL KW_JOIN                      -> TOK_NATURALJOIN
+    | KW_NATURAL KW_INNER KW_JOIN             -> TOK_NATURALJOIN
+    | COMMA                                   -> TOK_JOIN
+    | KW_CROSS KW_JOIN                        -> TOK_CROSSJOIN
+    | KW_LEFT  (KW_OUTER)? KW_JOIN            -> TOK_LEFTOUTERJOIN
+    | KW_RIGHT (KW_OUTER)? KW_JOIN            -> TOK_RIGHTOUTERJOIN
+    | KW_FULL  (KW_OUTER)? KW_JOIN            -> TOK_FULLOUTERJOIN
+    | KW_NATURAL KW_LEFT  (KW_OUTER)? KW_JOIN -> TOK_NATURALLEFTOUTERJOIN
+    | KW_NATURAL KW_RIGHT (KW_OUTER)? KW_JOIN -> TOK_NATURALRIGHTOUTERJOIN
+    | KW_NATURAL KW_FULL  (KW_OUTER)? KW_JOIN -> TOK_NATURALFULLOUTERJOIN
+    | KW_LEFT KW_SEMI KW_JOIN                 -> TOK_LEFTSEMIJOIN
+    | KW_ANTI KW_JOIN                         -> TOK_ANTIJOIN
     ;
 
 lateralView

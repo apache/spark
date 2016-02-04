@@ -60,3 +60,7 @@ case object FullOuter extends JoinType {
 case object LeftSemi extends JoinType {
   override def sql: String = "LEFT SEMI"
 }
+
+case class NaturalJoin(tpe: JoinType) extends JoinType {
+  override def sql: String = "NATURAL " + tpe.sql
+}
