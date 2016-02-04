@@ -39,7 +39,14 @@ import org.apache.spark.util.collection.CompactBuffer
  * object.
  */
 private[execution] sealed trait HashedRelation {
+  /**
+    * Returns matched rows.
+    */
   def get(key: InternalRow): Seq[InternalRow]
+
+  /**
+    * Returns matched rows for a key that has only one column with LongType.
+    */
   def get(key: Long): Seq[InternalRow] = {
     throw new UnsupportedOperationException
   }
@@ -61,15 +68,27 @@ private[execution] sealed trait HashedRelation {
   }
 }
 
+/**
+  * Interface for a hashed relation that have only one row per key.
+  *
+  * We should call getValue() for better performance.
+  */
 private[execution] trait UniqueHashedRelation extends HashedRelation {
 
+  /**
+    * Returns the matched single row.
+    */
   def getValue(key: InternalRow): InternalRow
+
+  /**
+    * Returns the matched single row with key that have only one column of LongType.
+    */
   def getValue(key: Long): InternalRow = {
     throw new UnsupportedOperationException
   }
 
   /**
-    * The buffer re-used in get().
+    * The buffer is re-used in get().
     */
   private val buffer = CompactBuffer[InternalRow](null)
 
@@ -82,6 +101,7 @@ private[execution] trait UniqueHashedRelation extends HashedRelation {
       null
     }
   }
+
   override def get(key: Long): Seq[InternalRow] = {
     val row = getValue(key)
     if (row != null) {
@@ -136,8 +156,6 @@ private[joins] class UniqueKeyHashedRelation(
     hashTable = SparkSqlSerializer.deserialize(readBytes(in))
   }
 }
-
-// TODO(rxin): a version of [[HashedRelation]] backed by arrays for consecutive integer keys.
 
 
 private[execution] object HashedRelation {
@@ -437,10 +455,14 @@ private[joins] object UnsafeHashedRelation {
       }
     }
 
+    // TODO: create UniqueUnsafeRelation
     new UnsafeHashedRelation(hashTable)
   }
 }
 
+/**
+  * An interface for a hashed relation that the key is a Long.
+  */
 private[joins] trait LongHashedRelation extends HashedRelation {
   override def get(key: InternalRow): Seq[InternalRow] = {
     get(key.getLong(0))
@@ -466,7 +488,7 @@ private[joins] final class GeneralLongHashedRelation(
 }
 
 private[joins] final class UniqueLongHashedRelation(
-  private var hashTable: JavaHashMap[Long, InternalRow])
+  private var hashTable: JavaHashMap[Long, UnsafeRow])
   extends UniqueHashedRelation with LongHashedRelation with Externalizable {
 
   // Needed for serialization (it is public to make Java serialization work)
@@ -490,25 +512,30 @@ private[joins] final class UniqueLongHashedRelation(
 }
 
 /**
-  * A relation that's based on array of UnsafeRow.
+  * A relation that pack all the rows into a byte array, together with offsets and sizes.
   */
 private[joins] final class LongArrayRelation(
-  private var numFields: Int,
-  private var start: Long,
-  private var array: Array[UnsafeRow])
-  extends UniqueHashedRelation with LongHashedRelation with Externalizable {
+    private var numFields: Int,
+    private var start: Long,
+    private var offsets: Array[Int],
+    private var sizes: Array[Int],
+    private var bytes: Array[Byte]
+  ) extends UniqueHashedRelation with LongHashedRelation with Externalizable {
 
   // Needed for serialization (it is public to make Java serialization work)
-  def this() = this(0, 0L, null)
+  def this() = this(0, 0L, null, null, null)
 
   override def getValue(key: InternalRow): InternalRow = {
     getValue(key.getLong(0))
   }
 
+  val result = new UnsafeRow(numFields)
+
   override def getValue(key: Long): InternalRow = {
-    val idx = key - start
-    if (idx >= 0 && idx < array.length) {
-      array(idx.toInt)
+    val idx = (key - start).toInt
+    if (idx >= 0 && idx < offsets.length && sizes(idx) > 0) {
+      result.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET + offsets(idx), sizes(idx))
+      result
     } else {
       null
     }
@@ -517,37 +544,34 @@ private[joins] final class LongArrayRelation(
   override def writeExternal(out: ObjectOutput): Unit = {
     out.writeInt(numFields)
     out.writeLong(start)
-    out.writeInt(array.length)
+    out.writeInt(sizes.length)
     var i = 0
-    while (i < array.length) {
-      if (array(i) != null) {
-        writeBytes(out, array(i).getBytes)
-      } else {
-        out.writeInt(0)
-      }
+    while (i < sizes.length) {
+      out.write(sizes(i))
       i += 1
     }
+    out.write(bytes.length)
+    out.write(bytes)
   }
 
   override def readExternal(in: ObjectInput): Unit = {
     numFields = in.readInt()
     start = in.readLong()
     val length = in.readInt()
-    array = new Array[UnsafeRow](length)
+    // read sizes of rows
+    sizes = new Array[Int](length)
+    offsets = new Array[Int](length)
     var i = 0
+    var offset = 0
     while (i < length) {
-      val len = in.readInt()
-      if (len != 0) {
-        val bytes = new Array[Byte](len)
-        in.readFully(bytes)
-        val row = new UnsafeRow(numFields)
-        row.pointTo(bytes, len)
-        array(i) = row
-      } else {
-        array(i) = null
-      }
+      offsets(i) = offset
+      sizes(i) = in.readInt()
+      offset += sizes(i)
       i += 1
     }
+    // read all the bytes
+    bytes = new Array[Byte](offset)
+    in.readFully(bytes)
   }
 }
 
@@ -591,15 +615,34 @@ private[joins] object LongHashedRelation {
     if (keyIsUnique) {
       if (maxKey - minKey <= hashTable.size() * 5) {
         // The keys are dense enough, so use LongArrayRelation
-        val array = new Array[UnsafeRow]((maxKey - minKey).toInt + 1)
-        val iter = hashTable.entrySet().iterator()
-        while (iter.hasNext) {
-          val entry = iter.next()
-          array(entry.getKey.toInt - minKey.toInt) = entry.getValue()(0)
+        val length = (maxKey - minKey).toInt + 1
+        val array = new Array[UnsafeRow](length)
+        val sizes = new Array[Int](length)
+        val offsets = new Array[Int](length)
+        var offset = 0
+        var i = 0
+        while (i < length) {
+          val rows = hashTable.get(i + minKey)
+          if (rows != null) {
+            offsets(i) = offset
+            sizes(i) = rows(0).getSizeInBytes
+            offset += sizes(i)
+          }
+          i += 1
         }
-        new LongArrayRelation(numFields, minKey, array)
+        val bytes = new Array[Byte](offset)
+        i = 0
+        while (i < length) {
+          val rows = hashTable.get(i + minKey)
+          if (rows != null) {
+            rows(0).writeToMemory(bytes, Platform.BYTE_ARRAY_OFFSET + offsets(i))
+          }
+          i += 1
+        }
+        new LongArrayRelation(numFields, minKey, offsets, sizes, bytes)
+
       } else {
-        val uniqHashTable = new JavaHashMap[Long, InternalRow](hashTable.size)
+        val uniqHashTable = new JavaHashMap[Long, UnsafeRow](hashTable.size)
         val iter = hashTable.entrySet().iterator()
         while (iter.hasNext) {
           val entry = iter.next()
