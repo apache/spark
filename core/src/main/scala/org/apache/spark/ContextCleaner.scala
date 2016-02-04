@@ -18,9 +18,9 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
-import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
@@ -57,13 +57,11 @@ private class CleanupTaskWeakReference(
  */
 private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
-  private val referenceBuffer = new ArrayBuffer[CleanupTaskWeakReference]
-    with SynchronizedBuffer[CleanupTaskWeakReference]
+  private val referenceBuffer = new ConcurrentLinkedQueue[CleanupTaskWeakReference]()
 
   private val referenceQueue = new ReferenceQueue[AnyRef]
 
-  private val listeners = new ArrayBuffer[CleanerListener]
-    with SynchronizedBuffer[CleanerListener]
+  private val listeners = new ConcurrentLinkedQueue[CleanerListener]()
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
@@ -111,7 +109,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Attach a listener object to get information of when objects are cleaned. */
   def attachListener(listener: CleanerListener): Unit = {
-    listeners += listener
+    listeners.add(listener)
   }
 
   /** Start the cleaner. */
@@ -166,7 +164,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask): Unit = {
-    referenceBuffer += new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue)
+    referenceBuffer.add(new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue))
   }
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
@@ -179,7 +177,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
         synchronized {
           reference.map(_.task).foreach { task =>
             logDebug("Got cleaning task " + task)
-            referenceBuffer -= reference.get
+            referenceBuffer.remove(reference.get)
             task match {
               case CleanRDD(rddId) =>
                 doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
@@ -206,7 +204,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug("Cleaning RDD " + rddId)
       sc.unpersistRDD(rddId, blocking)
-      listeners.foreach(_.rddCleaned(rddId))
+      listeners.asScala.foreach(_.rddCleaned(rddId))
       logInfo("Cleaned RDD " + rddId)
     } catch {
       case e: Exception => logError("Error cleaning RDD " + rddId, e)
@@ -219,7 +217,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       logDebug("Cleaning shuffle " + shuffleId)
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
       blockManagerMaster.removeShuffle(shuffleId, blocking)
-      listeners.foreach(_.shuffleCleaned(shuffleId))
+      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
       logInfo("Cleaned shuffle " + shuffleId)
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
@@ -231,7 +229,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug(s"Cleaning broadcast $broadcastId")
       broadcastManager.unbroadcast(broadcastId, true, blocking)
-      listeners.foreach(_.broadcastCleaned(broadcastId))
+      listeners.asScala.foreach(_.broadcastCleaned(broadcastId))
       logDebug(s"Cleaned broadcast $broadcastId")
     } catch {
       case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
@@ -243,7 +241,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug("Cleaning accumulator " + accId)
       Accumulators.remove(accId)
-      listeners.foreach(_.accumCleaned(accId))
+      listeners.asScala.foreach(_.accumCleaned(accId))
       logInfo("Cleaned accumulator " + accId)
     } catch {
       case e: Exception => logError("Error cleaning accumulator " + accId, e)
@@ -258,7 +256,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug("Cleaning rdd checkpoint data " + rddId)
       ReliableRDDCheckpointData.cleanCheckpoint(sc, rddId)
-      listeners.foreach(_.checkpointCleaned(rddId))
+      listeners.asScala.foreach(_.checkpointCleaned(rddId))
       logInfo("Cleaned rdd checkpoint data " + rddId)
     }
     catch {
