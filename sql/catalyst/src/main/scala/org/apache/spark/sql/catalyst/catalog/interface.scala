@@ -29,17 +29,15 @@ import org.apache.spark.sql.AnalysisException
  * Implementations should throw [[AnalysisException]] when table or database don't exist.
  */
 abstract class Catalog {
+  import Catalog._
 
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
 
-  def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
+  def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit
 
-  def dropDatabase(
-    db: String,
-    ignoreIfNotExists: Boolean,
-    cascade: Boolean): Unit
+  def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
   def alterDatabase(db: String, dbDefinition: Database): Unit
 
@@ -71,11 +69,28 @@ abstract class Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  // TODO: need more functions for partitioning.
+  def createPartitions(
+      db: String,
+      table: String,
+      parts: Seq[TablePartition],
+      ignoreIfExists: Boolean): Unit
 
-  def alterPartition(db: String, table: String, part: TablePartition): Unit
+  def dropPartitions(
+      db: String,
+      table: String,
+      parts: Seq[PartitionSpec],
+      ignoreIfNotExists: Boolean): Unit
 
-  def alterPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
+  def alterPartition(
+      db: String,
+      table: String,
+      spec: PartitionSpec,
+      newPart: TablePartition): Unit
+
+  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition
+
+  // TODO: support listing by pattern
+  def listPartitions(db: String, table: String): Seq[TablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
@@ -132,11 +147,11 @@ case class Column(
 /**
  * A partition (Hive style) defined in the catalog.
  *
- * @param values values for the partition columns
+ * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  */
 case class TablePartition(
-  values: Seq[String],
+  spec: Catalog.PartitionSpec,
   storage: StorageFormat
 )
 
@@ -176,3 +191,8 @@ case class Database(
   locationUri: String,
   properties: Map[String, String]
 )
+
+
+object Catalog {
+  type PartitionSpec = Map[String, String]
+}
