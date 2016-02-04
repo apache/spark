@@ -718,7 +718,11 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def select(col: String, cols: String*): DataFrame = select((col +: cols).map(Column(_)) : _*)
+  def select(col: String, cols: String*): DataFrame = {
+    val output = queryExecution.analyzed.output
+    val resolver = sqlContext.analyzer.resolver
+    select(output.filter(x=>(col +: cols).exists(y=>resolver(x.name,y))).map(Column(_)) : _*)
+  }
 
   /**
    * Selects a set of SQL expressions. This is a variant of `select` that accepts
