@@ -537,7 +537,30 @@ case class Pivot(
   }
 }
 
-case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+object Limit {
+  def apply(limitExpr: Expression, child: LogicalPlan): UnaryNode = {
+    GlobalLimit(limitExpr, LocalLimit(limitExpr, child))
+  }
+
+  def unapply(p: GlobalLimit): Option[(Expression, LogicalPlan)] = {
+    p match {
+      case GlobalLimit(le1, LocalLimit(le2, child)) if le1 == le2 => Some((le1, child))
+      case _ => None
+    }
+  }
+}
+
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+
+  override lazy val statistics: Statistics = {
+    val limit = limitExpr.eval().asInstanceOf[Int]
+    val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+}
+
+case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override lazy val statistics: Statistics = {

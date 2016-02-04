@@ -213,7 +213,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           wrapChildWithSubquery(plan)
 
         case plan @ Project(_,
-          _: Subquery | _: Filter | _: Join | _: MetastoreRelation | OneRowRelation | _: Limit
+          _: Subquery
+            | _: Filter
+            | _: Join
+            | _: MetastoreRelation
+            | OneRowRelation
+            | _: LocalLimit
+            | _: GlobalLimit
         ) => plan
 
         case plan: Project =>
