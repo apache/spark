@@ -250,7 +250,7 @@ class HeartbeatReceiverSuite
   }
 }
 
-// TODO: use these classes to add end-to-end tests for dynamic allocation!
+// TODO: use these classes to add end-to-end tests for elastic scaling!
 
 /**
  * Dummy RPC endpoint to simulate executors.

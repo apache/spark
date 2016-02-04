@@ -193,10 +193,10 @@ private[spark] class ExecutorAllocationManager(
     if (executorIdleTimeoutS <= 0) {
       throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
     }
-    // Require external shuffle service for dynamic allocation
+    // Require external shuffle service for elastic scaling
     // Otherwise, we may lose shuffle files when killing executors
     if (!conf.getBoolean("spark.shuffle.service.enabled", false) && !testing) {
-      throw new SparkException("Dynamic allocation of executors requires the external " +
+      throw new SparkException("Elastic scaling of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutor == 0) {

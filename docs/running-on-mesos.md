@@ -246,8 +246,8 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Dynamic Resource Allocation with Mesos
 
-Mesos supports dynamic allocation only with coarse grain mode, which can resize the number of executors based on statistics
-of the application. While dynamic allocation supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
+Mesos supports elastic scaling only with coarse grain mode, which can resize the number of executors based on statistics
+of the application. While elastic scaling supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
 since it is already designed to run one executor per slave with the configured amount of resources. However, after scaling down the number of executors the coarse grain scheduler
 can scale back up to the same amount of executors when Spark signals more executors are needed.
 

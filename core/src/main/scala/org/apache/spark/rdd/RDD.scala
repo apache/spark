@@ -1433,7 +1433,7 @@ abstract class RDD[T: ClassTag](
    * fault-tolerant storage. The effect is that if an executor fails during the computation,
    * the checkpointed data may no longer be accessible, causing an irrecoverable job failure.
    *
-   * This is NOT safe to use with dynamic allocation, which removes executors along
+   * This is NOT safe to use with elastic scaling, which removes executors along
    * with their cached blocks. If you must use both features, you are advised to set
    * `spark.dynamicAllocation.cachedExecutorIdleTimeout` to a high value.
    *
@@ -1442,7 +1442,7 @@ abstract class RDD[T: ClassTag](
   def localCheckpoint(): this.type = RDDCheckpointData.synchronized {
     if (conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
         conf.contains("spark.dynamicAllocation.cachedExecutorIdleTimeout")) {
-      logWarning("Local checkpointing is NOT safe to use with dynamic allocation, " +
+      logWarning("Local checkpointing is NOT safe to use with elastic scaling, " +
         "which removes executors along with their cached blocks. If you must use both " +
         "features, you are advised to set `spark.dynamicAllocation.cachedExecutorIdleTimeout` " +
         "to a high value. E.g. If you plan to use the RDD for 1 hour, set the timeout to " +

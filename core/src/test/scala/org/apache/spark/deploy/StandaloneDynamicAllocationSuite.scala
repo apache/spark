@@ -35,7 +35,7 @@ import org.apache.spark.scheduler.cluster._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 
 /**
- * End-to-end tests for dynamic allocation in standalone mode.
+ * End-to-end tests for elastic scaling in standalone mode.
  */
 class StandaloneDynamicAllocationSuite
   extends SparkFunSuite
@@ -85,7 +85,7 @@ class StandaloneDynamicAllocationSuite
     }
   }
 
-  test("dynamic allocation default behavior") {
+  test("elastic scaling default behavior") {
     sc = new SparkContext(appConf)
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
@@ -132,7 +132,7 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.getExecutorLimit === 1000)
   }
 
-  test("dynamic allocation with max cores <= cores per worker") {
+  test("elastic scaling with max cores <= cores per worker") {
     sc = new SparkContext(appConf.set("spark.cores.max", "8"))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
@@ -155,7 +155,7 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.executors.values.head.cores === 8)
     assert(apps.head.getExecutorLimit === 1)
     // request 1 more; this one won't go through because we're already at max cores.
-    // This highlights a limitation of using dynamic allocation with max cores WITHOUT
+    // This highlights a limitation of using elastic scaling with max cores WITHOUT
     // setting cores per executor: once an application scales down and then scales back
     // up, its executors may not be spread out anymore!
     assert(sc.requestExecutors(1))
@@ -187,7 +187,7 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.getExecutorLimit === 1000)
   }
 
-  test("dynamic allocation with max cores > cores per worker") {
+  test("elastic scaling with max cores > cores per worker") {
     sc = new SparkContext(appConf.set("spark.cores.max", "16"))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
@@ -240,7 +240,7 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.getExecutorLimit === 1000)
   }
 
-  test("dynamic allocation with cores per executor") {
+  test("elastic scaling with cores per executor") {
     sc = new SparkContext(appConf.set("spark.executor.cores", "2"))
     val appId = sc.applicationId
     eventually(timeout(10.seconds), interval(10.millis)) {
@@ -292,7 +292,7 @@ class StandaloneDynamicAllocationSuite
     assert(apps.head.getExecutorLimit === 1000)
   }
 
-  test("dynamic allocation with cores per executor AND max cores") {
+  test("elastic scaling with cores per executor AND max cores") {
     sc = new SparkContext(appConf
       .set("spark.executor.cores", "2")
       .set("spark.cores.max", "8"))

@@ -542,8 +542,8 @@ class StreamingContext private[streaming] (
     }
 
     if (Utils.isDynamicAllocationEnabled(sc.conf)) {
-      logWarning("Dynamic Allocation is enabled for this application. " +
-        "Enabling Dynamic allocation for Spark Streaming applications can cause data loss if " +
+      logWarning("Elastic Scaling is enabled for this application. " +
+        "Enabling Elastic scaling for Spark Streaming applications can cause data loss if " +
         "Write Ahead Log is not enabled for non-replayable sources like Flume. " +
         "See the programming guide for details on how to enable the Write Ahead Log")
     }

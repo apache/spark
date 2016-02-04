@@ -2207,9 +2207,10 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return whether dynamic allocation is enabled in the given conf
-   * Dynamic allocation and explicitly setting the number of executors are inherently
-   * incompatible. In environments where dynamic allocation is turned on by default,
+   * Return whether elastic scaling is enabled in the given conf
+   * Return whether elastic scaling is enabled in the given conf
+   * Elastic Scaling and explicitly setting the number of executors are inherently
+   * incompatible. In environments where elastic scaling is turned on by default,
    * the latter should override the former (SPARK-9092).
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {

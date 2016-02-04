@@ -79,7 +79,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
       .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orNull
-    // If dynamic allocation is enabled, start at the configured initial number of executors.
+    // If elastic scaling is enabled, start at the configured initial number of executors.
     // Default to minExecutors if no initialExecutors is set.
     numExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf, numExecutors)
     principal = Option(principal)
