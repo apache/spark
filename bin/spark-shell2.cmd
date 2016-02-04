@@ -17,7 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set SPARK_HOME="%~dp0.."
+set SPARK_HOME=%~dp0..
 set _SPARK_CMD_USAGE=Usage: .\bin\spark-shell.cmd [options]
 
 rem SPARK-4161: scala does not assume use of the java classpath,
