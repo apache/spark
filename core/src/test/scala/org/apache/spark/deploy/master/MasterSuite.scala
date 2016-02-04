@@ -467,7 +467,7 @@ class MasterSuite extends SparkFunSuite with Matchers with Eventually with Priva
       coresPerTask: Option[Int] = None): ApplicationInfo = {
     val desc = new ApplicationDescription(
       "test", maxCores, memoryPerExecutorMb, null, "", None, None, coresPerExecutor,
-      coresPerTask.getOrElse(1))
+      coresPerTask = coresPerTask.getOrElse(1))
     val appId = System.currentTimeMillis.toString
     new ApplicationInfo(0, appId, desc, new Date, null, Int.MaxValue)
   }
