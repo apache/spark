@@ -66,6 +66,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      LimitPushDown,
       ColumnPruning,
       // Operator combine
       CollapseRepartition,
@@ -126,6 +127,40 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       m.copy(
         deserializer = childWithoutSerialization.output.head,
         child = childWithoutSerialization)
+  }
+}
+
+/**
+ * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
+ */
+object LimitPushDown extends Rule[LogicalPlan] {
+
+  private def stipGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case GlobalLimit(expr, child) => child
+      case _ => plan
+    }
+  }
+
+  private def buildUnionChild(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRows) match {
+      case (IntegerLiteral(maxRow), Some(IntegerLiteral(childMaxRows))) if maxRow < childMaxRows =>
+        LocalLimit(limitExp, stipGlobalLimitIfPresent(plan))
+      case (_, None) =>
+        LocalLimit(limitExp, stipGlobalLimitIfPresent(plan))
+      case _ => plan
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
+    // descendants whose maxRow is larger. This heuristic is valid assuming there does not exist any
+    // Limit push-down rule that is unable to infer the value of maxRows.
+    // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
+    // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
+    // pushdown Limit.
+    case LocalLimit(exp, Union(children)) =>
+      LocalLimit(exp, Union(children.map(buildUnionChild(exp, _))))
   }
 }
 
@@ -985,8 +1020,12 @@ object RemoveDispensableExpressions extends Rule[LogicalPlan] {
  */
 object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ll @ GlobalLimit(le, nl @ GlobalLimit(ne, grandChild)) =>
+      GlobalLimit(Least(Seq(ne, le)), grandChild)
+    case ll @ LocalLimit(le, nl @ LocalLimit(ne, grandChild)) =>
+      LocalLimit(Least(Seq(ne, le)), grandChild)
     case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
-      Limit(If(LessThan(ne, le), ne, le), grandChild)
+      Limit(Least(Seq(ne, le)), grandChild)
   }
 }
 

@@ -39,6 +39,8 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
+  override def maxRows: Option[Expression] = child.maxRows
+
   override lazy val resolved: Boolean = {
     val hasSpecialExpressions = projectList.exists ( _.collect {
         case agg: AggregateExpression => agg
@@ -166,6 +168,13 @@ object Union {
 }
 
 case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
+  override def maxRows: Option[Expression] = {
+    if (children.exists(_.maxRows.isEmpty)) {
+      None
+    } else {
+      Some(children.flatMap(_.maxRows).reduce { (a, b) => Add(a, b) })
+    }
+  }
 
   // updating nullability to make all the children consistent
   override def output: Seq[Attribute] =
@@ -552,7 +561,7 @@ object Limit {
 
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-
+  override def maxRows: Option[Expression] = Some(limitExpr)
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
@@ -562,7 +571,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 
 case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
-
+  override def maxRows: Option[Expression] = Some(limitExpr)
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
