@@ -29,12 +29,13 @@ import org.apache.spark.sql.AnalysisException
  * Implementations should throw [[AnalysisException]] when table or database don't exist.
  */
 abstract class Catalog {
+  import Catalog._
 
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
 
-  def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
+  def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
@@ -68,19 +69,27 @@ abstract class Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  def createPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
+  def createPartitions(
+      db: String,
+      table: String,
+      parts: Seq[TablePartition],
+      ignoreIfExists: Boolean): Unit
 
-  def dropPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
+  def dropPartitions(
+      db: String,
+      table: String,
+      parts: Seq[TablePartition],
+      ignoreIfNotExists: Boolean): Unit
 
-  def getPartition(db: String, table: String, spec: Map[String, String]): TablePartition
+  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition
 
   def alterPartition(
       db: String,
       table: String,
-      spec: Map[String, String],
+      spec: PartitionSpec,
       newPart: TablePartition): Unit
 
-  def listPartitions(db: String, table: String, pattern: String): Seq[TablePartition]
+  def listPartitions(db: String, table: String): Seq[TablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
@@ -141,7 +150,7 @@ case class Column(
  * @param storage storage format of the partition
  */
 case class TablePartition(
-  spec: Map[String, String],
+  spec: Catalog.PartitionSpec,
   storage: StorageFormat
 )
 
@@ -181,3 +190,8 @@ case class Database(
   locationUri: String,
   properties: Map[String, String]
 )
+
+
+object Catalog {
+  type PartitionSpec = Map[String, String]
+}

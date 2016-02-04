@@ -41,8 +41,8 @@ abstract class CatalogTestCases extends SparkFunSuite {
    */
   private def newBasicCatalog(): Catalog = {
     val catalog = newEmptyCatalog()
-    catalog.createDatabase(newDb("db1"), ifNotExists = false)
-    catalog.createDatabase(newDb("db2"), ifNotExists = false)
+    catalog.createDatabase(newDb("db1"), ignoreIfExists = false)
+    catalog.createDatabase(newDb("db2"), ignoreIfExists = false)
 
     catalog.createTable("db2", newTable("tbl1"), ignoreIfExists = false)
     catalog.createTable("db2", newTable("tbl2"), ignoreIfExists = false)
@@ -67,10 +67,10 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("basic create, drop and list databases") {
     val catalog = newEmptyCatalog()
-    catalog.createDatabase(newDb(), ifNotExists = false)
+    catalog.createDatabase(newDb(), ignoreIfExists = false)
     assert(catalog.listDatabases().toSet == Set("default"))
 
-    catalog.createDatabase(newDb("default2"), ifNotExists = false)
+    catalog.createDatabase(newDb("default2"), ignoreIfExists = false)
     assert(catalog.listDatabases().toSet == Set("default", "default2"))
   }
 
