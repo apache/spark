@@ -1291,14 +1291,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
   }
-  
+
   test("SPARK-12982: Add table name validation in temp table registration") {
     val rows = List(Row("foo"), Row("bar"))
     val schema = StructType(Seq(StructField("col", StringType)))
     val rdd = sparkContext.parallelize(rows)
     val df = sqlContext.createDataFrame(rdd, schema)
-    assert(intercept[AnalysisException](df.registerTempTable("t~"))
-      .getMessage.contains("NoViableAltException"))
+    intercept[AnalysisException](df.registerTempTable("t~"))
   }
-
 }
