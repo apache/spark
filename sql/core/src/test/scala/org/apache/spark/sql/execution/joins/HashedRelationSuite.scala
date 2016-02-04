@@ -22,9 +22,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{StringType, IntegerType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -133,5 +134,33 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     hashed2.writeExternal(out2)
     out2.flush()
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
+  }
+
+  test("LongArrayRelation") {
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
+    val keyProj = UnsafeProjection.create(Seq(BoundReference(0, IntegerType, false)))
+    val longRelation = LongHashedRelation(rows.iterator, SQLMetrics.nullLongMetric, keyProj, 100)
+    assert(longRelation.isInstanceOf[LongArrayRelation])
+    val longArrayRelation = longRelation.asInstanceOf[LongArrayRelation]
+    (0 until 100).foreach { i =>
+      val row = longArrayRelation.getValue(i)
+      assert(row.getInt(0) === i)
+      assert(row.getInt(1) === i + 1)
+    }
+
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    longArrayRelation.writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val relation = new LongArrayRelation()
+    relation.readExternal(in)
+    (0 until 100).foreach { i =>
+      val row = longArrayRelation.getValue(i)
+      assert(row.getInt(0) === i)
+      assert(row.getInt(1) === i + 1)
+    }
   }
 }

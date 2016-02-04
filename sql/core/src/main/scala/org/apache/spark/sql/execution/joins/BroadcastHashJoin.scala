@@ -118,11 +118,7 @@ case class BroadcastHashJoin(
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
-      hashedRelation match {
-        case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
-        case _ =>
-      }
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
       hashJoin(streamedIter, numStreamedRows, hashedRelation, numOutputRows)
     }
   }
@@ -141,15 +137,10 @@ case class BroadcastHashJoin(
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
-    val incPeakMemory = if (broadcastRelation.value.isInstanceOf[UnsafeHashedRelation]) {
-      s"incPeakExecutionMemory($relationTerm.getUnsafeSize());"
-    } else {
-      ""
-    }
     ctx.addMutableState(clsName, relationTerm,
       s"""
          | $relationTerm = ($clsName) $broadcast.value();
-         | $incPeakMemory
+         | incPeakExecutionMemory($relationTerm.getMemorySize());
        """.stripMargin)
 
     s"""

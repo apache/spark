@@ -133,8 +133,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     BroadcastHashJoin:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    BroadcastHashJoin codegen=false         8994 / 10248         11.0          90.9       1.0X
-    BroadcastHashJoin codegen=true            882 / 1024        118.0           8.5      10.2X
+    BroadcastHashJoin codegen=false        10174 / 10317         10.0         100.0       1.0X
+    BroadcastHashJoin codegen=true           1069 / 1107         98.0          10.2       9.5X
     */
   }
 

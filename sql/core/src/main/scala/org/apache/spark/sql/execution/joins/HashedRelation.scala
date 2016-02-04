@@ -51,6 +51,11 @@ private[execution] sealed trait HashedRelation {
     throw new UnsupportedOperationException
   }
 
+  /**
+    * Returns the size of used memory.
+    */
+  def getMemorySize: Long = 1L  // to make the test happy
+
   // This is a helper method to implement Externalizable, and is used by
   // GeneralHashedRelation and UniqueKeyHashedRelation
   protected def writeBytes(out: ObjectOutput, serialized: Array[Byte]): Unit = {
@@ -87,16 +92,10 @@ private[execution] trait UniqueHashedRelation extends HashedRelation {
     throw new UnsupportedOperationException
   }
 
-  /**
-    * The buffer is re-used in get().
-    */
-  private val buffer = CompactBuffer[InternalRow](null)
-
   override def get(key: InternalRow): Seq[InternalRow] = {
     val row = getValue(key)
     if (row != null) {
-      buffer.update(0, row)
-      buffer
+      CompactBuffer[InternalRow](row)
     } else {
       null
     }
@@ -105,8 +104,7 @@ private[execution] trait UniqueHashedRelation extends HashedRelation {
   override def get(key: Long): Seq[InternalRow] = {
     val row = getValue(key)
     if (row != null) {
-      buffer.update(0, row)
-      buffer
+      CompactBuffer[InternalRow](row)
     } else {
       null
     }
@@ -255,7 +253,7 @@ private[joins] final class UnsafeHashedRelation(
    *
    * For non-broadcast joins or in local mode, return 0.
    */
-  def getUnsafeSize: Long = {
+  override def getMemorySize: Long = {
     if (binaryMap != null) {
       binaryMap.getTotalMemoryConsumption
     } else {
@@ -529,11 +527,14 @@ private[joins] final class LongArrayRelation(
     getValue(key.getLong(0))
   }
 
-  val result = new UnsafeRow(numFields)
+  override def getMemorySize: Long = {
+    offsets.length * 4 + sizes.length * 4 + bytes.length
+  }
 
   override def getValue(key: Long): InternalRow = {
     val idx = (key - start).toInt
-    if (idx >= 0 && idx < offsets.length && sizes(idx) > 0) {
+    if (idx >= 0 && idx < sizes.length && sizes(idx) > 0) {
+      val result = new UnsafeRow(numFields)
       result.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET + offsets(idx), sizes(idx))
       result
     } else {
@@ -547,10 +548,10 @@ private[joins] final class LongArrayRelation(
     out.writeInt(sizes.length)
     var i = 0
     while (i < sizes.length) {
-      out.write(sizes(i))
+      out.writeInt(sizes(i))
       i += 1
     }
-    out.write(bytes.length)
+    out.writeInt(bytes.length)
     out.write(bytes)
   }
 
@@ -570,11 +571,16 @@ private[joins] final class LongArrayRelation(
       i += 1
     }
     // read all the bytes
-    bytes = new Array[Byte](offset)
+    val total = in.readInt()
+    assert(total == offset)
+    bytes = new Array[Byte](total)
     in.readFully(bytes)
   }
 }
 
+/**
+  * Create hashed relation with key that is long.
+  */
 private[joins] object LongHashedRelation {
   def apply(
     input: Iterator[InternalRow],
@@ -616,7 +622,6 @@ private[joins] object LongHashedRelation {
       if (maxKey - minKey <= hashTable.size() * 5) {
         // The keys are dense enough, so use LongArrayRelation
         val length = (maxKey - minKey).toInt + 1
-        val array = new Array[UnsafeRow](length)
         val sizes = new Array[Int](length)
         val offsets = new Array[Int](length)
         var offset = 0
