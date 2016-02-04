@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -74,6 +75,12 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   // TODO: This is not really valid...
   def clustering: Set[Expression] = ordering.map(_.child).toSet
 }
+
+/**
+  * Represents data where tuples are broadcasted to every node. It is quite common that the
+  * entire set of tuples is transformed into different data structure.
+  */
+case class BroadcastDistribution(f: Iterable[InternalRow] => Any = identity) extends Distribution
 
 /**
  * Describes how an operator's output is split across partitions. The `compatibleWith`,

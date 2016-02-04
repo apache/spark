@@ -26,7 +26,7 @@ import net.razorvine.pickle._
 
 import org.apache.spark.{Accumulator, Logging => SparkLogging, TaskContext}
 import org.apache.spark.api.python.{PythonBroadcast, PythonRDD, PythonRunner, SerDeUtil}
-import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
@@ -48,7 +48,7 @@ private[spark] case class PythonUDF(
     pythonIncludes: JList[String],
     pythonExec: String,
     pythonVer: String,
-    broadcastVars: JList[Broadcast[PythonBroadcast]],
+    broadcastVars: JList[broadcast.Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
     children: Seq[Expression]) extends Expression with Unevaluable with SparkLogging {

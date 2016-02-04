@@ -17,19 +17,14 @@
 
 package org.apache.spark.sql.execution.joins
 
-import scala.concurrent._
-import scala.concurrent.duration._
-
 import org.apache.spark.TaskContext
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BindReferences, BoundReference, Expression, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, Partitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{BinaryNode, CodegenSupport, SparkPlan, SQLExecution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
@@ -52,53 +47,17 @@ case class BroadcastHashJoin(
     "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  val timeout: Duration = {
-    val timeoutValue = sqlContext.conf.broadcastTimeout
-    if (timeoutValue < 0) {
-      Duration.Inf
-    } else {
-      timeoutValue.seconds
-    }
-  }
-
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
-
-  // Use lazy so that we won't do broadcast when calling explain but still cache the broadcast value
-  // for the same query.
-  @transient
-  private lazy val broadcastFuture = {
-    val numBuildRows = buildSide match {
-      case BuildLeft => longMetric("numLeftRows")
-      case BuildRight => longMetric("numRightRows")
-    }
-
-    // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    future {
-      // This will run in another thread. Set the execution id so that we can connect these jobs
-      // with the correct execution.
-      SQLExecution.withExecutionId(sparkContext, executionId) {
-        // Note that we use .execute().collect() because we don't want to convert data to Scala
-        // types
-        val input: Array[InternalRow] = buildPlan.execute().map { row =>
-          numBuildRows += 1
-          row.copy()
-        }.collect()
-        // The following line doesn't run in a job so we cannot track the metric value. However, we
-        // have already tracked it in the above lines. So here we can use
-        // `SQLMetrics.nullLongMetric` to ignore it.
-        val hashed = HashedRelation(
-          input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
-        sparkContext.broadcast(hashed)
-      }
-    }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
+  override def requiredChildDistribution: Seq[Distribution] = buildSide match {
+    case BuildLeft => longMetric("numLeftRows")
+      BroadcastDistribution(buildRelation) :: UnspecifiedDistribution :: Nil
+    case BuildRight =>
+      UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
   }
 
-  protected override def doPrepare(): Unit = {
-    broadcastFuture
+  private val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
+    HashedRelation(input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -108,8 +67,7 @@ case class BroadcastHashJoin(
     }
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
-
+    val broadcastRelation = Broadcast.broadcastRelation[HashedRelation](buildPlan)
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
       hashedRelation match {
@@ -130,7 +88,7 @@ case class BroadcastHashJoin(
 
   override def doProduce(ctx: CodegenContext): String = {
     // create a name for HashRelation
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
+    val broadcastRelation = Broadcast.broadcastRelation[HashedRelation](buildPlan)
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     relationTerm = ctx.freshName("relation")
     // TODO: create specialized HashRelation for single join key
@@ -201,10 +159,4 @@ case class BroadcastHashJoin(
        | }
      """.stripMargin
   }
-}
-
-object BroadcastHashJoin {
-
-  private[joins] val broadcastHashJoinExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("broadcast-hash-join", 128))
 }
