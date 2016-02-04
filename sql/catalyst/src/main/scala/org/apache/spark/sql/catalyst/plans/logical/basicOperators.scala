@@ -38,7 +38,6 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
-
   override def maxRows: Option[Expression] = child.maxRows
 
   override lazy val resolved: Boolean = {
@@ -104,6 +103,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
+  override def maxRows: Option[Expression] = child.maxRows
+
   override protected def validConstraints: Set[Expression] = {
     child.constraints.union(splitConjunctivePredicates(condition).toSet)
   }
@@ -146,6 +147,14 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
       duplicateResolved
+
+  override def maxRows: Option[Expression] = {
+    if (children.exists(_.maxRows.isEmpty)) {
+      None
+    } else {
+      Some(Least(children.flatMap(_.maxRows)))
+    }
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -340,6 +349,7 @@ case class Sort(
     global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+  override def maxRows: Option[Expression] = child.maxRows
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -393,6 +403,7 @@ case class Aggregate(
   }
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def maxRows: Option[Expression] = child.maxRows
 }
 
 case class Window(
@@ -608,6 +619,7 @@ case class Sample(
  * Returns a new logical plan that dedups input rows.
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Expression] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 
@@ -626,6 +638,7 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
 case object OneRowRelation extends LeafNode {
+  override def maxRows: Option[Expression] = Some(Literal(1))
   override def output: Seq[Attribute] = Nil
 
   /**
