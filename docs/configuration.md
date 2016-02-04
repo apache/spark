@@ -1585,6 +1585,29 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Deploy
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaniing</th></tr>
+  <tr>
+    <td><code>spark.deploy.recoveryMode</code></td>
+    <td>NONE</td>
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
+    This is only applicable for cluster mode when running with Standalone or Mesos.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.url</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.dir</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+  </tr>
+</table>
+
+
 #### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
@@ -1642,6 +1665,8 @@ to use on each machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
+
+Note: When running Spark on YARN in `cluster` mode, environment variables need to be set using the `spark.yarn.appMasterEnv.[EnvironmentVariableName]` property in your `conf/spark-defaults.conf` file.  Environment variables that are set in `spark-env.sh` will not be reflected in the YARN Application Master process in `cluster` mode.  See the [YARN-related Spark Properties](running-on-yarn.html#spark-properties) for more information.
 
 # Configuring Logging
 

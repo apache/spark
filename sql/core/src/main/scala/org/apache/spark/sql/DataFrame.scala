@@ -1682,7 +1682,7 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
-   * Interface for saving the content of the [[DataFrame]] out into external storage.
+   * Interface for saving the content of the [[DataFrame]] out into external storage or streams.
    *
    * @group output
    * @since 1.4.0
