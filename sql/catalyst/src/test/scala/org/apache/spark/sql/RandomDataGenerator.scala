@@ -47,9 +47,9 @@ object RandomDataGenerator {
    */
   private val PROBABILITY_OF_NULL: Float = 0.1f
 
-  private val MAX_STR_LEN: Int = 1024
-  private val MAX_ARR_SIZE: Int = 128
-  private val MAX_MAP_SIZE: Int = 128
+  final val MAX_STR_LEN: Int = 1024
+  final val MAX_ARR_SIZE: Int = 128
+  final val MAX_MAP_SIZE: Int = 128
 
   /**
    * Helper function for constructing a biased random number generator which returns "interesting"
@@ -208,7 +208,17 @@ object RandomDataGenerator {
             forType(valueType, nullable = valueContainsNull, rand)
         ) yield {
           () => {
-            Seq.fill(rand.nextInt(MAX_MAP_SIZE))((keyGenerator(), valueGenerator())).toMap
+            val length = rand.nextInt(MAX_MAP_SIZE)
+            val keys = scala.collection.mutable.HashSet(Seq.fill(length)(keyGenerator()): _*)
+            // In case the number of different keys is not enough, set a max iteration to avoid
+            // infinite loop.
+            var count = 0
+            while (keys.size < length && count < MAX_MAP_SIZE) {
+              keys += keyGenerator()
+              count += 1
+            }
+            val values = Seq.fill(keys.size)(valueGenerator())
+            keys.zip(values).toMap
           }
         }
       }
