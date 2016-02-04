@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
+import java.util.concurrent.ConcurrentHashMap
 import java.util.{Calendar, TimeZone}
 import javax.xml.bind.DatatypeConverter
 
@@ -55,9 +56,18 @@ object DateTimeUtils {
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
-  final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
+
+  // Reuse the TimeZone object as it is expensive to create in each method call.
+  final val timeZones = new ConcurrentHashMap[String, TimeZone]
+
+  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
+  private val threadLocalCalendar = new ThreadLocal[Calendar] {
+    override protected def initialValue: Calendar = {
+      Calendar.getInstance
+    }
+  }
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
@@ -78,6 +88,13 @@ object DateTimeUtils {
     override def initialValue(): SimpleDateFormat = {
       new SimpleDateFormat("yyyy-MM-dd")
     }
+  }
+
+  def getTimeZone(id: String): TimeZone = {
+    if (!timeZones.containsKey(id)) {
+      timeZones.put(id, TimeZone.getTimeZone(id))
+    }
+    timeZones.get(id)
   }
 
   // we should use the exact day as Int, for example, (year, month, day) -> day
@@ -339,12 +356,14 @@ object DateTimeUtils {
       return None
     }
 
-    val c = if (timeZone.isEmpty) {
-      Calendar.getInstance()
+    val c = threadLocalCalendar.get()
+    if (timeZone.isEmpty) {
+      c.setTimeZone(defaultTimeZone)
     } else {
-      Calendar.getInstance(
-        TimeZone.getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+      c.setTimeZone(
+        getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
     }
+    c.clear()
     c.set(Calendar.MILLISECOND, 0)
 
     if (justTime) {
@@ -408,7 +427,9 @@ object DateTimeUtils {
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance(TimeZoneGMT)
+    val c = threadLocalCalendar.get()
+    c.setTimeZone(getTimeZone("GMT"))
+    c.clear()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
@@ -825,7 +846,7 @@ object DateTimeUtils {
    * representation in their timezone.
    */
   def fromUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    val tz = TimeZone.getTimeZone(timeZone)
+    val tz = getTimeZone(timeZone)
     val offset = tz.getOffset(time / 1000L)
     time + offset * 1000L
   }
@@ -835,7 +856,7 @@ object DateTimeUtils {
    * string representation in their timezone.
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
-    val tz = TimeZone.getTimeZone(timeZone)
+    val tz = getTimeZone(timeZone)
     val offset = tz.getOffset(time / 1000L)
     time - offset * 1000L
   }
