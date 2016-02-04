@@ -56,7 +56,7 @@ class StreamProgress {
   }
 
   private[sql] def toOffset: Offset = {
-    CompositeOffset.fill(currentOffsets.values.toSeq:_*)
+    CompositeOffset.fill(currentOffsets.values.toSeq: _*)
   }
 
   override def toString: String =

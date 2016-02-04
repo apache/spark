@@ -139,7 +139,7 @@ class MemorySink(schema: StructType) extends Sink with Logging {
     batches.dropRight(num)
   }
 
-  def toLongString = synchronized {
+  def toLongString: String = synchronized {
     batches.map { b =>
       val dataStr = try b.data.collect().mkString(" ") catch {
         case NonFatal(e) => "[Error converting to string]"

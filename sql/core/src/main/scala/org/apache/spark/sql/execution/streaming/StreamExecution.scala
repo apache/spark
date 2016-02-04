@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
 import org.apache.spark.sql._
@@ -27,6 +29,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.util.ContinuousQueryListener
+import org.apache.spark.sql.util.ContinuousQueryListener._
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -36,13 +40,14 @@ import org.apache.spark.sql.execution.QueryExecution
  */
 class StreamExecution(
     val sqlContext: SQLContext,
-    val name: String,
+    override val name: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink) extends ContinuousQuery with Logging {
 
   /** An monitor used to wait/notify when batches complete. */
   private val awaitBatchLock = new Object
-  private val awaitTerminationLock = new Object
+  private val startLatch = new CountDownLatch(1)
+  private val terminationLatch = new CountDownLatch(1)
 
   /** Minimum amount of time in between the start of each batch. */
   private val minBatchTime = 10
@@ -54,9 +59,88 @@ class StreamExecution(
   private val sources =
     logicalPlan.collect { case s: StreamingRelation => s.source }
 
-  // Start the execution at the current offsets stored in the sink. (i.e. avoid reprocessing data
-  // that we have already processed).
-  {
+  /** When false, signals to the microBatchThread that it should stop running. */
+  @volatile
+  private var state: State = INITIALIZED
+
+  @volatile
+  private[sql] var lastExecution: QueryExecution = null
+
+  @volatile
+  private[sql] var streamDeathCause: QueryException = null
+
+  /** The thread that runs the micro-batches of this stream. */
+  private[sql] val microBatchThread = new Thread(s"stream execution thread for $name") {
+    override def run(): Unit = { runBatches() }
+  }
+
+  /** Whether the query is currently active or not */
+  override def isActive: Boolean = state == ACTIVE
+
+  /** Returns current status of all the sources. */
+  override def sourceStatuses: Array[SourceStatus] = {
+    sources.map(s => new SourceStatus(s.toString, streamProgress.get(s))).toArray
+  }
+
+  /** Returns current status of the sink. */
+  override def sinkStatus: SinkStatus = new SinkStatus(sink.toString, sink.currentOffset)
+
+  /** Returns the [[QueryException]] if the query was terminated by an exception. */
+  override def exception: Option[QueryException] = Option(streamDeathCause)
+
+  /**
+   * Starts the execution. This returns only after the thread has started and [[QueryStarted]] event
+   * has been posted to all the listeners.
+   */
+  private[sql] def start(): Unit = {
+    microBatchThread.setDaemon(true)
+    microBatchThread.start()
+    startLatch.await()  // Wait until thread started and QueryStart event has been posted
+  }
+
+  /**
+   * Repeatedly attempts to run batches as data arrives.
+   *
+   * Note that this method ensures that [[QueryStarted]] and [[QueryTerminated]] events are posted
+   * so that listeners are guaranteed to get former event before the latter. Furthermore, this
+   * method also ensures that [[QueryStarted]] event is posted before the `start()` method returns.
+   */
+  private def runBatches(): Unit = {
+    try {
+      // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
+      // so must mark this as ACTIVE first.
+      state = ACTIVE
+      postEvent(new QueryStarted(this)) // Assumption: Does not throw exception.
+
+      // Unblock starting thread, so that
+      startLatch.countDown()
+
+      // While active, repeatedly attempt to run batches.
+      logInfo(s"Stream running at $streamProgress")
+      SQLContext.setActive(sqlContext)
+      findStartOffsets()
+      while (isActive) {
+        attemptBatch()
+        Thread.sleep(minBatchTime) // TODO: Could be tighter
+      }
+    } catch {
+      case _: InterruptedException if state == TERMINATED => // interrupted by stop()
+      case NonFatal(e) =>
+        streamDeathCause = new QueryException(
+          s"Query terminated with exception", e, Some(streamProgress.toOffset))
+    } finally {
+      state = TERMINATED
+      sqlContext.streams.notifyQueryTermination(StreamExecution.this)
+      postEvent(new QueryTerminated(this))
+      terminationLatch.countDown()
+    }
+  }
+
+  /**
+   * Get the start offsets to start the execution at the current offsets stored in the sink
+   * (i.e. avoid reprocessing data that we have already processed).
+   */
+  private def findStartOffsets(): Unit = {
     sink.currentOffset match {
       case Some(c: CompositeOffset) =>
         val storedProgress = c.offsets
@@ -73,63 +157,8 @@ class StreamExecution(
     }
   }
 
-  logInfo(s"Stream running at $streamProgress")
-
-  /** When false, signals to the microBatchThread that it should stop running. */
-  @volatile
-  private var active = true
-
-  @volatile
-  private[sql] var lastExecution: QueryExecution = null
-
-  @volatile
-  private[sql] var streamDeathCause: QueryException = null
-
-  /** The thread that runs the micro-batches of this stream. */
-  private[sql] val microBatchThread = new Thread("stream execution thread") {
-    override def run(): Unit = {
-      try {
-        SQLContext.setActive(sqlContext)
-        while (active) {
-          attemptBatch()
-          Thread.sleep(minBatchTime) // TODO: Could be tighter
-        }
-      } catch {
-        case _: InterruptedException if active == false => // interrupted by stop()
-        case t: Throwable =>
-          streamDeathCause = new QueryException(
-            s"Query terminated with exception", t, Some(streamProgress.toOffset))
-      } finally {
-        active = false
-        sqlContext.streams.notifyQueryTermination(StreamExecution.this)
-        awaitTerminationLock.synchronized {
-          awaitTerminationLock.notifyAll()
-        }
-      }
-    }
-  }
-  microBatchThread.setDaemon(true)
-  microBatchThread.start()
-
-  @volatile
-  private var batchRun = false
-
-  /** Whether the query is currently active or not */
-  override def isActive: Boolean = active
-
-  /** Returns current status of all the sources. */
-  override def sourceStatuses: Array[SourceStatus] = {
-    sources.map(s => new SourceStatus(s.toString, streamProgress.get(s))).toArray
-  }
-
-  /** Returns current status of the sink. */
-  override def sinkStatus: SinkStatus = new SinkStatus(sink.toString, sink.currentOffset)
-
-  /** Returns the [[QueryException]] if the query was terminated by an exception. */
-  override def exception: Option[QueryException] = Option(streamDeathCause)
-
   /**
-   * Checks to see if any new data is present in any of the sources.  When new data is available,
+   * Checks to see if any new data is present in any of the sources. When new data is available,
    * a batch is executed and passed to the sink, updating the currentOffsets.
    */
   private def attemptBatch(): Unit = {
@@ -185,7 +214,6 @@ class StreamExecution(
         sink.addBatch(nextBatch)
       }
 
-      active = true
       awaitBatchLock.synchronized {
         // Wake up any threads that are waiting for the stream to progress.
         awaitBatchLock.notifyAll()
@@ -198,12 +226,16 @@ class StreamExecution(
     logDebug(s"Waiting for data, current: $streamProgress")
   }
 
+  private def postEvent(event: ContinuousQueryListener.Event) {
+    sqlContext.streams.postListenerEvent(event)
+  }
+
   /**
    * Signals to the thread executing micro-batches that it should stop running after the next
    * batch. This method blocks until the thread stops running.
    */
   override def stop(): Unit = {
-    active = false
+    state = TERMINATED
     if (microBatchThread.isAlive) {
       microBatchThread.interrupt()
       microBatchThread.join()
@@ -227,47 +259,45 @@ class StreamExecution(
   }
 
   override def awaitTermination(): Unit = {
-    awaitTerminationLock.synchronized {
-      while (active) {
-        awaitTerminationLock.wait(10)
-      }
-      if (streamDeathCause != null) {
-        throw streamDeathCause
-      }
+    require(state != INITIALIZED,
+      "Cannot wait for termination on a query that has not started")
+    terminationLatch.await()
+    if (streamDeathCause != null) {
+      throw streamDeathCause
     }
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
+    require(state != INITIALIZED,
+      "Cannot wait for termination on a query that has not started")
     require(timeoutMs > 0, "Timeout has to be positive")
-
-    val endTime = System.currentTimeMillis + timeoutMs
-    def timeLeft = math.max(endTime - System.currentTimeMillis, 0)
-
-    awaitTerminationLock.synchronized {
-      while (active && timeLeft > 0) {
-        awaitTerminationLock.wait(10)
-      }
-      if (streamDeathCause != null) {
-        throw streamDeathCause
-      } else {
-        !isActive
-      }
+    terminationLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+    if (streamDeathCause != null) {
+      throw streamDeathCause
+    } else {
+      !isActive
     }
   }
 
   override def toString: String =
     s"""
        |=== Streaming Query ===
-       |CurrentOffsets: $streamProgress
+       |Current Offsets: $streamProgress
+       |Current State: $state
        |Thread State: ${microBatchThread.getState}
        |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
        |
        |$logicalPlan
      """.stripMargin
+
+  trait State
+  case object INITIALIZED extends State
+  case object ACTIVE extends State
+  case object TERMINATED extends State
 }
 
 private[sql] object StreamExecution {
   private val nextId = new AtomicInteger()
 
-  def nextName = s"query-${nextId.getAndIncrement}"
+  def nextName: String = s"query-${nextId.getAndIncrement}"
 }

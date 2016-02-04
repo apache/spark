@@ -33,7 +33,7 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder, encoderFor}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
@@ -138,6 +138,18 @@ trait StreamTest extends QueryTest with Timeouts {
     override def toString(): String = s"ExpectFailure[${causeClass.getCanonicalName}]"
   }
 
+  /** Assert that a body is true */
+  class Assert(condition: => Boolean, val message: String = "") extends StreamAction {
+    def run(): Unit = { Assertions.assert(condition) }
+    override def toString: String = s"Assert(<condition>, $message)"
+  }
+
+  object Assert {
+    def apply(condition: => Boolean): Assert = { new Assert(condition, "")  }
+
+    def apply(message: String)(body: => Unit): Assert = { new Assert( { body; true }, message) }
+  }
+
   /** Assert that a condition on the active query is true */
   class AssertOnQuery(val condition: StreamExecution => Boolean, val message: String)
     extends StreamAction {
@@ -148,6 +160,7 @@ trait StreamTest extends QueryTest with Timeouts {
     def apply(condition: StreamExecution => Boolean, message: String = ""): AssertOnQuery = {
       new AssertOnQuery(condition, message)
     }
+
     def apply(message: String)(condition: StreamExecution => Boolean): AssertOnQuery = {
       new AssertOnQuery(condition, message)
     }
@@ -233,7 +246,9 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     def failTest(message: String, cause: Throwable = null) = {
-      val c = Option(cause).map { _.getStackTrace.take(10).mkString("", "\n|\t", "\n") }
+      val c = Option(cause).map { e =>
+        e.getMessage + e.getStackTrace.take(10).mkString("\n\t", "\n|\t", "\n")
+      }
       val m = if (message != null && message.size > 0) Some(message) else None
       fail(
         s"""
@@ -321,6 +336,10 @@ trait StreamTest extends QueryTest with Timeouts {
               "cannot assert when not stream has been started")
             val streamToAssert = Option(currentStream).getOrElse(lastStream)
             assert(a.condition(streamToAssert), s"Assert on query failed: ${a.message}")
+
+          case a: Assert =>
+            val streamToAssert = Option(currentStream).getOrElse(lastStream)
+            assert({ a.run(); true }, s"Assert failed: ${a.message}")
 
           case a: AddData =>
             awaiting.put(a.source, a.addData())

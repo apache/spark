@@ -181,7 +181,7 @@ class SQLContext private[sql](
   @transient
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
-  protected[sql] lazy val continuousQueryManager = new ContinuousQueryManager
+  protected[sql] lazy val continuousQueryManager = new ContinuousQueryManager(this)
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
@@ -852,7 +852,7 @@ class SQLContext private[sql](
    *
    * @since 2.0.0
    */
-  def streams(): ContinuousQueryManager = {
+  def streams: ContinuousQueryManager = {
     continuousQueryManager
   }
 
