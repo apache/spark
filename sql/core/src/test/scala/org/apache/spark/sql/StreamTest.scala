@@ -145,9 +145,9 @@ trait StreamTest extends QueryTest with Timeouts {
   }
 
   object Assert {
-    def apply(condition: => Boolean): Assert = { new Assert(condition, "")  }
-
-    def apply(message: String)(body: => Unit): Assert = { new Assert( { body; true }, message) }
+    def apply(condition: => Boolean, message: String = ""): Assert = new Assert(condition, message)
+    def apply(message: String)(body: => Unit): Assert = new Assert( { body; true }, message)
+    def apply(body: => Unit): Assert = new Assert( { body; true }, "")
   }
 
   /** Assert that a condition on the active query is true */

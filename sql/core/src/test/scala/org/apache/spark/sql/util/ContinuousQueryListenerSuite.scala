@@ -103,16 +103,32 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     }
   }
 
+  test("event ordering") {
+    val listener = new QueryStatusCollector
+    withListenerAdded(listener) {
+      for (i <- 1 to 100) {
+        listener.reset()
+        require(listener.startStatus === null)
+        testStream(MemoryStream[Int].toDS)(
+          StartStream,
+          Assert(listener.startStatus !== null, "onQueryStarted not called before query returned"),
+          StopStream,
+          Assert { listener.checkAsyncErrors() }
+        )
+      }
+    }
+  }
 
-  private def withListenerAdded(listeners: ContinuousQueryListener*)(body: => Unit): Unit = {
+
+  private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
     @volatile var query: StreamExecution = null
     try {
-      failAfter(streamingTimout) {
-        listeners.foreach(sqlContext.streams.addListener)
+      failAfter(1 minute) {
+        sqlContext.streams.addListener(listener)
         body
       }
     } finally {
-      listeners.foreach(sqlContext.streams.removeListener)
+      sqlContext.streams.removeListener(listener)
     }
   }
 
@@ -125,7 +141,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
   class QueryStatusCollector extends ContinuousQueryListener {
 
-    private val asyncTestWaiter = new Waiter  // to catch errors in the listener thread
+    private val asyncTestWaiter = new Waiter  // to catch errors in the async listener events
 
     @volatile var startStatus: QueryStatus = null
     @volatile var terminationStatus: QueryStatus = null
