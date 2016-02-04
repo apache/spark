@@ -31,7 +31,7 @@ abstract class ContinuousQueryListener {
   /**
    * Called when a query is started.
    * @note This is called synchronously with
-   *       [[org.apache.spark.sql.DataStreamWriter `DataStreamWriter.start()`]],
+   *       [[org.apache.spark.sql.DataFrameWriter `DataFrameWriter.stream()`]],
    *       that is, `onQueryStart` will be called on all listeners before `DataFrameWriter.stream()`
    *       returns the corresponding [[ContinuousQuery]].
    */

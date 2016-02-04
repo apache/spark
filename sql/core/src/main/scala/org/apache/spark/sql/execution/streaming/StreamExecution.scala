@@ -116,9 +116,9 @@ class StreamExecution(
       startLatch.countDown()
 
       // While active, repeatedly attempt to run batches.
-      logInfo(s"Stream running at $streamProgress")
       SQLContext.setActive(sqlContext)
       findStartOffsets()
+      logInfo(s"Stream running at $streamProgress")
       while (isActive) {
         attemptBatch()
         Thread.sleep(minBatchTime) // TODO: Could be tighter
@@ -128,6 +128,7 @@ class StreamExecution(
       case NonFatal(e) =>
         streamDeathCause = new ContinuousQueryException(
           s"Query terminated with exception", e, Some(streamProgress.toCompositeOffset(sources)))
+        logError(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
       sqlContext.streams.notifyQueryTermination(StreamExecution.this)
@@ -217,7 +218,7 @@ class StreamExecution(
       }
 
       val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
-      logInfo(s"Compete up to $newOffsets in ${batchTime}ms")
+      logInfo(s"Completed up to $newOffsets in ${batchTime}ms")
     }
 
     logDebug(s"Waiting for data, current: $streamProgress")
@@ -237,6 +238,7 @@ class StreamExecution(
       microBatchThread.interrupt()
       microBatchThread.join()
     }
+    logInfo(s"Query $name was stopped")
   }
 
   /**

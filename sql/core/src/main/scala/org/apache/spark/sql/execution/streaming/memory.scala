@@ -48,14 +48,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected val output = logicalPlan.output
   protected val batches = new ArrayBuffer[Dataset[A]]
 
-  @volatile
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   protected def blockManager = SparkEnv.get.blockManager
 
   def schema: StructType = encoder.schema
-
-  def getCurrentOffset: Offset = currentOffset
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
     new Dataset(sqlContext, logicalPlan)
