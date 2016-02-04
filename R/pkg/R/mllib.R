@@ -148,12 +148,11 @@ setClass("KMeansModel", representation(model = "jobj"))
 #'\dontrun{
 #' model <- kmeans(x, algorithm="random")
 #'}
-setMethod("kmeans", signature(x = "DataFrame"),
-          function(x) {
-            cat("Am I in the right function?")
-            columnNames <- "Sepal_Length,Sepal_Width,Petal_Length,Petal_Width"
+setMethod("kmeans", signature(x = "DataFrame", centers = "numeric"),
+          function(x, centers) {
+            columnNames <- as.array(colnames(x))
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitKMeans", "random", x@sdf, 10,
-                                 10, 2, columnNames)
+                                 10, centers, columnNames)
             return(new("KMeansModel", model = model))
          })

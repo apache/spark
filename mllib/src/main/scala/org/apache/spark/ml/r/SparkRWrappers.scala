@@ -59,12 +59,9 @@ object SparkRWrappers {
       maxIter: Double,
       initSteps: Double,
       k: Double,
-      columns: String): KMeansModel = {
-    val assembler = new VectorAssembler().setInputCols(columns.split(",")).setOutputCol("features")
-    val features = assembler.transform(df).select("features")
-    // scalastyle:off println
-    features.collect().foreach { case Row(v) => println(v) }
-    // scalastyle:on println
+      columns: Array[String]): KMeansModel = {
+    val assembler = new VectorAssembler().setInputCols(columns).setOutputCol("features")
+    val features = assembler.transform(df)
     val kMeans = new KMeans()
       .setInitMode(initMode)
       .setMaxIter(maxIter.toInt)
