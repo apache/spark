@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.client.HiveConfUtil
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
