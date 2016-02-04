@@ -78,10 +78,8 @@ abstract class Catalog {
   def dropPartitions(
       db: String,
       table: String,
-      parts: Seq[TablePartition],
+      parts: Seq[PartitionSpec],
       ignoreIfNotExists: Boolean): Unit
-
-  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition
 
   def alterPartition(
       db: String,
@@ -89,6 +87,9 @@ abstract class Catalog {
       spec: PartitionSpec,
       newPart: TablePartition): Unit
 
+  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition
+
+  // TODO: support listing by pattern
   def listPartitions(db: String, table: String): Seq[TablePartition]
 
   // --------------------------------------------------------------------------

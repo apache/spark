@@ -69,13 +69,13 @@ class InMemoryCatalog extends Catalog {
 
   private def assertFunctionExists(db: String, funcName: String): Unit = {
     if (!existsFunction(db, funcName)) {
-      throw new AnalysisException(s"Function $funcName does not exists in $db database")
+      throw new AnalysisException(s"Function $funcName does not exist in $db database")
     }
   }
 
   private def assertTableExists(db: String, table: String): Unit = {
     if (!existsTable(db, table)) {
-      throw new AnalysisException(s"Table $table does not exists in $db database")
+      throw new AnalysisException(s"Table $table does not exist in $db database")
     }
   }
 
@@ -229,27 +229,19 @@ class InMemoryCatalog extends Catalog {
   override def dropPartitions(
       db: String,
       table: String,
-      parts: Seq[TablePartition],
+      partSpecs: Seq[PartitionSpec],
       ignoreIfNotExists: Boolean): Unit = synchronized {
     assertTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {
-      val missingSpecs = parts.collect { case p if !existingParts.contains(p.spec) => p.spec }
+      val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
       if (missingSpecs.nonEmpty) {
         val missingSpecsStr = missingSpecs.mkString("\n===\n")
         throw new AnalysisException(
           s"The following partitions do not exist in database $db table $table:\n$missingSpecsStr")
       }
     }
-    parts.foreach { p => existingParts.remove(p.spec) }
-  }
-
-  override def getPartition(
-      db: String,
-      table: String,
-      spec: Map[String, String]): TablePartition = synchronized {
-    assertPartitionExists(db, table, spec)
-    catalog(db).tables(table).partitions(spec)
+    partSpecs.foreach(existingParts.remove)
   }
 
   override def alterPartition(
@@ -264,6 +256,14 @@ class InMemoryCatalog extends Catalog {
       existingParts.remove(spec)
     }
     existingParts.put(newPart.spec, newPart)
+  }
+
+  override def getPartition(
+      db: String,
+      table: String,
+      spec: Map[String, String]): TablePartition = synchronized {
+    assertPartitionExists(db, table, spec)
+    catalog(db).tables(table).partitions(spec)
   }
 
   override def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
@@ -303,7 +303,7 @@ class InMemoryCatalog extends Catalog {
       // Also a rename; remove the old one and add the new one back
       catalog(db).functions.remove(funcName)
     }
-    catalog(db).functions.put(funcName, funcDefinition)
+    catalog(db).functions.put(funcDefinition.name, funcDefinition)
   }
 
   override def getFunction(db: String, funcName: String): Function = synchronized {
