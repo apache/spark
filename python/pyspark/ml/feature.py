@@ -145,12 +145,12 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
     # TODO: add a checksplits validation function?
     splits = \
         ListFloatParam(Params._dummy(), "splits",
-              "Split points for mapping continuous features into buckets. With n+1 splits, " +
-              "there are n buckets. A bucket defined by splits x,y holds values in the " +
-              "range [x,y) except the last bucket, which also includes y. The splits " +
-              "should be strictly increasing. Values at -inf, inf must be explicitly " +
-              "provided to cover all Double values; otherwise, values outside the splits " +
-              "specified will be treated as errors.")
+                       "Split points for mapping continuous features into buckets. With n+1 " +
+                       "splits, there are n buckets. A bucket defined by splits x,y holds values " +
+                       "in the range [x,y) except the last bucket, which also includes y. The " +
+                       "splits should be strictly increasing. Values at -inf, inf must be " +
+                       "explicitly provided to cover all Double values; otherwise, values outside" +
+                       " the splits specified will be treated as errors.")
 
     @keyword_only
     def __init__(self, splits=None, inputCol=None, outputCol=None):
@@ -230,7 +230,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         " Default 1.0", ParamValidators.gtEq(0))
     vocabSize = IntParam(
         Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.",
-            ParamValidators.gt(0))
+        ParamValidators.gt(0))
 
     @keyword_only
     def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, inputCol=None, outputCol=None):
@@ -349,7 +349,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     """
 
     inverse = BooleanParam(Params._dummy(), "inverse", "Set transformer to perform inverse DCT, " +
-                    "default False.")
+                           "default False.")
 
     @keyword_only
     def __init__(self, inverse=False, inputCol=None, outputCol=None):
@@ -410,7 +410,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     """
 
     scalingVec = VectorParam(Params._dummy(), "scalingVec", "vector for hadamard product, " +
-                       "it must be MLlib Vector type.")
+                             "it must be MLlib Vector type.")
 
     @keyword_only
     def __init__(self, scalingVec=None, inputCol=None, outputCol=None):
@@ -515,7 +515,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     """
 
     minDocFreq = IntParam(Params._dummy(), "minDocFreq",
-                       "minimum of documents in which a term should appear for filtering")
+                          "minimum of documents in which a term should appear for filtering")
 
     @keyword_only
     def __init__(self, minDocFreq=0, inputCol=None, outputCol=None):
@@ -1054,8 +1054,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed):
 
     # a placeholder to make it appear in the generated doc
     numBuckets = IntParam(Params._dummy(), "numBuckets",
-                       "Maximum number of buckets (quantiles, or " +
-                       "categories) into which data points are grouped. Must be >= 2. Default 2.",
+                          "Maximum number of buckets (quantiles, or categories) into which data " +
+                          "points are grouped. Must be >= 2. Default 2.",
                           ParamValidators.gtEq(2))
 
     @keyword_only
@@ -1481,8 +1481,8 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
     """
 
     labels = ListStringParam(Params._dummy(), "labels",
-                   "Optional array of labels specifying index-string mapping." +
-                   " If not provided or if empty, then metadata from inputCol is used instead.")
+                             "Optional array of labels specifying index-string mapping. If not " +
+                             "provided or if empty, then metadata from inputCol is used instead.")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, labels=None):
@@ -1748,9 +1748,9 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     """
 
     maxCategories = IntParam(Params._dummy(), "maxCategories",
-                          "Threshold for the number of values a categorical feature can take " +
-                          "(>= 2). If a feature is found to have > maxCategories values, then " +
-                          "it is declared continuous.", ParamValidators.gtEq(2))
+                             "Threshold for the number of values a categorical feature can take " +
+                             "(>= 2). If a feature is found to have > maxCategories values, then " +
+                             "it is declared continuous.", ParamValidators.gtEq(2))
 
     @keyword_only
     def __init__(self, maxCategories=20, inputCol=None, outputCol=None):
@@ -1847,12 +1847,12 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     .. versionadded:: 1.6.0
     """
     # TODO: define custom isValid functions?
-    indices = ListIntParam(Params._dummy(), "indices", "An array of indices to select features from " +
-                    "a vector column. There can be no overlap with names.")
-    names = ListStringParam(Params._dummy(), "names", "An array of feature names to select features from " +
-                  "a vector column. These names must be specified by ML " +
-                  "org.apache.spark.ml.attribute.Attribute. There can be no overlap with " +
-                  "indices.")
+    indices = ListIntParam(Params._dummy(), "indices", "An array of indices to select features " +
+                           "from a vector column. There can be no overlap with names.")
+    names = ListStringParam(Params._dummy(), "names", "An array of feature names to select " +
+                            "features from a vector column. These names must be specified by ML " +
+                            "org.apache.spark.ml.attribute.Attribute. There can be no overlap "
+                            "with indices.")
 
     @keyword_only
     def __init__(self, inputCol=None, outputCol=None, indices=None, names=None):
@@ -1941,12 +1941,12 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     """
 
     vectorSize = IntParam(Params._dummy(), "vectorSize",
-                       "the dimension of codes after transforming from words")
+                          "the dimension of codes after transforming from words")
     numPartitions = IntParam(Params._dummy(), "numPartitions",
-                          "number of partitions for sentences of words")
+                             "number of partitions for sentences of words")
     minCount = IntParam(Params._dummy(), "minCount",
-                     "the minimum number of times a token must appear to be included in the " +
-                     "word2vec model's vocabulary")
+                        "the minimum number of times a token must appear to be included in the " +
+                        "word2vec model's vocabulary")
 
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
@@ -2261,9 +2261,9 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     # a placeholder to make it appear in the generated doc
     numTopFeatures = \
         IntParam(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by statistics value " +
-              "descending. If the number of features is < numTopFeatures, then this will select " +
-              "all features.", ParamValidators.gtEq(1))
+                 "Number of features that selector will select, ordered by statistics value " +
+                 "descending. If the number of features is < numTopFeatures, then this will " +
+                 "select all features.", ParamValidators.gtEq(1))
 
     @keyword_only
     def __init__(self, numTopFeatures=50, featuresCol="features", outputCol=None, labelCol="label"):

@@ -20,7 +20,6 @@ import warnings
 from pyspark import since
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.ml.param import *
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
@@ -231,9 +230,10 @@ class TreeClassifierParams(object):
     supportedImpurities = ["entropy", "gini"]
 
     impurity = StringParam(Params._dummy(), "impurity",
-                     "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " +
-                     ", ".join(supportedImpurities), ParamValidators.inList(supportedImpurities))
+                           "Criterion used for information gain calculation (case-insensitive). " +
+                           "Supported options: " +
+                           ", ".join(supportedImpurities),
+                           ParamValidators.inList(supportedImpurities))
 
     def __init__(self):
         super(TreeClassifierParams, self).__init__()

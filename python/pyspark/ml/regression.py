@@ -188,11 +188,11 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     isotonic = \
         BooleanParam(Params._dummy(), "isotonic",
-              "whether the output sequence should be isotonic/increasing (true) or" +
-              "antitonic/decreasing (false).")
+                     "whether the output sequence should be isotonic/increasing (true) or" +
+                     "antitonic/decreasing (false).")
     featureIndex = \
         IntParam(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise.")
+                 "The index of the feature if featuresCol is a vector column, no effect otherwise.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -277,8 +277,8 @@ class TreeEnsembleParams(DecisionTreeParams):
     Mixin for Decision Tree-based ensemble algorithms parameters.
     """
 
-    subsamplingRate = FloatParam(Params._dummy(), "subsamplingRate", "Fraction of the training data " +
-                            "used for learning each decision tree, in range (0, 1].")
+    subsamplingRate = FloatParam(Params._dummy(), "subsamplingRate", "Fraction of the training " +
+                                 "data used for learning each decision tree, in range (0, 1].")
 
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
@@ -306,9 +306,9 @@ class TreeRegressorParams(Params):
 
     supportedImpurities = ["variance"]
     impurity = StringParam(Params._dummy(), "impurity",
-                     "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " +
-                     ", ".join(supportedImpurities))
+                           "Criterion used for information gain calculation (case-insensitive). " +
+                           "Supported options: " +
+                           ", ".join(supportedImpurities))
 
     def __init__(self):
         super(TreeRegressorParams, self).__init__()
@@ -608,8 +608,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     """
 
     lossType = StringParam(Params._dummy(), "lossType",
-                     "Loss function which GBT tries to minimize (case-insensitive). " +
-                     "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
+                           "Loss function which GBT tries to minimize (case-insensitive). " +
+                           "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -721,16 +721,16 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     """
 
     censorCol = StringParam(Params._dummy(), "censorCol",
-                      "censor column name. The value of this column could be 0 or 1. " +
-                      "If the value is 1, it means the event has occurred i.e. " +
-                      "uncensored; otherwise censored.")
+                            "censor column name. The value of this column could be 0 or 1. " +
+                            "If the value is 1, it means the event has occurred i.e. " +
+                            "uncensored; otherwise censored.")
     quantileProbabilities = \
         ListFloatParam(Params._dummy(), "quantileProbabilities",
-              "quantile probabilities array. Values of the quantile probabilities array " +
-              "should be in the range (0, 1) and the array should be non-empty.")
+                       "quantile probabilities array. Values of the quantile probabilities array " +
+                       "should be in the range (0, 1) and the array should be non-empty.")
     quantilesCol = StringParam(Params._dummy(), "quantilesCol",
-                         "quantiles column name. This column will output quantiles of " +
-                         "corresponding quantileProbabilities if it is set.")
+                               "quantiles column name. This column will output quantiles of " +
+                               "corresponding quantileProbabilities if it is set.")
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",

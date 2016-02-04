@@ -42,7 +42,6 @@ class Param(object):
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
-        # self.expectedType = expectedType
         self.isValid = isValid if isValid is not None else ParamValidators.alwaysTrue()
 
     def _copy_new_parent(self, parent):
@@ -56,7 +55,8 @@ class Param(object):
 
     def _validate(self, value):
         if not self.isValid(value):
-            raise ValueError("Invalid value")
+            raise ValueError("{parent} parameter {name} given invalid value {value}"
+                             .format(parent=self.parent, name=self.name, value=str(value)))
 
     def _convertAndValidate(self, value):
         self._validate(value)
@@ -475,23 +475,7 @@ class Params(Identifiable):
             p = getattr(self, param)
             value = p._convertAndValidate(value)
             self._paramMap[getattr(self, param)] = value
-            # if p.expectedType is None or type(value) == p.expectedType or value is None:
-            #     self._paramMap[getattr(self, param)] = value
-            # else:
-            #     try:
-            #         # Try and do "safe" conversions that don't lose information
-            #         if p.expectedType == float:
-            #             self._paramMap[getattr(self, param)] = float(value)
-            #         # Python 3 unified long & int
-            #         elif p.expectedType == int and type(value).__name__ == 'long':
-            #             self._paramMap[getattr(self, param)] = value
-            #         else:
-            #             raise Exception(
-            #                 "Provided type {0} incompatible with type {1} for param {2}"
-            #                 .format(type(value), p.expectedType, p))
-            #     except ValueError:
-            #         raise Exception(("Failed to convert {0} to type {1} for param {2}"
-            #                          .format(type(value), p.expectedType, p)))
+
         return self
 
     def _setDefault(self, **kwargs):

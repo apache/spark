@@ -149,7 +149,9 @@ class Pipeline(Estimator):
     .. versionadded:: 1.3.0
     """
 
-    stages = Param(Params._dummy(), "stages", "pipeline stages")
+    stages = Param(Params._dummy(), "stages", "pipeline stages",
+                   isValid=lambda lst: all(map(lambda s: isinstance(s, Estimator) or
+                                                         isinstance(s, Transformer), lst)))
 
     @keyword_only
     def __init__(self, stages=None):
