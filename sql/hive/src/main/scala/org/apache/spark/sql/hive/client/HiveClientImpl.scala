@@ -134,18 +134,7 @@ private[hive] class HiveClientImpl(
   }
 
   /** Returns the configuration for the current session. */
-  def conf: HiveConf = {
-    var ss = SessionState.get()
-    // SessionState is lazy initialization, it can be null here
-    if (ss == null) {
-      val original = Thread.currentThread().getContextClassLoader
-      val conf = new HiveConf(classOf[SessionState])
-      conf.setClassLoader(original)
-      ss = new SessionState(conf)
-      SessionState.start(ss)
-    }
-    ss.getConf
-  }
+  def conf: HiveConf = HiveConfUtil.conf()
 
   override def getConf(key: String, defaultValue: String): String = {
     conf.get(key, defaultValue)

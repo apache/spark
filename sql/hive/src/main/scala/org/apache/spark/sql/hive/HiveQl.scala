@@ -22,6 +22,7 @@ import java.util.Locale
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.client.HiveConfUtil
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
@@ -168,18 +169,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   /**
    * Returns the HiveConf
    */
-  private[this] def hiveConf: HiveConf = {
-    var ss = SessionState.get()
-    // SessionState is lazy initialization, it can be null here
-    if (ss == null) {
-      val original = Thread.currentThread().getContextClassLoader
-      val conf = new HiveConf(classOf[SessionState])
-      conf.setClassLoader(original)
-      ss = new SessionState(conf)
-      SessionState.start(ss)
-    }
-    ss.getConf
-  }
+  private[this] def hiveConf: HiveConf = HiveConfUtil.conf()
 
   protected def getProperties(node: ASTNode): Seq[(String, String)] = node match {
     case Token("TOK_TABLEPROPLIST", list) =>
