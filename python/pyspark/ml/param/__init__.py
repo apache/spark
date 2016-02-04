@@ -17,12 +17,16 @@
 
 from abc import ABCMeta
 import copy
+import numpy as np
+from pyspark.mllib.linalg import DenseVector, Vector
 
 from pyspark import since
 from pyspark.ml.util import Identifiable
 
 
-__all__ = ['Param', 'Params']
+__all__ = ['IntParam', 'FloatParam', 'StringParam', 'BooleanParam',
+           'VectorParam', 'ListIntParam', 'ListFloatParam', 'ListStringParam',
+           'Param', 'Params', 'ParamValidators']
 
 
 class Param(object):
@@ -32,13 +36,14 @@ class Param(object):
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc, expectedType=None):
+    def __init__(self, parent, name, doc, isValid=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
-        self.expectedType = expectedType
+        # self.expectedType = expectedType
+        self.isValid = isValid if isValid is not None else ParamValidators.alwaysTrue()
 
     def _copy_new_parent(self, parent):
         """Copy the current param to a new parent, must be a dummy param."""
@@ -48,6 +53,14 @@ class Param(object):
             return param
         else:
             raise ValueError("Cannot copy from non-dummy parent %s." % parent)
+
+    def _validate(self, value):
+        if not self.isValid(value):
+            raise ValueError("Invalid value")
+
+    def _convertAndValidate(self, value):
+        self._validate(value)
+        return value
 
     def __str__(self):
         return str(self.parent) + "__" + self.name
@@ -63,6 +76,192 @@ class Param(object):
             return self.parent == other.parent and self.name == other.name
         else:
             return False
+
+
+class IntParam(Param):
+    """
+    Specialized `Param` for integers.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        value = ParamValidators.primitiveConvert(value, int)
+        self._validate(value)
+        return value
+
+
+class FloatParam(Param):
+    """
+    Specialized `Param` for floats.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        value = ParamValidators.primitiveConvert(value, float)
+        self._validate(value)
+        return value
+
+
+class StringParam(Param):
+    """
+    Specialized `Param` for strings.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        value = ParamValidators.primitiveConvert(value, str)
+        self._validate(value)
+        return value
+
+
+class BooleanParam(Param):
+    """
+    Specialized `Param` for Booleans.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        value = ParamValidators.primitiveConvert(value, bool)
+        self._validate(value)
+        return value
+
+
+class ListIntParam(Param):
+    """
+    Specialized `Param` for lists of integers.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        if type(value) != list:
+            value = ParamValidators.convertToList(value)
+
+        if not all(map(lambda v: type(v) == int, value)):
+            try:
+                value = map(lambda v: int(v), value)
+            except ValueError:
+                raise TypeError("Could not convert %s to a list of integers" % value)
+        self._validate(value)
+        return value
+
+
+class ListFloatParam(Param):
+    """
+    Specialized `Param` for lists of floats.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        if type(value) != list:
+            value = ParamValidators.convertToList(value)
+
+        if not all(map(lambda v: type(v) == float, value)):
+            try:
+                value = map(lambda v: float(v), value)
+            except ValueError:
+                raise TypeError("Could not convert %s to a list of floats" % value)
+        self._validate(value)
+        return value
+
+
+class ListStringParam(Param):
+    """
+    Specialized `Param` for lists of strings.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        if type(value) != list:
+            value = ParamValidators.convertToList(value)
+
+        if not all(map(lambda v: type(v) == str, value)):
+            try:
+                value = map(lambda v: str(v), value)
+            except ValueError:
+                raise TypeError("Could not convert %s to a list of strings" % value)
+        self._validate(value)
+        return value
+
+
+class VectorParam(Param):
+    """
+    Specialized `Param` for Vector types.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def _convertAndValidate(self, value):
+        if not isinstance(value, Vector):
+            try:
+                value = DenseVector(value)
+            except:
+                raise TypeError("Could not convert %s to a Vector" % value)
+        self._validate(value)
+        return value
+
+
+class ParamValidators(object):
+
+    @staticmethod
+    def alwaysTrue():
+        return lambda value: True
+
+    @staticmethod
+    def primitiveConvert(value, primitiveType):
+        if type(value) != primitiveType:
+            try:
+                value = primitiveType(value)
+            except ValueError:
+                raise TypeError("Could not convert %s to a %s" % (value, primitiveType.__name__))
+        return value
+
+    @staticmethod
+    def convertToList(value):
+        if type(value) == np.ndarray:
+            return list(value)
+        elif isinstance(value, Vector):
+            return value.toArray()
+        else:
+            raise TypeError("Could not convert %s to list" % value)
+
+    @staticmethod
+    def gt(lowerBound):
+        return lambda value: value > lowerBound
+
+    @staticmethod
+    def gtEq(lowerBound):
+        return lambda value: value >= lowerBound
+
+    @staticmethod
+    def lt(lowerBound):
+        return lambda value: value < lowerBound
+
+    @staticmethod
+    def ltEq(lowerBound):
+        return lambda value: value <= lowerBound
+
+    @staticmethod
+    def inRange(lowerBound, upperBound, lowerInclusive=True, upperInclusive=True):
+        def inRangeFunction(x):
+            lowerValid = (x >= lowerBound) if lowerInclusive else (x > lowerBound)
+            upperValid = (x <= upperBound) if upperInclusive else (x < upperBound)
+            return lowerValid and upperValid
+        return inRangeFunction
+
+    @staticmethod
+    def inList(allowed):
+        return lambda value: value in allowed
+
+    @staticmethod
+    def listLengthGt(lowerBound):
+        return lambda lst: len(lst) > lowerBound
 
 
 class Params(Identifiable):
@@ -274,23 +473,25 @@ class Params(Identifiable):
         """
         for param, value in kwargs.items():
             p = getattr(self, param)
-            if p.expectedType is None or type(value) == p.expectedType or value is None:
-                self._paramMap[getattr(self, param)] = value
-            else:
-                try:
-                    # Try and do "safe" conversions that don't lose information
-                    if p.expectedType == float:
-                        self._paramMap[getattr(self, param)] = float(value)
-                    # Python 3 unified long & int
-                    elif p.expectedType == int and type(value).__name__ == 'long':
-                        self._paramMap[getattr(self, param)] = value
-                    else:
-                        raise Exception(
-                            "Provided type {0} incompatible with type {1} for param {2}"
-                            .format(type(value), p.expectedType, p))
-                except ValueError:
-                    raise Exception(("Failed to convert {0} to type {1} for param {2}"
-                                     .format(type(value), p.expectedType, p)))
+            value = p._convertAndValidate(value)
+            self._paramMap[getattr(self, param)] = value
+            # if p.expectedType is None or type(value) == p.expectedType or value is None:
+            #     self._paramMap[getattr(self, param)] = value
+            # else:
+            #     try:
+            #         # Try and do "safe" conversions that don't lose information
+            #         if p.expectedType == float:
+            #             self._paramMap[getattr(self, param)] = float(value)
+            #         # Python 3 unified long & int
+            #         elif p.expectedType == int and type(value).__name__ == 'long':
+            #             self._paramMap[getattr(self, param)] = value
+            #         else:
+            #             raise Exception(
+            #                 "Provided type {0} incompatible with type {1} for param {2}"
+            #                 .format(type(value), p.expectedType, p))
+            #     except ValueError:
+            #         raise Exception(("Failed to convert {0} to type {1} for param {2}"
+            #                          .format(type(value), p.expectedType, p)))
         return self
 
     def _setDefault(self, **kwargs):
