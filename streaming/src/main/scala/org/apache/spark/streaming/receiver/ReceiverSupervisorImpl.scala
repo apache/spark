@@ -18,7 +18,8 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{ConcurrentLinkedQueue, atomic.AtomicLong}
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
