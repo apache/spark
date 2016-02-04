@@ -231,6 +231,9 @@ private[spark] class ExecutorAllocationManager(
       }
     }
     executor.scheduleAtFixedRate(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
+
+    // sync initial target with cluster manager
+    client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
   }
 
   /**
