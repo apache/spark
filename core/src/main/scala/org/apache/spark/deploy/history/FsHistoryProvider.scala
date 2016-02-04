@@ -42,7 +42,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * This provider checks for new finished applications in the background periodically and
  * renders the history application UI by parsing the associated event logs.
  *
- * ==How new and updated attempts are detected==
+ * == How new and updated attempts are detected ==
  *
  * - New attempts are detected in [[checkForLogs]]: the log dir is scanned, and any
  * entries in the log dir whose modification time is greater than the last scan time
@@ -488,6 +488,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
     newIterator.foreach(addIfAbsent)
     oldIterator.foreach(addIfAbsent)
+    logDebug(s" completed apps=${mergedApps.count(_._2.completed)}")
+    logDebug(s" incomplete apps=${mergedApps.count(!_._2.completed)}")
     mergedApps
   }
 
@@ -741,7 +743,7 @@ private[history] object FsHistoryProvider {
  * @param lastUpdated the modification time of the log file when this entry was built by replaying
  *                    the history.
  * @param sparkUser user running the application
- * @param completed predicate to indicate whether or not the application has completed.
+ * @param completed flag to indicate whether or not the application has completed.
  * @param fileSize the size of the log file the last time the file was scanned for changes
  */
 private class FsApplicationAttemptInfo(
@@ -760,8 +762,8 @@ private class FsApplicationAttemptInfo(
 
   /** extend the superclass string value with the extra attributes of this class */
   override def toString: String = {
-    s"FsApplicationAttemptInfo($logPath, $name, $appId," +
-      s" ${super.toString}, $fileSize"
+    s"FsApplicationAttemptInfo($name, $appId," +
+      s" ${super.toString}, source=$logPath, size=$fileSize"
   }
 }
 
