@@ -520,6 +520,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case "TOK_LEFTSEMIJOIN" => LeftSemi
           case "TOK_UNIQUEJOIN" => noParseRule("Unique Join", node)
           case "TOK_ANTIJOIN" => noParseRule("Anti Join", node)
+          case "TOK_NATURALJOIN" => NaturalJoin(Inner)
+          case "TOK_NATURALRIGHTOUTERJOIN" => NaturalJoin(RightOuter)
+          case "TOK_NATURALLEFTOUTERJOIN" => NaturalJoin(LeftOuter)
+          case "TOK_NATURALFULLOUTERJOIN" => NaturalJoin(FullOuter)
         }
         Join(nodeToRelation(relation1),
           nodeToRelation(relation2),

@@ -24,6 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
@@ -81,6 +82,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
+      ResolveNaturalJoin ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -1228,6 +1230,47 @@ class Analyzer(
           val order = spec.orderSpec.map(_.child)
           WindowExpression(rank.withOrder(order), spec)
       }
+    }
+  }
+
+  /**
+   * Removes natural joins by calculating output columns based on output from two sides,
+   * Then apply a Project on a normal Join to eliminate natural join.
+   */
+  object ResolveNaturalJoin extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      // Should not skip unresolved nodes because natural join is always unresolved.
+      case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
+        // find common column names from both sides, should be treated like usingColumns
+        val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
+        val leftKeys = joinNames.map(keyName => left.output.find(_.name == keyName).get)
+        val rightKeys = joinNames.map(keyName => right.output.find(_.name == keyName).get)
+        val joinPairs = leftKeys.zip(rightKeys)
+        // Add joinPairs to joinConditions
+        val newCondition = (condition ++ joinPairs.map {
+          case (l, r) => EqualTo(l, r)
+        }).reduceLeftOption(And)
+        // columns not in joinPairs
+        val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
+        val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
+        // we should only keep unique columns(depends on joinType) for joinCols
+        val projectList = joinType match {
+          case LeftOuter =>
+            leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+          case RightOuter =>
+            rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
+          case FullOuter =>
+            // in full outer join, joinCols should be non-null if there is.
+            val joinedCols = joinPairs.map {
+              case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)()
+            }
+            joinedCols ++ lUniqueOutput.map(_.withNullability(true)) ++
+              rUniqueOutput.map(_.withNullability(true))
+          case _ =>
+            rightKeys ++ lUniqueOutput ++ rUniqueOutput
+        }
+        // use Project to trim unnecessary fields
+        Project(projectList, Join(left, right, joinType, newCondition))
     }
   }
 }
