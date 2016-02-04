@@ -182,7 +182,6 @@ Refer to the [`ChiSqTestResult` Java docs](api/java/org/apache/spark/mllib/stat/
 
 {% include_example java/org/apache/spark/examples/mllib/JavaHypothesisTestingExample.java %}
 
-{% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
