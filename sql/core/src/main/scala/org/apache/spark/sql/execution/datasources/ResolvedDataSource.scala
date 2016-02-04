@@ -122,7 +122,6 @@ object ResolvedDataSource extends Logging {
     provider.createSink(sqlContext, options, partitionColumns)
   }
 
-
   /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
