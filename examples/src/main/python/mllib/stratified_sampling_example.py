@@ -30,10 +30,15 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    # data = ... # an RDD of any key value pairs
-    # fractions = ... # specify the exact fraction desired from each key as a dictionary
-    #
-    # approxSample = data.sampleByKey(False, fractions);
+
+    data = sc.parallelize([(1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f')]) # an RDD of any key value pairs
+    fractions = {1:0.1, 2:0.6, 3:0.3} # specify the exact fraction desired from each key as a dictionary
+
+    approxSample = data.sampleByKey(False, fractions);
+
     # $example off$
+
+    for each in approxSample.collect():
+        print(each)
 
     sc.stop()
