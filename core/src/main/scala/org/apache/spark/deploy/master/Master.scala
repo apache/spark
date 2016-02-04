@@ -591,8 +591,7 @@ private[deploy] class Master(
       usableWorkers: Array[WorkerInfo],
       spreadOutApps: Boolean): Array[Int] = {
     val coresPerExecutor = app.desc.coresPerExecutor
-    val coresPerTask = app.desc.coresPerTask
-    val minCoresPerExecutor = math.max(coresPerExecutor.getOrElse(1), coresPerTask)
+    val minCoresPerExecutor = coresPerExecutor.getOrElse(1)
     val oneExecutorPerWorker = coresPerExecutor.isEmpty
     val memoryPerExecutor = app.desc.memoryPerExecutorMB
     val numUsable = usableWorkers.length

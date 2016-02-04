@@ -345,7 +345,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         val externalShufflePort = conf.getInt("spark.shuffle.service.port", 7337)
         val hostname = slaveIdToHost.remove(slaveId).get
         logDebug(s"Connecting to shuffle service on slave $slaveId, " +
-          s"host $hostname, port $externalShufflePort for app ${conf.getAppId}")
+            s"host $hostname, port $externalShufflePort for app ${conf.getAppId}")
         mesosExternalShuffleClient.get
           .registerDriverWithShuffleService(hostname, externalShufflePort)
       }
