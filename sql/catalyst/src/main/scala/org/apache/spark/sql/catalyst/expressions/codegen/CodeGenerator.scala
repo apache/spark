@@ -156,7 +156,11 @@ class CodegenContext {
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
 
-  private val curId = new java.util.concurrent.atomic.AtomicInteger()
+  /**
+    * The map from a variable name to it's next ID.
+    */
+  private val freshNameIds = new mutable.HashMap[String, Int]
+  freshNameIds += INPUT_ROW -> 1
 
   /**
     * A prefix used to generate fresh name.
@@ -164,16 +168,21 @@ class CodegenContext {
   var freshNamePrefix = ""
 
   /**
-   * Returns a term name that is unique within this instance of a `CodeGenerator`.
-   *
-   * (Since we aren't in a macro context we do not seem to have access to the built in `freshName`
-   * function.)
+   * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
-  def freshName(name: String): String = {
-    if (freshNamePrefix == "") {
-      s"$name${curId.getAndIncrement}"
+  def freshName(name: String): String = synchronized {
+    val fullName = if (freshNamePrefix == "") {
+      name
     } else {
-      s"${freshNamePrefix}_$name${curId.getAndIncrement}"
+      s"${freshNamePrefix}_$name"
+    }
+    if (freshNameIds.contains(fullName)) {
+      val id = freshNameIds(fullName)
+      freshNameIds(fullName) = id + 1
+      s"$fullName$id"
+    } else {
+      freshNameIds += fullName -> 1
+      fullName
     }
   }
 

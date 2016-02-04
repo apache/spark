@@ -60,22 +60,22 @@ class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
   test("resolve default source") {
-    sqlContext.streamFrom
+    sqlContext.read
       .format("org.apache.spark.sql.streaming.test")
-      .open()
-      .streamTo
+      .stream()
+      .write
       .format("org.apache.spark.sql.streaming.test")
-      .start()
+      .stream()
       .stop()
   }
 
   test("resolve full class") {
-    sqlContext.streamFrom
+    sqlContext.read
       .format("org.apache.spark.sql.streaming.test.DefaultSource")
-      .open()
-      .streamTo
+      .stream()
+      .write
       .format("org.apache.spark.sql.streaming.test")
-      .start()
+      .stream()
       .stop()
   }
 
@@ -83,12 +83,12 @@ class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
     val map = new java.util.HashMap[String, String]
     map.put("opt3", "3")
 
-    val df = sqlContext.streamFrom
+    val df = sqlContext.read
         .format("org.apache.spark.sql.streaming.test")
         .option("opt1", "1")
         .options(Map("opt2" -> "2"))
         .options(map)
-        .open()
+        .stream()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
@@ -96,12 +96,12 @@ class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
 
     LastOptions.parameters = null
 
-    df.streamTo
+    df.write
       .format("org.apache.spark.sql.streaming.test")
       .option("opt1", "1")
       .options(Map("opt2" -> "2"))
       .options(map)
-      .start()
+      .stream()
       .stop()
 
     assert(LastOptions.parameters("opt1") == "1")
@@ -110,54 +110,53 @@ class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
   }
 
   test("partitioning") {
-    val df = sqlContext.streamFrom
+    val df = sqlContext.read
       .format("org.apache.spark.sql.streaming.test")
-      .open()
+      .stream()
 
-    df.streamTo
+    df.write
       .format("org.apache.spark.sql.streaming.test")
-      .start()
+      .stream()
       .stop()
     assert(LastOptions.partitionColumns == Nil)
 
-    df.streamTo
+    df.write
       .format("org.apache.spark.sql.streaming.test")
       .partitionBy("a")
-      .start()
+      .stream()
       .stop()
     assert(LastOptions.partitionColumns == Seq("a"))
 
-
     withSQLConf("spark.sql.caseSensitive" -> "false") {
-      df.streamTo
+      df.write
         .format("org.apache.spark.sql.streaming.test")
         .partitionBy("A")
-        .start()
+        .stream()
         .stop()
       assert(LastOptions.partitionColumns == Seq("a"))
     }
 
     intercept[AnalysisException] {
-      df.streamTo
+      df.write
         .format("org.apache.spark.sql.streaming.test")
         .partitionBy("b")
-        .start()
+        .stream()
         .stop()
     }
   }
 
   test("stream paths") {
-    val df = sqlContext.streamFrom
+    val df = sqlContext.read
       .format("org.apache.spark.sql.streaming.test")
-      .open("/test")
+      .stream("/test")
 
     assert(LastOptions.parameters("path") == "/test")
 
     LastOptions.parameters = null
 
-    df.streamTo
+    df.write
       .format("org.apache.spark.sql.streaming.test")
-      .start("/test")
+      .stream("/test")
       .stop()
 
     assert(LastOptions.parameters("path") == "/test")

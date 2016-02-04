@@ -91,6 +91,7 @@ class SparkEnv (
       metricsSystem.stop()
       outputCommitCoordinator.stop()
       rpcEnv.shutdown()
+      rpcEnv.awaitTermination()
 
       // Note that blockTransferService is stopped by BlockManager since it is started by it.
 

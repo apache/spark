@@ -14,29 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.parser
 
-package org.apache.spark.sql.execution.datasources.parquet;
+import org.apache.spark.SparkFunSuite
 
-import org.apache.spark.sql.execution.vectorized.ColumnVector;
-
-/**
- * Interface for value decoding that supports vectorized (aka batched) decoding.
- * TODO: merge this into parquet-mr.
- */
-public interface VectorizedValuesReader {
-  byte readByte();
-  int readInteger();
-  long readLong();
-
-  /*
-   * Reads `total` values into `c` start at `c[rowId]`
-   */
-  void readBytes(int total, ColumnVector c, int rowId);
-  void readIntegers(int total, ColumnVector c, int rowId);
-  void readLongs(int total, ColumnVector c, int rowId);
-  void readBinary(int total, ColumnVector c, int rowId);
-
-  // TODO: add all the other parquet types.
-
-  void skip(int n);
+class ASTNodeSuite extends SparkFunSuite {
+  test("SPARK-13157 - remainder must return all input chars") {
+    val inputs = Seq(
+      ("add jar", "file:///tmp/ab/TestUDTF.jar"),
+      ("add jar", "file:///tmp/a@b/TestUDTF.jar"),
+      ("add jar", "c:\\windows32\\TestUDTF.jar"),
+      ("add jar", "some \nbad\t\tfile\r\n.\njar"),
+      ("ADD JAR", "@*#&@(!#@$^*!@^@#(*!@#"),
+      ("SET", "foo=bar"),
+      ("SET", "foo*)(@#^*@&!#^=bar")
+    )
+    inputs.foreach {
+      case (command, arguments) =>
+        val node = ParseDriver.parsePlan(s"$command $arguments", null)
+        assert(node.remainder === arguments)
+    }
+  }
 }
