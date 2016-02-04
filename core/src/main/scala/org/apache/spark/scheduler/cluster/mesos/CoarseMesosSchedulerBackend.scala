@@ -62,8 +62,8 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
-  private[this] val shutdownTimeoutMS = conf.getTimeAsMs("spark.mesos.coarse.shutdown.ms", "10s")
-    .ensuring(_ >= 0, "spark.mesos.coarse.shutdown.ms must be >= 0")
+  private[this] val shutdownTimeoutMS = conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
+    .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
 
   // Synchronization protected by stateLock
   private[this] var stopCalled: Boolean = false
