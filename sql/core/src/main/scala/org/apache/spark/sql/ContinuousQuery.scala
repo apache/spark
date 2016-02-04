@@ -53,7 +53,8 @@ trait ContinuousQuery {
   /**
    * Waits for the termination of this query, either by `stop` or by any exception.
    * Returns whether the query has terminated or not.
-   * @throws ContinuousQueryException, if the query terminated by an exception before `timeoutMs` milliseconds
+   * @throws ContinuousQueryException, if the query terminated by an exception before
+   *         `timeoutMs` milliseconds
    */
   def awaitTermination(timeoutMs: Long): Boolean
 

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
