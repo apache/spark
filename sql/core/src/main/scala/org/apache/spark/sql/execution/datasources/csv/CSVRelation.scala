@@ -22,12 +22,12 @@ import java.nio.charset.Charset
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.RecordWriter
+import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.mapreduce.lib.input.{LineRecordReader, TextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.Logging
@@ -60,7 +60,10 @@ private[csv] class CSVRelation(
       sqlContext.sparkContext.textFile(location)
     } else {
       val charset = params.charset
-      sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
+      val conf = sqlContext.sparkContext.hadoopConfiguration
+      conf.set(EncodingTextInputFormat.ENCODING_KEY, charset)
+      sqlContext.sparkContext
+        .newAPIHadoopFile[LongWritable, Text, EncodingTextInputFormat](location)
         .mapPartitions { _.map { pair =>
             new String(pair._2.getBytes, 0, pair._2.getLength, charset)
           }
@@ -249,16 +252,89 @@ object CSVRelation extends Logging {
   }
 }
 
+/**
+ * Because `TextInputFormat` in Hadoop does not support non-ascii compatible encodings,
+ * We need another `InputFormat` to handle the encodings. See SPARK-13108.
+ */
+private[csv] class EncodingTextInputFormat extends TextInputFormat {
+  override def createRecordReader(
+      split: InputSplit,
+      context: TaskAttemptContext): RecordReader[LongWritable, Text] = {
+    val conf: Configuration = {
+      // Use reflection to get the Configuration. This is necessary because TaskAttemptContext is
+      // a class in Hadoop 1.x and an interface in Hadoop 2.x.
+      val method = context.getClass.getMethod("getConfiguration")
+      method.invoke(context).asInstanceOf[Configuration]
+    }
+    val charset = Charset.forName(conf.get(EncodingTextInputFormat.ENCODING_KEY, "UTF-8"))
+    val charsetName = charset.name
+    val safeRecordDelimiterBytes = {
+      val delimiter = "\n"
+      val recordDelimiterBytes = delimiter.getBytes(charset)
+      EncodingTextInputFormat.stripBOM(charsetName, recordDelimiterBytes)
+    }
+    new LineRecordReader(safeRecordDelimiterBytes) {
+      var isFirst = true
+      override def getCurrentValue: Text = {
+        val value = super.getCurrentValue
+        if (isFirst) {
+          isFirst = false
+          val safeBytes = EncodingTextInputFormat.stripBOM(charsetName, value.getBytes)
+          new Text(safeBytes)
+        } else {
+          value
+        }
+      }
+    }
+  }
+}
+
+private[csv] object EncodingTextInputFormat {
+  // configuration key for encoding type
+  val ENCODING_KEY = "encodinginputformat.encoding"
+
+  def stripBOM(charsetName: String, bytes: Array[Byte]): Array[Byte] = {
+    charsetName match {
+      case "UTF-8"
+          if bytes(0) == 0xEF.toByte &&
+            bytes(1) == 0xBB.toByte &&
+            bytes(2) == 0xBF.toByte =>
+        bytes.slice(3, bytes.length)
+      case "UTF-16" | "UTF-16BE"
+          if bytes(0) == 0xFE.toByte &&
+            bytes(1) == 0xFF.toByte =>
+        bytes.slice(2, bytes.length)
+      case "UTF-16LE"
+          if bytes(0) == 0xFF.toByte &&
+            bytes(1) == 0xFE.toByte =>
+        bytes.slice(2, bytes.length)
+      case "UTF-32" | "UTF-32BE"
+          if bytes(0) == 0x00.toByte &&
+            bytes(1) == 0x00.toByte &&
+            bytes(2) == 0xFE.toByte &&
+            bytes(3) == 0xFF.toByte =>
+        bytes.slice(4, bytes.length)
+      case "UTF-32LE"
+          if bytes(0) == 0xFF.toByte &&
+            bytes(1) == 0xFE.toByte &&
+            bytes(2) == 0x00.toByte &&
+            bytes(3) == 0x00.toByte =>
+        bytes.slice(4, bytes.length)
+      case _ => bytes
+    }
+  }
+}
+
 private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
-    new CsvOutputWriter(path, dataSchema, context, params)
+    new CSVOutputWriter(path, dataSchema, context, params)
   }
 }
 
-private[sql] class CsvOutputWriter(
+private[sql] class CSVOutputWriter(
     path: String,
     dataSchema: StructType,
     context: TaskAttemptContext,

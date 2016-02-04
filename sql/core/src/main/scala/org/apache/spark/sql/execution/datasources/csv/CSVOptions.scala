@@ -46,26 +46,11 @@ private[sql] class CSVOptions(
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
-
-  private def checkedCharset(charsetName: String): String = {
-    val charset = Charset.forName(charsetName)
-    val lineSeq = "\n"
-    // Currently this datasource does not support non-ascii compatible encodings. See SPARK-13108
-    val isASCIICompatible =
-      java.util.Arrays.equals(
-        lineSeq.getBytes(Charset.forName("UTF-8")), lineSeq.getBytes(charset))
-    if (!isASCIICompatible) {
-      throw new UnsupportedCharsetException(charsetName)
-    } else {
-      charsetName
-    }
-  }
-
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val charset = checkedCharset(parameters.getOrElse("encoding",
-    parameters.getOrElse("charset", Charset.forName("UTF-8").name())))
+  val charset = parameters.getOrElse("encoding",
+    parameters.getOrElse("charset", Charset.forName("UTF-8").name()))
 
   val quote = getChar("quote", '\"')
   val escape = getChar("escape", '\\')
