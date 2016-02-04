@@ -68,15 +68,15 @@ class FileStreamSource(
     }
 
     if (newFiles.nonEmpty) {
-      maxBatchFile += 1
-      writeBatch(maxBatchFile, newFiles)
+      maxBatchId += 1
+      writeBatch(maxBatchId, newFiles)
     }
 
-    new LongOffset(maxBatchFile)
+    new LongOffset(maxBatchId)
   }
 
   def currentOffset: LongOffset = synchronized {
-    new LongOffset(maxBatchFile)
+    new LongOffset(maxBatchId)
   }
 
   /**
@@ -110,7 +110,7 @@ class FileStreamSource(
   private val fs = FileSystem.get(sparkContext.hadoopConfiguration)
   private val existingBatchFiles = fetchAllBatchFiles()
   private val existingBatchIds = existingBatchFiles.map(_.getPath.getName.toInt)
-  private var maxBatchFile = if (existingBatchIds.isEmpty) -1 else existingBatchIds.max
+  private var maxBatchId = if (existingBatchIds.isEmpty) -1 else existingBatchIds.max
   private val seenFiles = new OpenHashSet[String]
 
   if (existingBatchFiles.nonEmpty) {
