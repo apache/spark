@@ -135,19 +135,19 @@ object EliminateSerialization extends Rule[LogicalPlan] {
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
-  private def stipGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
+  private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
     plan match {
       case GlobalLimit(expr, child) => child
       case _ => plan
     }
   }
 
-  private def buildUnionChild(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+  private def maybePushLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
     (limitExp, plan.maxRows) match {
       case (IntegerLiteral(maxRow), Some(IntegerLiteral(childMaxRows))) if maxRow < childMaxRows =>
-        LocalLimit(limitExp, stipGlobalLimitIfPresent(plan))
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
       case (_, None) =>
-        LocalLimit(limitExp, stipGlobalLimitIfPresent(plan))
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
       case _ => plan
     }
   }
@@ -160,7 +160,15 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(buildUnionChild(exp, _))))
+      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
+    case LocalLimit(exp, join @ Join(left, right, joinType, condition)) =>
+      joinType match {
+        case RightOuter => join.copy(right = maybePushLimit(exp, right))
+        case LeftOuter => join.copy(left = maybePushLimit(exp, left))
+        case FullOuter =>
+          join.copy(left = maybePushLimit(exp, left), right = maybePushLimit(exp, right))
+        case _ => join
+      }
   }
 }
 
