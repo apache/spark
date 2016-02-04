@@ -387,13 +387,6 @@ See the [configuration page](configuration.html) for information on Spark config
     </ul>
   </td>
 </tr>
-<tr>
-  <td><code>spark.mesos.coarse.shutdown.ms</code></td>
-  <td><code>10s</code></td>
-  <td> 
-    Time to wait for executors to report that they have exited. Setting this too low has the risk of shutting down the Mesos driver (and thereby killing the spark executors) while the executor is still in the process of exiting cleanly.
-  </td>
-</tr>
 </table>
 
 # Troubleshooting and Debugging
