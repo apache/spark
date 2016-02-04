@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.util
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.collection.mutable
 import scala.concurrent.duration._
 
@@ -30,7 +32,7 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("basic") {
     val clock = new ManualClock()
-    val results = new mutable.ArrayBuffer[Long]() with mutable.SynchronizedBuffer[Long]
+    val results = new ConcurrentLinkedQueue[Long]()
     val timer = new RecurringTimer(clock, 100, time => {
       results += time
     }, "RecurringTimerSuite-basic")
@@ -51,7 +53,7 @@ class RecurringTimerSuite extends SparkFunSuite with PrivateMethodTester {
 
   test("SPARK-10224: call 'callback' after stopping") {
     val clock = new ManualClock()
-    val results = new mutable.ArrayBuffer[Long]() with mutable.SynchronizedBuffer[Long]
+    val results = new ConcurrentLinkedQueue[Long]()
     val timer = new RecurringTimer(clock, 100, time => {
       results += time
     }, "RecurringTimerSuite-SPARK-10224")

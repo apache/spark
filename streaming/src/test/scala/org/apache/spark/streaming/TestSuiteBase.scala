@@ -18,9 +18,9 @@
 package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream}
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.SynchronizedBuffer
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -93,8 +93,7 @@ class TestInputStream[T: ClassTag](_ssc: StreamingContext, input: Seq[Seq[T]], n
  */
 class TestOutputStream[T: ClassTag](
     parent: DStream[T],
-    val output: SynchronizedBuffer[Seq[T]] =
-      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
+    val output: ConcurrentLinkedQueue[Seq[T]] = new ConcurrentLinkedQueue[Seq[T]]
   ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
     output += collected
@@ -117,8 +116,8 @@ class TestOutputStream[T: ClassTag](
  */
 class TestOutputStreamWithPartitions[T: ClassTag](
     parent: DStream[T],
-    val output: SynchronizedBuffer[Seq[Seq[T]]] =
-      new ArrayBuffer[Seq[Seq[T]]] with SynchronizedBuffer[Seq[Seq[T]]])
+    val output: ConcurrentLinkedQueue[Seq[Seq[T]]] =
+      new ConcurrentLinkedQueue[Seq[Seq[T]]])
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
     output += collected
@@ -322,7 +321,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     val inputStream = new TestInputStream(ssc, input, numPartitions)
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
-      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
+      new ConcurrentLinkedQueue[Seq[Seq[V]]])
     outputStream.register()
     ssc
   }
@@ -347,7 +346,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     val inputStream2 = new TestInputStream(ssc, input2, numInputPartitions)
     val operatedStream = operation(inputStream1, inputStream2)
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
-      new ArrayBuffer[Seq[Seq[W]]] with SynchronizedBuffer[Seq[Seq[W]]])
+      new ConcurrentLinkedQueue[Seq[Seq[W]]])
     outputStream.register()
     ssc
   }

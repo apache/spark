@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import java.io.File
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{ConcurrentLinkedQueue, atomic.AtomicLong}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -101,8 +101,7 @@ class DirectKafkaStreamSuite
         ssc, kafkaParams, topics)
     }
 
-    val allReceived =
-      new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
+    val allReceived = new ConcurrentLinkedQueue[(String, String)]
 
     // hold a reference to the current offset ranges, so it can be used downstream
     var offsetRanges = Array[OffsetRange]()
@@ -173,7 +172,7 @@ class DirectKafkaStreamSuite
       "Start offset not from latest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
+    val collectedData = new ConcurrentLinkedQueue[String]()
     stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
@@ -219,7 +218,7 @@ class DirectKafkaStreamSuite
       "Start offset not from latest"
     )
 
-    val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
+    val collectedData = new ConcurrentLinkedQueue[String]()
     stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
     ssc.start()
     val newData = Map("b" -> 10)
@@ -335,8 +334,7 @@ class DirectKafkaStreamSuite
         ssc, kafkaParams, Set(topic))
     }
 
-    val allReceived =
-      new ArrayBuffer[(String, String)] with mutable.SynchronizedBuffer[(String, String)]
+    val allReceived = new ConcurrentLinkedQueue[(String, String)]
 
     stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
     ssc.start()
@@ -389,8 +387,7 @@ class DirectKafkaStreamSuite
       }
     }
 
-    val collectedData =
-      new mutable.ArrayBuffer[Array[String]]() with mutable.SynchronizedBuffer[Array[String]]
+    val collectedData = new ConcurrentLinkedQueue[Array[String]]()
 
     // Used for assertion failure messages.
     def dataToString: String =
@@ -433,7 +430,7 @@ class DirectKafkaStreamSuite
 }
 
 object DirectKafkaStreamSuite {
-  val collectedData = new mutable.ArrayBuffer[String]() with mutable.SynchronizedBuffer[String]
+  val collectedData = new ConcurrentLinkedQueue[String]()
   @volatile var total = -1L
 
   class InputInfoCollector extends StreamingListener {

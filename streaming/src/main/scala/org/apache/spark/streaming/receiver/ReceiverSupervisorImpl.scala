@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.{ConcurrentLinkedQueue, atomic.AtomicLong}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -92,8 +92,7 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Unique block ids if one wants to add blocks directly */
   private val newBlockId = new AtomicLong(System.currentTimeMillis())
 
-  private val registeredBlockGenerators = new mutable.ArrayBuffer[BlockGenerator]
-    with mutable.SynchronizedBuffer[BlockGenerator]
+  private val registeredBlockGenerators = new ConcurrentLinkedQueue[BlockGenerator]
 
   /** Divides received data records into data blocks for pushing in BlockManager. */
   private val defaultBlockGeneratorListener = new BlockGeneratorListener {
