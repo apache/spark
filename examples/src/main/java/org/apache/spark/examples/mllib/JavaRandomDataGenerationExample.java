@@ -52,9 +52,9 @@ public class JavaRandomDataGenerationExample {
                         return 1.0 + 2.0 * x;
                     }
                 });
-
-        // $example off$
 */
+        // $example off$
+
         jsc.stop();
     }
 }

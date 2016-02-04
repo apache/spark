@@ -31,8 +31,9 @@ object HypothesisTestingExample {
     val conf = new SparkConf().setAppName("HypothesisTestingExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-/*
+
     // $example on$
+/*
     // @note: todo
     val vec: Vector = ... // a vector composed of the frequencies of events
 
@@ -59,9 +60,9 @@ object HypothesisTestingExample {
       println(s"Column $i:\n$result")
       i += 1
     } // summary of the test
-
-    // $example off$
 */
+    // $example off$
+
     sc.stop()
   }
 }

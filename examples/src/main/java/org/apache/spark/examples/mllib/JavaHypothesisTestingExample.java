@@ -71,9 +71,9 @@ public class JavaHypothesisTestingExample {
             System.out.println(result); // summary of the test
             i++;
         }
-
-        // $example off$
 */
+        // $example off$
+
         jsc.stop();
     }
 }

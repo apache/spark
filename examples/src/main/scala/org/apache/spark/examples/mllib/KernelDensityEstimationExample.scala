@@ -30,9 +30,9 @@ object KernelDensityEstimationExample {
     val conf = new SparkConf().setAppName("KernelDensityEstimationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-/*
-    // $example on$
 
+    // $example on$
+/*
     // @note: todo
 
     val data: RDD[Double] = ... // an RDD of sample data
@@ -45,8 +45,9 @@ object KernelDensityEstimationExample {
 
     // Find density estimates for the given values
     val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
-    // $example off$
 */
+    // $example off$
+
     sc.stop()
   }
 }

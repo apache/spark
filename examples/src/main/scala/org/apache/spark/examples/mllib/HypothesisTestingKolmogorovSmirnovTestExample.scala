@@ -46,9 +46,9 @@ object HypothesisTestingKolmogorovSmirnovTestExample {
     // perform a KS test using a cumulative distribution function of our making
     val myCDF: Double => Double = ...
     val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
-
-    // $example off$
 */
+    // $example off$
+
     sc.stop()
   }
 }

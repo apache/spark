@@ -50,9 +50,9 @@ public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
         // and null hypothesis
         // if our p-value indicates significance, we can reject the null hypothesis
         System.out.println(testResult);
-
-        // $example off$
 */
+        // $example off$
+
         jsc.stop();
     }
 }
