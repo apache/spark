@@ -385,10 +385,10 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     // Ensure that the operator's children satisfy their output distribution requirements:
     children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
       distribution match {
-        case BroadcastDistribution(f) =>
-          Broadcast(f, child)
         case _ if child.outputPartitioning.satisfies(distribution) =>
           child
+        case BroadcastDistribution(f) =>
+          Broadcast(f, child)
         case _ =>
           Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
       }
@@ -396,8 +396,13 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),
     // then the children's output partitionings must be compatible:
+    def requireCompatiblePartitioning(distribution: Distribution): Boolean = distribution match {
+      case UnspecifiedDistribution => false
+      case BroadcastDistribution(_) => false
+      case _ => true
+    }
     if (children.length > 1
-        && requiredChildDistributions.toSet != Set(UnspecifiedDistribution)
+        && requiredChildDistributions.exists(requireCompatiblePartitioning)
         && !Partitioning.allCompatible(children.map(_.outputPartitioning))) {
 
       // First check if the existing partitions of the children all match. This means they are
@@ -434,8 +439,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
 
         children.zip(requiredChildDistributions).map {
           case (child, distribution) => {
-            val targetPartitioning =
-              createPartitioning(distribution, numPartitions)
+            val targetPartitioning = createPartitioning(distribution, numPartitions)
             if (child.outputPartitioning.guarantees(targetPartitioning)) {
               child
             } else {

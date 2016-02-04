@@ -43,6 +43,7 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
     val conf = new SparkConf()
       .setMaster("local-cluster[2,1,1024]")
       .setAppName("testing")
+      .set("spark.sql.codegen.wholeStage", "false")
     val sc = new SparkContext(conf)
     sqlContext = new SQLContext(sc)
   }
@@ -62,7 +63,7 @@ class BroadcastJoinSuite extends QueryTest with BeforeAndAfterAll {
       // Comparison at the end is for broadcast left semi join
       val joinExpression = df1("key") === df2("key") && df1("value") > df2("value")
       val df3 = df1.join(broadcast(df2), joinExpression, joinType)
-      val plan = df3.queryExecution.sparkPlan
+      val plan = df3.queryExecution.executedPlan
       assert(plan.collect { case p: T => p }.size === 1)
       plan.executeCollect()
     }

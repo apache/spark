@@ -42,15 +42,19 @@ case class BroadcastHashJoin(
     right: SparkPlan)
   extends BinaryNode with HashJoin with CodegenSupport {
 
+  val streamSideName = buildSide match {
+    case BuildLeft => "right"
+    case BuildRight => "left"
+  }
+
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numStreamRows" -> SQLMetrics.createLongMetric(sparkContext, s"number of $streamSideName rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def requiredChildDistribution: Seq[Distribution] = buildSide match {
-    case BuildLeft => longMetric("numLeftRows")
+    case BuildLeft =>
       BroadcastDistribution(buildRelation) :: UnspecifiedDistribution :: Nil
     case BuildRight =>
       UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
@@ -61,10 +65,7 @@ case class BroadcastHashJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = buildSide match {
-      case BuildLeft => longMetric("numRightRows")
-      case BuildRight => longMetric("numLeftRows")
-    }
+    val numStreamedRows = longMetric("numStreamRows")
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = Broadcast.broadcastRelation[HashedRelation](buildPlan)

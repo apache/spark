@@ -40,9 +40,18 @@ case class BroadcastHashOuterJoin(
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode with HashOuterJoin {
 
+  private[this] def failOnWrongJoinType(jt: JoinType): Nothing = {
+    throw new IllegalArgumentException(s"HashOuterJoin should not take $jt as the JoinType")
+  }
+
+  val streamSideName = joinType match {
+    case RightOuter => "right"
+    case LeftOuter => "left"
+    case jt => failOnWrongJoinType(jt)
+  }
+
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
+    "numStreamRows" -> SQLMetrics.createLongMetric(sparkContext, s"number of $streamSideName rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = joinType match {
@@ -51,7 +60,7 @@ case class BroadcastHashOuterJoin(
     case LeftOuter =>
       UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
     case x =>
-      throw new IllegalArgumentException(s"HashOuterJoin should not take $x as the JoinType")
+      failOnWrongJoinType(x)
   }
 
   private val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
@@ -61,13 +70,7 @@ case class BroadcastHashOuterJoin(
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = joinType match {
-      case RightOuter => longMetric("numRightRows")
-      case LeftOuter => longMetric("numLeftRows")
-      case x =>
-        throw new IllegalArgumentException(
-          s"HashOuterJoin should not take $x as the JoinType")
-    }
+    val numStreamedRows = longMetric("numStreamRows")
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = Broadcast.broadcastRelation[UnsafeHashedRelation](buildPlan)
@@ -102,8 +105,7 @@ case class BroadcastHashOuterJoin(
           })
 
         case x =>
-          throw new IllegalArgumentException(
-            s"BroadcastHashOuterJoin should not take $x as the JoinType")
+          failOnWrongJoinType(x)
       }
     }
   }

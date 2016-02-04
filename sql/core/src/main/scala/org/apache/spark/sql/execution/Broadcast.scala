@@ -23,6 +23,8 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.{EmptyRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -30,8 +32,16 @@ import org.apache.spark.util.ThreadUtils
  *
  * TODO whole stage codegen.
  */
-case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends UnaryNode {
+case class Broadcast(
+    f: Iterable[InternalRow] => Any,
+    child: SparkPlan)
+  extends UnaryNode with CodegenSupport {
+
   override def output: Seq[Attribute] = child.output
+
+  override private[sql] lazy val metrics = Map(
+    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows")
+  )
 
   val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
@@ -66,7 +76,11 @@ case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends 
     Await.result(future, timeout)
   }
 
+  override def upstream(): RDD[InternalRow] = {
+    child.asInstanceOf[CodegenSupport].upstream()
+  }
 
+  override def doProduce(ctx: CodegenContext): String = ""
 
   override protected def doPrepare(): Unit = {
     // Materialize the relation.
@@ -86,7 +100,7 @@ case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends 
 object Broadcast {
   def broadcastRelation[T](plan: SparkPlan): broadcast.Broadcast[T] = plan match {
     case builder: Broadcast => builder.broadcastRelation
-    case _ => sys.error("The given plan is not a Broadcaster")
+    case _ => sys.error("The given plan is not a Broadcast")
   }
 
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
