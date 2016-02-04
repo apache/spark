@@ -30,10 +30,10 @@ class ResolveNaturalJoinSuite extends AnalysisTest {
   lazy val aNotNull = a.notNull
   lazy val bNotNull = b.notNull
   lazy val cNotNull = c.notNull
-  lazy val r1 = LocalRelation(a, b)
-  lazy val r2 = LocalRelation(a, c)
+  lazy val r1 = LocalRelation(b, a)
+  lazy val r2 = LocalRelation(c, a)
   lazy val r3 = LocalRelation(aNotNull, bNotNull)
-  lazy val r4 = LocalRelation(bNotNull, cNotNull)
+  lazy val r4 = LocalRelation(cNotNull, bNotNull)
 
   test("natural inner join") {
     val plan = r1.join(r2, NaturalJoin(Inner), None)
