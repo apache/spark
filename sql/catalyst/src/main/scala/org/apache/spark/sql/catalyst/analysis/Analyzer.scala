@@ -215,8 +215,7 @@ class Analyzer(
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
       case x: GroupingSets =>
         val gid =
-          AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)(
-            isGenerated = Some(true))
+          AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
         // Expand works by setting grouping expressions to null as determined by the bitmasks. To
         // prevent these null values from being used in an aggregate instead of the original value
