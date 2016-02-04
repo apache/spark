@@ -67,6 +67,7 @@ trait HashJoin {
               BitwiseAnd(Cast(e, LongType), Literal((1 << bits) - 1)))
             width -= bits
           }
+        // TODO: support DateType and TimestampType
         case other =>
           return keys
       }
@@ -75,8 +76,9 @@ trait HashJoin {
   }
 
   protected val canJoinKeyFitWithinLong: Boolean = {
+    val sameTypes = buildKeys.map(_.dataType) == streamedKeys.map(_.dataType)
     val key = rewriteKeyExpr(buildKeys)
-    key.length == 1 && key.head.dataType.isInstanceOf[LongType]
+    sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
   }
 
   protected def buildSideKeyGenerator: Projection =
