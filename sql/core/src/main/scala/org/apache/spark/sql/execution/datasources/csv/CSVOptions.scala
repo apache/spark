@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.{Charset, UnsupportedCharsetException}
+import java.nio.charset.Charset
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
@@ -46,6 +46,7 @@ private[sql] class CSVOptions(
       throw new Exception(s"$paramName flag can be true or false")
     }
   }
+
   val delimiter = CSVTypeCast.toChar(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
