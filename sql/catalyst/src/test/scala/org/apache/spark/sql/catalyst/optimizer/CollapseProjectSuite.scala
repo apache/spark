@@ -25,11 +25,11 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class ProjectCollapsingSuite extends PlanTest {
+class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", FixedPoint(10), EliminateSubQueries) ::
-        Batch("ProjectCollapsing", Once, ProjectCollapsing) :: Nil
+        Batch("CollapseProject", Once, CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int)
