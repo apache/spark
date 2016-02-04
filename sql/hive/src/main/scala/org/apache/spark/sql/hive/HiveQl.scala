@@ -168,7 +168,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   /**
    * Returns the HiveConf
    */
-  private[this] def hiveConf: HiveConf = HiveConfUtil.conf()
+  private[this] def hiveConf: HiveConf = HiveConfUtil.conf
 
   protected def getProperties(node: ASTNode): Seq[(String, String)] = node match {
     case Token("TOK_TABLEPROPLIST", list) =>
