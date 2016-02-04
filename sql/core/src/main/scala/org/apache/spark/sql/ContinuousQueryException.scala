@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.streaming.Offset
  * @since 2.0.0
  */
 @Experimental
-class QueryException private[sql](
+class ContinuousQueryException private[sql](
     val message: String,
     val cause: Throwable,
     val startOffset: Option[Offset] = None,

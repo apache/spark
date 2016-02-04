@@ -67,7 +67,7 @@ class StreamExecution(
   private[sql] var lastExecution: QueryExecution = null
 
   @volatile
-  private[sql] var streamDeathCause: QueryException = null
+  private[sql] var streamDeathCause: ContinuousQueryException = null
 
   /** The thread that runs the micro-batches of this stream. */
   private[sql] val microBatchThread = new Thread(s"stream execution thread for $name") {
@@ -85,8 +85,8 @@ class StreamExecution(
   /** Returns current status of the sink. */
   override def sinkStatus: SinkStatus = new SinkStatus(sink.toString, sink.currentOffset)
 
-  /** Returns the [[QueryException]] if the query was terminated by an exception. */
-  override def exception: Option[QueryException] = Option(streamDeathCause)
+  /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
+  override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)
 
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStarted]] event
@@ -126,8 +126,8 @@ class StreamExecution(
     } catch {
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>
-        streamDeathCause = new QueryException(
-          s"Query terminated with exception", e, Some(streamProgress.toOffset))
+        streamDeathCause = new ContinuousQueryException(
+          s"Query terminated with exception", e, Some(streamProgress.toCompositeOffset(sources)))
     } finally {
       state = TERMINATED
       sqlContext.streams.notifyQueryTermination(StreamExecution.this)
@@ -204,12 +204,9 @@ class StreamExecution(
       streamProgress.synchronized {
         // Update the offsets and calculate a new composite offset
         newOffsets.foreach(streamProgress.update)
-        val newStreamProgress = logicalPlan.collect {
-          case StreamingRelation(source, _) => streamProgress.get(source)
-        }
-        val batchOffset = CompositeOffset(newStreamProgress)
 
         // Construct the batch and send it to the sink.
+        val batchOffset = streamProgress.toCompositeOffset(sources)
         val nextBatch = new Batch(batchOffset, new DataFrame(sqlContext, newPlan))
         sink.addBatch(nextBatch)
       }

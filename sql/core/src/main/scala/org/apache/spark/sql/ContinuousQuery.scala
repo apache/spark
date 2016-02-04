@@ -35,8 +35,8 @@ trait ContinuousQuery {
   /** Whether the query is currently active or not */
   def isActive: Boolean
 
-  /** Returns the [[QueryException]] if the query was terminated by an exception. */
-  def exception: Option[QueryException]
+  /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
+  def exception: Option[ContinuousQueryException]
 
   /** Returns current status of all the sources. */
   def sourceStatuses: Array[SourceStatus]
@@ -46,13 +46,14 @@ trait ContinuousQuery {
 
   /**
    * Waits for the termination of this query, either by `stop` or by any exception.
-   * @throws QueryException, if the query terminated by an exception.
+   * @throws ContinuousQueryException, if the query terminated by an exception.
    */
   def awaitTermination(): Unit
 
   /**
    * Waits for the termination of this query, either by `stop` or by any exception.
-   * @throws QueryException, if the query terminated by an exception before `timeoutMs` milliseconds
+   * Returns whether the query has terminated or not.
+   * @throws ContinuousQueryException, if the query terminated by an exception before `timeoutMs` milliseconds
    */
   def awaitTermination(timeoutMs: Long): Boolean
 

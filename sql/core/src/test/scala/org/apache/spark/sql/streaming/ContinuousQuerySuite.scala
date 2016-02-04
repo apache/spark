@@ -54,7 +54,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 2000),
       TestAwaitTermination(ExpectException[SparkException], timeoutMs = 10),
       AssertOnQuery(
-        q => q.exception.get.startOffset.get === q.streamProgress.toOffset,
+        q => q.exception.get.startOffset.get === q.streamProgress.toCompositeOffset(Seq(inputData)),
         "incorrect start offset on exception")
     )
   }

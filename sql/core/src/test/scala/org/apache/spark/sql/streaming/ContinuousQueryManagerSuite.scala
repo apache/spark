@@ -163,7 +163,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         sqlContext.streams.awaitAnyTermination()
       }
       assert(returnedValue === expectedReturnedValue,
-        "Returned value does not match expect3ed")
+        "Returned value does not match expected")
     }
 
     AwaitTerminationTester.test(expectedBehavior, awaitTermFunc, testTimeout)
@@ -176,6 +176,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     val queryToStop = activeQueries(Random.nextInt(activeQueries.length))
     Future {
       Thread.sleep(delay.toMillis)
+      logDebug(s"Stopping query ${queryToStop.name}")
       queryToStop.stop()
     }
     queryToStop
