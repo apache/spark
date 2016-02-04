@@ -511,6 +511,24 @@ private[joins] final class UniqueLongHashedRelation(
 
 /**
   * A relation that pack all the rows into a byte array, together with offsets and sizes.
+  *
+  * All the bytes of UnsafeRow are packed together as `bytes`:
+  *
+  *  [  Row0  ][  Row1  ][] ... [  RowN  ]
+  *
+  * With keys:
+  *
+  *   start    start+1   ...       start+N
+  *
+  * `offsets` are offsets of UnsafeRows in the `bytes`
+  * `sizes` are the numbers of bytes of UnsafeRows, 0 means no row for this key.
+  *
+  *  For example, two UnsafeRows (24 bytes and 32 bytes), with keys as 3 and 5 will stored as:
+  *
+  *  start   = 3
+  *  offsets = [0, 0, 24]
+  *  sizes   = [24, 0, 32]
+  *  bytes   = [0 - 24][][24 - 56]
   */
 private[joins] final class LongArrayRelation(
     private var numFields: Int,
@@ -582,6 +600,9 @@ private[joins] final class LongArrayRelation(
   * Create hashed relation with key that is long.
   */
 private[joins] object LongHashedRelation {
+
+  val DENSE_FACTOR = 0.2
+
   def apply(
     input: Iterator[InternalRow],
     numInputRows: LongSQLMetric,
@@ -591,7 +612,7 @@ private[joins] object LongHashedRelation {
     // Use a Java hash table here because unsafe maps expect fixed size records
     val hashTable = new JavaHashMap[Long, CompactBuffer[UnsafeRow]](sizeEstimate)
 
-    // Create a mapping of buildKeys -> rows
+    // Create a mapping of key -> rows
     var numFields = 0
     var keyIsUnique = true
     var minKey = Long.MaxValue
@@ -619,7 +640,7 @@ private[joins] object LongHashedRelation {
     }
 
     if (keyIsUnique) {
-      if (maxKey - minKey <= hashTable.size() * 5) {
+      if (hashTable.size() > (maxKey - minKey) * DENSE_FACTOR) {
         // The keys are dense enough, so use LongArrayRelation
         val length = (maxKey - minKey).toInt + 1
         val sizes = new Array[Int](length)
@@ -647,6 +668,7 @@ private[joins] object LongHashedRelation {
         new LongArrayRelation(numFields, minKey, offsets, sizes, bytes)
 
       } else {
+        // all the keys are unique, one row per key.
         val uniqHashTable = new JavaHashMap[Long, UnsafeRow](hashTable.size)
         val iter = hashTable.entrySet().iterator()
         while (iter.hasNext) {
