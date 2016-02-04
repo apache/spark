@@ -39,6 +39,9 @@ abstract class Catalog {
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
+  /**
+   * Alter an existing database. This operation does not support renaming.
+   */
   def alterDatabase(db: String, dbDefinition: Database): Unit
 
   def getDatabase(db: String): Database
@@ -57,6 +60,9 @@ abstract class Catalog {
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
+  /**
+   * Alter an existing table. This operation does not support renaming.
+   */
   def alterTable(db: String, table: String, tableDefinition: Table): Unit
 
   def getTable(db: String, table: String): Table
@@ -81,6 +87,9 @@ abstract class Catalog {
       parts: Seq[PartitionSpec],
       ignoreIfNotExists: Boolean): Unit
 
+  /**
+   * Alter an existing table partition and optionally override its spec.
+   */
   def alterPartition(
       db: String,
       table: String,
@@ -100,6 +109,9 @@ abstract class Catalog {
 
   def dropFunction(db: String, funcName: String): Unit
 
+  /**
+   * Alter an existing function and optionally override its name.
+   */
   def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit
 
   def getFunction(db: String, funcName: String): Function
@@ -194,5 +206,8 @@ case class Database(
 
 
 object Catalog {
+  /**
+   * Specifications of a table partition indexed by column name.
+   */
   type PartitionSpec = Map[String, String]
 }
