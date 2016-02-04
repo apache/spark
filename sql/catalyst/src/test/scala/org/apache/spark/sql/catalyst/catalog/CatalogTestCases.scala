@@ -27,10 +27,10 @@ import org.apache.spark.sql.AnalysisException
  * Implementations of the [[Catalog]] interface can create test suites by extending this.
  */
 abstract class CatalogTestCases extends SparkFunSuite {
-  private val storageFormat = StorageFormat("usa", "$", "zzz", "serde", Map.empty[String, String])
-  private val part1 = TablePartition(Map[String, String]("a" -> "1"), storageFormat)
-  private val part2 = TablePartition(Map[String, String]("b" -> "2"), storageFormat)
-  private val part3 = TablePartition(Map[String, String]("c" -> "3"), storageFormat)
+  private val storageFormat = StorageFormat("usa", "$", "zzz", "serde", Map())
+  private val part1 = TablePartition(Map("a" -> "1"), storageFormat)
+  private val part2 = TablePartition(Map("b" -> "2"), storageFormat)
+  private val part3 = TablePartition(Map("c" -> "3"), storageFormat)
   private val funcClass = "org.apache.spark.myFunc"
 
   protected def newEmptyCatalog(): Catalog
@@ -42,6 +42,8 @@ abstract class CatalogTestCases extends SparkFunSuite {
    * db2
    *   - tbl1
    *   - tbl2
+   *     - part1
+   *     - part2
    *   - func1
    */
   private def newBasicCatalog(): Catalog = {
@@ -50,8 +52,8 @@ abstract class CatalogTestCases extends SparkFunSuite {
     catalog.createDatabase(newDb("db2"), ignoreIfExists = false)
     catalog.createTable("db2", newTable("tbl1"), ignoreIfExists = false)
     catalog.createTable("db2", newTable("tbl2"), ignoreIfExists = false)
-    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
+    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
     catalog
   }
 
