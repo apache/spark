@@ -19,11 +19,11 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointAddress}
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
@@ -89,8 +89,16 @@ private[spark] class SparkDeploySchedulerBackend(
       args, sc.executorEnvs, classPathEntries ++ testingClassPath, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
-      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+    // If we're using dynamic allocation, set our initial executor limit to 0 for now.
+    // ExecutorAllocationManager will send the real initial limit to the Master later.
+    val initialExecutorLimit =
+      if (Utils.isDynamicAllocationEnabled(conf)) {
+        Some(0)
+      } else {
+        None
+      }
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
+      appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
