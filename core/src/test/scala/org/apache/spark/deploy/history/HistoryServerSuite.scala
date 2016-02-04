@@ -29,7 +29,8 @@ import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.json4s.JsonAST.JArray
+import org.json4s._
+import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.when
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
@@ -361,7 +362,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
 
     // which lists as incomplete
-    assertUrlContains(historyServerIncompleted, appId)
+//    assertUrlContains(historyServerIncompleted, appId)
 
     val appIdRoot = buildURL(appId, "")
     val rootAppPage = HistoryServerSuite.getUrl(appIdRoot)
@@ -387,11 +388,21 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
     // use REST API to get #of jobs
     def getNumJobsRestful(): Int = {
-      val jobs = applications(appId, "/jobs")
-      val json = HistoryServerSuite.getUrl(jobs)
+      val json = HistoryServerSuite.getUrl(applications(appId, "/jobs"))
       val jsonAst = parse(json)
       val jobList = jsonAst.asInstanceOf[JArray]
       jobList.values.size
+    }
+
+    def listApplications(completed: Boolean): Seq[String] = {
+      val json = HistoryServerSuite.getUrl(applications("", ""))
+      val apps = parse(json).asInstanceOf[JArray]
+      apps.filter( app => {
+        val attempts: JArray = (app \ "attempts").asInstanceOf[JArray]
+        val state: JBool = (attempts.values.head.asInstanceOf[JObject] \ "completed")
+            .asInstanceOf[JBool]
+        state.value == completed
+      }).map(app => (app \ "id").asInstanceOf[JString].values)
     }
 
     def completedJobs(): Seq[JobUIData] = {
@@ -437,6 +448,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val jobcount = getNumJobs("/jobs")
     assert(!provider.getListing().head.completed)
 
+    listApplications(false) should contain(appId)
+
     // stop the spark context
     resetSparkContext()
     // check the app is now found as completed
@@ -445,13 +458,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         s"application never completed, server=$server\n")
     }
 
-    // verify the root page picks up the application, even without any GETs to the loaded
-    // incomplete UI
+    // app becomes observably complete
     eventually(stdTimeout, stdInterval) {
-      assertUrlContains(historyServerRoot, appId)
+      listApplications(true) should contain (appId)
     }
-    // the root UI must pick this up too
-    HistoryServerSuite.getUrl(historyServerIncompleted) should not contain (appId)
+    // app is no longer incomplete
+    listApplications(false) should not contain(appId)
 
     assert(jobcount === getNumJobs("/jobs"))
 
