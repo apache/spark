@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -84,7 +85,7 @@ private[streaming] class ReceiverSupervisorImpl(
           cleanupOldBlocks(threshTime)
         case UpdateRateLimit(eps) =>
           logInfo(s"Received a new rate limit: $eps.")
-          registeredBlockGenerators.foreach { bg =>
+          registeredBlockGenerators.asScala.foreach { bg =>
             bg.updateRate(eps)
           }
       }
@@ -170,11 +171,11 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onStart() {
-    registeredBlockGenerators.foreach { _.start() }
+    registeredBlockGenerators.asScala.foreach { _.start() }
   }
 
   override protected def onStop(message: String, error: Option[Throwable]) {
-    registeredBlockGenerators.foreach { _.stop() }
+    registeredBlockGenerators.asScala.foreach { _.stop() }
     env.rpcEnv.stop(endpoint)
   }
 
@@ -194,10 +195,10 @@ private[streaming] class ReceiverSupervisorImpl(
   override def createBlockGenerator(
       blockGeneratorListener: BlockGeneratorListener): BlockGenerator = {
     // Cleanup BlockGenerators that have already been stopped
-    registeredBlockGenerators --= registeredBlockGenerators.filter{ _.isStopped() }
+    registeredBlockGenerators.removeAll(registeredBlockGenerators.asScala.filter{ _.isStopped() })
 
     val newBlockGenerator = new BlockGenerator(blockGeneratorListener, streamId, env.conf)
-    registeredBlockGenerators += newBlockGenerator
+    registeredBlockGenerators.add(newBlockGenerator)
     newBlockGenerator
   }
 
