@@ -90,6 +90,7 @@ case class BroadcastHashJoin(
         // The following line doesn't run in a job so we cannot track the metric value. However, we
         // have already tracked it in the above lines. So here we can use
         // `SQLMetrics.nullLongMetric` to ignore it.
+        // TODO: move this check into HashedRelation
         val hashed = if (canJoinKeyFitWithinLong) {
           LongHashedRelation(
             input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)

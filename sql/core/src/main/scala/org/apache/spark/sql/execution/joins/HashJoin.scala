@@ -23,8 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
-import org.apache.spark.sql.types.{LongType, IntegralType}
-
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
   self: SparkPlan =>
@@ -49,7 +48,9 @@ trait HashJoin {
   override def output: Seq[Attribute] = left.output ++ right.output
 
   /**
-    * Rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+    *
+    * If not, returns the original expressions.
     */
   def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
     var keyExpr: Expression = null
@@ -79,7 +80,7 @@ trait HashJoin {
   }
 
   protected def buildSideKeyGenerator: Projection =
-      UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
+    UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
 
   protected def streamSideKeyGenerator: Projection =
     UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
