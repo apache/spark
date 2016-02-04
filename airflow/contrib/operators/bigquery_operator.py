@@ -18,7 +18,7 @@ class BigQueryOperator(BaseOperator):
                  destination_dataset_table = False,
                  write_disposition = 'WRITE_EMPTY',
                  bigquery_conn_id='bigquery_default',
-                 sub=None,
+                 delegate_to=None,
                  *args,
                  **kwargs):
         """
@@ -33,15 +33,18 @@ class BigQueryOperator(BaseOperator):
         :type destination_dataset_table: string
         :param bigquery_conn_id: reference to a specific BigQuery hook.
         :type bigquery_conn_id: string
+        :param delegate_to: The account to impersonate, if any.
+            For this to work, the service account making the request must have domain-wide delegation enabled.
+        :type delegate_to: string
         """
         super(BigQueryOperator, self).__init__(*args, **kwargs)
         self.bql = bql
         self.destination_dataset_table = destination_dataset_table
         self.write_disposition = write_disposition
         self.bigquery_conn_id = bigquery_conn_id
-        self.sub = sub
+        self.delegate_to = delegate_to
 
     def execute(self, context):
         logging.info('Executing: %s', str(self.bql))
-        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, sub=self.sub)
+        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, delegate_to=self.delegate_to)
         hook.run(self.bql, self.destination_dataset_table, self.write_disposition)

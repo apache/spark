@@ -28,13 +28,13 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
     def __init__(self,
                  scope='https://www.googleapis.com/auth/devstorage.read_only',
                  google_cloud_storage_conn_id='google_cloud_storage_default',
-                 sub=None):
+                 delegate_to=None):
         """
         :param scope: The scope of the hook (read only, read write, etc). See:
             https://cloud.google.com/storage/docs/authentication?hl=en#oauth-scopes
         :type scope: string
         """
-        super(GoogleCloudStorageHook, self).__init__(scope, google_cloud_storage_conn_id, sub)
+        super(GoogleCloudStorageHook, self).__init__(scope, google_cloud_storage_conn_id, delegate_to)
 
     def get_conn(self):
         """

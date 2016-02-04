@@ -30,12 +30,12 @@ class BigQueryHook(GoogleCloudBaseHook):
     def __init__(self,
                  scope='https://www.googleapis.com/auth/bigquery',
                  bigquery_conn_id='bigquery_default',
-                 sub=None):
+                 delegate_to=None):
         """
         :param scope: The scope of the hook.
         :type scope: string
         """
-        super(BigQueryHook, self).__init__(scope, bigquery_conn_id, sub)
+        super(BigQueryHook, self).__init__(scope, bigquery_conn_id, delegate_to)
 
     def get_conn(self):
         """

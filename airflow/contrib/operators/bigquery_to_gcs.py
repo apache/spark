@@ -22,7 +22,7 @@ class BigQueryToCloudStorageOperator(BaseOperator):
         field_delimiter=',', 
         print_header=True, 
         bigquery_conn_id='bigquery_default',
-        sub=None,
+        delegate_to=None,
         *args, 
         **kwargs):
         """
@@ -50,6 +50,9 @@ class BigQueryToCloudStorageOperator(BaseOperator):
         :type print_header: boolean
         :param bigquery_conn_id: reference to a specific BigQuery hook.
         :type bigquery_conn_id: string
+        :param delegate_to: The account to impersonate, if any.
+            For this to work, the service account making the request must have domain-wide delegation enabled.
+        :type delegate_to: string
         """
         super(BigQueryToCloudStorageOperator, self).__init__(*args, **kwargs)
         self.source_dataset_table = source_dataset_table 
@@ -59,11 +62,11 @@ class BigQueryToCloudStorageOperator(BaseOperator):
         self.field_delimiter = field_delimiter
         self.print_header = print_header
         self.bigquery_conn_id = bigquery_conn_id
-        self.sub = sub
+        self.delegate_to = delegate_to
 
     def execute(self, context):
         logging.info('Executing extract of %s into: %s', self.source_dataset_table, self.destination_cloud_storage_uris)
-        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, sub=self.sub)
+        hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, delegate_to=self.delegate_to)
         hook.run_extract(
             self.source_dataset_table,
             self.destination_cloud_storage_uris,
