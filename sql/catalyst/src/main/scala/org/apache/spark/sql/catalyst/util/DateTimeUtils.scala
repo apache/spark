@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.util
 
 import java.sql.{Date, Timestamp}
 import java.text.{DateFormat, SimpleDateFormat}
-import java.util.concurrent.ConcurrentHashMap
 import java.util.{Calendar, TimeZone}
+import java.util.concurrent.ConcurrentHashMap
 import javax.xml.bind.DatatypeConverter
 
 import org.apache.spark.unsafe.types.UTF8String
