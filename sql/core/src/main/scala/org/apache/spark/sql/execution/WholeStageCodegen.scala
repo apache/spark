@@ -260,6 +260,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     CodeGenerator.compile(source)
 
     plan.upstream().mapPartitions { iter =>
+
       val clazz = CodeGenerator.compile(source)
       val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
       buffer.setInput(iter)

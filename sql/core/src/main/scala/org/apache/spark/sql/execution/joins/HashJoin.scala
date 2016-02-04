@@ -59,15 +59,19 @@ trait HashJoin {
       e.dataType match {
         case dt: IntegralType if dt.defaultSize <= 8 - width =>
           if (width == 0) {
-            keyExpr = Cast(e, LongType)
+            if (e.dataType != LongType) {
+              keyExpr = Cast(e, LongType)
+            } else {
+              keyExpr = e
+            }
             width = dt.defaultSize
           } else {
             val bits = dt.defaultSize * 8
             keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
-              BitwiseAnd(Cast(e, LongType), Literal((1 << bits) - 1)))
+              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
             width -= bits
           }
-        // TODO: support DateType and TimestampType
+        // TODO: support BooleanType, DateType and TimestampType
         case other =>
           return keys
       }
