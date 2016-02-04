@@ -44,14 +44,6 @@ trait BaseLimit extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputPartitioning: Partitioning = child.outputPartitioning
-  override def executeTake(n: Int): Array[InternalRow] = {
-    throw new UnsupportedOperationException(
-      s"Should not invoke executeTake() on ${getClass.getName}; use CollectLimit instead.")
-  }
-  override def executeCollect(): Array[InternalRow] = {
-    throw new UnsupportedOperationException(
-      s"Should not invoke executeCollect() on ${getClass.getName}; use CollectLimit instead.")
-  }
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
   }
