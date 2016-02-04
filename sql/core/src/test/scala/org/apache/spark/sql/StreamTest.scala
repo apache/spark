@@ -59,6 +59,8 @@ trait StreamTest extends QueryTest with Timeouts {
 
   implicit class RichSource(s: Source) {
     def toDF(): DataFrame = new DataFrame(sqlContext, StreamingRelation(s))
+
+    def toDS[A: Encoder](): Dataset[A] = new Dataset(sqlContext, StreamingRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */

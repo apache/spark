@@ -95,13 +95,25 @@ class FileStreamSourceSuite extends StreamTest with SharedSQLContext {
     val filtered = df
 
     testStream(filtered)(
-      AddTextFileData(textSource, "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}", src, tmp),
+      AddTextFileData(
+        textSource,
+        "{'value': 'drop1'}\n{'value': 'keep2'}\n{'value': 'keep3'}",
+        src,
+        tmp),
       CheckAnswer("keep2", "keep3"),
       StopStream,
-      AddTextFileData(textSource, "{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+      AddTextFileData(
+        textSource,
+        "{'value': 'drop4'}\n{'value': 'keep5'}\n{'value': 'keep6'}",
+        src,
+        tmp),
       StartStream,
       CheckAnswer("keep2", "keep3", "keep5", "keep6"),
-      AddTextFileData(textSource, "{'c': 'drop7'}\n{'c': 'keep8'}\n{'c': 'keep9'}", src, tmp),
+      AddTextFileData(
+        textSource,
+        "{'value': 'drop7'}\n{'value': 'keep8'}\n{'value': 'keep9'}",
+        src,
+        tmp),
       CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
     )
 
@@ -149,6 +161,20 @@ class FileStreamSourceSuite extends StreamTest with SharedSQLContext {
       AddParquetFileData(fileSource, Seq("drop7", "keep8", "keep9"), src, tmp),
       CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
     )
+
+    Utils.deleteRecursively(src)
+    Utils.deleteRecursively(tmp)
+  }
+
+  test("file stress test") {
+    val src = Utils.createTempDir("streaming.src")
+    val tmp = Utils.createTempDir("streaming.tmp")
+
+    val textSource = createFileStreamSource("text", src.getCanonicalPath)
+    val ds = textSource.toDS[String]().map(_.toInt + 1)
+    runStressTest(ds, data => {
+      AddTextFileData(textSource, data.mkString("\n"), src, tmp)
+    })
 
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
