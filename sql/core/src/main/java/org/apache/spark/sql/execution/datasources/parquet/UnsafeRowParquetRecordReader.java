@@ -170,7 +170,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
     if (batchIdx >= numBatched) {
-      if (columnarBatch != null) {
+      if (vectorizedDecode()) {
         if (!nextBatch()) return false;
       } else {
         if (!loadBatch()) return false;
@@ -182,7 +182,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
   @Override
   public InternalRow getCurrentValue() throws IOException, InterruptedException {
-    if (columnarBatch != null) {
+    if (vectorizedDecode()) {
       return columnarBatch.getRow(batchIdx - 1);
     } else {
       return rows[batchIdx - 1];
@@ -692,8 +692,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
           break;
 
         case INT64:
-          for (int i = rowId; i < rowId + num; ++i) {
-            column.putLong(i, dictionary.decodeToLong(dictionaryIds.getInt(i)));
+          if (column.dataType() == DataTypes.LongType ||
+              DecimalType.is64BitDecimalType(column.dataType())) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              column.putLong(i, dictionary.decodeToLong(dictionaryIds.getInt(i)));
+            }
+          } else {
+            throw new NotImplementedException("Unimplemented type: " + column.dataType());
           }
           break;
 
@@ -778,24 +783,23 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
     private void readLongBatch(int rowId, int num, ColumnVector column) throws IOException {
       // This is where we implement support for the valid type conversions.
-      // TODO: implement remaining type conversions
       if (column.dataType() == DataTypes.LongType ||
           DecimalType.is64BitDecimalType(column.dataType())) {
         defColumn.readLongs(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
-        throw new NotImplementedException("Unimplemented type: " + column.dataType());
+        throw new UnsupportedOperationException("Unsupported conversion to: " + column.dataType());
       }
     }
 
     private void readFloatBatch(int rowId, int num, ColumnVector column) throws IOException {
       // This is where we implement support for the valid type conversions.
-      // TODO: implement remaining type conversions
+      // TODO: support implicit cast to double?
       if (column.dataType() == DataTypes.FloatType) {
         defColumn.readFloats(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
-        throw new NotImplementedException("Unimplemented type: " + column.dataType());
+        throw new UnsupportedOperationException("Unsupported conversion to: " + column.dataType());
       }
     }
 
