@@ -2180,6 +2180,16 @@ class DAG(LoggingMixin):
         return qry.scalar() >= self.concurrency
 
     @property
+    @provide_session
+    def is_paused(self, session=None):
+        """
+        Returns a boolean as to whether this DAG is paused
+        """
+        qry = session.query(DagModel).filter(
+            DagModel.dag_id == self.dag_id)
+        return qry.value('is_paused')
+
+    @property
     def latest_execution_date(self):
         """
         Returns the latest date for which at least one task instance exists
