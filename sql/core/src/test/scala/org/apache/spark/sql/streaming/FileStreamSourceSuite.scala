@@ -36,9 +36,10 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     extends AddData {
 
     override def addData(): Offset = {
-      val file = Utils.tempFileWith(new File(tmp, "text"))
-      stringToFile(file, content).renameTo(new File(src, file.getName))
-      source.currentOffset + 1
+      source.currentOffset {
+        val file = Utils.tempFileWith(new File(tmp, "text"))
+        stringToFile(file, content).renameTo(new File(src, file.getName))
+      } + 1
     }
   }
 
@@ -49,10 +50,11 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     tmp: File) extends AddData {
 
     override def addData(): Offset = {
-      val file = Utils.tempFileWith(new File(tmp, "parquet"))
-      content.toDS().toDF().write.parquet(file.getCanonicalPath)
-      file.renameTo(new File(src, file.getName))
-      source.currentOffset + 1
+      source.currentOffset {
+        val file = Utils.tempFileWith(new File(tmp, "parquet"))
+        content.toDS().toDF().write.parquet(file.getCanonicalPath)
+        file.renameTo(new File(src, file.getName))
+      } + 1
     }
   }
 
@@ -205,9 +207,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     )
 
     val textSource2 = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource2.currentOffset === textSource.currentOffset)
+    assert(textSource2.currentOffset() === textSource.currentOffset())
     assertBatch(textSource2.getNextBatch(None), textSource.getNextBatch(None))
-    for (f <- 0L to textSource.currentOffset.offset) {
+    for (f <- 0L to textSource.currentOffset().offset) {
       val offset = LongOffset(f)
       assertBatch(textSource2.getNextBatch(Some(offset)), textSource.getNextBatch(Some(offset)))
     }
@@ -228,7 +230,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     // the metadata file of batch is corrupted, so currentOffset should be 0
-    assert(textSource.currentOffset === LongOffset(0))
+    assert(textSource.currentOffset() === LongOffset(0))
 
     Utils.deleteRecursively(src)
   }
@@ -244,7 +246,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       s"${sqlContext.sparkContext.version}\nSTART\n-/x/y/z\nEND\n")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
-    assert(textSource.currentOffset === LongOffset(1))
+    assert(textSource.currentOffset() === LongOffset(1))
 
     Utils.deleteRecursively(src)
   }

@@ -84,7 +84,12 @@ class FileStreamSource(
     }
   }
 
-  /** Returns the maximum offset that can be retrieved from the source. */
+  /**
+   * Returns the maximum offset that can be retrieved from the source.
+   *
+   * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
+   * there is no race here, so the cost of `synchronized` should be rare.
+   */
   private def fetchMaxOffset(): LongOffset = synchronized {
     val filesPresent = fetchAllFiles()
     val newFiles = new ArrayBuffer[String]()
@@ -106,7 +111,12 @@ class FileStreamSource(
     new LongOffset(maxBatchId)
   }
 
-  def currentOffset: LongOffset = synchronized {
+  /**
+   * For test only. Run `action` and return the current offset. When `action` is running, the method
+   * guarantee that the current offset won't be changed and no new batch will be emitted.
+   */
+  def currentOffset(action: => Unit = {}): LongOffset = synchronized {
+    action
     new LongOffset(maxBatchId)
   }
 
