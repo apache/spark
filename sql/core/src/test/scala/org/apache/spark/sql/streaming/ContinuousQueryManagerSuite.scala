@@ -27,9 +27,9 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
 import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.{Dataset, ContinuousQuery, StreamTest}
 
 class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
 
@@ -83,7 +83,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
   test("awaitAnyTermination") {
     val dss = Seq.fill(5)(makeDataset._2)
-    withQueriesOn(dss:_*) { queries =>
+    withQueriesOn(dss: _*) { queries =>
       require(queries.size === dss.size)
       assert(sqlContext.streams.active.toSet === queries.toSet)
 

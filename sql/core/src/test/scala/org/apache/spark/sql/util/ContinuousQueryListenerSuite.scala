@@ -153,7 +153,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
       terminationStatus = null
       progressStatuses.clear()
 
-      // To reset the waiter 
+      // To reset the waiter
       try asyncTestWaiter.await(timeout(1 milliseconds)) catch {
         case NonFatal(e) =>
       }
