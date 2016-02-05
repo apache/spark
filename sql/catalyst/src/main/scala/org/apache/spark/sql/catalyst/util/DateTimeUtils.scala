@@ -57,22 +57,15 @@ object DateTimeUtils {
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
 
-  @transient lazy val defaultTimeZone = TimeZone.getDefault
+  private lazy val defaultTimeZone = TimeZone.getDefault
 
   // Reuse the TimeZone object as it is expensive to create in each method call.
-  @transient private final val timeZones = new ConcurrentHashMap[String, TimeZone]
+  private val timeZones = new ConcurrentHashMap[String, TimeZone]
 
   // Reuse the Calendar object in each thread as it is expensive to create in each method call.
   private val threadLocalCalendar = new ThreadLocal[Calendar] {
     override protected def initialValue: Calendar = {
       Calendar.getInstance
-    }
-  }
-
-  // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
-  private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
-    override protected def initialValue: TimeZone = {
-      Calendar.getInstance.getTimeZone
     }
   }
 
@@ -101,14 +94,14 @@ object DateTimeUtils {
   def millisToDays(millisUtc: Long): SQLDate = {
     // SPARK-6785: use Math.floor so negative number of days (dates before 1970)
     // will correctly work as input for function toJavaDate(Int)
-    val millisLocal = millisUtc + threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    val millisLocal = millisUtc + defaultTimeZone.getOffset(millisUtc)
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
     val millisUtc = days.toLong * MILLIS_PER_DAY
-    millisUtc - threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    millisUtc - defaultTimeZone.getOffset(millisUtc)
   }
 
   def dateToString(days: SQLDate): String =
