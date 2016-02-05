@@ -466,7 +466,7 @@ model.save("/tmp/spark-logistic-regression-model")
 pipeline.save("/tmp/unfit-lr-model")
 
 // and load it back in during production
-val sameModel = Pipeline.load("/tmp/spark-logistic-regression-model")
+val sameModel = PipelineModel.load("/tmp/spark-logistic-regression-model")
 
 // Prepare test documents, which are unlabeled (id, text) tuples.
 val test = sqlContext.createDataFrame(Seq(
