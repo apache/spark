@@ -26,34 +26,46 @@ import static org.apache.spark.mllib.random.RandomRDDs.*;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
 
+
 public class JavaRandomDataGenerationExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaRandomDataGenerationExample");
+        SparkConf conf = new SparkConf().setAppName("JavaRandomDataGenerationExample").setMaster("local[*]");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-/*
-        // @note: todo
-
         // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
         // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-        JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
+        JavaDoubleRDD u = normalJavaRDD(jsc, 1000L, 10);
         // Apply a transform to get a random double RDD following `N(1, 4)`.
-        JavaDoubleRDD v = u.map(
+        JavaRDD v = u.map(
                 new Function<Double, Double>() {
                     public Double call(Double x) {
                         return 1.0 + 2.0 * x;
                     }
                 });
-*/
+
         // $example off$
+
+        u.foreach(new VoidFunction<Double>() {
+            public void call(Double d) throws Exception {
+                System.out.println(d);
+            }
+        });
+
+        v.foreach(new VoidFunction<Double>() {
+            public void call(Double d) throws Exception {
+                System.out.println(d);
+            }
+        });
 
         jsc.stop();
     }

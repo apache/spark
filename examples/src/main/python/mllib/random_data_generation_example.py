@@ -30,14 +30,17 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
+    # Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+    # standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+    u = RandomRDDs.normalRDD(sc, 1000L, 10)
+    # Apply a transform to get a random double RDD following `N(1, 4)`.
+    v = u.map(lambda x: 1.0 + 2.0 * x)
+    # $example off$
 
-    # @note: todo
+    for each in u.collect():
+        print(each)
 
-    # # Generate a random double RDD that contains 1 million i.i.d. values drawn from the
-    # # standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-    # u = RandomRDDs.normalRDD(sc, 1000000L, 10)
-    # # Apply a transform to get a random double RDD following `N(1, 4)`.
-    # v = u.map(lambda x: 1.0 + 2.0 * x)
-    # # $example off$
+    for each in v.collect():
+        print(each)
 
     sc.stop()
