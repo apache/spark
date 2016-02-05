@@ -22,7 +22,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.kafka.newapi._
+import org.apache.spark.streaming.kafka.KafkaUtils
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
@@ -79,7 +79,7 @@ object DirectNewKafkaWordCount {
       ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> offsetReset,
       ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG -> "false"
     )
-    val messages = KafkaUtils.createDirectStream[String, String](ssc, kafkaParams, topicsSet)
+    val messages = KafkaUtils.createNewDirectStream[String, String](ssc, kafkaParams, topicsSet)
 
     // Get the lines, split them into words, count the words and print
     val lines = messages.map(_._2)

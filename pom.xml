@@ -113,7 +113,6 @@
     <module>repl</module>
     <module>launcher</module>
     <module>external/kafka</module>
-    <module>external/kafka-newapi</module>
     <module>external/kafka-assembly</module>
   </modules>
 

@@ -25,7 +25,6 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SslConfigs
-import org.apache.spark.streaming.kafka.newapi._
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -833,6 +832,157 @@ object KafkaUtils {
       ssc, addSSLOptions(kafkaParams, ssc.sparkContext), fromOffsets, messageHandler)
   }
 
+
+  /**
+    * Create an input stream that directly pulls messages from Kafka Brokers
+    * without using any receiver. This stream can guarantee that each message
+    * from Kafka is included in transformations exactly once (see points below).
+    *
+    * Points to note:
+    * - No receivers: This stream does not use any receiver. It directly queries Kafka
+    * - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+    * by the stream itself.
+    * You can access the offsets used in each batch from the generated RDDs (see
+    * [[HasOffsetRanges]]).
+    * - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+    * in the [[StreamingContext]]. The information on consumed offset can be
+    * recovered from the checkpoint. See the programming guide for details (constraints, etc.).
+    * - End-to-end semantics: This stream ensures that every records is effectively received and
+    * transformed exactly once, but gives no guarantees on whether the transformed data are
+    * outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+    * that the output operation is idempotent, or use transactions to output records atomically.
+    * See the programming guide for more details.
+    *
+    * @param ssc StreamingContext object
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    to be set with Kafka broker(s) (NOT zookeeper servers), specified in
+    *                    host1:port1,host2:port2 form.
+    *                    If not starting from a checkpoint, "auto.offset.reset" may be set to
+    *                    "earliest" or "latest" to determine where the stream starts
+    *                    (defaults to "latest")
+    * @param topics Names of the topics to consume
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @return DStream of (Kafka message key, Kafka message value)
+    */
+  def createNewDirectStream[K: ClassTag, V: ClassTag](
+    ssc: StreamingContext,
+    kafkaParams: Map[String, String],
+    topics: Set[String]): InputDStream[(K, V)] = {
+    val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
+    val fromOffsets = getFromOffsets(kafkaParams, topics)
+
+    new NewDirectKafkaInputDStream[K, V, (K, V)](
+      ssc, addSSLOptions(kafkaParams, ssc.sparkContext), fromOffsets, messageHandler)
+  }
+
+  /**
+    * Create an input stream that directly pulls messages from Kafka Brokers
+    * without using any receiver. This stream can guarantee that each message
+    * from Kafka is included in transformations exactly once (see points below).
+    *
+    * Points to note:
+    * - No receivers: This stream does not use any receiver. It directly queries Kafka
+    * - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+    * by the stream itself.
+    * You can access the offsets used in each batch from the generated RDDs (see
+    * [[HasOffsetRanges]]).
+    * - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+    * in the [[StreamingContext]]. The information on consumed offset can be
+    * recovered from the checkpoint. See the programming guide for details (constraints, etc.).
+    * - End-to-end semantics: This stream ensures that every records is effectively received and
+    * transformed exactly once, but gives no guarantees on whether the transformed data are
+    * outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+    * that the output operation is idempotent, or use transactions to output records atomically.
+    * See the programming guide for more details.
+    *
+    * @param jssc JavaStreamingContext object
+    * @param keyClass Class of the keys in the Kafka records
+    * @param valueClass Class of the values in the Kafka records
+    * @param recordClass Class of the records in DStream
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    specified in host1:port1,host2:port2 form.
+    * @param fromOffsets Per-topic/partition Kafka offsets defining the (inclusive)
+    *                    starting point of the stream
+    * @param messageHandler Function for translating each message and metadata into the desired type
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type returned by messageHandler
+    * @return DStream of R
+    */
+  def createNewDirectStream[K, V, R](
+    jssc: JavaStreamingContext,
+    keyClass: Class[K],
+    valueClass: Class[V],
+    recordClass: Class[R],
+    kafkaParams: JMap[String, String],
+    fromOffsets: JMap[TopicPartition, JLong],
+    messageHandler: JFunction[ConsumerRecord[K, V], R]): JavaInputDStream[R] = {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+    implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
+    val cleanedHandler = jssc.sparkContext.clean(messageHandler.call _)
+    createNewDirectStream[K, V, R](
+      jssc.ssc,
+      Map(kafkaParams.asScala.toSeq: _*),
+      Map(fromOffsets.asScala.mapValues {
+        _.longValue()
+      }.toSeq: _*),
+      cleanedHandler)
+  }
+
+  /**
+    * Create an input stream that directly pulls messages from Kafka Brokers
+    * without using any receiver. This stream can guarantee that each message
+    * from Kafka is included in transformations exactly once (see points below).
+    *
+    * Points to note:
+    * - No receivers: This stream does not use any receiver. It directly queries Kafka
+    * - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+    * by the stream itself.
+    * You can access the offsets used in each batch from the generated RDDs (see
+    * [[HasOffsetRanges]]).
+    * - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+    * in the [[StreamingContext]]. The information on consumed offset can be
+    * recovered from the checkpoint. See the programming guide for details (constraints, etc.).
+    * - End-to-end semantics: This stream ensures that every records is effectively received and
+    * transformed exactly once, but gives no guarantees on whether the transformed data are
+    * outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+    * that the output operation is idempotent, or use transactions to output records atomically.
+    * See the programming guide for more details.
+    *
+    * @param jssc JavaStreamingContext object
+    * @param keyClass Class of the keys in the Kafka records
+    * @param valueClass Class of the values in the Kafka records
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    to be set with Kafka broker(s) (NOT zookeeper servers), specified in
+    *                    host1:port1,host2:port2 form.
+    *                    If not starting from a checkpoint, "auto.offset.reset" may be set
+    *                    to "latest" or "earliest" to determine where the stream starts
+    *                    (defaults to "latest")
+    * @param topics Names of the topics to consume
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @return DStream of (Kafka message key, Kafka message value)
+    */
+  def createNewDirectStream[K, V](
+    jssc: JavaStreamingContext,
+    keyClass: Class[K],
+    valueClass: Class[V],
+    kafkaParams: JMap[String, String],
+    topics: JSet[String]): JavaPairInputDStream[K, V] = {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+    createNewDirectStream[K, V](
+      jssc.ssc,
+      Map(kafkaParams.asScala.toSeq: _*),
+      Set(topics.asScala.toSeq: _*))
+  }
+
+
   def newOffsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
     val parentRDDs = rdd.getNarrowAncestors
     val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[NewKafkaRDD[_, _, _]])
@@ -844,6 +994,22 @@ object KafkaUtils {
 
     val kafkaRDD = kafkaRDDs.head.asInstanceOf[NewKafkaRDD[_, _, _]]
     kafkaRDD.offsetRanges.toSeq.asJava
+  }
+
+  private[kafka] def getFromOffsets(
+    kafkaParams: Map[String, String],
+    topics: Set[String]): Map[TopicPartition, Long] = {
+    val kc = new NewKafkaCluster(kafkaParams)
+    try {
+      val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
+      if (reset == Some("earliest")) {
+        kc.getEarliestOffsets(kc.getPartitions(topics))
+      } else {
+        kc.getLatestOffsets(kc.getPartitions(topics))
+      }
+    } finally {
+      kc.close()
+    }
   }
 
   // End - Kafka functions using the new Consumer API
