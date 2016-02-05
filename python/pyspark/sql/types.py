@@ -1291,6 +1291,11 @@ class Row(tuple):
         else:
             return "<Row(%s)>" % ", ".join(self)
 
+    @property
+    def count(self):
+        """Overrides inherited count method to avoid column name collision."""
+        return self.__getattr__('count')
+
 
 class DateConverter(object):
     def can_convert(self, obj):
