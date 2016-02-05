@@ -132,7 +132,7 @@ class DirectKafkaStreamSuite
         assert(partSize === rangeSize, "offset ranges are wrong")
       }
     }
-    stream.foreachRDD { rdd => allReceived.addAll(rdd.collect()) }
+    stream.foreachRDD { rdd => allReceived.addAll(rdd.collect().asJava) }
     ssc.start()
     eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
       assert(allReceived.size === totalSent,
@@ -175,7 +175,7 @@ class DirectKafkaStreamSuite
     )
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    stream.map { _._2 }.foreachRDD { rdd => collectedData.addAll(rdd.collect()) }
+    stream.map { _._2 }.foreachRDD { rdd => collectedData.addAll(rdd.collect().asJava) }
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
@@ -221,7 +221,7 @@ class DirectKafkaStreamSuite
     )
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    stream.foreachRDD { rdd => collectedData.addAll(rdd.collect()) }
+    stream.foreachRDD { rdd => collectedData.addAll(rdd.collect().asJava) }
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
@@ -266,7 +266,7 @@ class DirectKafkaStreamSuite
     // This is to collect the raw data received from Kafka
     kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
       val data = rdd.map { _._2 }.collect()
-      DirectKafkaStreamSuite.collectedData.addAll(data)
+      DirectKafkaStreamSuite.collectedData.addAll(data.asJava)
     }
 
     // This is ensure all the data is eventually receiving only once
@@ -338,7 +338,7 @@ class DirectKafkaStreamSuite
 
     val allReceived = new ConcurrentLinkedQueue[(String, String)]
 
-    stream.foreachRDD { rdd => allReceived.addAll(rdd.collect()) }
+    stream.foreachRDD { rdd => allReceived.addAll(rdd.collect().asJava) }
     ssc.start()
     eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
       assert(allReceived.size === totalSent,
