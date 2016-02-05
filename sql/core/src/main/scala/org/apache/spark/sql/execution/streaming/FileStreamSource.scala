@@ -164,7 +164,7 @@ class FileStreamSource(
    * Write the metadata of a batch to disk. The file format is as follows:
    *
    * {{{
-   *   SPARK_VERSION
+   *   <FileStreamSource.VERSION>
    *   START
    *   -/a/b/c
    *   -/d/e/f
@@ -172,7 +172,8 @@ class FileStreamSource(
    *   END
    * }}}
    *
-   * Note: every file path starts with "-" so that we can know if a line is a file path easily.
+   * Note: <FileStreamSource.VERSION> means the value of `FileStreamSource.VERSION`.  Every file
+   * path starts with "-" so that we can know if a line is a file path easily.
    */
   private def writeBatch(id: Int, files: Seq[String]): Unit = {
     assert(files.nonEmpty, "create a new batch without any file")
@@ -214,16 +215,19 @@ object FileStreamSource {
    */
   def readBatch(input: InputStream): Seq[String] = {
     val lines = scala.io.Source.fromInputStream(input)(Codec.UTF8).getLines().toArray
-      .drop(1) // The first line is version, just drop it
-    if (lines.isEmpty) {
+    if (lines.length < 4) {
+      // version + start tag + end tag + at least one file path
       return Nil
     }
-    if (lines.head != "START") {
+    if (lines.head != VERSION) {
+      return Nil
+    }
+    if (lines(1) != START_TAG) {
       return Nil
     }
     if (lines.last != END_TAG) {
       return Nil
     }
-    lines.slice(1, lines.length - 1).map(_.drop(1)) // Drop character "-"
+    lines.slice(2, lines.length - 1).map(_.drop(1)) // Drop character "-"
   }
 }
