@@ -85,7 +85,7 @@ class FileStreamSource(
   }
 
   /** Returns the maximum offset that can be retrieved from the source. */
-  def fetchMaxOffset(): LongOffset = synchronized {
+  private def fetchMaxOffset(): LongOffset = synchronized {
     val filesPresent = fetchAllFiles()
     val newFiles = new ArrayBuffer[String]()
     filesPresent.foreach { file =>
