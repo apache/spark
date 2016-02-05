@@ -154,7 +154,7 @@ object RowEncoder {
       If(
         IsNull(field),
         Literal.create(null, externalDataTypeFor(f.dataType)),
-        constructorFor(BoundReference(i, f.dataType, f.nullable))
+        constructorFor(field)
       )
     }
     CreateExternalRow(fields)

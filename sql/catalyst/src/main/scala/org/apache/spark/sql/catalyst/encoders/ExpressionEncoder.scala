@@ -50,7 +50,7 @@ object ExpressionEncoder {
     val cls = mirror.runtimeClass(typeTag[T].tpe)
     val flat = !classOf[Product].isAssignableFrom(cls)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = false)
     val toRowExpression = ScalaReflection.extractorsFor[T](inputObject)
     val fromRowExpression = ScalaReflection.constructorFor[T]
 
@@ -257,12 +257,10 @@ case class ExpressionEncoder[T](
   }
 
   /**
-   * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
-   * given schema.
+   * Validates `fromRowExpression` to make sure it can be resolved by given schema, and produce
+   * friendly error messages to explain why it fails to resolve if there is something wrong.
    */
-  def resolve(
-      schema: Seq[Attribute],
-      outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
+  def validate(schema: Seq[Attribute]): Unit = {
     def fail(st: StructType, maxOrdinal: Int): Unit = {
       throw new AnalysisException(s"Try to map ${st.simpleString} to Tuple${maxOrdinal + 1}, " +
         "but failed as the number of fields does not line up.\n" +
@@ -270,6 +268,8 @@ case class ExpressionEncoder[T](
         " - Target schema: " + this.schema.simpleString)
     }
 
+    // If this is a tuple encoder or tupled encoder, which means its leaf nodes are all
+    // `BoundReference`, make sure their ordinals are all valid.
     var maxOrdinal = -1
     fromRowExpression.foreach {
       case b: BoundReference => if (b.ordinal > maxOrdinal) maxOrdinal = b.ordinal
@@ -279,6 +279,10 @@ case class ExpressionEncoder[T](
       fail(StructType.fromAttributes(schema), maxOrdinal)
     }
 
+    // If we have nested tuple, the `fromRowExpression` will contains `GetStructField` instead of
+    // `UnresolvedExtractValue`, so we need to check if their ordinals are all valid.
+    // Note that, `BoundReference` contains the expected type, but here we need the actual type, so
+    // we unbound it by the given `schema` and propagate the actual type to `GetStructField`.
     val unbound = fromRowExpression transform {
       case b: BoundReference => schema(b.ordinal)
     }
@@ -299,28 +303,24 @@ case class ExpressionEncoder[T](
           fail(schema, maxOrdinal)
         }
     }
+  }
 
-    val plan = Project(Alias(unbound, "")() :: Nil, LocalRelation(schema))
+  /**
+   * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
+   * given schema.
+   */
+  def resolve(
+      schema: Seq[Attribute],
+      outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
+    val deserializer = SimpleAnalyzer.ResolveReferences.resolveDeserializer(
+      fromRowExpression, schema)
+
+    // Make a fake plan to wrap the deserializer, so that we can go though the whole analyzer, check
+    // analysis, go through optimizer, etc.
+    val plan = Project(Alias(deserializer, "")() :: Nil, LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     SimpleAnalyzer.checkAnalysis(analyzedPlan)
-    val optimizedPlan = SimplifyCasts(analyzedPlan)
-
-    // In order to construct instances of inner classes (for example those declared in a REPL cell),
-    // we need an instance of the outer scope.  This rule substitues those outer objects into
-    // expressions that are missing them by looking up the name in the SQLContexts `outerScopes`
-    // registry.
-    copy(fromRowExpression = optimizedPlan.expressions.head.children.head transform {
-      case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
-        val outer = outerScopes.get(n.cls.getDeclaringClass.getName)
-        if (outer == null) {
-          throw new AnalysisException(
-            s"Unable to generate an encoder for inner class `${n.cls.getName}` without access " +
-            s"to the scope that this class was defined in. " + "" +
-             "Try moving this class out of its parent class.")
-        }
-
-        n.copy(outerPointer = Some(Literal.fromObject(outer)))
-    })
+    copy(fromRowExpression = SimplifyCasts(analyzedPlan).expressions.head.children.head)
   }
 
   /**
