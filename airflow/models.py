@@ -981,7 +981,8 @@ class TaskInstance(Base):
             if self.try_number == 0:
                 msg = "First run"
             else:
-                msg = "Attempt {self.try_number} out of {tot_tries}"
+                msg = "Attempt {} out of {}".format(self.try_number,
+                                                    tot_tries)
             self.try_number += 1
             msg = msg.format(**locals())
             logging.info(HR + msg + HR)
@@ -992,6 +993,9 @@ class TaskInstance(Base):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
+                # Since we are just getting enqueued, we need to undo
+                # the try_number increment above
+                self.try_number -= 1
                 self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
