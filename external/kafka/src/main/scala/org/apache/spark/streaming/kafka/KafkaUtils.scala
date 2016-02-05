@@ -21,6 +21,12 @@ import java.io.OutputStream
 import java.lang.{Integer => JInt, Long => JLong}
 import java.util.{List => JList, Map => JMap, Set => JSet}
 
+import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.SslConfigs
+import org.apache.spark.streaming.kafka.newapi._
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -30,7 +36,7 @@ import kafka.message.MessageAndMetadata
 import kafka.serializer.{Decoder, DefaultDecoder, StringDecoder}
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{SSLOptions, SparkContext, SparkException}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.api.python.SerDeUtil
@@ -44,7 +50,8 @@ import org.apache.spark.streaming.util.WriteAheadLogUtils
 object KafkaUtils {
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
-   * @param ssc       StreamingContext object
+    *
+    * @param ssc       StreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
    * @param groupId   The group id for this consumer
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
@@ -69,7 +76,8 @@ object KafkaUtils {
 
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
-   * @param ssc         StreamingContext object
+    *
+    * @param ssc         StreamingContext object
    * @param kafkaParams Map of kafka configuration parameters,
    *                    see http://kafka.apache.org/08/configuration.html
    * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
@@ -94,7 +102,8 @@ object KafkaUtils {
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
-   * @param jssc      JavaStreamingContext object
+    *
+    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
    * @param groupId   The group id for this consumer
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
@@ -112,7 +121,8 @@ object KafkaUtils {
 
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
-   * @param jssc      JavaStreamingContext object
+    *
+    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
    * @param groupId   The group id for this consumer.
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
@@ -133,7 +143,8 @@ object KafkaUtils {
 
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
-   * @param jssc      JavaStreamingContext object
+    *
+    * @param jssc      JavaStreamingContext object
    * @param keyTypeClass Key type of DStream
    * @param valueTypeClass value type of Dstream
    * @param keyDecoderClass Type of kafka key decoder
@@ -611,6 +622,232 @@ object KafkaUtils {
     )
   }
 
+  // Start - Kafka functions using the new Consumer API
+
+  def addSSLOptions(
+    kafkaParams: Map[String, String],
+    sc: SparkContext): Map[String, String] = {
+    val sparkConf = sc.getConf
+    val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", None)
+    val kafkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.kafka", Some(defaultSSLOptions))
+
+    if (kafkaSSLOptions.enabled) {
+      val sslParams = Map[String, Option[_]](
+        CommonClientConfigs.SECURITY_PROTOCOL_CONFIG -> Some("SSL"),
+        SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG -> kafkaSSLOptions.trustStore,
+        SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG -> kafkaSSLOptions.trustStorePassword,
+        SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG -> kafkaSSLOptions.keyStore,
+        SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG -> kafkaSSLOptions.keyStorePassword,
+        SslConfigs.SSL_KEY_PASSWORD_CONFIG -> kafkaSSLOptions.keyPassword)
+      kafkaParams ++ sslParams.filter(_._2.isDefined).mapValues(_.get.toString)
+    } else {
+      kafkaParams
+    }
+
+  }
+
+  /** Make sure offsets are available in kafka, or throw an exception */
+  private def newCheckOffsets(
+    kafkaParams: Map[String, String],
+    offsetRanges: Array[OffsetRange]): Array[OffsetRange] = {
+    val kc = new NewKafkaCluster(kafkaParams)
+    try {
+      val topics = offsetRanges.map(_.topicPartition).toSet
+      val low = kc.getEarliestOffsets(topics)
+      val high = kc.getLatestOffsetsWithLeaders(topics)
+
+      val result = offsetRanges.filterNot { o =>
+        low(o.topicPartition()) <= o.fromOffset &&
+          o.untilOffset <= high(o.topicPartition()).offset
+      }
+
+      if (!result.isEmpty) {
+        throw new SparkException("Offsets not available in Kafka: " + result.mkString(","))
+      }
+
+      offsetRanges.map { o =>
+        OffsetRange(o.topic, o.partition, o.fromOffset, o.untilOffset,
+          high(o.topicPartition()).host)
+      }
+    } finally {
+      kc.close()
+    }
+  }
+
+  /**
+    * Create a RDD from Kafka using offset ranges for each topic and partition.
+    *
+    * @param sc SparkContext object
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+    *                    host1:port1,host2:port2 form.
+    * @param offsetRanges Each OffsetRange in the batch corresponds to a
+    *                     range of offsets for a given Kafka topic/partition
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @return RDD of (Kafka message key, Kafka message value)
+    */
+  def createNewRDD[K: ClassTag, V: ClassTag](
+    sc: SparkContext,
+    kafkaParams: Map[String, String],
+    offsetRanges: Array[OffsetRange]): RDD[(K, V)] = sc.withScope {
+    val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
+    new NewKafkaRDD[K, V, (K, V)](
+      sc,
+      addSSLOptions(kafkaParams, sc),
+      newCheckOffsets(kafkaParams, offsetRanges),
+      messageHandler)
+  }
+
+  /**
+    * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
+    * as the metadata.
+    *
+    * @param sc SparkContext object
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+    *                    host1:port1,host2:port2 form.
+    * @param offsetRanges Each OffsetRange in the batch corresponds to a
+    *                     range of offsets for a given Kafka topic/partition
+    * @param messageHandler Function for translating each message and metadata into the desired type
+    *                       * @tparam K type of Kafka message key
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type returned by messageHandler
+    * @return RDD of R
+    */
+  def createNewRDD[K: ClassTag, V: ClassTag, R: ClassTag](
+    sc: SparkContext,
+    kafkaParams: Map[String, String],
+    offsetRanges: Array[OffsetRange],
+    messageHandler: ConsumerRecord[K, V] => R): RDD[R] = sc.withScope {
+    val cleanedHandler = sc.clean(messageHandler)
+    new NewKafkaRDD[K, V, R](sc,
+      addSSLOptions(kafkaParams, sc),
+      newCheckOffsets(kafkaParams, offsetRanges),
+      cleanedHandler)
+  }
+
+  /**
+    * Create a RDD from Kafka using offset ranges for each topic and partition.
+    *
+    * @param jsc JavaSparkContext object
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    specified in host1:port1,host2:port2 form.
+    * @param offsetRanges Each OffsetRange in the batch corresponds to a
+    *                     range of offsets for a given Kafka topic/partition
+    * @param keyClass type of Kafka message key
+    * @param valueClass type of Kafka message value
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @return RDD of (Kafka message key, Kafka message value)
+    */
+  def createNewRDD[K, V](
+    jsc: JavaSparkContext,
+    keyClass: Class[K],
+    valueClass: Class[V],
+    kafkaParams: JMap[String, String],
+    offsetRanges: Array[OffsetRange]): JavaPairRDD[K, V] = jsc.sc.withScope {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+    new JavaPairRDD(createNewRDD[K, V](
+      jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges))
+  }
+
+  /**
+    * Create a RDD from Kafka using offset ranges for each topic and partition. This allows you
+    * specify the Kafka leader to connect to (to optimize fetching) and access the message as well
+    * as the metadata.
+    *
+    * @param jsc JavaSparkContext object
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    specified in host1:port1,host2:port2 form.
+    * @param offsetRanges Each OffsetRange in the batch corresponds to a
+    *                     range of offsets for a given Kafka topic/partition
+    * @param messageHandler Function for translating each message and metadata into the desired type
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type returned by messageHandler
+    * @return RDD of R
+    */
+  def createNewRDD[K, V, R](
+    jsc: JavaSparkContext,
+    keyClass: Class[K],
+    valueClass: Class[V],
+    recordClass: Class[R],
+    kafkaParams: JMap[String, String],
+    offsetRanges: Array[OffsetRange],
+    messageHandler: JFunction[ConsumerRecord[K, V], R]): JavaRDD[R] = jsc.sc.withScope {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+    implicit val recordCmt: ClassTag[R] = ClassTag(recordClass)
+    createNewRDD[K, V, R](
+      jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges, messageHandler.call _)
+  }
+
+  /**
+    * Create an input stream that directly pulls messages from Kafka Brokers
+    * without using any receiver. This stream can guarantee that each message
+    * from Kafka is included in transformations exactly once (see points below).
+    *
+    * Points to note:
+    * - No receivers: This stream does not use any receiver. It directly queries Kafka
+    * - Offsets: This does not use Zookeeper to store offsets. The consumed offsets are tracked
+    * by the stream itself.
+    * You can access the offsets used in each batch from the generated RDDs (see
+    * [[HasOffsetRanges]]).
+    * - Failure Recovery: To recover from driver failures, you have to enable checkpointing
+    * in the [[StreamingContext]]. The information on consumed offset can be
+    * recovered from the checkpoint. See the programming guide for details (constraints, etc.).
+    * - End-to-end semantics: This stream ensures that every records is effectively received and
+    * transformed exactly once, but gives no guarantees on whether the transformed data are
+    * outputted exactly once. For end-to-end exactly-once semantics, you have to either ensure
+    * that the output operation is idempotent, or use transactions to output records atomically.
+    * See the programming guide for more details.
+    *
+    * @param ssc StreamingContext object
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    *                    configuration parameters</a>. Requires "bootstrap.servers"
+    *                    to be set with Kafka broker(s) (NOT zookeeper servers) specified in
+    *                    host1:port1,host2:port2 form.
+    * @param fromOffsets Per-topic/partition Kafka offsets defining the (inclusive)
+    *                    starting point of the stream
+    * @param messageHandler Function for translating each message and metadata into the desired type
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam R type returned by messageHandler
+    * @return DStream of R
+    */
+  def createNewDirectStream[K: ClassTag, V: ClassTag, R: ClassTag](
+    ssc: StreamingContext,
+    kafkaParams: Map[String, String],
+    fromOffsets: Map[TopicPartition, Long],
+    messageHandler: ConsumerRecord[K, V] => R): InputDStream[R] = {
+    val cleanedHandler = ssc.sc.clean(messageHandler)
+    new NewDirectKafkaInputDStream[K, V, R](
+      ssc, addSSLOptions(kafkaParams, ssc.sparkContext), fromOffsets, messageHandler)
+  }
+
+  def newOffsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
+    val parentRDDs = rdd.getNarrowAncestors
+    val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[NewKafkaRDD[_, _, _]])
+
+    require(
+      kafkaRDDs.length == 1,
+      "Cannot get offset ranges, as there may be multiple Kafka RDDs or no Kafka RDD associated" +
+        "with this RDD, please call this method only on a Kafka RDD.")
+
+    val kafkaRDD = kafkaRDDs.head.asInstanceOf[NewKafkaRDD[_, _, _]]
+    kafkaRDD.offsetRanges.toSeq.asJava
+  }
+
+  // End - Kafka functions using the new Consumer API
+
   private[kafka] def errBeginAfterEnd(part: KafkaRDDPartition): String =
     s"Beginning offset ${part.fromOffset} is after the ending offset ${part.untilOffset} " +
       s"for topic ${part.topic} partition ${part.partition}. " +
@@ -764,6 +1001,7 @@ private[kafka] class KafkaUtilsPythonHelper {
     val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
     kafkaRDD.offsetRanges.toSeq.asJava
   }
+
 }
 
 private object KafkaUtilsPythonHelper {
