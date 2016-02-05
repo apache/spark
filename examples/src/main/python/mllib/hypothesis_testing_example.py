@@ -33,7 +33,6 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-
     vec = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25) # a vector composed of the frequencies of events
 
     # compute the goodness of fit. If a second vector to test against is not supplied as a parameter,

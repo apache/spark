@@ -30,7 +30,6 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-
     parallelData = sc.parallelize([0.1, 0.15, 0.2, 0.3, 0.25])
 
     # run a KS test for the sample versus a standard normal distribution

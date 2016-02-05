@@ -40,7 +40,6 @@ public class JavaHypothesisTestingExample {
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-
         Vector vec = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25); // a vector composed of the frequencies of events
 
         // compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
