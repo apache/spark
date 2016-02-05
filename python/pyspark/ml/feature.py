@@ -21,8 +21,8 @@ if sys.version > '3':
 
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.ml.param.shared import *
 from pyspark.ml.param import ParamValidators
+from pyspark.ml.param.shared import *
 from pyspark.ml.util import keyword_only
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc

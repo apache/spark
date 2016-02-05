@@ -208,13 +208,27 @@ class VectorParam(Param):
 
 
 class ParamValidators(object):
+    """
+    .. note:: DeveloperApi
+
+    Factory methods for common validation functions for `Param.isValid`.
+
+    .. versionadded:: 2.0.0
+
+    """
 
     @staticmethod
     def alwaysTrue():
+        """
+        Returns a validation function which is always `True`.
+        """
         return lambda value: True
 
     @staticmethod
     def primitiveConvert(value, primitiveType):
+        """
+        Convert a value to a primitive, if possible.
+        """
         if type(value) != primitiveType:
             try:
                 value = primitiveType(value)
@@ -224,6 +238,9 @@ class ParamValidators(object):
 
     @staticmethod
     def convertToList(value):
+        """
+        Convert a value to a list, if possible.
+        """
         if type(value) == np.ndarray:
             return list(value)
         elif isinstance(value, Vector):
@@ -233,22 +250,37 @@ class ParamValidators(object):
 
     @staticmethod
     def gt(lowerBound):
+        """
+        Check if value > lowerBound.
+        """
         return lambda value: value > lowerBound
 
     @staticmethod
     def gtEq(lowerBound):
+        """
+        Check if value >= lowerBound.
+        """
         return lambda value: value >= lowerBound
 
     @staticmethod
     def lt(lowerBound):
+        """
+        Check if value < lowerBound.
+        """
         return lambda value: value < lowerBound
 
     @staticmethod
     def ltEq(lowerBound):
+        """
+        Check if value <= lowerBound.
+        """
         return lambda value: value <= lowerBound
 
     @staticmethod
     def inRange(lowerBound, upperBound, lowerInclusive=True, upperInclusive=True):
+        """
+        Check if value is in range lowerBound to upperBound.
+        """
         def inRangeFunction(x):
             lowerValid = (x >= lowerBound) if lowerInclusive else (x > lowerBound)
             upperValid = (x <= upperBound) if upperInclusive else (x < upperBound)
@@ -257,10 +289,16 @@ class ParamValidators(object):
 
     @staticmethod
     def inList(allowed):
+        """
+        Check for a value in an allowed set of values.
+        """
         return lambda value: value in allowed
 
     @staticmethod
     def listLengthGt(lowerBound):
+        """
+        Check that the list length is greater than `lowerBound`.
+        """
         return lambda lst: len(lst) > lowerBound
 
 

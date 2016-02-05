@@ -112,7 +112,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     itemCol = StringParam(Params._dummy(), "itemCol", "column name for item ids")
     ratingCol = StringParam(Params._dummy(), "ratingCol", "column name for ratings")
     nonnegative = BooleanParam(Params._dummy(), "nonnegative",
-                        "whether to use nonnegative constraint for least squares")
+                               "whether to use nonnegative constraint for least squares")
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
