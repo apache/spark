@@ -36,21 +36,19 @@ import java.util.Arrays;
 public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample");
+        SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample").setMaster("local[*]");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
 
         // $example on$
-/*
-        // @note: todo
 
-        JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.2, 1.0, ...));
+        JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.1, 0.15, 0.2, 0.3, 0.25));
         KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
         // summary of the test including the p-value, test statistic,
         // and null hypothesis
         // if our p-value indicates significance, we can reject the null hypothesis
         System.out.println(testResult);
-*/
+
         // $example off$
 
         jsc.stop();

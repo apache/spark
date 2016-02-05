@@ -31,17 +31,15 @@ if __name__ == "__main__":
 
     # $example on$
 
-    # @note: todo
+    parallelData = sc.parallelize([0.1, 0.15, 0.2, 0.3, 0.25])
 
-    # parallelData = sc.parallelize([1.0, 2.0, ... ])
-    #
-    # # run a KS test for the sample versus a standard normal distribution
-    # testResult = Statistics.kolmogorovSmirnovTest(parallelData, "norm", 0, 1)
-    # print(testResult) # summary of the test including the p-value, test statistic,
-    # # and null hypothesis
-    # # if our p-value indicates significance, we can reject the null hypothesis
-    # # Note that the Scala functionality of calling Statistics.kolmogorovSmirnovTest with
-    # # a lambda to calculate the CDF is not made available in the Python API
+    # run a KS test for the sample versus a standard normal distribution
+    testResult = Statistics.kolmogorovSmirnovTest(parallelData, "norm", 0, 1)
+    print(testResult) # summary of the test including the p-value, test statistic,
+    # and null hypothesis
+    # if our p-value indicates significance, we can reject the null hypothesis
+    # Note that the Scala functionality of calling Statistics.kolmogorovSmirnovTest with
+    # a lambda to calculate the CDF is not made available in the Python API
 
     # $example off$
 
