@@ -87,10 +87,17 @@ private[spark] class CoarseMesosSchedulerBackend(
   val failuresBySlaveId: HashMap[String, Int] = new HashMap[String, Int]
 
   /**
-   * The total number of executors we aim to have. Undefined when not using dynamic allocation
-   * and before the ExecutorAllocatorManager calls [[doRequestTotalExecutors]].
+   * The total number of executors we aim to have. Undefined when not using dynamic allocation.
+   * Initially set to 0 when using dynamic allocation, the executor allocation manager will send
+   * the real initial limit later.
    */
-  private var executorLimitOption: Option[Int] = None
+  private var executorLimitOption: Option[Int] = {
+    if (Utils.isDynamicAllocationEnabled(conf)) {
+      Some(0)
+    } else {
+      None
+    }
+  }
 
   /**
    *  Return the current executor limit, which may be [[Int.MaxValue]]
