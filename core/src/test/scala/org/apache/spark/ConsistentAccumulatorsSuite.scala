@@ -31,7 +31,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 1)
-    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    val b = a.map{x => acc += x; x}
     b.cache()
     b.count()
     acc.value should be (210)
@@ -42,7 +42,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    val b = a.map{x => acc += x; x}
     b.cache()
     b.first()
     acc.value should be > (0)
@@ -55,12 +55,12 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    d.mapWithAccumulator{case (ui, x) => acc += (ui, x)}.count()
+    d.map{x => acc += x}.count()
     acc.value should be (210)
 
     val longAcc = sc.consistentAccumulator(0L)
     val maxInt = Integer.MAX_VALUE.toLong
-    d.mapWithAccumulator{case (ui, x) => longAcc += (ui, maxInt + x)}.count()
+    d.map{x => longAcc += maxInt + x; x}.count()
     longAcc.value should be (210L + maxInt * 20)
   }
 
@@ -69,13 +69,13 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    d.mapWithAccumulator{case (ui, x) => acc += (ui, x)}.count()
+    d.map{x => acc += x}.count()
     acc.value should be (210)
 
     val longAcc = sc.consistentAccumulator(0L)
     val maxInt = Integer.MAX_VALUE.toLong
-    val c = d.flatMapWithAccumulator{case (ui, x) =>
-      longAcc += (ui, maxInt + x)
+    val c = d.flatMap{x =>
+      longAcc += maxInt + x
       if (x % 2 == 0) {
         Some(x)
       } else {
@@ -91,8 +91,8 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
-    val c = b.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    val b = a.map{x => acc += x; x}
+    val c = b.map{x => acc += x; x}
     c.count()
     acc.value should be (420)
   }
@@ -102,7 +102,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.mapWithAccumulator{case (ui, x) => acc += (ui, x); x}
+    val b = a.map{x => acc += x; x}
     b.first()
     b.count()
     acc.value should be (210)
@@ -113,12 +113,12 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 20, 10)
-    val b = a.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
+    val b = a.map{x => acc += x; x}
     b.count()
     acc.value should be (210)
     b.count()
     acc.value should be (210)
-    val c = b.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
+    val c = b.map{x => acc += x; x}
     c.count()
     acc.value should be (420)
   }
@@ -128,7 +128,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     val acc : ConsistentAccumulator[Int] = sc.consistentAccumulator(0)
 
     val a = sc.parallelize(1 to 100, 10)
-    val b = a.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
+    val b = a.map{x => acc += x; x}
     // This depends on toLocalIterators per-partition fetch behaviour
     b.toLocalIterator.take(2).toList
     acc.value should be > (0)
@@ -137,7 +137,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     b.count()
     acc.value should be (5050)
 
-    val c = b.mapWithAccumulator{(ui, x) => acc += (ui, x); x}
+    val c = b.map{x => acc += x; x}
     c.cache()
     c.toLocalIterator.take(2).toList
     acc.value should be > (5050)

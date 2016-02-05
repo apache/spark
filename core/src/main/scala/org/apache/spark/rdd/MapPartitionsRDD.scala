@@ -48,8 +48,13 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    f(context, id, split.index, firstParent[T].iterator(split, context))
+  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
+    val input = firstParent[T].iterator(split, context)
+    // Set the ID of the RDD and partition being processed. We need to do this per
+    // element since we chain the iterator transformations together
+    val data = input.map{x => context.setRDDPartitionInfo(id, split.index); x}
+    f(context, id, split.index, data)
+  }
 
   override def clearDependencies() {
     super.clearDependencies()

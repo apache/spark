@@ -19,8 +19,6 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
-
 /**
  * Structure for keeping track of the values being accumulated.
  * When collecting updates from the workers values are accumulated in pending hash map of
@@ -28,12 +26,12 @@ case class UpdateInfo private[spark](val rddId: Int, splitId: Int)
  * before merging in each pending record, checked against processed.
  */
 private[spark] case class UpdateTracking[T](
-    pending: mutable.HashMap[UpdateInfo, T],
+    pending: mutable.HashMap[(Int, Int), T],
     processed: mutable.HashMap[Int, mutable.BitSet],
     var value: T) extends Serializable {
 
   def this(value: T) = {
-    this(new mutable.HashMap[UpdateInfo, T](), new mutable.HashMap[Int, mutable.BitSet](), value)
+    this(new mutable.HashMap[(Int, Int), T](), new mutable.HashMap[Int, mutable.BitSet](), value)
   }
 }
 
@@ -65,7 +63,7 @@ class ConsistentAccumulator[T] private[spark] (
     param: ConsistentAccumulatorParam[T],
     name: Option[String],
     internal: Boolean)
-  extends GenericAccumulable[T, UpdateTracking[T], (UpdateInfo, T)](
+  extends GenericAccumulable[T, UpdateTracking[T], T](
     Accumulators.newId(), initialValue, param, name, internal, countFailedValues = false,
     process = {x => x.value}, consistent = true) {
 
@@ -86,7 +84,7 @@ class ConsistentAccumulator[T] private[spark] (
  * @tparam T type of value to accumulate
  */
 class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
-    extends AccumulableParam[UpdateTracking[T], (UpdateInfo, T)] {
+    extends AccumulableParam[UpdateTracking[T], T] {
 
   /**
    * Add additional value to the current accumulator. No consistency checking is performed at this
@@ -96,11 +94,12 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
    * @param t the data to be added to the accumulator
    * @return the new value of the accumulator
    */
-  def addAccumulator(r: UpdateTracking[T], t: (UpdateInfo, T)): UpdateTracking[T] = {
-    val v = r.pending.get(t._1).map(
-      accumulatorParam.addAccumulator(_, t._2)
-    ).getOrElse(t._2)
-    r.pending(t._1) = v
+  def addAccumulator(r: UpdateTracking[T], t: T): UpdateTracking[T] = {
+    val updateInfo = TaskContext.get().getRDDPartitionInfo()
+    val v = r.pending.get(updateInfo).map(
+      accumulatorParam.addAccumulator(_, t)
+    ).getOrElse(t)
+    r.pending(updateInfo) = v
     // We don't need to set the value here since we always have a merge with the zero UpdateTracking
     r
   }
@@ -115,7 +114,7 @@ class ConsistentAccumulatorParam[T](accumulatorParam: AccumulatorParam[T])
    * @return both data sets merged together
    */
   def addInPlace(r1: UpdateTracking[T], r2: UpdateTracking[T]): UpdateTracking[T] = {
-    r2.pending.foreach{case (UpdateInfo(rddId, splitId), v) =>
+    r2.pending.foreach{case ((rddId, splitId), v) =>
       val splits = r1.processed.getOrElseUpdate(rddId, new mutable.BitSet())
       if (!splits.contains(splitId)) {
         splits += splitId
