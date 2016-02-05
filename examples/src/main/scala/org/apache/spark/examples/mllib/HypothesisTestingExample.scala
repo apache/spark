@@ -19,6 +19,11 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.stat.test.ChiSqTestResult
+import org.apache.spark.rdd.RDD
 
 // $example off$
 import org.apache.spark.sql.SQLContext
@@ -33,9 +38,8 @@ object HypothesisTestingExample {
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-/*
-    // @note: todo
-    val vec: Vector = ... // a vector composed of the frequencies of events
+
+    val vec: Vector = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25) // a vector composed of the frequencies of events
 
     // compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
     // the test runs against a uniform distribution.
@@ -43,13 +47,20 @@ object HypothesisTestingExample {
     println(goodnessOfFitTestResult) // summary of the test including the p-value, degrees of freedom,
     // test statistic, the method used, and the null hypothesis.
 
-    val mat: Matrix = ... // a contingency matrix
+
+
+    // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
+    val mat: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0)) // a contingency matrix
 
     // conduct Pearson's independence test on the input contingency matrix
     val independenceTestResult = Statistics.chiSqTest(mat)
     println(independenceTestResult) // summary of the test including the p-value, degrees of freedom...
 
-    val obs: RDD[LabeledPoint] = ... // (feature, label) pairs.
+
+    val p1 = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
+    val p2 = LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0))
+    val p3 = LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5))
+    val obs: RDD[LabeledPoint] = sc.parallelize(Seq(p1, p2, p3)) // (feature, label) pairs.
 
     // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
@@ -60,7 +71,7 @@ object HypothesisTestingExample {
       println(s"Column $i:\n$result")
       i += 1
     } // summary of the test
-*/
+
     // $example off$
 
     sc.stop()

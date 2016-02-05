@@ -41,10 +41,11 @@ object StratifiedSamplingExample {
     val approxSample = data.sampleByKey(withReplacement = false, fractions)
     val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
 
-    approxSample.foreach(println)
-    exactSample.foreach(println)
     // $example off$
 
+    approxSample.foreach(println)
+    exactSample.foreach(println)
+    
     sc.stop()
   }
 }
