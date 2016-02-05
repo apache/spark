@@ -320,6 +320,15 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("18:12:15.12312+7:30")).get ===
       c.getTimeInMillis * 1000 + 120)
 
+    c = Calendar.getInstance(TimeZone.getTimeZone("GMT-08:00"))
+    c.set(Calendar.HOUR_OF_DAY, 18)
+    c.set(Calendar.MINUTE, 12)
+    c.set(Calendar.SECOND, 15)
+    c.set(Calendar.MILLISECOND, 123)
+    assert(stringToTimestamp(
+      UTF8String.fromString("T18:12:15.12312-8:00")).get ===
+      c.getTimeInMillis * 1000 + 120)
+
     c = Calendar.getInstance()
     c.set(2011, 4, 6, 7, 8, 9)
     c.set(Calendar.MILLISECOND, 100)
