@@ -40,9 +40,11 @@ if __name__ == "__main__":
         (2L, "spark f g h", 1.0),
         (3L, "hadoop mapreduce", 0.0)], ["id", "text", "label"])
 
-    # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
+    # Configure an ML pipeline, which consists of tree
+    # stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
-    hashingTF = HashingTF(inputCol=tokenizer.getOutputCol(), outputCol="features")
+    hashingTF = HashingTF(
+        inputCol=tokenizer.getOutputCol(), outputCol="features")
     lr = LogisticRegression(maxIter=10, regParam=0.01)
     pipeline = Pipeline(stages=[tokenizer, hashingTF, lr])
 
