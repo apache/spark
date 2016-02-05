@@ -102,20 +102,6 @@
                 <include>com.fasterxml.jackson.**</include>
               </includes>
             </relocation>
-            <relocation>
-              <pattern>io.netty</pattern>
-              <shadedPattern>org.spark-project.io.netty</shadedPattern>
-              <includes>
-                <include>io.netty.**</include>
-              </includes>
-            </relocation>
-            <relocation>
-              <pattern>javax.annotation</pattern>
-              <shadedPattern>org.spark-project.javax.annotation</shadedPattern>
-              <includes>
-                <include>javax.annotation.**</include>
-              </includes>
-            </relocation>
           </relocations>
         </configuration>
         <executions>
@@ -158,8 +144,6 @@
                 <shaded resource="com/fasterxml/jackson/core/JsonParser.class" />
                 <shaded resource="com/fasterxml/jackson/annotation/JacksonAnnotation.class" />
                 <shaded resource="com/fasterxml/jackson/databind/JsonSerializer.class" />
-                <shaded resource="io/netty/channel/AbstractChannel.class" />
-                <shaded resource="javax/annotation/Nullable.class" />
               </target>
             </configuration>
           </execution>
