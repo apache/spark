@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.kafka
 
-import org.apache.spark.streaming.kafka.NewKafkaCluster.LeaderOffset
-
 import scala.reflect.ClassTag
 
 import org.apache.kafka.clients.consumer.ConsumerRecord

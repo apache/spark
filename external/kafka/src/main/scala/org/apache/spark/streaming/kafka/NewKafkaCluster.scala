@@ -38,8 +38,6 @@ private[spark]
 class NewKafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String])
   extends Serializable {
 
-  import NewKafkaCluster.LeaderOffset
-
   @transient
   protected var consumer: KafkaConsumer[K, V] = null
 
@@ -135,7 +133,7 @@ class NewKafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, Str
       }
       topicPartitions.map { tp =>
         val pos = consumer.position(tp)
-        tp -> new LeaderOffset(tplMap(tp), pos)
+        tp -> new LeaderOffset(tplMap(tp), Int.MinValue, pos)
       }.toMap
 
     }.asInstanceOf[Map[TopicPartition, LeaderOffset]]
@@ -155,11 +153,4 @@ class NewKafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, Str
     }
   }
 
-}
-
-private[spark]
-object NewKafkaCluster {
-
-  private[spark]
-  case class LeaderOffset(host: String, offset: Long)
 }

@@ -74,7 +74,6 @@ R: ClassTag] private[spark](
 
 private[kafka]
 object KafkaRDD {
-  import KafkaCluster.LeaderOffset
 
   /**
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
