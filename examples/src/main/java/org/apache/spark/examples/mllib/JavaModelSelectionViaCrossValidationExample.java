@@ -85,7 +85,8 @@ public class JavaModelSelectionViaCrossValidationExample {
     SparkConf conf = new SparkConf().setAppName("JavaModelSelectionViaCrossValidationExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
-    
+
+    // $example on$
     // Prepare training documents, which are labeled.
     DataFrame training = sqlContext.createDataFrame(Arrays.asList(
         new LabeledDocument1(0L, "a b c d e spark", 1.0), new LabeledDocument1(
@@ -146,6 +147,8 @@ public class JavaModelSelectionViaCrossValidationExample {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob="
           + r.get(2) + ", prediction=" + r.get(3));
     }
+    // $example off$
 
+    sc.stop();
   }
 }

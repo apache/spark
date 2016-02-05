@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{ SparkConf, SparkContext }
 import org.apache.spark.ml.Pipeline
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{ HashingTF, Tokenizer }
-import org.apache.spark.ml.tuning.{ ParamGridBuilder, CrossValidator }
+import org.apache.spark.ml.tuning.{ CrossValidator, ParamGridBuilder }
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.SQLContext
 
 object ModelSelectionViaCrossValidationExample {
 
@@ -34,6 +35,7 @@ object ModelSelectionViaCrossValidationExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    // $example on$
     // Prepare training data from a list of (id, text, label) tuples.
     val training = sqlContext.createDataFrame(Seq(
       (0L, "a b c d e spark", 1.0),
@@ -98,5 +100,9 @@ object ModelSelectionViaCrossValidationExample {
         case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
           println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
+    // $example off$
+
+    sc.stop()
   }
 }
+// scalastyle:on println

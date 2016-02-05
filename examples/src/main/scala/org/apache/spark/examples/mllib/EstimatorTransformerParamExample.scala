@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{ SparkConf, SparkContext }
@@ -31,6 +32,7 @@ object EstimatorTransformerParamExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    // $example on$
     // Prepare training data from a list of (label, features) tuples.
     val training = sqlContext.createDataFrame(Seq(
       (1.0, Vectors.dense(0.0, 1.1, 0.1)),
@@ -87,5 +89,9 @@ object EstimatorTransformerParamExample {
         case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
           println(s"($features, $label) -> prob=$prob, prediction=$prediction")
       }
+    // $example off$
+
+    sc.stop()
   }
 }
+// scalastyle:on println

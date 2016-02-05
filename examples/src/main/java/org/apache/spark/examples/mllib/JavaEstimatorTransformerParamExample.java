@@ -34,6 +34,8 @@ public class JavaEstimatorTransformerParamExample {
     SparkConf conf = new SparkConf().setAppName("JavaEstimatorTransformerParamExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
+
+    // $example on$
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean. Spark SQL can convert RDDs of
     // JavaBeans
@@ -64,11 +66,9 @@ public class JavaEstimatorTransformerParamExample {
         + model1.parent().extractParamMap());
 
     // We may alternatively specify parameters using a ParamMap.
-    ParamMap paramMap = new ParamMap().put(lr.maxIter().w(20)) // Specify 1
-                                                               // Param.
+    ParamMap paramMap = new ParamMap().put(lr.maxIter().w(20)) // Specify 1 Param.
         .put(lr.maxIter(), 30) // This overwrites the original maxIter.
-        .put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple
-                                                            // Params.
+        .put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple Params.
 
     // One can also combine ParamMaps.
     ParamMap paramMap2 = new ParamMap().put(lr.probabilityCol().w(
@@ -101,5 +101,8 @@ public class JavaEstimatorTransformerParamExample {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob="
           + r.get(2) + ", prediction=" + r.get(3));
     }
+    // $example off$
+
+    sc.stop();
   }
 }

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{ SparkConf, SparkContext }
@@ -32,6 +33,7 @@ object PipelineExample {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
 
+    // $example on$
     // Prepare training documents from a list of (id, text, label) tuples.
     val training = sqlContext.createDataFrame(Seq(
       (0L, "a b c d e spark", 1.0),
@@ -80,5 +82,9 @@ object PipelineExample {
         case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
           println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
+    // $example off$
+
+    sc.stop()
   }
 }
+// scalastyle:on println

@@ -19,7 +19,9 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
+//$example on$
 import org.apache.spark.ml.regression.LinearRegression;
+//$example off$
 import org.apache.spark.ml.tuning.*;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
@@ -29,7 +31,8 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     SparkConf conf = new SparkConf().setAppName("JavaModelSelectionViaTrainValidationSplitExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext jsql = new SQLContext(sc);
-    
+
+    // $example on$
     DataFrame data = jsql.read().format("libsvm")
         .load("data/mllib/sample_libsvm_data.txt");
 
@@ -55,11 +58,8 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     // ParamMaps, and an Evaluator.
     TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
         .setEstimator(lr).setEvaluator(new RegressionEvaluator())
-        .setEstimatorParamMaps(paramGrid).setTrainRatio(0.8); // 80% for
-                                                              // training and
-                                                              // the remaining
-                                                              // 20% for
-                                                              // validation
+        // 80% for training and the remaining 20% for validation
+        .setEstimatorParamMaps(paramGrid).setTrainRatio(0.8);
 
     // Run train validation split, and choose the best set of parameters.
     TrainValidationSplitModel model = trainValidationSplit.fit(training);
@@ -68,6 +68,8 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     // parameters
     // that performed best.
     model.transform(test).select("features", "label", "prediction").show();
+    // $example off$
 
+    sc.stop();
   }
 }

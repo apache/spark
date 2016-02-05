@@ -19,9 +19,11 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.{ SparkConf, SparkContext }
 import org.apache.spark.ml.evaluation.RegressionEvaluator
-import org.apache.spark.sql.SQLContext
+// $example on$
 import org.apache.spark.ml.regression.LinearRegression
+// $example off$
 import org.apache.spark.ml.tuning.{ ParamGridBuilder, TrainValidationSplit }
+import org.apache.spark.sql.SQLContext
 
 object ModelSelectionViaTrainValidationSplitExample {
 
@@ -29,7 +31,8 @@ object ModelSelectionViaTrainValidationSplitExample {
     val conf = new SparkConf().setAppName("ModelSelectionViaTrainValidationSplitExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-    
+
+    // $example on$
     // Prepare training and test data.
     val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
     val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
@@ -62,5 +65,8 @@ object ModelSelectionViaTrainValidationSplitExample {
     model.transform(test)
       .select("features", "label", "prediction")
       .show()
+    // $example off$
+
+    sc.stop()
   }
 }
