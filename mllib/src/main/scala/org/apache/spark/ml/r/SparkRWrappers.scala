@@ -54,19 +54,24 @@ object SparkRWrappers {
   }
 
   def fitKMeans(
-      initMode: String,
       df: DataFrame,
-      maxIter: Double,
+      initMode: String,
       initSteps: Double,
+      maxIter: Double,
+      seed: Double,
+      epsilon: Double,
       k: Double,
       columns: Array[String]): KMeansModel = {
-    val assembler = new VectorAssembler().setInputCols(columns).setOutputCol("features")
+    val assembler = new VectorAssembler().setInputCols(columns).setOutputCol("temp-features")
     val features = assembler.transform(df)
     val kMeans = new KMeans()
       .setInitMode(initMode)
-      .setMaxIter(maxIter.toInt)
       .setInitSteps(initSteps.toInt)
+      .setMaxIter(maxIter.toInt)
+      .setSeed(seed.toLong)
+      .setTol(epsilon)
       .setK(k.toInt)
+      .setFeaturesCol("temp-features")
     kMeans.fit(features)
   }
 
@@ -133,20 +138,4 @@ object SparkRWrappers {
         "LogisticRegressionModel"
     }
   }
-
-  // scalastyle:off println
-  def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("test-R").setMaster("local")
-    val sc = new SparkContext(conf)
-    val sqlCtx = new SQLContext(sc)
-    import sqlCtx.implicits._
-    val initMode = "random"
-    val columns = "Sepal_Length,Sepal_Width,Petal_Length,Petal_Width"
-    val df = sc.textFile("iris.txt").map(_.split("\\s+"))
-      .map(ary => (ary(1).toDouble, ary(2).toDouble, ary(3).toDouble, ary(4).toDouble))
-      .toDF("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width")
-    val model = fitKMeans(initMode, df, 10, 10, 3, columns)
-    println(model)
-  }
-  // scalastyle:on println
 }
