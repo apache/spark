@@ -79,6 +79,27 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
+
+  /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
    * @since 1.4.0
