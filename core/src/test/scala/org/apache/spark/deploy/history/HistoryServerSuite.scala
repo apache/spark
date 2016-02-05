@@ -31,6 +31,8 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s._
 import org.json4s.JsonAST._
+import org.json4s.JsonAST.JNothing
+import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.when
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
@@ -40,7 +42,7 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.ResetSystemProperties
 import org.apache.spark._
@@ -394,15 +396,23 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       jobList.values.size
     }
 
+    // get a list of app Ids of all apps in a given state. REST API
     def listApplications(completed: Boolean): Seq[String] = {
-      val json = HistoryServerSuite.getUrl(applications("", ""))
-      val apps = parse(json).asInstanceOf[JArray]
-      apps.filter( app => {
-        val attempts: JArray = (app \ "attempts").asInstanceOf[JArray]
-        val state: JBool = (attempts.values.head.asInstanceOf[JObject] \ "completed")
-            .asInstanceOf[JBool]
-        state.value == completed
-      }).map(app => (app \ "id").asInstanceOf[JString].values)
+      val json = parse(HistoryServerSuite.getUrl(applications("", "")))
+      logDebug(s"${JsonMethods.pretty(json)}")
+      json match {
+        case JNothing => Seq()
+        case apps: JArray =>
+          apps.filter(app => {
+            (app \ "attempts") match {
+              case attempts: JArray =>
+                val state = (attempts.children.head \ "completed").asInstanceOf[JBool]
+                state.value == completed
+              case _ => false
+            }
+          }).map(app => (app \ "id").asInstanceOf[JString].values)
+        case _ => Seq()
+      }
     }
 
     def completedJobs(): Seq[JobUIData] = {
