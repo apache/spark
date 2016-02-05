@@ -142,7 +142,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 
     .. versionadded:: 1.3.0
     """
-    # TODO: add a checksplits validation function?
     splits = \
         ListFloatParam(Params._dummy(), "splits",
                        "Split points for mapping continuous features into buckets. With n+1 " +
@@ -1846,7 +1845,6 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
 
     .. versionadded:: 1.6.0
     """
-    # TODO: define custom isValid functions?
     indices = ListIntParam(Params._dummy(), "indices", "An array of indices to select features " +
                            "from a vector column. There can be no overlap with names.")
     names = ListStringParam(Params._dummy(), "names", "An array of feature names to select " +

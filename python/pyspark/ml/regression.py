@@ -338,8 +338,8 @@ class RandomForestParams(TreeEnsembleParams):
     numTrees = IntParam(Params._dummy(), "numTrees", "Number of trees to train (>= 1).")
     featureSubsetStrategy = \
         StringParam(Params._dummy(), "featureSubsetStrategy",
-              "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(supportedFeatureSubsetStrategies))
+                    "The number of features to consider for splits at each tree node. Supported " +
+                    "options: " + ", ".join(supportedFeatureSubsetStrategies))
 
     def __init__(self):
         super(RandomForestParams, self).__init__()

@@ -104,25 +104,6 @@ class ParamTypeConversionTests(PySparkTestCase):
     Test that param type conversion happens.
     """
 
-    def test_list_int(self):
-        vs = VectorSlicer(indices=[1.0, 4.0])
-        self.assertEqual(vs.getIndices(), [1, 4])
-        vs = VectorSlicer(indices=np.array([1.0, 4.0]))
-        self.assertEqual(vs.getIndices(), [1, 4])
-        vs = VectorSlicer(indices=DenseVector([1.0, 4.0]))
-        self.assertEqual(vs.getIndices(), [1, 4])
-        self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
-
-    def test_list_float(self):
-        b = Bucketizer(splits=[1, 4])
-        self.assertEqual(b.getSplits(), [1.0, 4.0])
-        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", "b"]))
-
-    def test_list_string(self):
-        idx_to_string = IndexToString(labels=[1, 4])
-        self.assertEqual(idx_to_string.getLabels(), ['1', '4'])
-        self.assertRaises(TypeError, lambda: IndexToString(labels="a"))
-
     def test_int(self):
         lr = LogisticRegression(maxIter=5.0)
         self.assertEqual(lr.getMaxIter(), 5)
@@ -155,6 +136,25 @@ class ParamTypeConversionTests(PySparkTestCase):
         ewp = ElementwiseProduct(scalingVec=np.array([1.2, 3.4]))
         self.assertEqual(ewp.getScalingVec(), DenseVector([1.2, 3.4]))
         self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
+
+    def test_list_int(self):
+        vs = VectorSlicer(indices=[1.0, 4.0])
+        self.assertEqual(vs.getIndices(), [1, 4])
+        vs = VectorSlicer(indices=np.array([1.0, 4.0]))
+        self.assertEqual(vs.getIndices(), [1, 4])
+        vs = VectorSlicer(indices=DenseVector([1.0, 4.0]))
+        self.assertEqual(vs.getIndices(), [1, 4])
+        self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
+
+    def test_list_float(self):
+        b = Bucketizer(splits=[1, 4])
+        self.assertEqual(b.getSplits(), [1.0, 4.0])
+        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", "b"]))
+
+    def test_list_string(self):
+        idx_to_string = IndexToString(labels=[1, 4])
+        self.assertEqual(idx_to_string.getLabels(), ['1', '4'])
+        self.assertRaises(TypeError, lambda: IndexToString(labels="a"))
 
 
 class PipelineTests(PySparkTestCase):
