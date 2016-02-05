@@ -21,7 +21,6 @@ import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 

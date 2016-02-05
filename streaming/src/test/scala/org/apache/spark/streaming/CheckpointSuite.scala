@@ -21,7 +21,6 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectOutputS
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.reflect.ClassTag
 
