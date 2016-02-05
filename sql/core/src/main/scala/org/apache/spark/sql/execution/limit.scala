@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -33,7 +34,12 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(executeCollect(), 1)
+  private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
+  protected override def doExecute(): RDD[InternalRow] = {
+    val shuffled = new ShuffledRowRDD(
+      Exchange.prepareShuffleDependency(child.execute(), child.output, SinglePartition, serializer))
+    shuffled.mapPartitionsInternal(_.take(limit))
+  }
 }
 
 /**
