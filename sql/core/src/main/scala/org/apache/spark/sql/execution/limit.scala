@@ -27,15 +27,13 @@ import org.apache.spark.sql.catalyst.plans.physical._
  * Take the first `limit` elements and collect them to a single partition.
  *
  * This operator will be used when a logical `Limit` operation is the final operator in an
- * logical plan and the user is collecting results back to the driver.
+ * logical plan, which happens when the user is collecting results back to the driver.
  */
 case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
-  protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException("doExecute() should not be called on CollectLimit()")
-  }
+  protected override def doExecute(): RDD[InternalRow] = sparkContext.makeRDD(executeCollect(), 1)
 }
 
 /**
