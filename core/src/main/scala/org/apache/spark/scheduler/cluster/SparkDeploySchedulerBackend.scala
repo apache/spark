@@ -106,7 +106,7 @@ private[spark] class SparkDeploySchedulerBackend(
     }
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor,
-      coresPerTask = scheduler.CPUS_PER_TASK)
+      initialExecutorLimit, coresPerTask = scheduler.CPUS_PER_TASK)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
