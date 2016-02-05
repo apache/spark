@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 class FileStreamSourceTest extends StreamTest with SharedSQLContext {
@@ -59,15 +60,23 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   }
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
-  def createFileStreamSource(format: String, path: String): FileStreamSource = {
-    sqlContext.read
-      .format(format)
-      .stream(path)
+  def createFileStreamSource(
+      format: String,
+      path: String,
+      schema: Option[StructType] = None): FileStreamSource = {
+    val reader =
+      if (schema.isDefined) {
+        sqlContext.read.format(format).schema(schema.get)
+      } else {
+        sqlContext.read.format(format)
+      }
+    reader.stream(path)
       .queryExecution.analyzed
       .collect { case StreamingRelation(s: FileStreamSource, _) => s }
       .head
   }
 
+  val valueSchema = new StructType().add("value", StringType)
 }
 
 class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
@@ -101,7 +110,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
 
-    val textSource = createFileStreamSource("json", src.getCanonicalPath)
+    val textSource = createFileStreamSource("json", src.getCanonicalPath, Some(valueSchema))
     val df = textSource.toDF().filter($"value" contains "keep")
     val filtered = df
 
@@ -158,7 +167,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     val src = Utils.createTempDir("streaming.src")
     val tmp = Utils.createTempDir("streaming.tmp")
 
-    val fileSource = createFileStreamSource("parquet", src.getCanonicalPath)
+    val fileSource = createFileStreamSource("parquet", src.getCanonicalPath, Some(valueSchema))
     val df = fileSource.toDF().filter($"value" contains "keep")
     val filtered = df
 
@@ -175,6 +184,23 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
     Utils.deleteRecursively(src)
     Utils.deleteRecursively(tmp)
+  }
+
+  test("file stream source without schema") {
+    val src = Utils.createTempDir("streaming.src")
+
+    // Only "text" doesn't need a schema
+    createFileStreamSource("text", src.getCanonicalPath)
+
+    // Both "json" and "parquet" require a schema if no existing file to infer
+    intercept[IllegalArgumentException] {
+      createFileStreamSource("json", src.getCanonicalPath)
+    }
+    intercept[IllegalArgumentException] {
+      createFileStreamSource("parquet", src.getCanonicalPath)
+    }
+
+    Utils.deleteRecursively(src)
   }
 
   test("fault tolerance") {

@@ -76,7 +76,7 @@ class FileStreamSource(
     dataSchema.getOrElse {
       val filesPresent = fetchAllFiles()
       if (filesPresent.isEmpty) {
-        new StructType().add("value", StringType)
+        throw new IllegalArgumentException("No schema specified")
       } else {
         // There are some existing files. Use them to infer the schema
         dataFrameBuilder(filesPresent.toArray).schema

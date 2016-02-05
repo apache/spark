@@ -34,6 +34,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   override def createSource(
       sqlContext: SQLContext,
       schema: Option[StructType],
+      providerName: String,
       parameters: Map[String, String]): Source = {
     LastOptions.parameters = parameters
     LastOptions.schema = schema

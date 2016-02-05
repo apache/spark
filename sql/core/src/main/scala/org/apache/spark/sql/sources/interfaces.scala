@@ -131,6 +131,7 @@ trait StreamSourceProvider {
   def createSource(
       sqlContext: SQLContext,
       schema: Option[StructType],
+      providerName: String,
       parameters: Map[String, String]): Source
 }
 
@@ -199,6 +200,7 @@ trait HadoopFsRelationProvider extends StreamSourceProvider {
   override def createSource(
       sqlContext: SQLContext,
       schema: Option[StructType],
+      providerName: String,
       parameters: Map[String, String]): Source = {
     val path = parameters("path")
     val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
@@ -214,7 +216,14 @@ trait HadoopFsRelationProvider extends StreamSourceProvider {
       DataFrame(sqlContext, LogicalRelation(relation))
     }
 
-    new FileStreamSource(sqlContext, metadataPath, path, schema, dataFrameBuilder)
+    val maybeSchema =
+      if (schema.isEmpty && providerName == "text") {
+        // Add a default schema for "text"
+        Some(new StructType().add("value", StringType))
+      } else {
+        schema
+      }
+    new FileStreamSource(sqlContext, metadataPath, path, maybeSchema, dataFrameBuilder)
   }
 }
 
