@@ -21,7 +21,6 @@ import java.net.InetSocketAddress
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
