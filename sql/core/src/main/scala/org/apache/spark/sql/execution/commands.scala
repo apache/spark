@@ -404,7 +404,7 @@ case class DescribeFunction(
           result
         }
 
-      case None => Seq(Row(s"Function: $functionName is not found."))
+      case None => Seq(Row(s"Function: $functionName not found."))
     }
   }
 }

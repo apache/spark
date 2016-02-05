@@ -26,12 +26,20 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
 import org.apache.spark.util.Utils
 
 /**
   * An interface for those physical operators that support codegen.
   */
 trait CodegenSupport extends SparkPlan {
+
+  /** Prefix used in the current operator's variable names. */
+  private def variablePrefix: String = this match {
+    case _: TungstenAggregate => "agg"
+    case _ => nodeName.toLowerCase
+  }
 
   /**
     * Whether this SparkPlan support whole stage codegen or not.
@@ -53,7 +61,7 @@ trait CodegenSupport extends SparkPlan {
     */
   def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
-    ctx.freshNamePrefix = nodeName
+    ctx.freshNamePrefix = variablePrefix
     doProduce(ctx)
   }
 
@@ -94,7 +102,7 @@ trait CodegenSupport extends SparkPlan {
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
-    ctx.freshNamePrefix = nodeName
+    ctx.freshNamePrefix = variablePrefix
     if (row != null) {
       ctx.currentVars = null
       ctx.INPUT_ROW = row
@@ -163,8 +171,11 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     s"""
        | while (input.hasNext()) {
        |   InternalRow $row = (InternalRow) input.next();
-       |   ${columns.map(_.code).mkString("\n")}
-       |   ${consume(ctx, columns)}
+       |   ${columns.map(_.code).mkString("\n").trim}
+       |   ${consume(ctx, columns).trim}
+       |   if (shouldStop()) {
+       |     return;
+       |   }
        | }
      """.stripMargin
   }
@@ -229,15 +240,16 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
 
         private Object[] references;
         ${ctx.declareMutableStates()}
-        ${ctx.declareAddedFunctions()}
 
         public GeneratedIterator(Object[] references) {
-         this.references = references;
-         ${ctx.initMutableStates()}
+          this.references = references;
+          ${ctx.initMutableStates()}
         }
 
+        ${ctx.declareAddedFunctions()}
+
         protected void processNext() throws java.io.IOException {
-         $code
+          ${code.trim}
         }
       }
       """
@@ -275,8 +287,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRow = $row;
-         | return;
+         | currentRows.add($row.copy());
        """.stripMargin
     } else {
       assert(input != null)
@@ -289,14 +300,12 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
            | ${code.code.trim}
-           | currentRow = ${code.value};
-           | return;
+           | currentRows.add(${code.value}.copy());
          """.stripMargin
       } else {
         // There is no columns
         s"""
-           | currentRow = unsafeRow;
-           | return;
+           | currentRows.add(unsafeRow);
          """.stripMargin
       }
     }
@@ -363,6 +372,11 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
 
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
+            // The build side can't be compiled together
+            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
+              b.copy(left = apply(left))
+            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
+              b.copy(right = apply(right))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input

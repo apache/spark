@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParse
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
@@ -424,13 +425,13 @@ object StructType extends AbstractDataType {
         if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
           DecimalType(leftPrecision, leftScale)
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
         } else if (leftPrecision != rightPrecision) {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"precision $leftPrecision and $rightPrecision")
         } else {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"scala $leftScale and $rightScale")
         }
 

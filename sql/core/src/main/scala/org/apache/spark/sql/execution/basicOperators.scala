@@ -93,9 +93,14 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
       BindReferences.bindReference(condition, child.output))
     ctx.currentVars = input
     val eval = expr.gen(ctx)
+    val nullCheck = if (expr.nullable) {
+      s"!${eval.isNull} &&"
+    } else {
+      s""
+    }
     s"""
        | ${eval.code}
-       | if (!${eval.isNull} && ${eval.value}) {
+       | if ($nullCheck ${eval.value}) {
        |   ${consume(ctx, ctx.currentVars)}
        | }
      """.stripMargin
@@ -232,6 +237,8 @@ case class Range(
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
+      |
+      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }
@@ -417,18 +424,6 @@ case class Except(left: SparkPlan, right: SparkPlan) extends BinaryNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     left.execute().map(_.copy()).subtract(right.execute().map(_.copy()))
-  }
-}
-
-/**
- * Returns the rows in left that also appear in right using the built in spark
- * intersection function.
- */
-case class Intersect(left: SparkPlan, right: SparkPlan) extends BinaryNode {
-  override def output: Seq[Attribute] = children.head.output
-
-  protected override def doExecute(): RDD[InternalRow] = {
-    left.execute().map(_.copy()).intersection(right.execute().map(_.copy()))
   }
 }
 

@@ -323,8 +323,8 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    * field is always empty, since this represents the partial updates recorded in this task,
    * not the aggregated value across multiple tasks.
    */
-  def accumulatorUpdates(): Seq[AccumulableInfo] = accums.map { a =>
-    new AccumulableInfo(a.id, a.name, Some(a.localValue), None, a.isInternal, a.countFailedValues)
+  def accumulatorUpdates(): Seq[AccumulableInfo] = {
+    accums.map { a => a.toInfo(Some(a.localValue), None) }
   }
 
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.

@@ -111,7 +111,9 @@ object PowerIterationClusteringModel extends Loader[PowerIterationClusteringMode
  *
  * @param k Number of clusters.
  * @param maxIterations Maximum number of iterations of the PIC algorithm.
- * @param initMode Initialization mode.
+ * @param initMode Set the initialization mode. This can be either "random" to use a random vector
+ *                 as vertex properties, or "degree" to use normalized sum similarities.
+ *                 Default: random.
  *
  * @see [[http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)]]
  */
