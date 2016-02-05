@@ -60,7 +60,7 @@ object DateTimeUtils {
   @transient lazy val defaultTimeZone = TimeZone.getDefault
 
   // Reuse the TimeZone object as it is expensive to create in each method call.
-  final val timeZones = new ConcurrentHashMap[String, TimeZone]
+  @transient private final val timeZones = new ConcurrentHashMap[String, TimeZone]
 
   // Reuse the Calendar object in each thread as it is expensive to create in each method call.
   private val threadLocalCalendar = new ThreadLocal[Calendar] {
@@ -90,7 +90,7 @@ object DateTimeUtils {
     }
   }
 
-  def getTimeZone(id: String): TimeZone = {
+  private def getTimeZone(id: String): TimeZone = {
     if (!timeZones.containsKey(id)) {
       timeZones.put(id, TimeZone.getTimeZone(id))
     }
