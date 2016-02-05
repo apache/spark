@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
 import javax.servlet.Filter
+import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -29,6 +30,9 @@ import com.google.common.cache.LoadingCache
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.mockito.Mockito._
+import org.mockito.Matchers._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 
@@ -480,6 +484,27 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     val clazz = Utils.classForName(ApplicationCacheCheckFilterRelay.FILTER_NAME)
     val instance = clazz.newInstance()
     instance shouldBe a [Filter]
+  }
+
+  test("redirect includes query params") {
+    val clazz = Utils.classForName(ApplicationCacheCheckFilterRelay.FILTER_NAME)
+    val filter = clazz.newInstance().asInstanceOf[ApplicationCacheCheckFilter]
+    filter.appId = "local-123"
+    val cache = mock[ApplicationCache]
+    when(cache.checkForUpdates(any(), any())).thenReturn(true)
+    ApplicationCacheCheckFilterRelay.setApplicationCache(cache)
+    val request = mock[HttpServletRequest]
+    when(request.getMethod()).thenReturn("GET")
+    when(request.getRequestURI()).thenReturn("http://localhost:18080/history/local-123/jobs/job/")
+    when(request.getQueryString()).thenReturn("id=2")
+    val resp = mock[HttpServletResponse]
+    when(resp.encodeRedirectURL(any())).thenAnswer(new Answer[String](){
+      override def answer(invocationOnMock: InvocationOnMock): String = {
+        invocationOnMock.getArguments()(0).asInstanceOf[String]
+      }
+    })
+    filter.doFilter(request, resp, null)
+    verify(resp).sendRedirect("http://localhost:18080/history/local-123/jobs/job/?id=2")
   }
 
 }

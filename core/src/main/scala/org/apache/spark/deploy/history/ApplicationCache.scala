@@ -551,7 +551,8 @@ private[history] class ApplicationCacheCheckFilter() extends Filter with Logging
       // send a redirect back to the same location. This will be routed
       // to the *new* UI
       logInfo(s"Application Attempt $appId/$attemptId updated; refreshing")
-      val redirectUrl = httpResponse.encodeRedirectURL(requestURI)
+      val queryStr = Option(httpRequest.getQueryString).map("?" + _).getOrElse("")
+      val redirectUrl = httpResponse.encodeRedirectURL(requestURI + queryStr)
       httpResponse.sendRedirect(redirectUrl)
     } else {
       chain.doFilter(request, response)
