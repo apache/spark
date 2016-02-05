@@ -56,7 +56,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
-class DataStreamReaderWriterSuite extends StreamTest with SharedSQLContext {
+class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
   test("resolve default source") {
