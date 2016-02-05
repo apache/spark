@@ -21,6 +21,7 @@ import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -131,11 +132,11 @@ class DirectKafkaStreamSuite
         assert(partSize === rangeSize, "offset ranges are wrong")
       }
     }
-    stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
+    stream.foreachRDD { rdd => allReceived.addAll(rdd.collect()) }
     ssc.start()
     eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
       assert(allReceived.size === totalSent,
-        "didn't get expected number of messages, messages:\n" + allReceived.mkString("\n"))
+        "didn't get expected number of messages, messages:\n" + allReceived.asScala.mkString("\n"))
     }
     ssc.stop()
   }
@@ -174,7 +175,7 @@ class DirectKafkaStreamSuite
     )
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    stream.map { _._2 }.foreachRDD { rdd => collectedData ++= rdd.collect() }
+    stream.map { _._2 }.foreachRDD { rdd => collectedData.addAll(rdd.collect()) }
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
@@ -220,7 +221,7 @@ class DirectKafkaStreamSuite
     )
 
     val collectedData = new ConcurrentLinkedQueue[String]()
-    stream.foreachRDD { rdd => collectedData ++= rdd.collect() }
+    stream.foreachRDD { rdd => collectedData.addAll(rdd.collect()) }
     ssc.start()
     val newData = Map("b" -> 10)
     kafkaTestUtils.sendMessages(topic, newData)
@@ -265,7 +266,7 @@ class DirectKafkaStreamSuite
     // This is to collect the raw data received from Kafka
     kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
       val data = rdd.map { _._2 }.collect()
-      DirectKafkaStreamSuite.collectedData.appendAll(data)
+      DirectKafkaStreamSuite.collectedData.addAll(data)
     }
 
     // This is ensure all the data is eventually receiving only once
@@ -337,11 +338,11 @@ class DirectKafkaStreamSuite
 
     val allReceived = new ConcurrentLinkedQueue[(String, String)]
 
-    stream.foreachRDD { rdd => allReceived ++= rdd.collect() }
+    stream.foreachRDD { rdd => allReceived.addAll(rdd.collect()) }
     ssc.start()
     eventually(timeout(20000.milliseconds), interval(200.milliseconds)) {
       assert(allReceived.size === totalSent,
-        "didn't get expected number of messages, messages:\n" + allReceived.mkString("\n"))
+        "didn't get expected number of messages, messages:\n" + allReceived.asScala.mkString("\n"))
 
       // Calculate all the record number collected in the StreamingListener.
       assert(collector.numRecordsSubmitted.get() === totalSent)
@@ -392,12 +393,12 @@ class DirectKafkaStreamSuite
 
     // Used for assertion failure messages.
     def dataToString: String =
-      collectedData.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
+      collectedData.asScala.map(_.mkString("[", ",", "]")).mkString("{", ", ", "}")
 
     // This is to collect the raw data received from Kafka
     kafkaStream.foreachRDD { (rdd: RDD[(String, String)], time: Time) =>
       val data = rdd.map { _._2 }.collect()
-      collectedData += data
+      collectedData.add(data)
     }
 
     ssc.start()
@@ -413,7 +414,7 @@ class DirectKafkaStreamSuite
       eventually(timeout(5.seconds), interval(batchIntervalMilliseconds.milliseconds)) {
         // Assert that rate estimator values are used to determine maxMessagesPerPartition.
         // Funky "-" in message makes the complete assertion message read better.
-        assert(collectedData.exists(_.size == expectedSize),
+        assert(collectedData.asScala.exists(_.size == expectedSize),
           s" - No arrays of size $expectedSize for rate $rate found in $dataToString")
       }
     }
