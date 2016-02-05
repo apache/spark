@@ -246,18 +246,15 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Dynamic Resource Allocation with Mesos
 
-Mesos supports dynamic allocation only with coarse grain mode, which can resize the number of executors based on statistics
-of the application. While dynamic allocation supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
-since it is already designed to run one executor per slave with the configured amount of resources. However, after scaling down the number of executors the coarse grain scheduler
-can scale back up to the same amount of executors when Spark signals more executors are needed.
+Mesos supports dynamic allocation only with coarse-grain mode, which can resize the number of
+executors based on statistics of the application. For general information,
+see [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocation).
 
-Users that like to utilize this feature should launch the Mesos Shuffle Service that
-provides shuffle data cleanup functionality on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
-termination. To launch/stop the Mesos Shuffle Service please use the provided sbin/start-mesos-shuffle-service.sh and sbin/stop-mesos-shuffle-service.sh
-scripts accordingly.
+The External Shuffle Service to use is the Mesos Shuffle Service. It provides shuffle data cleanup functionality
+on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
+termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all slave nodes, with `spark.shuffle.service.enabled` set to `true`.
 
-The Shuffle Service is expected to be running on each slave node that will run Spark executors. One way to easily achieve this with Mesos
-is to launch the Shuffle Service with Marathon with a unique host constraint.
+This can also be achieved through Marathon, using a unique host constraint, and the following command: `bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
 
 # Configuration
 
