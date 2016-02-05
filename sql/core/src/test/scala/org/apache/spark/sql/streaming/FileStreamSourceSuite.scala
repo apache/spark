@@ -249,10 +249,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     assert(new File(src, "_metadata").mkdirs())
     stringToFile(
       new File(src, "_metadata/0"),
-      s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
-    stringToFile(
-      new File(src, "_metadata/1"),
-      s"${sqlContext.sparkContext.version}\nSTART\n-")
+      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
+    stringToFile(new File(src, "_metadata/1"), s"${FileStreamSource.VERSION}\nSTART\n-")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     // the metadata file of batch is corrupted, so currentOffset should be 0
@@ -266,10 +264,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     assert(new File(src, "_metadata").mkdirs())
     stringToFile(
       new File(src, "_metadata/0"),
-      s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
+      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n")
     stringToFile(
       new File(src, "_metadata/1"),
-      s"${sqlContext.sparkContext.version}\nSTART\n-/x/y/z\nEND\n")
+      s"${FileStreamSource.VERSION}\nSTART\n-/x/y/z\nEND\n")
 
     val textSource = createFileStreamSource("text", src.getCanonicalPath)
     assert(textSource.currentOffset() === LongOffset(1))
@@ -282,23 +280,21 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
     // Invalid metadata
     assert(readBatch(stringToStream("")) === Nil)
-    assert(readBatch(stringToStream(sqlContext.sparkContext.version)) === Nil)
-    assert(readBatch(stringToStream(s"${sqlContext.sparkContext.version}\n")) === Nil)
-    assert(readBatch(stringToStream(s"${sqlContext.sparkContext.version}\nSTART")) === Nil)
-    assert(readBatch(stringToStream(s"${sqlContext.sparkContext.version}\nSTART\n-")) === Nil)
-    assert(readBatch(stringToStream(s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c")) === Nil)
-    assert(
-      readBatch(stringToStream(s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\n")) === Nil)
-    assert(
-      readBatch(stringToStream(s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\nEN")) === Nil)
+    assert(readBatch(stringToStream(FileStreamSource.VERSION)) === Nil)
+    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\n")) === Nil)
+    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART")) === Nil)
+    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-")) === Nil)
+    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c")) === Nil)
+    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n")) === Nil)
+    assert(readBatch(stringToStream(s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEN")) === Nil)
 
     // Valid metadata
     assert(readBatch(stringToStream(
-      s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\nEND")) === Seq("/a/b/c"))
+      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND")) === Seq("/a/b/c"))
     assert(readBatch(stringToStream(
-      s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\nEND\n")) === Seq("/a/b/c"))
+      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\nEND\n")) === Seq("/a/b/c"))
     assert(readBatch(stringToStream(
-      s"${sqlContext.sparkContext.version}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n"))
+      s"${FileStreamSource.VERSION}\nSTART\n-/a/b/c\n-/e/f/g\nEND\n"))
       === Seq("/a/b/c", "/e/f/g"))
   }
 }

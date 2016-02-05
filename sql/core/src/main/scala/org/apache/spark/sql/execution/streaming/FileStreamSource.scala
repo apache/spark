@@ -43,7 +43,6 @@ class FileStreamSource(
     providerName: String,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
-  private val version = sqlContext.sparkContext.version
   private val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
   private var maxBatchId = -1
   private val seenFiles = new OpenHashSet[String]
@@ -181,7 +180,7 @@ class FileStreamSource(
     val writer = new PrintWriter(new OutputStreamWriter(output, UTF_8))
     try {
       // scalastyle:off println
-      writer.println(version)
+      writer.println(FileStreamSource.VERSION)
       writer.println(FileStreamSource.START_TAG)
       files.foreach(file => writer.println("-" + file))
       writer.println(FileStreamSource.END_TAG)
@@ -207,6 +206,7 @@ object FileStreamSource {
 
   private val START_TAG = "START"
   private val END_TAG = "END"
+  val VERSION = "FILESTREAM1"
 
   /**
    * Parse a metadata file and return the content. If the metadata file is corrupted, it will return
