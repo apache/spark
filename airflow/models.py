@@ -1932,7 +1932,9 @@ class DagModel(Base):
     """
     dag_id = Column(String(ID_LEN), primary_key=True)
     # A DAG can be paused from the UI / DB
-    is_paused = Column(Boolean, default=False)
+    # Set this default value of is_paused based on a configuration value!
+    is_paused_at_creation = configuration.getboolean('core', 'dags_are_paused_at_creation')
+    is_paused = Column(Boolean, default=is_paused_at_creation)
     # Whether the DAG is a subdag
     is_subdag = Column(Boolean, default=False)
     # Whether that DAG was seen on the last DagBag load
