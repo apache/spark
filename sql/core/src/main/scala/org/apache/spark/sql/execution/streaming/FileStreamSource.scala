@@ -40,6 +40,7 @@ class FileStreamSource(
     metadataPath: String,
     path: String,
     dataSchema: Option[StructType],
+    providerName: String,
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
   private val version = sqlContext.sparkContext.version
@@ -76,7 +77,12 @@ class FileStreamSource(
     dataSchema.getOrElse {
       val filesPresent = fetchAllFiles()
       if (filesPresent.isEmpty) {
-        throw new IllegalArgumentException("No schema specified")
+        if (providerName == "text") {
+          // Add a default schema for "text"
+          new StructType().add("value", StringType)
+        } else {
+          throw new IllegalArgumentException("No schema specified")
+        }
       } else {
         // There are some existing files. Use them to infer the schema
         dataFrameBuilder(filesPresent.toArray).schema

@@ -216,14 +216,7 @@ trait HadoopFsRelationProvider extends StreamSourceProvider {
       DataFrame(sqlContext, LogicalRelation(relation))
     }
 
-    val maybeSchema =
-      if (schema.isEmpty && providerName == "text") {
-        // Add a default schema for "text"
-        Some(new StructType().add("value", StringType))
-      } else {
-        schema
-      }
-    new FileStreamSource(sqlContext, metadataPath, path, maybeSchema, dataFrameBuilder)
+    new FileStreamSource(sqlContext, metadataPath, path, schema, providerName, dataFrameBuilder)
   }
 }
 
