@@ -22,7 +22,7 @@ import java.net.URL
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{Future, Promise, Await}
+import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
