@@ -22,7 +22,8 @@ import java.util.NoSuchElementException
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -439,6 +440,286 @@ case class CreateFunction(
     asName: String,
     resourcesMap: Map[String, String],
     isTemp: Boolean)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableRename(
+    tableName: TableIdentifier,
+    renameTableName: Option[TableIdentifier])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableProperties(
+    tableName: TableIdentifier,
+    setProperties: Option[Map[String, Option[String]]],
+    dropProperties: Option[Map[String, Option[String]]],
+    allowExisting: Boolean)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableSerDeProperties(
+    tableName: TableIdentifier,
+    serdeClassName: Option[String],
+    serdeProperties: Option[Map[String, Option[String]]],
+    partition: Option[Map[String, Option[String]]])(sql: String) extends RunnableCommand
+    with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableStoreProperties(
+    tableName: TableIdentifier,
+    buckets: Option[BucketSpec],
+    noClustered: Boolean,
+    noSorted: Boolean)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableSkewed(
+    tableName: TableIdentifier,
+    skewedCols: Seq[String],
+    skewedValues: Seq[Seq[String]],
+    storedAsDirs: Boolean,
+    notSkewed: Boolean,
+    notStoredAsDirs: Boolean)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableSkewedLocation(
+    tableName: TableIdentifier,
+    skewedMap: Map[Seq[String], String])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableAddPartition(
+    tableName: TableIdentifier,
+    partitionsAndLocs: Seq[(Map[String, Option[String]], Option[String])],
+    allowExisting: Boolean)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableRenamePartition(
+    tableName: TableIdentifier,
+    oldPartition: Map[String, Option[String]],
+    newPartition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableExchangePartition(
+    tableName: TableIdentifier,
+    fromTableName: TableIdentifier,
+    partition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableDropPartition(
+    tableName: TableIdentifier,
+    partitions: Seq[Seq[(String, String, String)]],
+    allowExisting: Boolean,
+    purge: Boolean,
+    replication: Option[(String, Boolean)])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableArchivePartition(
+    tableName: TableIdentifier,
+    partition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableUnarchivePartition(
+    tableName: TableIdentifier,
+    partition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableSetFileFormat(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]],
+    fileFormat: Option[Seq[String]],
+    genericFormat: Option[String])(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableSetLocation(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]],
+    location: String)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableTouch(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]])(sql: String) extends RunnableCommand
+    with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableCompact(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]],
+    compactType: String)(sql: String) extends RunnableCommand with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableMerge(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]])(sql: String) extends RunnableCommand
+    with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableChangeCol(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]],
+    oldColName: String,
+    newColName: String,
+    dataType: DataType,
+    comment: Option[String],
+    afterPos: Boolean,
+    afterPosCol: Option[String],
+    restrict: Boolean,
+    cascade: Boolean)(sql: String) extends RunnableCommand
+    with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableAddCol(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]],
+    columns: StructType,
+    restrict: Boolean,
+    cascade: Boolean)(sql: String) extends RunnableCommand
+    with Logging {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
+case class AlterTableReplaceCol(
+    tableName: TableIdentifier,
+    partition: Option[Map[String, Option[String]]],
+    columns: StructType,
+    restrict: Boolean,
+    cascade: Boolean)(sql: String) extends RunnableCommand
+    with Logging {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     sqlContext.catalog.runNativeCommand(sql)
