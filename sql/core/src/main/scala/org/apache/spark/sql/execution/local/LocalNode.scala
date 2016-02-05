@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.local
 
-import scala.util.control.NonFatal
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.{Row, SQLConf}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -96,33 +94,13 @@ abstract class LocalNode(conf: SQLConf) extends QueryPlan[LocalNode] with Loggin
       inputSchema: Seq[Attribute]): () => MutableProjection = {
     log.debug(
       s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    try {
-      GenerateMutableProjection.generate(expressions, inputSchema)
-    } catch {
-      case NonFatal(e) =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate mutable projection, fallback to interpreted", e)
-          () => new InterpretedMutableProjection(expressions, inputSchema)
-        }
-    }
+    GenerateMutableProjection.generate(expressions, inputSchema)
   }
 
   protected def newPredicate(
       expression: Expression,
       inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    try {
-      GeneratePredicate.generate(expression, inputSchema)
-    } catch {
-      case NonFatal(e) =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate predicate, fallback to interpreted", e)
-          InterpretedPredicate.create(expression, inputSchema)
-        }
-    }
+    GeneratePredicate.generate(expression, inputSchema)
   }
 }
 
