@@ -273,7 +273,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           } else if (functionsWithDistinct.isEmpty) {
             // Check if the child operator satisfies the group-by distribution requirements
             val childPlan = planLater(child)
-            val skipUnnecessaryAggregate = if (groupingExpressions != Nil) {
+            val canPatialAggregate = if (groupingExpressions != Nil) {
               childPlan.outputPartitioning.satisfies(ClusteredDistribution(groupingExpressions))
             } else {
               false
@@ -283,7 +283,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
-              skipUnnecessaryAggregate,
+              canPatialAggregate,
               planLater(child))
           } else {
             aggregate.AggUtils.planAggregateWithOneDistinct(

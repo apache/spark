@@ -81,13 +81,13 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      skipUnnecessaryAggregate: Boolean,
+      partialAggregation: Boolean,
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use HashAggregate.
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    if (skipUnnecessaryAggregate) {
+    if (partialAggregation) {
       // A single-stage aggregation is enough to get the final result because input data are
       // already clustered.
       val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
