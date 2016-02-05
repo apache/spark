@@ -344,7 +344,7 @@ class HasTol(Params):
     Mixin for param tol: the convergence tolerance for iterative algorithms.
     """
 
-    tol = BooleanParam(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", None)
+    tol = FloatParam(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", None)
 
     def __init__(self):
         super(HasTol, self).__init__()

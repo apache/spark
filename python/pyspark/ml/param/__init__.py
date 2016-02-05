@@ -66,7 +66,8 @@ class Param(object):
         return str(self.parent) + "__" + self.name
 
     def __repr__(self):
-        return "Param(parent=%r, name=%r, doc=%r)" % (self.parent, self.name, self.doc)
+        class_name = self.__class__.__name__
+        return "%s(parent=%r, name=%r, doc=%r)" % (class_name, self.parent, self.name, self.doc)
 
     def __hash__(self):
         return hash(str(self))
@@ -125,7 +126,11 @@ class BooleanParam(Param):
     """
 
     def _convertAndValidate(self, value):
-        value = ParamValidators.primitiveConvert(value, bool)
+        if type(value) != bool:
+            if value in {0, 1}:
+                value = bool(value)
+            else:
+                raise TypeError("Could not convert %s to a Boolean" % value)
         self._validate(value)
         return value
 

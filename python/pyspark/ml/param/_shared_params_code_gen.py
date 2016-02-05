@@ -128,7 +128,7 @@ if __name__ == "__main__":
          " (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", None,
          "lambda interval: (interval == -1) or (interval >= 1)"),
         ("seed", "IntParam", "random seed.", "hash(type(self).__name__)", None),
-        ("tol", "BooleanParam", "the convergence tolerance for iterative algorithms.", None, None),
+        ("tol", "FloatParam", "the convergence tolerance for iterative algorithms.", None, None),
         ("stepSize", "FloatParam", "Step size to be used for each iteration of optimization.", None,
          None),
         ("handleInvalid", "StringParam", "how to handle invalid entries. Options are skip (which " +
