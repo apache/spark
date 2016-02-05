@@ -163,7 +163,7 @@ class Params(Identifiable):
         """
         if isinstance(paramName, str):
             p = getattr(self, paramName, None)
-            return p is not None and isinstance(p, Param)
+            return isinstance(p, Param)
         else:
             raise TypeError("hasParam(): paramName must be a string")
 
