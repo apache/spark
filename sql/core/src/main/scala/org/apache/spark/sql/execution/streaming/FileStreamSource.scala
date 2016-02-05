@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{BufferedWriter, OutputStreamWriter}
+import java.io._
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.io.Codec
 
+import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 
 import org.apache.spark.Logging
@@ -30,6 +32,8 @@ import org.apache.spark.util.collection.OpenHashSet
 
 /**
  * A very simple source that reads text files from the given directory as they appear.
+ *
+ * TODO Clean up the metadata files periodically
  */
 class FileStreamSource(
     sqlContext: SQLContext,
@@ -38,7 +42,34 @@ class FileStreamSource(
     dataSchema: Option[StructType],
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
-  import sqlContext.implicits._
+  private val version = sqlContext.sparkContext.version
+  private val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
+  private var maxBatchId = -1
+  private val seenFiles = new OpenHashSet[String]
+
+  /** Cache files for each batch. The content of this map is also stored in the disk.  */
+  private val batchToMetadata = new HashMap[Long, Seq[String]]
+
+  {
+    // Restore statues from the metadata files
+    val existingBatchFiles = fetchAllBatchFiles()
+    if (existingBatchFiles.nonEmpty) {
+      val existingBatchIds = existingBatchFiles.map(_.getPath.getName.toInt)
+      maxBatchId = existingBatchIds.max
+      // Recover "batchToMetadata" and "seenFiles" from existing metadata files.
+      existingBatchIds.sorted.foreach { batchId =>
+        val files = readBatch(batchId)
+        if (files.isEmpty) {
+          // Assert that the corrupted file must be the latest metadata file.
+          require(batchId == maxBatchId, "Invalid metadata files")
+          maxBatchId = maxBatchId - 1
+        } else {
+          batchToMetadata(batchId) = files
+          files.foreach(seenFiles.add)
+        }
+      }
+    }
+  }
 
   /** Returns the schema of the data from this source */
   override lazy val schema: StructType = {
@@ -87,40 +118,17 @@ class FileStreamSource(
     val end = fetchMaxOffset()
     val endId = end.offset
 
-    val batchFiles = (startId + 1 to endId).filter(_ >= 0).map(i => s"$metadataPath/$i")
-    if (batchFiles.nonEmpty) {
-      logDebug(s"Producing files from batches ${startId + 1}:$endId")
-      logDebug(s"Batch files: $batchFiles")
-
-      // Probably does not need to be a spark job...
-      val files = sqlContext
-          .read
-          .text(batchFiles: _*)
-          .as[String]
-          .collect()
+    if (startId + 1 <= endId) {
+      val files = (startId + 1 to endId).filter(_ >= 0).flatMap { batchId =>
+          batchToMetadata.getOrElse(batchId, Nil)
+        }.toArray
+      logDebug(s"Return files from batches ${startId + 1}:$endId")
       logDebug(s"Streaming ${files.mkString(", ")}")
       Some(new Batch(end, dataFrameBuilder(files)))
-    } else {
+    }
+    else {
       None
     }
-  }
-
-  private def sparkContext = sqlContext.sparkContext
-
-  private val fs = FileSystem.get(sparkContext.hadoopConfiguration)
-  private val existingBatchFiles = fetchAllBatchFiles()
-  private val existingBatchIds = existingBatchFiles.map(_.getPath.getName.toInt)
-  private var maxBatchId = if (existingBatchIds.isEmpty) -1 else existingBatchIds.max
-  private val seenFiles = new OpenHashSet[String]
-
-  if (existingBatchFiles.nonEmpty) {
-    sqlContext.read
-        .text(existingBatchFiles.map(_.getPath.toString): _*)
-        .as[String]
-        .collect()
-        .foreach { file =>
-          seenFiles.add(file)
-        }
   }
 
   private def fetchAllBatchFiles(): Seq[FileStatus] = {
@@ -137,15 +145,69 @@ class FileStreamSource(
       .map(_.getPath.toUri.toString)
   }
 
+  /**
+   * Write the metadata of a batch to disk. The file format is as follows:
+   *
+   * {{{
+   *   SPARK_VERSION
+   *   START
+   *   -/a/b/c
+   *   -/d/e/f
+   *   ...
+   *   END
+   * }}}
+   *
+   * Note: every file path starts with "-" so that we can know if a line is a file path easily.
+   */
   private def writeBatch(id: Int, files: Seq[String]): Unit = {
-    val path = new Path(metadataPath + "/" + id)
-    val fs = FileSystem.get(sparkContext.hadoopConfiguration)
-    val writer = new BufferedWriter(new OutputStreamWriter(fs.create(path, true)))
-    files.foreach { file =>
-      writer.write(file)
-      writer.write("\n")
+    assert(files.nonEmpty, "create a new batch without any file")
+    val output = fs.create(new Path(metadataPath + "/" + id), true)
+    val writer = new PrintWriter(new OutputStreamWriter(output, UTF_8))
+    try {
+      // scalastyle:off println
+      writer.println(version)
+      writer.println(FileStreamSource.START_TAG)
+      files.foreach(file => writer.println("-" + file))
+      writer.println(FileStreamSource.END_TAG)
+      // scalastyle:on println
+    } finally {
+      writer.close()
     }
-    writer.close()
-    logDebug(s"Wrote batch file $path")
+    batchToMetadata(id) = files
+  }
+
+  /** Read the file names of the specified batch id from the metadata file */
+  private def readBatch(id: Int): Seq[String] = {
+    val input = fs.open(new Path(metadataPath + "/" + id))
+    try {
+      FileStreamSource.readBatch(input)
+    } finally {
+      input.close()
+    }
+  }
+}
+
+object FileStreamSource {
+
+  private val START_TAG = "START"
+  private val END_TAG = "END"
+
+  /**
+   * Parse a metadata file and return the content. If the metadata file is corrupted, it will return
+   * an empty `Seq`.
+   */
+  def readBatch(input: InputStream): Seq[String] = {
+    val lines = scala.io.Source.fromInputStream(input)(Codec.UTF8).getLines().toArray
+      .drop(1) // The first line is version, just drop it
+    if (lines.isEmpty) {
+      return Nil
+    }
+    if (lines.head != "START") {
+      return Nil
+    }
+    if (lines.last != END_TAG) {
+      return Nil
+    }
+    lines.slice(1, lines.length - 1).map(_.drop(1)) // Drop character "-"
   }
 }
