@@ -168,7 +168,18 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   /**
    * Returns the HiveConf
    */
-  private[this] def hiveConf: HiveConf = HiveConfUtil.conf
+  private[this] def hiveConf: HiveConf = {
+    var ss = SessionState.get()
+    // SessionState is lazy initialization, it can be null here
+    if (ss == null) {
+      val original = Thread.currentThread().getContextClassLoader
+      val conf = new HiveConf(classOf[SessionState])
+      conf.setClassLoader(original)
+      ss = new SessionState(conf)
+      SessionState.start(ss)
+    }
+    ss.getConf
+  }
 
   protected def getProperties(node: ASTNode): Seq[(String, String)] = node match {
     case Token("TOK_TABLEPROPLIST", list) =>
