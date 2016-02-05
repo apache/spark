@@ -96,6 +96,27 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameWriter = option(key, value.toString)
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameWriter = option(key, value.toString)
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameWriter = option(key, value.toString)
+
+  /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
    * @since 1.4.0
