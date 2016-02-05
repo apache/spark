@@ -356,23 +356,29 @@ object DateTimeUtils {
       return None
     }
 
-    val c = threadLocalCalendar.get()
-    if (timeZone.isEmpty) {
-      c.setTimeZone(defaultTimeZone)
+    val tz = if (timeZone.isEmpty) {
+      defaultTimeZone
     } else {
-      c.setTimeZone(
-        getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d"))
+      getTimeZone(f"GMT${timeZone.get.toChar}${segments(7)}%02d:${segments(8)}%02d")
     }
-    c.clear()
-    c.set(Calendar.MILLISECOND, 0)
+
+    val c = if (justTime) {
+      // cannot reuse the Calendar as we need get the current date in the timezone
+      Calendar.getInstance(tz)
+    } else {
+      threadLocalCalendar.get()
+    }
 
     if (justTime) {
       c.set(Calendar.HOUR_OF_DAY, segments(3))
       c.set(Calendar.MINUTE, segments(4))
       c.set(Calendar.SECOND, segments(5))
     } else {
+      c.clear()
+      c.setTimeZone(tz)
       c.set(segments(0), segments(1) - 1, segments(2), segments(3), segments(4), segments(5))
     }
+    c.set(Calendar.MILLISECOND, 0)
 
     Some(c.getTimeInMillis * 1000 + segments(6))
   }
@@ -428,8 +434,8 @@ object DateTimeUtils {
       return None
     }
     val c = threadLocalCalendar.get()
-    c.setTimeZone(getTimeZone("GMT"))
     c.clear()
+    c.setTimeZone(getTimeZone("GMT"))
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
