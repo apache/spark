@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
 
+import com.sun.javafx.util.Logging
+
 import scala.collection.generic.Growable
 import scala.collection.Map
 import scala.collection.mutable
