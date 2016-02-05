@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.kafka
 
+import org.apache.spark.streaming.kafka.NewKafkaCluster.LeaderOffset
+
 import scala.reflect.ClassTag
 
-import kafka.common.TopicAndPartition
-import kafka.message.MessageAndMetadata
-import kafka.serializer.Decoder
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{TaskContext, Logging, Partition, SparkContext}
 
@@ -29,32 +30,26 @@ import org.apache.spark.{TaskContext, Logging, Partition, SparkContext}
  * A batch-oriented interface for consuming from Kafka.
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
-  *
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
- * configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers" to be set
- * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+ *
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+ *                    configuration parameters</a>. Requires "bootstrap.servers" to be set
+ *                    with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
- * @param messageHandler function for translating each message into the desired type
-  */
+ */
 private[kafka]
-class KafkaRDD[
-K: ClassTag,
-V: ClassTag,
-U <: Decoder[_] : ClassTag,
-T <: Decoder[_] : ClassTag,
-R: ClassTag] private[spark](
+class NewKafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
   sc: SparkContext,
   kafkaParams: Map[String, String],
   val offsetRanges: Array[OffsetRange],
-  leaders: Map[TopicAndPartition, (String, Int)],
-  messageHandler: MessageAndMetadata[K, V] => R
-) extends KafkaRDDBase[K, V, U, T, R](sc, kafkaParams, offsetRanges, leaders)
-  with Logging with HasOffsetRanges {
+  messageHandler: ConsumerRecord[K, V] => R
+) extends KafkaRDDBase[K, V, scala.Null, scala.Null, R](sc, kafkaParams, offsetRanges, null) with
+  Logging with HasOffsetRanges {
 
   override def getPartitions: Array[Partition] = {
-    offsetRanges.zipWithIndex.map { case (o, i) =>
-        val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
+    offsetRanges.zipWithIndex.map {
+      case (o, i) =>
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, o.leaderHost,
+          Int.MinValue)
     }.toArray
   }
 
@@ -66,48 +61,37 @@ R: ClassTag] private[spark](
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
-      new KafkaRDDIterator[K, V, U, T, R](part, context, kafkaParams, messageHandler)
+      new NewKafkaRDDIterator[K, V, R](sc, part, context, kafkaParams, messageHandler)
     }
   }
 
 }
 
 private[kafka]
-object KafkaRDD {
-  import KafkaCluster.LeaderOffset
+object NewKafkaRDD {
 
   /**
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-   * configuration parameters</a>.
-   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   *                    configuration parameters</a>.
+   *                    Requires "bootstrap.servers" to be set with Kafka broker(s),
+   *                    NOT zookeeper servers, specified in host1:port1,host2:port2 form.
    * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-   *  starting point of the batch
+   *                    starting point of the batch
    * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
-   *  ending point of the batch
-   * @param messageHandler function for translating each message into the desired type
+   *                     ending point of the batch
    */
-  def apply[
-    K: ClassTag,
-    V: ClassTag,
-    U <: Decoder[_]: ClassTag,
-    T <: Decoder[_]: ClassTag,
-    R: ClassTag](
+  def apply[K: ClassTag, V: ClassTag, R: ClassTag](
       sc: SparkContext,
       kafkaParams: Map[String, String],
-      fromOffsets: Map[TopicAndPartition, Long],
-      untilOffsets: Map[TopicAndPartition, LeaderOffset],
-      messageHandler: MessageAndMetadata[K, V] => R
-    ): KafkaRDD[K, V, U, T, R] = {
-    val leaders = untilOffsets.map { case (tp, lo) =>
-        tp -> (lo.host, lo.port)
-    }.toMap
-
-    val offsetRanges = fromOffsets.map { case (tp, fo) =>
+      fromOffsets: Map[TopicPartition, Long],
+      untilOffsets: Map[TopicPartition, LeaderOffset],
+      messageHandler: ConsumerRecord[K, V] => R): NewKafkaRDD[K, V, R] = {
+    val offsetRanges = fromOffsets.map {
+      case (tp, fo) =>
         val uo = untilOffsets(tp)
-        OffsetRange(tp.topic, tp.partition, fo, uo.offset)
+        OffsetRange(tp.topic, tp.partition, fo, uo.offset, uo.host)
     }.toArray
 
-    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, offsetRanges, leaders, messageHandler)
+    new NewKafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, messageHandler)
   }
 }

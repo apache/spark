@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import org.apache.kafka.clients.consumer.ConsumerRecord
+
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.{classTag, ClassTag}
 
@@ -41,7 +43,6 @@ import org.apache.spark.util.NextIterator
   * configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers" to be set
   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
-  * @param messageHandler function for translating each message into the desired type
   */
 private[kafka]
 abstract class KafkaRDDBase[
@@ -52,9 +53,8 @@ T <: Decoder[_] : ClassTag,
 R: ClassTag] private[spark](
   sc: SparkContext,
   kafkaParams: Map[String, String],
-  val offsetRanges: Array[OffsetRange],
-  leaders: Map[TopicAndPartition, (String, Int)],
-  messageHandler: MessageAndMetadata[K, V] => R
+  offsetRanges: Array[OffsetRange],
+  leaders: Map[TopicAndPartition, (String, Int)]
 ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map { case (o, i) =>
@@ -112,18 +112,7 @@ R: ClassTag] private[spark](
     } else {
       Seq()
     }
-
   }
 
-  override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
-    val part = thePart.asInstanceOf[KafkaRDDPartition]
-    assert(part.fromOffset <= part.untilOffset, KafkaUtils.errBeginAfterEnd(part))
-    if (part.fromOffset == part.untilOffset) {
-      log.info(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
-        s"skipping ${part.topic} ${part.partition}")
-      Iterator.empty
-    } else {
-      new KafkaRDDIterator[K, V, U, T, R](part, context, kafkaParams, messageHandler)
-    }
-  }
 }
+
