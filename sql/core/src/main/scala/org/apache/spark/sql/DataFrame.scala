@@ -1510,12 +1510,13 @@ class DataFrame private[sql](
   }
 
   private def collect(needCallback: Boolean): Array[Row] = {
-    def execute(): Array[Row] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollectPublic()
+    val dfToExecute = withPlan(ReturnAnswer(logicalPlan))
+    def execute(): Array[Row] = dfToExecute.withNewExecutionId {
+      dfToExecute.queryExecution.executedPlan.executeCollectPublic()
     }
 
     if (needCallback) {
-      withCallback("collect", this)(_ => execute())
+      withCallback("collect", dfToExecute)(_ => execute())
     } else {
       execute()
     }

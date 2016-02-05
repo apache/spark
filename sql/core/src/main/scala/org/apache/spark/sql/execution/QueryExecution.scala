@@ -44,7 +44,7 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   lazy val sparkPlan: SparkPlan = {
     SQLContext.setActive(sqlContext)
-    sqlContext.planner.plan(ReturnAnswer(optimizedPlan)).next()
+    sqlContext.planner.plan(optimizedPlan).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be

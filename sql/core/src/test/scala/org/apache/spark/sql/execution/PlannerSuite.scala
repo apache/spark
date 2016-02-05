@@ -182,12 +182,6 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("terminal limits use CollectLimit") {
-    val query = testData.select('value).limit(2)
-    val planned = query.queryExecution.sparkPlan
-    assert(planned.isInstanceOf[CollectLimit])
-  }
-
   test("PartitioningCollection") {
     withTempTable("normal", "small", "tiny") {
       testData.registerTempTable("normal")
