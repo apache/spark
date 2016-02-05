@@ -60,3 +60,9 @@ case object FullOuter extends JoinType {
 case object LeftSemi extends JoinType {
   override def sql: String = "LEFT SEMI"
 }
+
+case class NaturalJoin(tpe: JoinType) extends JoinType {
+  require(Seq(Inner, LeftOuter, RightOuter, FullOuter).contains(tpe),
+    "Unsupported natural join type " + tpe)
+  override def sql: String = "NATURAL " + tpe.sql
+}
