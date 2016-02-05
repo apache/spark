@@ -610,6 +610,22 @@ object KafkaUtils {
       Set(topics.asScala.toSeq: _*)
     )
   }
+
+  private[kafka] def errBeginAfterEnd(part: KafkaRDDPartition): String =
+    s"Beginning offset ${part.fromOffset} is after the ending offset ${part.untilOffset} " +
+      s"for topic ${part.topic} partition ${part.partition}. " +
+      "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
+
+  private[kafka] def errRanOutBeforeEnd(part: KafkaRDDPartition): String =
+    s"Ran out of messages before reaching ending offset ${part.untilOffset} " +
+      s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+      " This should not happen, and indicates that messages may have been lost"
+
+  private[kafka] def errOvershotEnd(itemOffset: Long, part: KafkaRDDPartition): String =
+    s"Got ${itemOffset} > ending offset ${part.untilOffset} " +
+      s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+      " This should not happen, and indicates a message may have been skipped"
+
 }
 
 /**
