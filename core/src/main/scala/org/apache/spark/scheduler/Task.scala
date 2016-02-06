@@ -63,7 +63,7 @@ private[spark] abstract class Task[T](
   final def run(
       taskAttemptId: Long,
       attemptNumber: Int,
-      metricsSystem: MetricsSystem): T = {
+      metricsSystem: MetricsSystem): (T, Boolean) = {
     context = new TaskContextImpl(
       stageId,
       partitionId,
@@ -104,7 +104,8 @@ private[spark] abstract class Task[T](
     this.taskMemoryManager = taskMemoryManager
   }
 
-  def runTask(context: TaskContext): T
+  // Run a task returning the result and if all of the input was consumed.
+  def runTask(context: TaskContext): (T, Boolean)
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
@@ -138,10 +139,14 @@ private[spark] abstract class Task[T](
   /**
    * Collect the latest values of accumulators used in this task. If the task failed,
    * filter out the accumulators whose values should not be included on failures.
+   * If the task didn't read the full partition filter out accumulators who should only be updated
+   * on full partitions
    */
-  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
-    if (context != null) {
-      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+  def collectAccumulatorUpdates(taskFailed: Boolean, readFullPartition: Boolean):
+      Seq[AccumulableInfo] = {
+     if (context != null) {
+      context.taskMetrics.accumulatorUpdates().filter { a =>
+        (!taskFailed || a.countFailedValues) && (readFullPartition || !a.consistent)}
     } else {
       Seq.empty[AccumulableInfo]
     }

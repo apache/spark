@@ -707,11 +707,13 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   private def assertJsonStringEquals(expected: String, actual: String, metadata: String) {
     val formatJsonString = (json: String) => json.replaceAll("[\\s|]", "")
-    if (formatJsonString(expected) != formatJsonString(actual)) {
+    val formattedExpected = formatJsonString(expected)
+    val formattedResult = formatJsonString(actual)
+    if (formattedExpected != formattedResult) {
       // scalastyle:off
       // This prints something useful if the JSON strings don't match
-      println("=== EXPECTED ===\n" + pretty(parse(expected)) + "\n")
-      println("=== ACTUAL ===\n" + pretty(parse(actual)) + "\n")
+      println("=== EXPECTED ===\n" + pretty(parse(formattedExpected)) + "\n")
+      println("=== ACTUAL ===\n" + pretty(parse(formattedResult)) + "\n")
       // scalastyle:on
       throw new TestFailedException(s"$metadata JSON did not equal", 1)
     }
@@ -826,7 +828,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       countFailedValues: Boolean = false,
       metadata: Option[String] = None): AccumulableInfo =
     new AccumulableInfo(id, Some(s"Accumulable$id"), Some(s"delta$id"), Some(s"val$id"),
-      internal, countFailedValues, metadata)
+      internal, countFailedValues, false, metadata)
 
   /**
    * Creates a TaskMetrics object describing a task that read data from Hadoop (if hasHadoopInput is
@@ -905,7 +907,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 1,
@@ -913,7 +916,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  },
@@ -962,7 +966,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 1,
@@ -970,7 +975,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  }
@@ -1002,7 +1008,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 2,
@@ -1010,7 +1017,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 3,
@@ -1018,7 +1026,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta3",
       |        "Value": "val3",
       |        "Internal": true,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  }
@@ -1048,7 +1057,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 2,
@@ -1056,7 +1066,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 3,
@@ -1064,7 +1075,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta3",
       |        "Value": "val3",
       |        "Internal": true,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  }
@@ -1100,7 +1112,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 2,
@@ -1108,7 +1121,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 3,
@@ -1116,7 +1130,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta3",
       |        "Value": "val3",
       |        "Internal": true,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  },
@@ -1189,7 +1204,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 2,
@@ -1197,7 +1213,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 3,
@@ -1205,7 +1222,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta3",
       |        "Value": "val3",
       |        "Internal": true,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  },
@@ -1275,7 +1293,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta1",
       |        "Value": "val1",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 2,
@@ -1283,7 +1302,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta2",
       |        "Value": "val2",
       |        "Internal": false,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      },
       |      {
       |        "ID": 3,
@@ -1291,7 +1311,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "Update": "delta3",
       |        "Value": "val3",
       |        "Internal": true,
-      |        "Count Failed Values": false
+      |        "Count Failed Values": false,
+      |        "Consistent": false
       |      }
       |    ]
       |  },
@@ -1371,7 +1392,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 1,
@@ -1379,7 +1401,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        }
       |      ]
       |    },
@@ -1431,7 +1454,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 1,
@@ -1439,7 +1463,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        }
       |      ]
       |    },
@@ -1507,7 +1532,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 1,
@@ -1515,7 +1541,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        }
       |      ]
       |    },
@@ -1599,7 +1626,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta2",
       |          "Value": "val2",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 1,
@@ -1607,7 +1635,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Update": "delta1",
       |          "Value": "val1",
       |          "Internal": false,
-      |          "Count Failed Values": false
+      |          "Count Failed Values": false,
+      |          "Consistent": false
       |        }
       |      ]
       |    }
@@ -1774,56 +1803,64 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |          "Name": "$EXECUTOR_DESERIALIZE_TIME",
       |          "Update": 300,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 1,
       |          "Name": "$EXECUTOR_RUN_TIME",
       |          "Update": 400,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 2,
       |          "Name": "$RESULT_SIZE",
       |          "Update": 500,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 3,
       |          "Name": "$JVM_GC_TIME",
       |          "Update": 600,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 4,
       |          "Name": "$RESULT_SERIALIZATION_TIME",
       |          "Update": 700,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 5,
       |          "Name": "$MEMORY_BYTES_SPILLED",
       |          "Update": 800,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 6,
       |          "Name": "$DISK_BYTES_SPILLED",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 7,
       |          "Name": "$PEAK_EXECUTION_MEMORY",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 8,
@@ -1844,119 +1881,136 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |            }
       |          ],
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 9,
       |          "Name": "${shuffleRead.REMOTE_BLOCKS_FETCHED}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 10,
       |          "Name": "${shuffleRead.LOCAL_BLOCKS_FETCHED}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 11,
       |          "Name": "${shuffleRead.REMOTE_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 12,
       |          "Name": "${shuffleRead.LOCAL_BYTES_READ}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 13,
       |          "Name": "${shuffleRead.FETCH_WAIT_TIME}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 14,
       |          "Name": "${shuffleRead.RECORDS_READ}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 15,
       |          "Name": "${shuffleWrite.BYTES_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 16,
       |          "Name": "${shuffleWrite.RECORDS_WRITTEN}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 17,
       |          "Name": "${shuffleWrite.WRITE_TIME}",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 18,
       |          "Name": "${input.READ_METHOD}",
       |          "Update": "Hadoop",
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 19,
       |          "Name": "${input.BYTES_READ}",
       |          "Update": 2100,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 20,
       |          "Name": "${input.RECORDS_READ}",
       |          "Update": 21,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 21,
       |          "Name": "${output.WRITE_METHOD}",
       |          "Update": "Hadoop",
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 22,
       |          "Name": "${output.BYTES_WRITTEN}",
       |          "Update": 1200,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 23,
       |          "Name": "${output.RECORDS_WRITTEN}",
       |          "Update": 12,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        },
       |        {
       |          "ID": 24,
       |          "Name": "$TEST_ACCUM",
       |          "Update": 0,
       |          "Internal": true,
-      |          "Count Failed Values": true
+      |          "Count Failed Values": true,
+      |          "Consistent": false
       |        }
       |      ]
       |    }

@@ -1513,6 +1513,13 @@ data.map(g)
 
 </div>
 
+Spark's new experimental consistent accumulators also only have updates performed inside of actions, but also keep track of where the update is coming from so that multiple actions will not trigger double counting.
+
+{% highlight scala %}
+val accum = sc.consistentAccumulator(0)
+data.mapWithAccumulator{case (ui, x) => accum += (ui, x); f(x) }
+{% endhighlight %}
+
 # Deploying to a Cluster
 
 The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.

@@ -95,8 +95,17 @@ private[spark] class TaskContextImpl(
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = {
+  private[spark] override def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit = {
     taskMetrics.registerAccumulator(a)
   }
 
+  private var rddPartitionInfo: (Int, Int) = null
+
+  private[spark] def setRDDPartitionInfo(rddId: Int, index: Int) = {
+    rddPartitionInfo = (rddId, index)
+  }
+
+  private[spark] override def getRDDPartitionInfo(): (Int, Int) = {
+    rddPartitionInfo
+  }
 }

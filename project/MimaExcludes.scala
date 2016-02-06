@@ -201,6 +201,10 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.TransactionProcessor.org$apache$spark$streaming$flume$sink$Logging$$log_"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.flume.sink.TransactionProcessor.org$apache$spark$streaming$flume$sink$Logging$$log__=")
       ) ++ Seq(
+        // SPARK-12469 Add consistent accumulators to Spark
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$deserialized_="),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.Accumulable.org$apache$spark$Accumulable$$value__=")
+      ) ++ Seq(
         // SPARK-12689 Migrate DDL parsing to the newly absorbed parser
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLParser"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.execution.datasources.DDLException"),

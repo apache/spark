@@ -87,7 +87,7 @@ private[spark] object Accumulators extends Logging {
    * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
    */
   @GuardedBy("Accumulators")
-  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
+  val originals = mutable.Map[Long, WeakReference[GenericAccumulable[_, _, _]]]()
 
   private val nextId = new AtomicLong(0L)
 
@@ -109,9 +109,9 @@ private[spark] object Accumulators extends Logging {
    * of overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
    * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
    */
-  def register(a: Accumulable[_, _]): Unit = synchronized {
+  def register(a: GenericAccumulable[_, _, _]): Unit = synchronized {
     if (!originals.contains(a.id)) {
-      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
+      originals(a.id) = new WeakReference[GenericAccumulable[_, _, _]](a)
     }
   }
 
@@ -123,9 +123,9 @@ private[spark] object Accumulators extends Logging {
   }
 
   /**
-   * Return the [[Accumulable]] registered with the given ID, if any.
+   * Return the [[GenericAccumulable]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[Accumulable[_, _]] = synchronized {
+  def get(id: Long): Option[GenericAccumulable[_, _, _]] = synchronized {
     originals.get(id).map { weakRef =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       weakRef.get.getOrElse {

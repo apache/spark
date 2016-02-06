@@ -137,14 +137,16 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
         initialAccums)
       context.taskMetrics.registerAccumulator(acc1)
       context.taskMetrics.registerAccumulator(acc2)
-      override def runTask(tc: TaskContext): Int = 0
+      override def runTask(tc: TaskContext): (Int, Boolean) = (0, false)
     }
     // First, simulate task success. This should give us all the accumulators.
-    val accumUpdates1 = task.collectAccumulatorUpdates(taskFailed = false)
+    val accumUpdates1 = task.collectAccumulatorUpdates(taskFailed = false,
+      readFullPartition = false)
     val accumUpdates2 = (initialAccums ++ Seq(acc1, acc2)).map(TaskMetricsSuite.makeInfo)
     TaskMetricsSuite.assertUpdatesEquals(accumUpdates1, accumUpdates2)
     // Now, simulate task failures. This should give us only the accums that count failed values.
-    val accumUpdates3 = task.collectAccumulatorUpdates(taskFailed = true)
+    val accumUpdates3 = task.collectAccumulatorUpdates(taskFailed = true,
+      readFullPartition = false)
     val accumUpdates4 = (initialAccums ++ Seq(acc1)).map(TaskMetricsSuite.makeInfo)
     TaskMetricsSuite.assertUpdatesEquals(accumUpdates3, accumUpdates4)
   }

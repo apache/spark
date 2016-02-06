@@ -73,7 +73,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     val metrics = mock(classOf[TaskMetrics])
     when(metrics.accumulatorUpdates()).thenReturn(accumulatorUpdates.map { case (id, update) =>
       new AccumulableInfo(id, Some(""), Some(new LongSQLMetricValue(update)),
-        value = None, internal = true, countFailedValues = true)
+        value = None, internal = true, countFailedValues = true, consistent = false)
     }.toSeq)
     metrics
   }
