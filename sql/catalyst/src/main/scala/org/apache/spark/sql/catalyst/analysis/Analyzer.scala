@@ -216,15 +216,30 @@ class Analyzer(
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
       // Ensure all the expressions have been resolved.
-      case g: GroupingSets if g.expressions.exists(!_.resolved) => g
-      case x: GroupingSets =>
+      case g: GroupingSets if g.expressions.exists(!_.resolved) =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
-
+        // If users manually specify grouping__id in the aggregation expression, resolve it.
+        val aggExprs = g.aggregations.map(_.transform {
+          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.groupingIdName) => gid
+        }.asInstanceOf[NamedExpression])
+        g.copy(aggregations = aggExprs, groupByExprs = g.groupByExprs :+ gid)
+      case x: GroupingSets =>
+        // Find the grouping ID AttributeReference that has been added above
+        val (groupingID, groupByExprsWithoutGroupingID) = x.groupByExprs.partition {
+          case u: AttributeReference => resolver(u.name, VirtualColumn.groupingIdName)
+          case _ => false
+        }
+        // If found, use it; otherwise, create a new one.
+        val gid = if (groupingID.nonEmpty) {
+          groupingID.head.asInstanceOf[AttributeReference]
+        } else {
+          AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
+        }
         // Expand works by setting grouping expressions to null as determined by the bitmasks. To
         // prevent these null values from being used in an aggregate instead of the original value
         // we need to create new aliases for all group by expressions that will only be used for
         // the intended purpose.
-        val groupByAliases: Seq[Alias] = x.groupByExprs.map {
+        val groupByAliases: Seq[Alias] = groupByExprsWithoutGroupingID.map {
           case e: NamedExpression => Alias(e, e.name)()
           case other => Alias(other, other.toString)()
         }
@@ -256,7 +271,7 @@ class Analyzer(
         val groupByAttributes = groupByAliases.map(attributeMap(_))
 
         Aggregate(
-          groupByAttributes :+ VirtualColumn.groupingIdAttribute,
+          groupByAttributes :+ gid,
           aggregations,
           Expand(x.bitmasks, groupByAttributes, gid, child))
     }
