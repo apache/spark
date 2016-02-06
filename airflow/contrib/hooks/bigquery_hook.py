@@ -27,12 +27,15 @@ class BigQueryHook(GoogleCloudBaseHook):
     """
     conn_name_attr = 'bigquery_conn_id'
 
-    def __init__(self, scope='https://www.googleapis.com/auth/bigquery', bigquery_conn_id='bigquery_default'):
+    def __init__(self,
+                 scope='https://www.googleapis.com/auth/bigquery',
+                 bigquery_conn_id='bigquery_default',
+                 delegate_to=None):
         """
         :param scope: The scope of the hook.
         :type scope: string
         """
-        super(BigQueryHook, self).__init__(scope, bigquery_conn_id)
+        super(BigQueryHook, self).__init__(scope, bigquery_conn_id, delegate_to)
 
     def get_conn(self):
         """

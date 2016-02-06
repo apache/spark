@@ -19,6 +19,7 @@ class GoogleCloudStorageDownloadOperator(BaseOperator):
         object,
         filename,
         google_cloud_storage_conn_id='google_cloud_storage_default',
+        delegate_to=None,
         *args,
         **kwargs):
         """
@@ -35,14 +36,19 @@ class GoogleCloudStorageDownloadOperator(BaseOperator):
         :param google_cloud_storage_conn_id: The connection ID to use when
             connecting to Google cloud storage.
         :type google_cloud_storage_conn_id: string
+        :param delegate_to: The account to impersonate, if any.
+            For this to work, the service account making the request must have domain-wide delegation enabled.
+        :type delegate_to: string
         """
         super(GoogleCloudStorageDownloadOperator, self).__init__(*args, **kwargs)
         self.bucket = bucket
         self.object = object
         self.filename = filename
         self.google_cloud_storage_conn_id = google_cloud_storage_conn_id
+        self.delegate_to = delegate_to
 
     def execute(self, context):
         logging.info('Executing download: %s, %s, %s', self.bucket, self.object, self.filename)
-        hook = GoogleCloudStorageHook(google_cloud_storage_conn_id=self.google_cloud_storage_conn_id)
+        hook = GoogleCloudStorageHook(google_cloud_storage_conn_id=self.google_cloud_storage_conn_id,
+                                      delegate_to=self.delegate_to)
         print(hook.download(self.bucket, self.object, self.filename))
