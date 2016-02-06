@@ -87,12 +87,6 @@
       <groupId>org.apache.curator</groupId>
       <artifactId>curator-recipes</artifactId>
     </dependency>
-    <dependency>
-      <!-- direct dependency on version 1.10 -->
-      <groupId>commons-codec</groupId>
-      <artifactId>commons-codec</artifactId>
-      <version>1.10</version>
-    </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
          and inlined into spark-core jar -->
