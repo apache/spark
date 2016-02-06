@@ -215,6 +215,8 @@ class Analyzer(
         GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
+      // Ensure all the expressions have been resolved.
+      case g: GroupingSets if g.expressions.exists(!_.resolved) => g
       case x: GroupingSets =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 

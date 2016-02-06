@@ -2040,6 +2040,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("grouping sets") {
+    checkAnswer(
+      sql("select course, sum(earnings) as sum from courseSales group by course, earnings" +
+        " grouping sets((), (course), (course, earnings))" +
+        " order by course, sum"),
+      Row(null, 113000.0) ::
+        Row("Java", 20000.0) ::
+        Row("Java", 30000.0) ::
+        Row("Java", 50000.0) ::
+        Row("dotNET", 5000.0) ::
+        Row("dotNET", 10000.0) ::
+        Row("dotNET", 48000.0) ::
+        Row("dotNET", 63000.0) :: Nil
+    )
+  }
+
   test("cube") {
     checkAnswer(
       sql("select course, year, sum(earnings) from courseSales group by cube(course, year)"),
