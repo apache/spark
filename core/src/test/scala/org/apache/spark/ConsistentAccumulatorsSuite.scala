@@ -37,7 +37,6 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (210)
   }
 
-  /*
   test("map + cache + first + count") {
     sc = new SparkContext("local", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
@@ -164,5 +163,4 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     Accumulators.remove(accId)
     assert(!Accumulators.originals.get(accId).isDefined)
   }
-   */
 }
