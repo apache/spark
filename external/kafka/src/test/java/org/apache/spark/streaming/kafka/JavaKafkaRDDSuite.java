@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import scala.Tuple2;
 
 import kafka.common.TopicAndPartition;
@@ -146,6 +148,83 @@ public class JavaKafkaRDDSuite implements Serializable {
     Assert.assertEquals(count1, count2);
     Assert.assertEquals(count1, count3);
   }
+
+  @Test
+  public void testNewKafkaRDD() throws InterruptedException {
+    String topic1 = "topic1";
+    String topic2 = "topic2";
+
+    createTopicAndSendData(topic1);
+    createTopicAndSendData(topic2);
+
+    Map<String, String> kafkaParams = new HashMap<>();
+    kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());
+    kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+    kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"
+    );
+
+    OffsetRange[] offsetRanges = {
+            OffsetRange.create(topic1, 0, 0, 1),
+            OffsetRange.create(topic2, 0, 0, 1)
+    };
+
+    String[] hostAndPort = kafkaTestUtils.brokerAddress().split(":");
+    Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
+
+    JavaRDD<String> rdd1 = KafkaUtils.createNewRDD(
+            sc,
+            String.class,
+            String.class,
+            kafkaParams,
+            offsetRanges
+    ).map(
+            new Function<Tuple2<String, String>, String>() {
+              @Override
+              public String call(Tuple2<String, String> kv) {
+                return kv._2();
+              }
+            }
+    );
+
+    JavaRDD<String> rdd2 = KafkaUtils.createNewRDD(
+            sc,
+            String.class,
+            String.class,
+            String.class,
+            kafkaParams,
+            offsetRanges,
+            new Function<ConsumerRecord<String, String>, String>() {
+              @Override
+              public String call(ConsumerRecord<String, String> cr) {
+                return cr.value();
+              }
+            }
+    );
+
+    JavaRDD<String> rdd3 = KafkaUtils.createNewRDD(
+            sc,
+            String.class,
+            String.class,
+            String.class,
+            kafkaParams,
+            offsetRanges,
+            new Function<ConsumerRecord<String, String>, String>() {
+              @Override
+              public String call(ConsumerRecord<String, String> cr) {
+                return cr.value();
+              }
+            }
+    );
+
+    // just making sure the java user apis work; the scala tests handle logic corner cases
+    long count1 = rdd1.count();
+    long count2 = rdd2.count();
+    long count3 = rdd3.count();
+    Assert.assertTrue(count1 > 0);
+    Assert.assertEquals(count1, count2);
+    Assert.assertEquals(count1, count3);
+  }
+
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
