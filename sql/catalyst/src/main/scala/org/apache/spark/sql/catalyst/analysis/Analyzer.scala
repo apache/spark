@@ -414,8 +414,7 @@ class Analyzer(
             case UnresolvedAlias(f @ UnresolvedFunction(_, args, _), _) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
               UnresolvedAlias(child = f.copy(children = newChildren)) :: Nil
-            case a @ Alias(f @ UnresolvedFunction(_, args, _), name)
-                if containsStar(args) =>
+            case a @ Alias(f @ UnresolvedFunction(_, args, _), name) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
               Alias(child = f.copy(children = newChildren), name)(
                 isGenerated = a.isGenerated) :: Nil
@@ -703,7 +702,7 @@ class Analyzer(
         val aggregatedCondition =
           Aggregate(
             grouping,
-            Alias(havingCondition, "havingCondition")(isGenerated = Some(true)) :: Nil,
+            Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
             child)
         val resolvedOperator = execute(aggregatedCondition)
         def resolvedAggregateFilter =
@@ -730,7 +729,7 @@ class Analyzer(
         try {
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
           val aliasedOrdering =
-            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = Some(true)))
+            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -1161,7 +1160,7 @@ class Analyzer(
           leafNondeterministic.map { e =>
             val ne = e match {
               case n: NamedExpression => n
-              case _ => Alias(e, "_nondeterministic")(isGenerated = Some(true))
+              case _ => Alias(e, "_nondeterministic")(isGenerated = true)
             }
             new TreeNodeRef(e) -> ne
           }
