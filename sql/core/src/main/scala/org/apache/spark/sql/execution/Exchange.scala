@@ -383,15 +383,20 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     assert(requiredChildOrderings.length == children.length)
 
     // Ensure that the operator's children satisfy their output distribution requirements:
-    children = children.zip(requiredChildDistributions).map { case (child, distribution) =>
-      distribution match {
-        case _ if child.outputPartitioning.satisfies(distribution) =>
-          child
-        case BroadcastDistribution(f) =>
-          Broadcast(f, child)
-        case _ =>
-          Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
-      }
+    children = children.zip(requiredChildDistributions).map {
+      case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
+        child
+      case (child, BroadcastDistribution(f1)) =>
+        child match {
+          // The child is broadcasting the same variable: keep the child.
+          case Broadcast(f2, _) if f1 == f2 => child
+          // The child is broadcasting a different variable: replace the child.
+          case Broadcast(f2, src) => Broadcast(f1, src)
+          // Create a broadcast on top of the child.
+          case _ => Broadcast(f1, child)
+        }
+      case (child, distribution) =>
+        Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
     }
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),

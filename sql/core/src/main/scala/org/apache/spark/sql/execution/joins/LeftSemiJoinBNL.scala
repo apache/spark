@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -29,40 +29,32 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * for hash join.
  */
 case class LeftSemiJoinBNL(
-    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
+    left: SparkPlan, right: SparkPlan, condition: Option[Expression])
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
   override private[sql] lazy val metrics = Map(
     "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+  override def requiredChildDistribution: Seq[Distribution] = {
+    UnspecifiedDistribution :: BroadcastDistribution(_.toIndexedSeq) :: Nil
+  }
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
 
   override def output: Seq[Attribute] = left.output
-
-  /** The Streamed Relation */
-  override def left: SparkPlan = streamed
-
-  /** The Broadcast relation */
-  override def right: SparkPlan = broadcast
 
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastedRelation =
-      sparkContext.broadcast(broadcast.execute().map { row =>
-        numRightRows += 1
-        row.copy()
-      }.collect().toIndexedSeq)
+    val broadcastedRelation = right.executeBroadcast[IndexedSeq[InternalRow]]()
 
-    streamed.execute().mapPartitions { streamedIter =>
+    left.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
 
       streamedIter.filter(streamedRow => {

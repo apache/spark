@@ -227,8 +227,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     testSparkPlanMetrics(df, 2, Map(
       1L -> ("BroadcastHashJoin", Map(
         "number of left rows" -> 2L,
-        "number of right rows" -> 4L,
-        "number of output rows" -> 2L)))
+        "number of output rows" -> 2L)),
+      3L -> ("Broadcast", Map(
+        "number of rows" -> 4L)))
     )
   }
 
@@ -241,16 +242,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("BroadcastHashOuterJoin", Map(
         "number of left rows" -> 3L,
-        "number of right rows" -> 4L,
-        "number of output rows" -> 5L)))
+        "number of output rows" -> 5L)),
+      2L -> ("Broadcast", Map(
+        "number of rows" -> 4L)))
     )
 
     val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
     testSparkPlanMetrics(df3, 2, Map(
       0L -> ("BroadcastHashOuterJoin", Map(
-        "number of left rows" -> 3L,
         "number of right rows" -> 4L,
-        "number of output rows" -> 6L)))
+        "number of output rows" -> 6L)),
+      1L -> ("Broadcast", Map(
+        "number of rows" -> 3L)))
     )
   }
 
@@ -266,8 +269,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df, 3, Map(
         1L -> ("BroadcastNestedLoopJoin", Map(
           "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 2L,
-          "number of output rows" -> 12L)))
+          "number of output rows" -> 12L)),
+        3L -> ("Broadcast", Map(
+          "number of rows" -> 2L)))
       )
     }
   }
@@ -281,8 +285,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("BroadcastLeftSemiJoinHash", Map(
         "number of left rows" -> 2L,
-        "number of right rows" -> 4L,
-        "number of output rows" -> 2L)))
+        "number of output rows" -> 2L)),
+      2L -> ("Broadcast", Map(
+        "number of rows" -> 4L)))
     )
   }
 
@@ -311,8 +316,9 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("LeftSemiJoinBNL", Map(
         "number of left rows" -> 2L,
-        "number of right rows" -> 4L,
-        "number of output rows" -> 2L)))
+        "number of output rows" -> 2L)),
+      2L -> ("Broadcast", Map(
+        "number of rows" -> 4L)))
     )
   }
 

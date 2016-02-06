@@ -55,7 +55,7 @@ case class BroadcastHashOuterJoin(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = joinType match {
-    case RightOuter => longMetric("numLeftRows")
+    case RightOuter =>
       BroadcastDistribution(buildRelation) :: UnspecifiedDistribution :: Nil
     case LeftOuter =>
       UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
@@ -63,7 +63,7 @@ case class BroadcastHashOuterJoin(
       failOnWrongJoinType(x)
   }
 
-  private val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
+  private[this] val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
     HashedRelation(input.iterator, SQLMetrics.nullLongMetric, buildKeyGenerator, input.size)
   }
 

@@ -157,10 +157,6 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     child.execute()
   }
 
-  override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    child.doExecuteBroadcast[T]()
-  }
-
   override def supportCodegen: Boolean = false
 
   override def upstream(): RDD[InternalRow] = {
@@ -371,6 +367,8 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
     if (sqlContext.conf.wholeStageEnabled) {
       plan.transform {
         case plan: CodegenSupport if supportCodegen(plan) &&
+          // A broadcast operator cannot be at the top level.
+          !plan.isInstanceOf[Broadcast] &&
           // Whole stage codegen is only useful when there are at least two levels of operators that
           // support it (save at least one projection/iterator).
           (Utils.isTesting || plan.children.exists(supportCodegen)) =>
@@ -378,10 +376,10 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
             // The build side can't be compiled together
-            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
-              b.copy(left = apply(left))
-            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
-              b.copy(right = apply(right))
+            case b @ BroadcastHashJoin(_, _, BuildLeft, _, Broadcast(f, left), _) =>
+              b.copy(left = Broadcast(f, apply(left)))
+            case b @ BroadcastHashJoin(_, _, BuildRight, _, _, Broadcast(f, right)) =>
+              b.copy(right = Broadcast(f, apply(right)))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input

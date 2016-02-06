@@ -60,7 +60,7 @@ case class BroadcastHashJoin(
       UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
   }
 
-  private val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
+  private[this] val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
     HashedRelation(input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
   }
 
@@ -71,7 +71,6 @@ case class BroadcastHashJoin(
     val broadcastRelation = buildPlan.executeBroadcast[UnsafeHashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
-      logWarning(s"Using Hashed Relation size=${hashedRelation.estimatedSize}")
       hashedRelation match {
         case unsafe: UnsafeHashedRelation =>
           TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)

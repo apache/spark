@@ -20,7 +20,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 
 import org.apache.spark.broadcast
-import org.apache.spark.rdd.{EmptyRDD, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
 
 /**
- * A broadcaster collects transforms and broadcasts the result of an underlying spark plan.
+ * A broadcast collects, transforms and finally broadcasts the result of a transformed SparkPlan.
  *
  * TODO whole stage codegen.
  */
@@ -87,9 +87,7 @@ case class Broadcast(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    // Return an empty RDD.
-    // TODO this might violate the principle of least surprise.
-    new EmptyRDD[InternalRow](sparkContext)
+    child.execute() // TODO throw an Exception here?
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
