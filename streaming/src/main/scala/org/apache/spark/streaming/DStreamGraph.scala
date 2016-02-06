@@ -100,6 +100,13 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def getOutputStreams(): Array[DStream[_]] = this.synchronized { outputStreams.toArray }
 
+  def readyToShutdown() : Unit = this.synchronized {
+    this.synchronized {
+      outputStreams.foreach(_.readyToShutdown())
+    }
+    logDebug("Ready to shutdown")
+  }
+
   def getReceiverInputStreams(): Array[ReceiverInputDStream[_]] = this.synchronized {
     inputStreams.filter(_.isInstanceOf[ReceiverInputDStream[_]])
       .map(_.asInstanceOf[ReceiverInputDStream[_]])
@@ -129,6 +136,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
       outputStreams.foreach(_.clearMetadata(time))
     }
     logDebug("Cleared old metadata for time " + time)
+  }
+
+  def isCheckpointMissedLastTime() : Boolean = {
+    outputStreams.foldLeft(false)((value, next) => value || next.isCheckpointMissedLastTime)
   }
 
   def updateCheckpointData(time: Time) {

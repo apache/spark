@@ -100,6 +100,9 @@ abstract class DStream[T: ClassTag] (
   @transient
   private var restoredFromCheckpointData = false
 
+  @transient
+  private var _readyToShutdown = false
+
   // Reference to whole DStream graph
   private[streaming] var graph: DStreamGraph = null
 
@@ -347,7 +350,8 @@ abstract class DStream[T: ClassTag] (
             newRDD.persist(storageLevel)
             logDebug(s"Persisting RDD ${newRDD.id} for time $time to $storageLevel")
           }
-          if (checkpointDuration != null && (time - zeroTime).isMultipleOf(checkpointDuration)) {
+          if (checkpointDuration != null &&
+            ((time - zeroTime).isMultipleOf(checkpointDuration) || _readyToShutdown)) {
             newRDD.checkpoint()
             logInfo(s"Marking RDD ${newRDD.id} for time $time for checkpointing")
           }
@@ -488,6 +492,19 @@ abstract class DStream[T: ClassTag] (
     checkpointData.cleanup(time)
     dependencies.foreach(_.clearCheckpointData(time))
     logDebug("Cleared checkpoint data")
+  }
+
+  private[streaming] def readyToShutdown(): Unit = {
+    _readyToShutdown = true
+    dependencies.foreach(_.readyToShutdown())
+    logDebug("Ready to shutdown")
+  }
+
+  private[streaming] def isCheckpointMissedLastTime(): Boolean = {
+    val latestTime = generatedRDDs.keys.max
+    val itself = checkpointDuration!= null &&
+      !(latestTime - zeroTime).isMultipleOf(checkpointDuration)
+    dependencies.foldLeft(itself)((value, next) => value || next.isCheckpointMissedLastTime)
   }
 
   /**
