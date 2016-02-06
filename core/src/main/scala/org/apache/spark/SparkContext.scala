@@ -1304,15 +1304,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * :: Experimental ::
-   * Create an [[org.apache.spark.ConsistentAccumulator]] variable of a given type, which tasks can
+   * Create an [[org.apache.Accumulator]] variable of a given type, which tasks can
    * "add" values to using the `+=` method. Only the driver can access the accumulator's `value`.
    * Differs from `accumulator` in that the value is only incremented once per RDD/partition (so no
    * "double counting").
    */
   @Experimental
   def consistentAccumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]):
-      ConsistentAccumulator[T] = {
-    val acc = new ConsistentAccumulator(initialValue, param)
+      Accumulator[T] = {
+    val acc = new Accumulator(initialValue, param, None,
+      internal = false, countFailedValues = false, consistent = true)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -1326,8 +1327,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @Experimental
   def consistentAccumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
-    : ConsistentAccumulator[T] = {
-    val acc = new ConsistentAccumulator(initialValue, param, Some(name))
+    : Accumulator[T] = {
+    val acc = new Accumulator(initialValue, param, Some(name),
+      internal = false, countFailedValues = false, consistent = true)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

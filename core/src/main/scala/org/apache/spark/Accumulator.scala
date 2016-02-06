@@ -64,8 +64,9 @@ class Accumulator[T] private[spark] (
     param: AccumulatorParam[T],
     name: Option[String],
     internal: Boolean,
-    override val countFailedValues: Boolean = false)
-  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
+    override val countFailedValues: Boolean = false,
+    consistent: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues, consistent) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
     this(initialValue, param, name, false)
@@ -87,7 +88,7 @@ private[spark] object Accumulators extends Logging {
    * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
    */
   @GuardedBy("Accumulators")
-  val originals = mutable.Map[Long, WeakReference[GenericAccumulable[_, _, _]]]()
+  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
 
   private val nextId = new AtomicLong(0L)
 
@@ -109,9 +110,9 @@ private[spark] object Accumulators extends Logging {
    * of overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
    * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
    */
-  def register(a: GenericAccumulable[_, _, _]): Unit = synchronized {
+  def register(a: Accumulable[_, _]): Unit = synchronized {
     if (!originals.contains(a.id)) {
-      originals(a.id) = new WeakReference[GenericAccumulable[_, _, _]](a)
+      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
     }
   }
 
@@ -125,7 +126,7 @@ private[spark] object Accumulators extends Logging {
   /**
    * Return the [[GenericAccumulable]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[GenericAccumulable[_, _, _]] = synchronized {
+  def get(id: Long): Option[Accumulable[_, _]] = synchronized {
     originals.get(id).map { weakRef =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       weakRef.get.getOrElse {

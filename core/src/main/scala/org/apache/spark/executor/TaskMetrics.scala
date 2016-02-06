@@ -57,7 +57,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
   /**
    * All accumulators registered with this task.
    */
-  private val accums = new ArrayBuffer[GenericAccumulable[_, _, _]]
+  private val accums = new ArrayBuffer[Accumulable[_, _]]
   accums ++= initialAccums
 
   /**
@@ -312,7 +312,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    |        OTHER THINGS        |
    * ========================== */
 
-  private[spark] def registerAccumulator(a: GenericAccumulable[_, _, _]): Unit = {
+  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
     accums += a
   }
 
@@ -324,7 +324,7 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    * not the aggregated value across multiple tasks.
    */
   def accumulatorUpdates(): Seq[AccumulableInfo] = {
-    accums.map { a => a.toInfo(Some(a.localValue), None) }
+    accums.map { a => a.toInfo(Some(a.updateValue), None) }
   }
 
   // If we are reconstructing this TaskMetrics on the driver, some metrics may already be set.

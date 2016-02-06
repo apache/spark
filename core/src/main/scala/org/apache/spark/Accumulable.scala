@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.{ObjectInputStream, Serializable}
 
 import scala.collection.generic.Growable
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.scheduler.AccumulableInfo
@@ -53,13 +54,11 @@ import org.apache.spark.util.Utils
  *                          for system and time metrics like serialization time or bytes spilled,
  *                          and false for things with absolute values like number of input rows.
  *                          This should be used for internal metrics only.
- * @param process function on the accumulated data to the result (defaults to identity).
  * @param consistent if the current accumulator has [[ConsistentAccumulator]] behaviour.
  * @tparam R the full accumulated data
- * @tparam RR result type
  * @tparam T partial data that can be added in
  */
-class GenericAccumulable[RR, R, T] private[spark] (
+class Accumulable[R, T] private[spark] (
     val id: Long,
     // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
     @transient private val initialValue: R,
@@ -67,11 +66,61 @@ class GenericAccumulable[RR, R, T] private[spark] (
     val name: Option[String],
     internal: Boolean,
     private[spark] val countFailedValues: Boolean,
-    @transient private val process: R => RR,
     private[spark] val consistent: Boolean)
   extends Serializable {
 
+  private[spark] def this(
+      @transient initialValue: R,
+      param: AccumulableParam[R, T],
+      internal: Boolean,
+      countFailedValues: Boolean,
+      consistent: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, None, internal, countFailedValues, consistent)
+  }
+
+  def this(
+      @transient initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean,
+      countFailedValues: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues,
+      false /* consistent */)
+  }
+
+  def this(
+      @transient initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean,
+      countFailedValues: Boolean,
+      consistent: Boolean) = {
+    this(Accumulators.newId(), initialValue, param, name, internal, countFailedValues, consistent)
+  }
+
+  def this(
+      @transient initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String],
+      internal: Boolean) =
+    this(initialValue, param, name, internal, false /* countFailed */)
+
+  def this(
+      @transient initialValue: R,
+      param: AccumulableParam[R, T],
+      name: Option[String]) =
+    this(initialValue, param, name, false /* internal */)
+
+  def this(
+      @transient initialValue: R,
+      param: AccumulableParam[R, T]) =
+    this(initialValue, param, None)
+
   @volatile @transient private var value_ : R = initialValue // Current value on driver
+  // For consistent accumulators pending and processed updates
+  @volatile @transient private[spark] var pending = new mutable.HashMap[(Int, Int), R]()
+  @volatile @transient private var processed = new mutable.HashMap[Int, mutable.BitSet]()
+
   val zero = param.zero(initialValue) // Zero value to be passed to executors
   private var deserialized = false
 
@@ -102,33 +151,41 @@ class GenericAccumulable[RR, R, T] private[spark] (
    * [[Accumulators]] again. This method exists so that the caller can avoid passing the
    * same mutable instance around.
    */
-  private[spark] def copy(): GenericAccumulable[RR, R, T] = {
-    new GenericAccumulable[RR, R, T](id, initialValue, param, name, internal, countFailedValues,
-      process, consistent)
+  private[spark] def copy(): Accumulable[R, T] = {
+    new Accumulable[R, T](id, initialValue, param, name, internal, countFailedValues, consistent)
   }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def += (term: T) { value_ = param.addAccumulator(value_, term) }
+  def += (term: T) { add(term) }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def add(term: T) { value_ = param.addAccumulator(value_, term) }
+  def add(term: T) {
+    value_ = param.addAccumulator(value_, term)
+    if (consistent) {
+      val updateInfo = TaskContext.get().getRDDPartitionInfo()
+      val base = pending.getOrElse(updateInfo, zero)
+      pending(updateInfo) = param.addAccumulator(base, term)
+    }
+  }
 
   /**
-   * Merge two accumulable objects together
+   * Merge two accumulable accumulated values together
    *
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { value_ = param.addInPlace(value_, term)}
+  def ++= (term: R) {
+    value_ = param.addInPlace(value_, term)
+  }
 
   /**
-   * Merge two accumulable objects together
+   * Merge two accumulable accumulated values together
    *
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
@@ -136,11 +193,25 @@ class GenericAccumulable[RR, R, T] private[spark] (
   def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
+   * Merge another pending updates, checks to make sure that each pending update has not
+   * already been processed before updating.
+   */
+  private[spark] def merge(otherPending: mutable.HashMap[(Int, Int), R]) = {
+    otherPending.foreach{case ((rddId, splitId), v) =>
+      val splits = processed.getOrElseUpdate(rddId, new mutable.BitSet())
+      if (!splits.contains(splitId)) {
+          splits += splitId
+        value_ = param.addInPlace(value_, v)
+      }
+    }
+  }
+
+  /**
    * Access the accumulator's current value; only allowed on driver.
    */
-  def value: RR = {
+  def value: R = {
     if (!deserialized) {
-      process(value_)
+        value_
     } else {
       throw new UnsupportedOperationException("Can't read accumulator value in task")
     }
@@ -158,11 +229,28 @@ class GenericAccumulable[RR, R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Set the accumulator's value; only allowed on driver.
+   * Get the current update value for this accumulator. For consistent accumulators
+   * this consists of the pending updates, for regular accumulators this is just the
+   * aggregated values locally.
+   */
+  private[spark] def updateValue: Any = {
+    if (consistent) {
+      pending
+    } else {
+      localValue
+    }
+  }
+
+  /**
+   * Set the accumulator's value; only allowed on driver for non-consistent accumulators.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
-      value_ = newValue
+      if (!consistent) {
+        value_ = newValue
+      } else {
+        throw new UnsupportedOperationException("Can't assign value to a consistent accumulator.")
+      }
     } else {
       throw new UnsupportedOperationException("Can't assign accumulator value in task")
     }
@@ -201,56 +289,6 @@ class GenericAccumulable[RR, R, T] private[spark] (
   }
 
   override def toString: String = if (value_ == null) "null" else value_.toString
-}
-
-
-/**
- * A data type that can be accumulated, ie has an commutative and associative "add" operation,
- * but where the result type, `R`, may be different from the element type being added, `T`.
- *
- * You must define how to add data, and how to merge two of these together.  For some data types,
- * such as a counter, these might be the same operation. In that case, you can use the simpler
- * [[org.apache.spark.Accumulator]]. They won't always be the same, though -- e.g., imagine you are
- * accumulating a set. You will add items to the set, and you will union two sets together.
- *
- * @param initialValue initial value of accumulator
- * @param param helper object defining how to add elements of type `R` and `T`
- * @param name human-readable name for use in Spark's web UI
- * @param internal if this [[Accumulable]] is internal. Internal [[Accumulable]]s will be reported
- *                 to the driver via heartbeats. For internal [[Accumulable]]s, `R` must be
- *                 thread safe so that they can be reported correctly.
- * @param countFailedValues whether to accumulate values from failed tasks. This is set to true
- *                          for system and time metrics like serialization time or bytes spilled,
- *                          and false for things with absolute values like number of input rows.
- *                          This should be used for internal metrics only.
- * @tparam R the full accumulated data
- * @tparam T partial data that can be added in
- */
-class Accumulable[R, T] private[spark] (
-    initialValue: R,
-    param: AccumulableParam[R, T],
-    name: Option[String],
-    internal: Boolean,
-    countFailedValues: Boolean)
-  extends GenericAccumulable[R, R, T](Accumulators.newId(), initialValue, param, name, internal,
-      countFailedValues, identity, false) with Serializable {
-
-  private[spark] def this(
-      @transient initialValue: R, param: AccumulableParam[R, T], internal: Boolean,
-      countFailedValues: Boolean) = {
-    this(initialValue, param, None, internal, countFailedValues)
-  }
-
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String],
-      internal: Boolean) =
-    this(initialValue, param, name, internal, false /* countFailed */)
-
-  def this(@transient initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
-    this(initialValue, param, name, false /* internal */)
-
-  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
-    this(initialValue, param, None)
-
 }
 
 /**
