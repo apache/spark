@@ -785,11 +785,8 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(url)
         assert "runme_0" in response.data.decode('utf-8')
 
-        #clean up
-        self.dag_bash.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
-
     def tearDown(self):
-        pass
+        self.dag_bash.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
 
 
 class WebPasswordAuthTest(unittest.TestCase):
