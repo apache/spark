@@ -628,6 +628,11 @@ class WebUiTests(unittest.TestCase):
         app.config['TESTING'] = True
         self.app = app.test_client()
 
+        self.dagbag = models.DagBag(
+            dag_folder=DEV_NULL, include_examples=True)
+        self.dag_bash = self.dagbag.dags['example_bash_operator']
+        self.runme_0 = self.dag_bash.get_task('runme_0')
+
     def test_index(self):
         response = self.app.get('/', follow_redirects=True)
         assert "DAGs" in response.data.decode('utf-8')
@@ -737,12 +742,6 @@ class WebUiTests(unittest.TestCase):
             "dag_id=example_bash_operator&force=true&deps=true&"
             "execution_date={}&origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
-        url = (
-            "/admin/airflow/object/task_instances?"
-            "dag_id=example_bash_operator&"
-            "execution_date={}".format(DEFAULT_DATE_DS))
-        response = self.app.get(url)
-        assert "runme_0" in response.data.decode('utf-8')
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
         response = self.app.get("/admin/airflow/refresh_all")
@@ -768,6 +767,26 @@ class WebUiTests(unittest.TestCase):
         response = self.app.get(
             '/admin/airflow/dag_details?dag_id=example_branch_operator')
         assert "run_this_first" in response.data.decode('utf-8')
+
+    def test_fetch_task_instance(self):
+        url = (
+            "/admin/airflow/object/task_instances?"
+            "dag_id=example_bash_operator&"
+            "execution_date={}".format(DEFAULT_DATE_DS))
+        response = self.app.get(url)
+        assert "{}" in response.data.decode('utf-8')
+
+        TI = models.TaskInstance
+        ti = TI(
+            task=self.runme_0, execution_date=DEFAULT_DATE)
+        job = jobs.LocalTaskJob(task_instance=ti, force=True)
+        job.run()
+
+        response = self.app.get(url)
+        assert "runme_0" in response.data.decode('utf-8')
+
+        #clean up
+        self.dag_bash.clear(start_date=DEFAULT_DATE, end_date=datetime.now())
 
     def tearDown(self):
         pass
