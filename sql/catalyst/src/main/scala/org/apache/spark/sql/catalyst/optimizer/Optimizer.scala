@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
@@ -68,7 +68,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       ColumnPruning,
       // Operator combine
-      ProjectCollapsing,
+      CollapseRepartition,
+      CollapseProject,
       CombineFilters,
       CombineLimits,
       CombineUnions,
@@ -118,10 +119,13 @@ object SamplePushDown extends Rule[LogicalPlan] {
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case m @ MapPartitions(_, input, _, child: ObjectOperator)
-        if !input.isInstanceOf[Attribute] && m.input.dataType == child.outputObject.dataType =>
+    case m @ MapPartitions(_, deserializer, _, child: ObjectOperator)
+        if !deserializer.isInstanceOf[Attribute] &&
+          deserializer.dataType == child.outputObject.dataType =>
       val childWithoutSerialization = child.withObjectOutput
-      m.copy(input = childWithoutSerialization.output.head, child = childWithoutSerialization)
+      m.copy(
+        deserializer = childWithoutSerialization.output.head,
+        child = childWithoutSerialization)
   }
 }
 
@@ -322,7 +326,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
  * Combines two adjacent [[Project]] operators into one and perform alias substitution,
  * merging the expressions into one single expression.
  */
-object ProjectCollapsing extends Rule[LogicalPlan] {
+object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p @ Project(projectList1, Project(projectList2, child)) =>
@@ -387,6 +391,16 @@ object ProjectCollapsing extends Rule[LogicalPlan] {
         )
         agg.copy(aggregateExpressions = cleanedProjection)
       }
+  }
+}
+
+/**
+ * Combines adjacent [[Repartition]] operators by keeping only the last one.
+ */
+object CollapseRepartition extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case r @ Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
+      Repartition(numPartitions, shuffle, child)
   }
 }
 
@@ -857,6 +871,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Splits join condition expressions into three categories based on the attributes required
    * to evaluate them.
+   *
    * @return (canEvaluateInLeft, canEvaluateInRight, haveToEvaluateInBoth)
    */
   private def split(condition: Seq[Expression], left: LogicalPlan, right: LogicalPlan) = {
@@ -905,6 +920,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           (rightFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
         case FullOuter => f // DO Nothing for Full Outer Join
+        case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
       }
 
     // push down the join filter into sub query scanning if applicable
@@ -939,6 +955,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           Join(newLeft, newRight, LeftOuter, newJoinCond)
         case FullOuter => f
+        case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
       }
   }
 }

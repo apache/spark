@@ -2075,4 +2075,28 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       )
     }
   }
+
+  test("natural join") {
+    val df1 = Seq(("one", 1), ("two", 2), ("three", 3)).toDF("k", "v1")
+    val df2 = Seq(("one", 1), ("two", 22), ("one", 5)).toDF("k", "v2")
+    withTempTable("nt1", "nt2") {
+      df1.registerTempTable("nt1")
+      df2.registerTempTable("nt2")
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural join nt2 where k = \"one\""),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Nil)
+
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural left join nt2 order by v1, v2"),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Row("three", 3, null) :: Nil)
+
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural right join nt2 order by v1, v2"),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Nil)
+
+      checkAnswer(
+        sql("SELECT count(*) FROM nt1 natural full outer join nt2"),
+        Row(4) :: Nil)
+    }
+  }
 }
