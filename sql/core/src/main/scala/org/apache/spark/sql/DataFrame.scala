@@ -474,6 +474,7 @@ class DataFrame private[sql](
           val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
           Alias(Coalesce(Seq(leftCol, rightCol)), col)()
         }
+      case NaturalJoin(_) => sys.error("NaturalJoin with using clause is not supported.")
     }
     // The nullability of output of joined could be different than original column,
     // so we can only compare them by exprId
@@ -1682,21 +1683,13 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
-   * Interface for saving the content of the [[DataFrame]] out into external storage.
+   * Interface for saving the content of the [[DataFrame]] out into external storage or streams.
    *
    * @group output
    * @since 1.4.0
    */
   @Experimental
   def write: DataFrameWriter = new DataFrameWriter(this)
-
-  /**
-   * :: Experimental ::
-   * Interface for starting a streaming query that will continually output results to the specified
-   * external sink as new data arrives.
-   */
-  @Experimental
-  def streamTo: DataStreamWriter = new DataStreamWriter(this)
 
   /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
