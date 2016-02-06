@@ -127,7 +127,7 @@ class BooleanParam(Param):
 
     def _convertAndValidate(self, value):
         if type(value) != bool:
-            if value in {0, 1}:
+            if value in [0, 1]:
                 value = bool(value)
             else:
                 raise TypeError("Could not convert %s to a Boolean" % value)
@@ -148,7 +148,7 @@ class ListIntParam(Param):
 
         if not all(map(lambda v: type(v) == int, value)):
             try:
-                value = map(lambda v: int(v), value)
+                value = list(map(lambda v: int(v), value))
             except ValueError:
                 raise TypeError("Could not convert %s to a list of integers" % value)
         self._validate(value)
@@ -168,7 +168,7 @@ class ListFloatParam(Param):
 
         if not all(map(lambda v: type(v) == float, value)):
             try:
-                value = map(lambda v: float(v), value)
+                value = list(map(lambda v: float(v), value))
             except ValueError:
                 raise TypeError("Could not convert %s to a list of floats" % value)
         self._validate(value)
@@ -188,7 +188,7 @@ class ListStringParam(Param):
 
         if not all(map(lambda v: type(v) == str, value)):
             try:
-                value = map(lambda v: str(v), value)
+                value = list(map(lambda v: str(v), value))
             except ValueError:
                 raise TypeError("Could not convert %s to a list of strings" % value)
         self._validate(value)

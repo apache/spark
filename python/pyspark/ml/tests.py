@@ -107,14 +107,10 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_int(self):
         lr = LogisticRegression(maxIter=5.0)
         self.assertEqual(lr.getMaxIter(), 5)
-        lr.setMaxIter(5L)
-        self.assertEqual(lr.getMaxIter(), 5)
         self.assertRaises(TypeError, lambda: LogisticRegression(maxIter="notAnInt"))
 
     def test_float(self):
         lr = LogisticRegression(tol=1)
-        self.assertEqual(lr.getTol(), 1.0)
-        lr.setTol(1L)
         self.assertEqual(lr.getTol(), 1.0)
         self.assertRaises(TypeError, lambda: LogisticRegression(tol="notAFloat"))
 
