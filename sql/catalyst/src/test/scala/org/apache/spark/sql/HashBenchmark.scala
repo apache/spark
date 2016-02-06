@@ -29,9 +29,7 @@ import org.apache.spark.util.Benchmark
  */
 object HashBenchmark {
 
-  def test(name: String, schema: StructType, iters: Int): Unit = {
-    val numRows = 512
-
+  def test(name: String, schema: StructType, numRows: Int, iters: Int): Unit = {
     val generator = RandomDataGenerator.forType(schema, nullable = false).get
     val encoder = RowEncoder(schema)
     val attrs = schema.toAttributes
@@ -72,12 +70,12 @@ object HashBenchmark {
     val simple = new StructType().add("i", IntegerType)
     /*
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    Hash For simple:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    interpreted version                      531.53           252.51         1.00 X
-    codegen version                         1228.31           109.27         0.43 X
+    Hash For simple:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    interpreted version                       941 /  955        142.6           7.0       1.0X
+    codegen version                          1737 / 1775         77.3          12.9       0.5X
      */
-    test("simple", simple, 1024 * 256)
+    test("simple", simple, 1 << 13, 1 << 14)
 
     val normal = new StructType()
       .add("null", NullType)
@@ -96,12 +94,12 @@ object HashBenchmark {
       .add("timestamp", TimestampType)
     /*
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    Hash For normal:                   Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    interpreted version                     2187.63             0.96         1.00 X
-    codegen version                         1693.21             1.24         1.29 X
+    Hash For normal:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    interpreted version                      2209 / 2271          0.9        1053.4       1.0X
+    codegen version                          1887 / 2018          1.1         899.9       1.2X
      */
-    test("normal", normal, 1024 * 4)
+    test("normal", normal, 1 << 10, 1 << 11)
 
     val arrayOfInt = ArrayType(IntegerType)
     val array = new StructType()
@@ -109,12 +107,12 @@ object HashBenchmark {
       .add("arrayOfArray", ArrayType(arrayOfInt))
     /*
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    Hash For array:                    Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    interpreted version                     3290.06             0.08         1.00 X
-    codegen version                         6674.07             0.04         0.49 X
+    Hash For array:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    interpreted version                      1481 / 1529          0.1       11301.7       1.0X
+    codegen version                          2591 / 2636          0.1       19771.1       0.6X
      */
-    test("array", array, 512)
+    test("array", array, 1 << 8, 1 << 9)
 
     val mapOfInt = MapType(IntegerType, IntegerType)
     val map = new StructType()
@@ -122,11 +120,11 @@ object HashBenchmark {
       .add("mapOfMap", MapType(IntegerType, mapOfInt))
     /*
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    Hash For map:                      Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-    -------------------------------------------------------------------------------
-    interpreted version                    64709.73             0.00         1.00 X
-    codegen version                         8019.04             0.02         8.07 X
+    Hash For map:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    interpreted version                      1820 / 1861          0.0      444347.2       1.0X
+    codegen version                           205 /  223          0.0       49936.5       8.9X
      */
-    test("map", map, 256)
+    test("map", map, 1 << 6, 1 << 6)
   }
 }
