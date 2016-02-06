@@ -978,10 +978,11 @@ class TaskInstance(Base):
         elif force or self.state in State.runnable():
             HR = "\n" + ("-" * 80) + "\n"  # Line break
             tot_tries = task.retries + 1
-            if self.try_number == 0:
-                msg = "First run"
-            else:
-                msg = "Attempt {self.try_number} out of {tot_tries}"
+            # For reporting purposes, we report based on 1-indexed,
+            # not 0-indexed lists (i.e. Attempt 1 instead of
+            # Attempt 0 for the first attempt)
+            msg = "Attempt {} out of {}".format(self.try_number+1,
+                                                tot_tries)
             self.try_number += 1
             msg = msg.format(**locals())
             logging.info(HR + msg + HR)
@@ -992,6 +993,11 @@ class TaskInstance(Base):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
+                # Since we are just getting enqueued, we need to undo
+                # the try_number increment above and update the message as well
+                self.try_number -= 1
+                msg = "Queuing attempt {} out of {}".format(self.try_number+1,
+                                                            tot_tries)
                 self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
