@@ -156,7 +156,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Produces the result of the query as a broadcast variable.
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    throw new NotImplementedError(s"$nodeName does not implement doExecuteBroadcast:\n$this")
+    throw new NotImplementedError(s"$nodeName does not implement doExecuteBroadcast")
   }
 
   /**

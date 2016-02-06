@@ -31,7 +31,6 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
   }
 
   private lazy val myUpperCaseData = sqlContext.createDataFrame(
