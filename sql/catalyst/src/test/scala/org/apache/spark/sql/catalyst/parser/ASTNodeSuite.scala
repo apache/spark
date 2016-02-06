@@ -14,25 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql.catalyst.parser
 
-package org.apache.spark.deploy
+import org.apache.spark.SparkFunSuite
 
-import java.net.URI
-
-private[spark] case class ApplicationDescription(
-    name: String,
-    maxCores: Option[Int],
-    memoryPerExecutorMB: Int,
-    command: Command,
-    appUiUrl: String,
-    eventLogDir: Option[URI] = None,
-    // short name of compression codec used when writing event logs, if any (e.g. lzf)
-    eventLogCodec: Option[String] = None,
-    coresPerExecutor: Option[Int] = None,
-    // number of executors this application wants to start with,
-    // only used if dynamic allocation is enabled
-    initialExecutorLimit: Option[Int] = None,
-    user: String = System.getProperty("user.name", "<unknown>")) {
-
-  override def toString: String = "ApplicationDescription(" + name + ")"
+class ASTNodeSuite extends SparkFunSuite {
+  test("SPARK-13157 - remainder must return all input chars") {
+    val inputs = Seq(
+      ("add jar", "file:///tmp/ab/TestUDTF.jar"),
+      ("add jar", "file:///tmp/a@b/TestUDTF.jar"),
+      ("add jar", "c:\\windows32\\TestUDTF.jar"),
+      ("add jar", "some \nbad\t\tfile\r\n.\njar"),
+      ("ADD JAR", "@*#&@(!#@$^*!@^@#(*!@#"),
+      ("SET", "foo=bar"),
+      ("SET", "foo*)(@#^*@&!#^=bar")
+    )
+    inputs.foreach {
+      case (command, arguments) =>
+        val node = ParseDriver.parsePlan(s"$command $arguments", null)
+        assert(node.remainder === arguments)
+    }
+  }
 }
