@@ -481,6 +481,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a fixed-size sampled subset of this RDD in an array
    *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @param withReplacement whether sampling is done with replacement
    * @param num size of the returned sample
    * @param seed seed for the random number generator
@@ -836,6 +839,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collect(): Array[T] = withScope {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
@@ -1202,6 +1208,9 @@ abstract class RDD[T: ClassTag](
    * results from that partition to estimate the number of additional partitions needed to satisfy
    * the limit.
    *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @note due to complications in the internal implementation, this method will raise
    * an exception if called on an RDD of `Nothing` or `Null`.
    */
@@ -1263,6 +1272,9 @@ abstract class RDD[T: ClassTag](
    *   // returns Array(6, 5)
    * }}}
    *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
@@ -1282,6 +1294,9 @@ abstract class RDD[T: ClassTag](
    *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
    *   // returns Array(2, 3)
    * }}}
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    *
    * @param num k, the number of elements to return
    * @param ord the implicit ordering for T

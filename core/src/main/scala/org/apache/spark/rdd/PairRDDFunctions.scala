@@ -726,6 +726,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
    *          one value per key is preserved in the map returned)
+   *
+   * @note this method should only be used if the resulting data is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collectAsMap(): Map[K, V] = self.withScope {
     val data = self.collect()

@@ -327,6 +327,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collect(): JList[T] =
     rdd.collect().toSeq.asJava
@@ -465,6 +468,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
    * it will be slow if a lot of partitions are required. In that case, use collect() to get the
    * whole RDD instead.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def take(num: Int): JList[T] =
     rdd.take(num).toSeq.asJava
@@ -548,6 +554,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Returns the top k (largest) elements from this RDD as defined by
    * the specified Comparator[T] and maintains the order.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    * @param num k, the number of top elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
@@ -559,6 +568,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Returns the top k (largest) elements from this RDD using the
    * natural ordering for T and maintains the order.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    * @param num k, the number of top elements to return
    * @return an array of top elements
    */
@@ -570,6 +582,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Returns the first k (smallest) elements from this RDD as defined by
    * the specified Comparator[T] and maintains the order.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    * @param num k, the number of elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
@@ -601,6 +616,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Returns the first k (smallest) elements from this RDD using the
    * natural ordering for T while maintain the order.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    * @param num k, the number of top elements to return
    * @return an array of top elements
    */
@@ -634,6 +652,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * The asynchronous version of `collect`, which returns a future for
    * retrieving an array containing all of the elements in this RDD.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collectAsync(): JavaFutureAction[JList[T]] = {
     new JavaFutureActionWrapper(rdd.collectAsync(), (x: Seq[T]) => x.asJava)
@@ -642,6 +663,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * The asynchronous version of the `take` action, which returns a
    * future for retrieving the first `num` elements of this RDD.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def takeAsync(num: Int): JavaFutureAction[JList[T]] = {
     new JavaFutureActionWrapper(rdd.takeAsync(num), (x: Seq[T]) => x.asJava)

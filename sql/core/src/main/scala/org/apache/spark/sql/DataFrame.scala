@@ -1384,6 +1384,10 @@ class DataFrame private[sql](
 
   /**
    * Returns the first `n` rows.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @group action
    * @since 1.3.0
    */
