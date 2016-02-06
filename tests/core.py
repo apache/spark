@@ -737,6 +737,12 @@ class WebUiTests(unittest.TestCase):
             "dag_id=example_bash_operator&force=true&deps=true&"
             "execution_date={}&origin=/admin".format(DEFAULT_DATE_DS))
         response = self.app.get(url)
+        url = (
+            "/admin/airflow/object/task_instances?"
+            "dag_id=example_bash_operator&"
+            "execution_date={}".format(DEFAULT_DATE_DS))
+        response = self.app.get(url)
+        assert "runme_0" in response.data.decode('utf-8')
         response = self.app.get(
             "/admin/airflow/refresh?dag_id=example_bash_operator")
         response = self.app.get("/admin/airflow/refresh_all")

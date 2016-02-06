@@ -1554,7 +1554,6 @@ class Airflow(BaseView):
     @login_required
     @wwwutils.action_logging
     def task_instances(self):
-        print request.args
         session = settings.Session()
         dag_id = request.args.get('dag_id')
         dag = dagbag.get_dag(dag_id)
