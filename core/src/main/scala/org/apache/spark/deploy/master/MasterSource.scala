@@ -42,6 +42,6 @@ private[spark] class MasterSource(val master: Master) extends Source {
 
   // Gauge for waiting application numbers in cluster
   metricRegistry.register(MetricRegistry.name("waitingApps"), new Gauge[Int] {
-    override def getValue: Int = master.waitingApps.size
+    override def getValue: Int = master.apps.filter(_.state == ApplicationState.WAITING).size
   })
 }

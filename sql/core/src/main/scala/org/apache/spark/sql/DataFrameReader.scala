@@ -29,17 +29,17 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystQl}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[SQLContext.read]] to access this.
+ * key-value stores, etc) or data streams. Use [[SQLContext.read]] to access this.
  *
  * @since 1.4.0
  */
@@ -77,6 +77,27 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     this.extraOptions += (key -> value)
     this
   }
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
 
   /**
    * (Scala-specific) Adds input options for the underlying data source.
@@ -137,6 +158,30 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
+   * (e.g. external key-value stores).
+   *
+   * @since 2.0.0
+   */
+  def stream(): DataFrame = {
+    val resolved = ResolvedDataSource.createSource(
+      sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      providerName = source,
+      options = extraOptions.toMap)
+    DataFrame(sqlContext, StreamingRelation(resolved))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data streams that read from some path.
+   *
+   * @since 2.0.0
+   */
+  def stream(path: String): DataFrame = {
+    option("path", path).stream()
+  }
+
+  /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
    *
@@ -165,7 +210,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
-   *
    * @since 1.4.0
    */
   def jdbc(
@@ -252,6 +296,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal
+   * type</li>
    * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
    * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
    * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes

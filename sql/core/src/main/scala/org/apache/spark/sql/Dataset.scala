@@ -74,6 +74,7 @@ class Dataset[T] private[sql](
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
+  unresolvedTEncoder.validate(logicalPlan.output)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
@@ -85,7 +86,7 @@ class Dataset[T] private[sql](
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
-  private implicit def classTag = resolvedTEncoder.clsTag
+  private implicit def classTag = unresolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
@@ -346,7 +347,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).iterator.asScala
+    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
   }
 
@@ -366,7 +367,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (T) => Iterable[U] = x => f.call(x).asScala
+    val func: (T) => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
   }
 

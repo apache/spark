@@ -29,12 +29,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -97,10 +99,15 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (partitionAndNormalColumnAttrs ++ projects).toSeq
       }
 
+      // Prune the buckets based on the pushed filters that do not contain partitioning key
+      // since the bucketing key is not allowed to use the columns in partitioning key
+      val bucketSet = getBuckets(pushedFilters, t.getBucketSpec)
+
       val scan = buildPartitionedTableScan(
         l,
         partitionAndNormalColumnProjs,
         pushedFilters,
+        bucketSet,
         t.partitionSpec.partitionColumns,
         selectedPartitions)
 
@@ -124,11 +131,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val sharedHadoopConf = SparkHadoopUtil.get.conf
       val confBroadcast =
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
+      // Prune the buckets based on the filters
+      val bucketSet = getBuckets(filters, t.getBucketSpec)
       pruneFilterProject(
         l,
         projects,
         filters,
-        (a, f) => t.buildInternalScan(a.map(_.name).toArray, f, t.paths, confBroadcast)) :: Nil
+        (a, f) =>
+          t.buildInternalScan(a.map(_.name).toArray, f, bucketSet, t.paths, confBroadcast)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -150,6 +160,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       logicalRelation: LogicalRelation,
       projections: Seq[NamedExpression],
       filters: Seq[Expression],
+      buckets: Option[BitSet],
       partitionColumns: StructType,
       partitions: Array[Partition]): SparkPlan = {
     val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
@@ -174,7 +185,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           // assuming partition columns data stored in data files are always consistent with those
           // partition values encoded in partition directory paths.
           val dataRows = relation.buildInternalScan(
-            requiredDataColumns.map(_.name).toArray, filters, Array(dir), confBroadcast)
+            requiredDataColumns.map(_.name).toArray, filters, buckets, Array(dir), confBroadcast)
 
           // Merges data values with partition values.
           mergeWithPartitionValues(
@@ -249,6 +260,69 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     } else {
       dataRows
     }
+  }
+
+  // Get the bucket ID based on the bucketing values.
+  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
+  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
+    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
+    val bucketIdGeneration = UnsafeProjection.create(
+      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
+      bucketColumn :: Nil)
+
+    bucketIdGeneration(mutableRow).getInt(0)
+  }
+
+  // Get the bucket BitSet by reading the filters that only contains bucketing keys.
+  // Note: When the returned BitSet is None, no pruning is possible.
+  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
+  private def getBuckets(
+      filters: Seq[Expression],
+      bucketSpec: Option[BucketSpec]): Option[BitSet] = {
+
+    if (bucketSpec.isEmpty ||
+      bucketSpec.get.numBuckets == 1 ||
+      bucketSpec.get.bucketColumnNames.length != 1) {
+      // None means all the buckets need to be scanned
+      return None
+    }
+
+    // Just get the first because bucketing pruning only works when the column has one column
+    val bucketColumnName = bucketSpec.get.bucketColumnNames.head
+    val numBuckets = bucketSpec.get.numBuckets
+    val matchedBuckets = new BitSet(numBuckets)
+    matchedBuckets.clear()
+
+    filters.foreach {
+      case expressions.EqualTo(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      case expressions.EqualTo(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      // Because we only convert In to InSet in Optimizer when there are more than certain
+      // items. So it is possible we still get an In expression here that needs to be pushed
+      // down.
+      case expressions.In(a: Attribute, list)
+          if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
+        val hSet = list.map(e => e.eval(EmptyRow))
+        hSet.foreach(e => matchedBuckets.set(getBucketId(a, numBuckets, e)))
+      case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, null))
+      case _ =>
+    }
+
+    logInfo {
+      val selected = matchedBuckets.cardinality()
+      val percentPruned = (1 - selected.toDouble / numBuckets.toDouble) * 100
+      s"Selected $selected buckets out of $numBuckets, pruned $percentPruned% partitions."
+    }
+
+    // None means all the buckets need to be scanned
+    if (matchedBuckets.cardinality() == 0) None else Some(matchedBuckets)
   }
 
   protected def prunePartitions(
