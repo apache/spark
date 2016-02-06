@@ -92,7 +92,7 @@
     var layout = dagreD3.layout().rankDir(arrange).nodeSep(15).rankSep(15);
     var renderer = new dagreD3.Renderer();
     renderer.layout(layout).run(g, d3.select("#dig"));
-    apply_border_coloring(task_instances);
+    update_nodes_states(task_instances);
 
     d3.selectAll("g.node").on("click", function(d){
         task = tasks[d];
@@ -199,14 +199,14 @@
         }
     });
 
-    // Assigning css classes based on state to nodes for border coloring
-    function apply_border_coloring(task_instances) {
+    // Assigning css classes based on state to nodes
+    function update_nodes_states(task_instances) {
         $.each(task_instances, function(task_id, ti) {
           $('tspan').filter(function(index) { return $(this).text() === task_id; })
             .parent().parent().parent()
             .attr("class", "node enter " + ti.state)
             .attr("data-toggle", "tooltip")
-            .attr("title", function(d) {
+            .attr("data-original-title", function(d) {
               // Tooltip
               task = tasks[task_id];
               tt =  "Task_id: " + ti.task_id + "<br>";
@@ -280,7 +280,7 @@
                 "/admin/airflow/object/task_instances",
                 {dag_id : "{{ dag.dag_id }}", execution_date : "{{ execution_date }}"},
                 function(task_instances) {
-                    apply_border_coloring(JSON.parse(task_instances));
+                    update_nodes_states(JSON.parse(task_instances));
                 }
             );
         }
