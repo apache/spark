@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{BinaryNode, Broadcast, SparkPlan}
+import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -73,7 +73,7 @@ case class BroadcastHashOuterJoin(
     val numStreamedRows = longMetric("numStreamRows")
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastRelation = Broadcast.broadcastRelation[UnsafeHashedRelation](buildPlan)
+    val broadcastRelation = buildPlan.executeBroadcast[UnsafeHashedRelation]()
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()

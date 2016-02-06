@@ -68,9 +68,10 @@ case class BroadcastHashJoin(
     val numStreamedRows = longMetric("numStreamRows")
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastRelation = Broadcast.broadcastRelation[HashedRelation](buildPlan)
+    val broadcastRelation = buildPlan.executeBroadcast[UnsafeHashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
+      logWarning(s"Using Hashed Relation size=${hashedRelation.estimatedSize}")
       hashedRelation match {
         case unsafe: UnsafeHashedRelation =>
           TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
@@ -89,7 +90,7 @@ case class BroadcastHashJoin(
 
   override def doProduce(ctx: CodegenContext): String = {
     // create a name for HashRelation
-    val broadcastRelation = Broadcast.broadcastRelation[HashedRelation](buildPlan)
+    val broadcastRelation = buildPlan.executeBroadcast[UnsafeHashedRelation]()
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     relationTerm = ctx.freshName("relation")
     // TODO: create specialized HashRelation for single join key

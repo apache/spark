@@ -53,12 +53,12 @@ case class Broadcast(
   }
 
   @transient
-  private lazy val relation: broadcast.Broadcast[Any] = {
+  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     val numBuildRows = longMetric("numRows")
 
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    val future = Future {
+    Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
@@ -73,7 +73,6 @@ case class Broadcast(
         sparkContext.broadcast(f(input))
       }
     }(Broadcast.executionContext)
-    Await.result(future, timeout)
   }
 
   override def upstream(): RDD[InternalRow] = {
@@ -83,8 +82,8 @@ case class Broadcast(
   override def doProduce(ctx: CodegenContext): String = ""
 
   override protected def doPrepare(): Unit = {
-    // Materialize the relation.
-    relation
+    // Materialize the future.
+    relationFuture
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -93,16 +92,13 @@ case class Broadcast(
     new EmptyRDD[InternalRow](sparkContext)
   }
 
-  /** Get the constructed relation. */
-  def broadcastRelation[T]: broadcast.Broadcast[T] = relation.asInstanceOf[broadcast.Broadcast[T]]
+  override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    val result = Await.result(relationFuture, timeout)
+    result.asInstanceOf[broadcast.Broadcast[T]]
+  }
 }
 
 object Broadcast {
-  def broadcastRelation[T](plan: SparkPlan): broadcast.Broadcast[T] = plan match {
-    case builder: Broadcast => builder.broadcastRelation
-    case _ => sys.error("The given plan is not a Broadcast")
-  }
-
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("build-broadcast", 128))
 }

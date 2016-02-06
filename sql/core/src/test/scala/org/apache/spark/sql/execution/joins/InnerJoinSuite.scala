@@ -29,6 +29,11 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+  }
+
   private lazy val myUpperCaseData = sqlContext.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "A"),
@@ -88,7 +93,9 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      joins.BroadcastHashJoin(leftKeys, rightKeys, side, boundCondition, leftPlan, rightPlan)
+      val broadcastJoin =
+        joins.BroadcastHashJoin(leftKeys, rightKeys, side, boundCondition, leftPlan, rightPlan)
+      EnsureRequirements(sqlContext).apply(broadcastJoin)
     }
 
     def makeSortMergeJoin(
