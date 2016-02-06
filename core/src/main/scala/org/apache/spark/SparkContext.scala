@@ -1224,7 +1224,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] =
   {
-    val acc = new Accumulator(initialValue, param)
+    val acc = new Accumulator(initialValue, param, name = None, internal = false,
+      consistent = false)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
+   * values to using the `+=` method. Only the driver can access the accumulator's `value`.
+   *
+   * @param consistent If the accumulator should avoid re-counting multiple evaluations on the same
+   * RDD/partition. This adds some additional overhead for tracking and is an experimental feature.
+   */
+  def accumulator[T](initialValue: T, consistent: Boolean)(implicit param: AccumulatorParam[T]): Accumulator[T] =
+  {
+    val acc = new Accumulator(initialValue, param, name = None, internal = false,
+      consistent = consistent)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -1234,9 +1250,28 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
+  def accumulator[T](initialValue: T, name: String)
+    (implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name))
+    val acc = new Accumulator(initialValue, param, Some(name), internal = false,
+      consistent = false)
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    acc
+  }
+
+  /**
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
+   * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
+   * driver can access the accumulator's `value`.
+   *
+   * @param consistent If the accumulator should avoid re-counting multiple evaluations on the same
+   * RDD/partition. This adds some additional overhead for tracking and is an experimental feature.
+   */
+  def accumulator[T](initialValue: T, name: String, consistent: Boolean)
+    (implicit param: AccumulatorParam[T])
+    : Accumulator[T] = {
+    val acc = new Accumulator(initialValue, param, Some(name), internal = false,
+      consistent = consistent)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }
@@ -1300,38 +1335,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
     bc
-  }
-
-  /**
-   * :: Experimental ::
-   * Create an [[org.apache.Accumulator]] variable of a given type, which tasks can
-   * "add" values to using the `+=` method. Only the driver can access the accumulator's `value`.
-   * Differs from `accumulator` in that the value is only incremented once per RDD/partition (so no
-   * "double counting").
-   */
-  @Experimental
-  def consistentAccumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]):
-      Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, None,
-      internal = false, countFailedValues = false, consistent = true)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
-    acc
-  }
-
-  /**
-   * :: Experimental ::
-   * Create an [[org.apache.spark.ConsistentAccumulator]] variable of a given type, with a name for
-   * display in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only
-   * the driver can access the accumulator's `value`. Differs from `accumulator` in that the value
-   * is only incremented once per RDD/partition (so no "double counting").
-   */
-  @Experimental
-  def consistentAccumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
-    : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name),
-      internal = false, countFailedValues = false, consistent = true)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
-    acc
   }
 
   /**

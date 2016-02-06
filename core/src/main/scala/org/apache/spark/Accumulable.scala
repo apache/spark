@@ -190,14 +190,26 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term)}
+  def merge(term: R) { value_ = param.addInPlace(value_, term) }
+
+  /**
+   * Merge in pending updates for ac consistent accumulators or merge accumulated values for
+   * regular accumulators.
+   */
+  private[spark] def internalMerge(term: Any) {
+    if (!consistent) {
+      merge(term.asInstanceOf[R])
+    } else {
+      mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int), R]])
+    }
+  }
 
   /**
    * Merge another pending updates, checks to make sure that each pending update has not
    * already been processed before updating.
    */
-  private[spark] def merge(otherPending: mutable.HashMap[(Int, Int), R]) = {
-    otherPending.foreach{case ((rddId, splitId), v) =>
+  private[spark] def mergePending(term: mutable.HashMap[(Int, Int), R]) = {
+    term.foreach{case ((rddId, splitId), v) =>
       val splits = processed.getOrElseUpdate(rddId, new mutable.BitSet())
       if (!splits.contains(splitId)) {
           splits += splitId
@@ -277,6 +289,10 @@ class Accumulable[R, T] private[spark] (
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     value_ = zero
+    if (consistent) {
+      pending = new mutable.HashMap[(Int, Int), R]()
+      processed = new mutable.HashMap[Int, mutable.BitSet]()
+    }
     deserialized = true
 
     // Automatically register the accumulator when it is deserialized with the task closure.
