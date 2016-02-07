@@ -124,7 +124,7 @@ private[spark] object Accumulators extends Logging {
   }
 
   /**
-   * Return the [[GenericAccumulable]] registered with the given ID, if any.
+   * Return the [[Accumulable]] registered with the given ID, if any.
    */
   def get(id: Long): Option[Accumulable[_, _]] = synchronized {
     originals.get(id).map { weakRef =>

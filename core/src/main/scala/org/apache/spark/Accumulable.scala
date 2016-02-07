@@ -54,7 +54,13 @@ import org.apache.spark.util.Utils
  *                          for system and time metrics like serialization time or bytes spilled,
  *                          and false for things with absolute values like number of input rows.
  *                          This should be used for internal metrics only.
- * @param consistent if the current accumulator has [[ConsistentAccumulator]] behaviour.
+ * @param consistent if this [[Accumulable]] is consistent. Consistent [[Accumulable]]s will only
+ *                   have values added once for each RDD/Partition execution combination. This
+ *                   prevents double counting on reevaluation. Partial evaluation of a partition
+ *                   will not increment a consistent [[Accumulable]]. Consistent [[Accumulable]]s
+ *                   are currently experimental and the behaviour may change in future versions.
+ *                   Consistent [[Accumulable]]s can only be added to inside is
+ *                   [[MapPartitionsRDD]]s and are designed for counting "data properties".
  * @tparam R the full accumulated data
  * @tparam T partial data that can be added in
  */
@@ -140,7 +146,8 @@ class Accumulable[R, T] private[spark] (
 
   /**
    * If this [[Accumulable]] is consistent.
-   * Consistent accumulators will only be added to when a full partition is processed.
+   * Consistent [[Accumulable]]s track pending updates and reconcile them on the driver to avoid
+   * applying duplicate updates for the same RDD and partition.
    */
   private[spark] def isConsistent: Boolean = consistent
 
@@ -180,9 +187,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) {
-    value_ = param.addInPlace(value_, term)
-  }
+  def ++= (term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
    * Merge two accumulable accumulated values together
@@ -190,7 +195,7 @@ class Accumulable[R, T] private[spark] (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { value_ = param.addInPlace(value_, term) }
+  def merge(term: R) { value_ = param.addInPlace(value_, term)}
 
   /**
    * Merge in pending updates for ac consistent accumulators or merge accumulated values for
@@ -223,7 +228,7 @@ class Accumulable[R, T] private[spark] (
    */
   def value: R = {
     if (!deserialized) {
-        value_
+      value_
     } else {
       throw new UnsupportedOperationException("Can't read accumulator value in task")
     }
@@ -241,9 +246,9 @@ class Accumulable[R, T] private[spark] (
   def localValue: R = value_
 
   /**
-   * Get the current update value for this accumulator. For consistent accumulators
-   * this consists of the pending updates, for regular accumulators this is just the
-   * aggregated values locally.
+   * Get the updates for this accumulator that should be sent to the driver. For consistent
+   * accumulators this consists of the pending updates, for regular accumulators this is the same as
+   * `localValue`.
    */
   private[spark] def updateValue: Any = {
     if (consistent) {
@@ -254,7 +259,7 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Set the accumulator's value; only allowed on driver for non-consistent accumulators.
+   * Set the accumulator's value; only allowed on driver and only for non-consistent accumulators.
    */
   def value_= (newValue: R) {
     if (!deserialized) {
@@ -291,7 +296,6 @@ class Accumulable[R, T] private[spark] (
     value_ = zero
     if (consistent) {
       pending = new mutable.HashMap[(Int, Int), R]()
-      processed = new mutable.HashMap[Int, mutable.BitSet]()
     }
     deserialized = true
 

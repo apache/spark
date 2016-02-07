@@ -45,7 +45,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHad
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.input.{FixedLengthBinaryInputFormat, PortableDataStream, StreamInputFormat,
@@ -1224,10 +1224,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] =
   {
-    val acc = new Accumulator(initialValue, param, name = None, internal = false,
-      consistent = false)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
-    acc
+    accumulator(initialValue, consistent = false)
   }
 
   /**
@@ -1253,10 +1250,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    val acc = new Accumulator(initialValue, param, Some(name), internal = false,
-      consistent = false)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
-    acc
+    accumulator(initialValue, name, consistent = false)
   }
 
   /**

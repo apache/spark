@@ -1513,12 +1513,7 @@ data.map(g)
 
 </div>
 
-Spark's new experimental consistent accumulators also only have updates performed inside of actions, but also keep track of where the update is coming from so that multiple actions will not trigger double counting.
-
-{% highlight scala %}
-val accum = sc.consistentAccumulator(0)
-data.mapWithAccumulator{case (ui, x) => accum += (ui, x); f(x) }
-{% endhighlight %}
+Spark's new experimental consistent accumulators also only have updates performed inside of actions, but also keep track of where the update is coming from so that multiple actions will not trigger double counting. This experimental API is currently only available in Scala, to create a consistent accumulator simply specify `consistent = true` as the last parameter in your `accumulator` call.
 
 # Deploying to a Cluster
 
