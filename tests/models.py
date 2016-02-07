@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -45,6 +46,18 @@ class DagBagTest(unittest.TestCase):
 
         non_existing_dag_id = "non_existing_dag_id"
         assert dagbag.get_dag(non_existing_dag_id) is None
+
+    def test_process_file_that_contains_multi_bytes_char(self):
+        """
+        test that we're able to parse file that contains multi-byte char
+        """
+        from tempfile import NamedTemporaryFile
+        f = NamedTemporaryFile()
+        f.write('\u3042'.encode('utf8'))  # write multi-byte char (hiragana)
+        f.flush()
+
+        dagbag = models.DagBag(include_examples=True)
+        assert dagbag.process_file(f.name) == []
 
 
 class TaskInstanceTest(unittest.TestCase):
