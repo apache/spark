@@ -26,23 +26,9 @@ import org.apache.spark.{Partition, TaskContext}
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
-    // (TaskContext, rdd id, partition index, iterator)
-    f: (TaskContext, Int, Int, Iterator[T]) => Iterator[U],
+    f: (TaskContext, Int, Iterator[T]) => Iterator[U],  // (TaskContext, partition index, iterator)
     preservesPartitioning: Boolean = false)
   extends RDD[U](prev) {
-
-  def this(prev: RDD[T],
-      // (TaskContext, partition index, iterator)
-      f: (TaskContext, Int, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean) = {
-    this(prev, (t, _, p, i) => f(t, p, i), preservesPartitioning)
-  }
-
-  def this(prev: RDD[T],
-      // (TaskContext, partition index, iterator)
-      f: (TaskContext, Int, Iterator[T]) => Iterator[U]) = {
-    this(prev, (t, _, p, i) => f(t, p, i), false)
-  }
 
   override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
 
@@ -53,7 +39,7 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     // Set the ID of the RDD and partition being processed. We need to do this per
     // element since we chain the iterator transformations together
     val data = input.map{x => context.setRDDPartitionInfo(id, split.index); x}
-    f(context, id, split.index, data)
+    f(context, split.index, data)
   }
 
   override def clearDependencies() {
