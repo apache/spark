@@ -378,7 +378,9 @@ class DirectKafkaStreamSuite
     basicOffsetRecoveryTest(kafkaStream, topic, getOffsetRanges[String, String])
   }
 
-  test("offset recovery with new Kafka consumer API") {
+  // TODO: Renable when we move to Kafka 0.9.0.1. This test wouldn't pass until KAFKA-3029
+  // (Make class org.apache.kafka.common.TopicPartition Serializable) is resolved.
+  ignore("offset recovery with new Kafka consumer API") {
     val kafkaParams: Map[String, String] = populateNewParams()
     val topic = s"recovery-${Random.nextInt}"
     kafkaTestUtils.createTopic(topic)
