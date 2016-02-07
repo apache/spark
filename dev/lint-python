@@ -24,7 +24,7 @@ PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py ./dev/r
 PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
-SPHINXBUILD = sphinx-build
+SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
 SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 
 cd "$SPARK_ROOT_DIR"
@@ -99,11 +99,28 @@ fi
 rm "$PEP8_REPORT_PATH"
 
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.
-ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
-$(warn The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you do not have Sphinx installed, grab it from http://sphinx-doc.org/. Skipping doc checks for now)
+if hash "$SPHINXBUILD" 2> /dev/null; then
+  cd python/docs
+  make clean
+  export SPHINXOPTS=""
+  make linkcheck &>> "$SPHINX_REPORT_PATH"  || lint_status=1
+  make clean
+  export SPHINXOPTS="-a -W"
+  make html &>> "$SPHINX_REPORT_PATH" || lint_status=1
+  if [ "$lint_status" -ne 0 ]; then
+    echo "\033[0;31mpydoc checks failed.\033[0m"
+    cat "$SPHINX_REPORT_PATH"
+    echo "re-running make html to print full warning list"
+    export SPHINXOPTS="-a"
+    make clean
+    make html
+  else
+    echo "pydoc checks passed."
+  fi
+  cd ../..
 else
-# Run the doc tests
-endif
+  echo >&2 "The $SPHINXBUILD command was not found. Skipping pydoc checks for now"
+fi
 
 
 # for to_be_checked in "$PATHS_TO_CHECK"
