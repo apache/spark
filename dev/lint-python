@@ -109,11 +109,11 @@ if hash "$SPHINXBUILD" 2> /dev/null; then
   export SPHINXOPTS="-a -W"
   make html &>> "$SPHINX_REPORT_PATH" || lint_status=1
   if [ "$lint_status" -ne 0 ]; then
-    echo "\033[0;31mpydoc checks failed.\033[0m"
+    echo "pydoc checks failed."
     cat "$SPHINX_REPORT_PATH"
     echo "re-running make html to print full warning list"
-    export SPHINXOPTS="-a"
     make clean
+    export SPHINXOPTS="-a"
     make html
   else
     echo "pydoc checks passed."
