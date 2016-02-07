@@ -148,7 +148,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("test empty with new Kafka consumer API") {
     val topic = s"topicbasic-${Random.nextInt}"
     val (messages: Array[String], offsetRanges: Array[OffsetRange], kafkaParams: Map[String,
-      String]) = setupBasicTest(topic)
+      String]) = setupNewBasicTest(topic)
     val emptyRdd = KafkaUtils.createNewRDD[String, String](
       sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)))
 
@@ -158,7 +158,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   test("invalid offset ranges with new Kafka consumer API") {
     val topic = s"topicbasic-${Random.nextInt}"
     val (messages: Array[String], offsetRanges: Array[OffsetRange], kafkaParams: Map[String,
-      String]) = setupBasicTest(topic)
+      String]) = setupNewBasicTest(topic)
     // invalid offset ranges throw exceptions
     val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
     intercept[SparkException] {
