@@ -19,6 +19,8 @@
 package org.apache.spark.examples.mllib
 
 // $example on$
+import org.apache.spark.mllib.stat.KernelDensity
+import org.apache.spark.rdd.RDD
 // $example off$
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.{SparkConf, SparkContext}
@@ -32,10 +34,7 @@ object KernelDensityEstimationExample {
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-/*
-    // @note: todo
-
-    val data: RDD[Double] = ... // an RDD of sample data
+    val data: RDD[Double] = sc.parallelize(Seq(1,1,1,2,3,4,5,5,6,7,8,9,9)) // an RDD of sample data
 
     // Construct the density estimator with the sample data and a standard deviation for the Gaussian
     // kernels
@@ -45,8 +44,10 @@ object KernelDensityEstimationExample {
 
     // Find density estimates for the given values
     val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
-*/
+
     // $example off$
+
+    densities.foreach(print)
 
     sc.stop()
   }
