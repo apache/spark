@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import unittest
+import mock
 from datetime import datetime, time, timedelta
 from time import sleep
 
@@ -40,6 +41,10 @@ except ImportError:
     # Python 3
     import pickle
 
+class FakeDatetime(datetime):
+    "A fake replacement for datetime that can be mocked for testing."
+    def __new__(cls, *args, **kwargs):
+        return date.__new__(datetime, *args, **kwargs)
 
 def reset(dag_id=TEST_DAG_ID):
     session = Session()
@@ -128,6 +133,86 @@ class CoreTest(unittest.TestCase):
 
         assert dag_run is not None
         assert dag_run2 is None
+
+    def test_schedule_dag_start_end_dates(self):
+        """
+        Tests that an attempt to schedule a task after the Dag's end_date
+        does not succeed.
+        """
+        delta = timedelta(hours=1)
+        runs = 3
+        start_date = DEFAULT_DATE
+        end_date = start_date + (runs - 1) * delta
+        dag = DAG(TEST_DAG_ID+'test_schedule_dag_start_end_dates',
+                  start_date=start_date,
+                  end_date=end_date,
+                  schedule_interval=delta)
+
+        # Create and schedule the dag runs
+        dag_runs = []
+        scheduler = jobs.SchedulerJob(test_mode=True)
+        for i in range(runs):
+            date = dag.start_date + i * delta
+            task = models.BaseOperator(task_id='faketastic__%s' % i,
+                                       owner='Also fake',
+                                       start_date=date)
+            dag.tasks.append(task)
+            dag_runs.append(scheduler.schedule_dag(dag))
+
+        additional_dag_run = scheduler.schedule_dag(dag)
+
+        for dag_run in dag_runs:
+            assert dag_run is not None
+
+        assert additional_dag_run is None
+
+    @mock.patch('airflow.jobs.datetime', FakeDatetime)
+    def test_schedule_dag_no_end_date_up_to_today_only(self):
+        """
+        Tests that a Dag created without an end_date can only be scheduled up
+        to and including the current datetime.
+
+        For example, if today is 2016-01-01 and we are scheduling from a
+        start_date of 2015-01-01, only jobs up to, but not including
+        2016-01-01 should be scheduled.
+        """
+        from datetime import datetime
+        FakeDatetime.now = classmethod(lambda cls: datetime(2016, 1, 1))
+
+        session = settings.Session()
+        delta = timedelta(days=1)
+        start_date = DEFAULT_DATE
+        runs = 365
+        dag = DAG(TEST_DAG_ID+'test_schedule_dag_no_end_date_up_to_today_only',
+                  start_date=start_date,
+                  schedule_interval=delta)
+
+        dag_runs = []
+        scheduler = jobs.SchedulerJob(test_mode=True)
+        for i in range(runs):
+            # Create the DagRun
+            date = dag.start_date + i * delta
+            task = models.BaseOperator(task_id='faketastic__%s' % i,
+                                       owner='Also fake',
+                                       start_date=date)
+            dag.tasks.append(task)
+
+            # Schedule the DagRun
+            dag_run = scheduler.schedule_dag(dag)
+            dag_runs.append(dag_run)
+
+            # Mark the DagRun as complete
+            dag_run.state = utils.State.SUCCESS
+            session.merge(dag_run)
+            session.commit()
+
+        # Attempt to schedule an additional dag run (for 2016-01-01)
+        additional_dag_run = scheduler.schedule_dag(dag)
+
+        for dag_run in dag_runs:
+            assert dag_run is not None
+
+        assert additional_dag_run is None
 
     def test_confirm_unittest_mod(self):
         assert configuration.get('core', 'unit_test_mode')
