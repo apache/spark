@@ -334,3 +334,6 @@ epub_exclude_files = ['search.html']
 
 # If false, no index is generated.
 #epub_use_index = True
+
+# Skip kinses link
+linkcheck_ignore = [r'https://kinesis.us-east-1.amazonaws.com']
