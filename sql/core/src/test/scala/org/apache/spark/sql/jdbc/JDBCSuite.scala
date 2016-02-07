@@ -183,7 +183,7 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT * WHERE (simple predicates)") {
-    def checkPlan(df: DataFrame): DataFrame = {
+    def checkPushdown(df: DataFrame): DataFrame = {
       val parentPlan = df.queryExecution.executedPlan
       // Check if SparkPlan Filter is removed in a physical plan and
       // the plan only has PhysicalRDD to scan JDBCRelation.
@@ -191,25 +191,26 @@ class JDBCSuite extends SparkFunSuite
       assert(parentPlan.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
       df
     }
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID != 2")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME = 'fred'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME <=> 'fred'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME > 'fred'")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME != 'fred'")).collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME IN ('mary', 'fred')"))
       .collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')")).collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME NOT IN ('fred')"))
       .collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary'"))
+      .collect().size == 2)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID = 1 OR NAME = 'mary' "
       + "AND THEID = 2")).collect().size == 2)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
-    assert(checkPlan(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
+    assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
@@ -217,6 +218,18 @@ class JDBCSuite extends SparkFunSuite
     val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
     assert(df1.collect.toSet === Set(Row("mary", 2)))
     assert(df2.collect.toSet === Set(Row("mary", 2)))
+
+    def checkNotPushdown(df: DataFrame): DataFrame = {
+      val parentPlan = df.queryExecution.executedPlan
+      // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
+      // cannot compile given predicates.
+      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.Filter])
+      df
+    }
+    sql("SELECT * FROM foobar WHERE THEID < 1").explain(true)
+    sql("SELECT * FROM foobar WHERE (THEID + 1) < 2").explain(true)
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
+    assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
