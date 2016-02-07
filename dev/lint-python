@@ -105,6 +105,7 @@ if hash "$SPHINXBUILD" 2> /dev/null; then
   export SPHINXOPTS=""
   make linkcheck &>> "$SPHINX_REPORT_PATH"  || lint_status=1
   make clean
+  # Treat warnings as errors so we stop correctly
   export SPHINXOPTS="-a -W"
   make html &>> "$SPHINX_REPORT_PATH" || lint_status=1
   if [ "$lint_status" -ne 0 ]; then
