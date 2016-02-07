@@ -56,15 +56,15 @@ case class LeftSemiJoinBNL(
 
     left.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
+      val relation = broadcastedRelation.value
 
       streamedIter.filter(streamedRow => {
         numLeftRows += 1
         var i = 0
         var matched = false
 
-        while (i < broadcastedRelation.value.size && !matched) {
-          val broadcastedRow = broadcastedRelation.value(i)
-          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+        while (i < relation.size && !matched) {
+          if (boundCondition(joinedRow(streamedRow, relation(i)))) {
             matched = true
           }
           i += 1

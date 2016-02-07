@@ -98,13 +98,15 @@ case class BroadcastNestedLoopJoin(
       val rightNulls = new GenericMutableRow(right.output.size)
       val resultProj = genResultProjection
 
+      val relation = broadcastedRelation.value
+
       streamedIter.foreach { streamedRow =>
         var i = 0
         var streamRowMatched = false
         numStreamedRows += 1
 
-        while (i < broadcastedRelation.value.size) {
-          val broadcastedRow = broadcastedRelation.value(i)
+        while (i < relation.size) {
+          val broadcastedRow = relation(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>
               matchedRows += resultProj(joinedRow(streamedRow, broadcastedRow)).copy()
