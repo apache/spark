@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+import org.apache.spark._
 
 /**
  * A batch-oriented interface for consuming from Kafka.
@@ -59,7 +59,7 @@ class NewKafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
-      val pollTime = sc.getConf.getLong("spark.kafka.poll.time", KafkaUtils
+      val pollTime = SparkEnv.get.conf.getLong("spark.kafka.poll.time", KafkaUtils
         .DEFAULT_NEW_KAFKA_API_POLL_TIME)
       new NewKafkaRDDIterator[K, V, R](part, context, kafkaParams, messageHandler, pollTime)
     }
