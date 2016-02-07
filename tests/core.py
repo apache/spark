@@ -129,6 +129,38 @@ class CoreTest(unittest.TestCase):
         assert dag_run is not None
         assert dag_run2 is None
 
+    def test_schedule_dag_start_end_dates(self):
+        """
+        Tests that an attempt to schedule a task after the Dag's end_date
+        does not succeed.
+        """
+        delta = timedelta(hours=1)
+        runs = 3
+        start_date = DEFAULT_DATE
+        end_date = start_date + (runs - 1) * delta
+        dag = DAG(TEST_DAG_ID+'test_schedule_dag_start_end_dates',
+                  start_date=start_date,
+                  end_date=end_date,
+                  schedule_interval=delta)
+
+        # Create and schedule the dag runs
+        dag_runs = []
+        scheduler = jobs.SchedulerJob(test_mode=True)
+        for i in range(runs):
+            date = dag.start_date + i * delta
+            task = models.BaseOperator(task_id='faketastic__%s' % i,
+                                       owner='Also fake',
+                                       start_date=date)
+            dag.tasks.append(task)
+            dag_runs.append(scheduler.schedule_dag(dag))
+
+        additional_dag_run = scheduler.schedule_dag(dag)
+
+        for dag_run in dag_runs:
+            assert dag_run is not None
+
+        assert additional_dag_run is None
+
     def test_confirm_unittest_mod(self):
         assert configuration.get('core', 'unit_test_mode')
 
