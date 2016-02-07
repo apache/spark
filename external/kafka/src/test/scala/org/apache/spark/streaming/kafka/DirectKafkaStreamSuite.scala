@@ -42,8 +42,6 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
 
-import scala.util.Random
-
 class DirectKafkaStreamSuite
   extends SparkFunSuite
   with BeforeAndAfter
@@ -185,7 +183,7 @@ class DirectKafkaStreamSuite
   }
 
   test("receiving from largest starting offset") {
-    val topic = s"largest-${Random.nextInt}"
+    val topic = "largest"
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
     kafkaTestUtils.sendMessages(topic, data)
@@ -224,7 +222,7 @@ class DirectKafkaStreamSuite
   }
 
   test("receiving from largest starting offset, using new Kafka consumer API") {
-    val topic = s"largest-${Random.nextInt}"
+    val topic = "largest"
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
     kafkaTestUtils.sendMessages(topic, data)
@@ -278,7 +276,7 @@ class DirectKafkaStreamSuite
   }
 
   test("creating stream by offset") {
-    val topic = s"offset-${Random.nextInt}"
+    val topic = "offset"
     val topicPartition = TopicAndPartition(topic, 0)
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
@@ -312,7 +310,7 @@ class DirectKafkaStreamSuite
   }
 
   test("creating stream by offset, using new Kafka consumer API") {
-    val topic = s"offset-${Random.nextInt}"
+    val topic = "offset"
     val topicPartition = new TopicPartition(topic, 0)
     val data = Map("a" -> 10)
     kafkaTestUtils.createTopic(topic)
@@ -361,7 +359,7 @@ class DirectKafkaStreamSuite
 
   test("offset recovery") {
     val kafkaParams: Map[String, String] = populateParams()
-    val topic = s"recovery-${Random.nextInt}"
+    val topic = "recovery"
 
     // Setup the streaming context
     ssc = new StreamingContext(sparkConf, Milliseconds(100))
@@ -374,7 +372,7 @@ class DirectKafkaStreamSuite
 
   test("offset recovery with new Kafka consumer API") {
     val kafkaParams: Map[String, String] = populateNewParams()
-    val topic = s"recovery-${Random.nextInt}"
+    val topic = "recovery"
 
     // Setup the streaming context
     ssc = new StreamingContext(sparkConf, Milliseconds(100))
@@ -468,7 +466,7 @@ class DirectKafkaStreamSuite
   }
 
   test("Direct Kafka stream report input information") {
-    val topic = s"report-test-${Random.nextInt}"
+    val topic = "report-test"
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val kafkaParams: Map[String, String] = populateParams()
     val stream = withClue("Error creating direct stream") {
@@ -480,7 +478,7 @@ class DirectKafkaStreamSuite
   }
 
   test("Direct Kafka stream report input information with new Kafka consumer API") {
-    val topic = s"report-test-${Random.nextInt}"
+    val topic = "report-test"
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
     val kafkaParams: Map[String, String] = populateNewParams()
     val stream = withClue("Error creating direct stream") {
@@ -521,7 +519,7 @@ class DirectKafkaStreamSuite
   }
 
   test("using rate controller") {
-    val topic = s"backpressure-${Random.nextInt}"
+    val topic = "backpressure"
     val kafkaParams: Map[String, String] = populateParams()
     val batchIntervalMilliseconds = 100
     val estimator = new ConstantEstimator(100)
@@ -555,7 +553,7 @@ class DirectKafkaStreamSuite
   }
 
   test("using rate controller using new Kafka consumer API") {
-    val topic = s"backpressure-${Random.nextInt}"
+    val topic = "backpressure"
     val kafkaParams: Map[String, String] = populateNewParams()
     val batchIntervalMilliseconds = 100
     val estimator = new ConstantEstimator(100)
