@@ -36,7 +36,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)
 
-    val query = Intersect(table1, table2)
+    val query = Intersect(table1, table2, distinct = true)
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =

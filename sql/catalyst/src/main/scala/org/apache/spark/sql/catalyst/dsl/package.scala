@@ -272,7 +272,8 @@ package object dsl {
 
       def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
 
-      def intersect(otherPlan: LogicalPlan): LogicalPlan = Intersect(logicalPlan, otherPlan)
+      def intersect(otherPlan: LogicalPlan): LogicalPlan =
+        Intersect(logicalPlan, otherPlan, distinct = true)
 
       def unionAll(otherPlan: LogicalPlan): LogicalPlan = Union(logicalPlan, otherPlan)
 

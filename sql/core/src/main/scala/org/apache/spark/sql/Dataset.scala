@@ -594,8 +594,9 @@ class Dataset[T] private[sql](
    * and thus is not affected by a custom `equals` function defined on `T`.
    * @since 1.6.0
    */
-  def intersect(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Intersect)
-
+  def intersect(other: Dataset[T]): Dataset[T] = withPlan[T](other){ (left, right) =>
+    Intersect(left, right, distinct = true)
+  }
   /**
    * Returns a new [[Dataset]] that contains the elements of both this and the `other` [[Dataset]]
    * combined.

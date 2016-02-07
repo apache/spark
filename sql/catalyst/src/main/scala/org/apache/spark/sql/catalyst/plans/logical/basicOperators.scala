@@ -113,7 +113,10 @@ private[sql] object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+case class Intersect(
+    left: LogicalPlan,
+    right: LogicalPlan,
+    distinct: Boolean) extends SetOperation(left, right) {
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 

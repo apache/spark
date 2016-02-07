@@ -931,7 +931,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
-  test("INTERSECT") {
+  test("INTERSECT ALL/DISTINCT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       Row(1, "a") ::
@@ -940,6 +940,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(4, "d") :: Nil)
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM upperCaseData"), Nil)
+
+    checkAnswer(
+      sql("SELECT a FROM testData2 INTERSECT DISTINCT SELECT a FROM testData2"),
+      Row(1) :: Row(2) :: Row(3) :: Nil)
+    checkAnswer(
+      sql("SELECT a FROM testData2 INTERSECT ALL SELECT a FROM testData2"),
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Row(3) :: Row(3) ::Nil)
   }
 
   test("SET commands semantics using sql()") {

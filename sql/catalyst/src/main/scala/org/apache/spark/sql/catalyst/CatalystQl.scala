@@ -439,8 +439,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       Distinct(Union(nodeToPlan(left), nodeToPlan(right)))
     case Token("TOK_EXCEPT", left :: right :: Nil) =>
       Except(nodeToPlan(left), nodeToPlan(right))
-    case Token("TOK_INTERSECT", left :: right :: Nil) =>
-      Intersect(nodeToPlan(left), nodeToPlan(right))
+    case Token("TOK_INTERSECTALL", left :: right :: Nil) =>
+      Intersect(nodeToPlan(left), nodeToPlan(right), distinct = false)
+    case Token("TOK_INTERSECTDISTINCT", left :: right :: Nil) =>
+      Intersect(nodeToPlan(left), nodeToPlan(right), distinct = true)
 
     case _ =>
       noParseRule("Plan", node)
