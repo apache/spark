@@ -32,7 +32,8 @@ import java.util.Arrays;
 public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample").setMaster("local[*]");
+        SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample")
+                .setMaster("local[*]");
         JavaSparkContext jsc = new JavaSparkContext(conf);
         SQLContext sqlContext = new SQLContext(jsc);
 

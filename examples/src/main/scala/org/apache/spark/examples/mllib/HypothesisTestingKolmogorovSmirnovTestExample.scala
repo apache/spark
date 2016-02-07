@@ -18,20 +18,19 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object HypothesisTestingKolmogorovSmirnovTestExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("HypothesisTestingKolmogorovSmirnovTestExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("HypothesisTestingKolmogorovSmirnovTestExample")
+      .setMaster("local[*]")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // $example on$
     val data: RDD[Double] = sc.parallelize(Seq(0.1, 0.15, 0.2, 0.3, 0.25)) // an RDD of sample data
@@ -43,7 +42,7 @@ object HypothesisTestingKolmogorovSmirnovTestExample {
     // if our p-value indicates significance, we can reject the null hypothesis
 
     // perform a KS test using a cumulative distribution function of our making
-    val myCDF: Double => Double = Map(0.1 -> 0.2, 0.15 -> 0.6, 0.2 -> 0.05, 0.3 -> 0.05, 0.25 -> 0.1)
+    val myCDF = Map(0.1 -> 0.2, 0.15 -> 0.6, 0.2 -> 0.05, 0.3 -> 0.05, 0.25 -> 0.1)
     val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
     println(testResult2)
 

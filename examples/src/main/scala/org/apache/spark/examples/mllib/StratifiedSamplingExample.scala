@@ -33,9 +33,12 @@ object StratifiedSamplingExample {
     val sqlContext = new SQLContext(sc)
 
     // $example on$
-    // @note: I don't know how to use class "import org.apache.spark.rdd.PairRDDFunctions"
-    val data = sc.parallelize(Seq((1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f'))) // an RDD[(K, V)] of any key value pairs
-    val fractions =  Map(1 -> 0.1, 2 -> 0.6, 3 -> 0.3)// specify the exact fraction desired from each key
+    // an RDD[(K, V)] of any key value pairs
+    val data = sc.parallelize(
+      Seq((1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f')))
+
+    // specify the exact fraction desired from each key
+    val fractions = Map(1 -> 0.1, 2 -> 0.6, 3 -> 0.3)
 
     // Get an exact sample from each stratum
     val approxSample = data.sampleByKey(withReplacement = false, fractions)
@@ -45,7 +48,7 @@ object StratifiedSamplingExample {
 
     approxSample.foreach(println)
     exactSample.foreach(println)
-    
+
     sc.stop()
   }
 }

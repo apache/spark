@@ -18,11 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.random.RandomRDDs._
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object RandomDataGenerationExample {
 
@@ -30,7 +29,6 @@ object RandomDataGenerationExample {
 
     val conf = new SparkConf().setAppName("RandomDataGenerationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // $example on$
     // Generate a random double RDD that contains 1 million i.i.d. values drawn from the

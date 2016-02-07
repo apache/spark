@@ -29,8 +29,9 @@ if __name__ == "__main__":
     # $example on$
     sc = SparkContext(appName="CorrelationsExample") # SparkContext
 
-    seriesX = sc.parallelize([1.0, 2.0, 3.0, 3.0, 5.0]) # a series
-    seriesY = sc.parallelize([11.0, 22.0, 33.0, 33.0, 555.0]) # must have the same number of partitions and cardinality as seriesX
+    seriesX = sc.parallelize([1.0, 2.0, 3.0, 3.0, 5.0])  # a series
+    seriesY = sc.parallelize(
+        [11.0, 22.0, 33.0, 33.0, 555.0])  # must have the same number of partitions and cardinality as seriesX
 
     # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
     # method is not specified, Pearson's method will be used by default.
@@ -39,7 +40,7 @@ if __name__ == "__main__":
     v1 = np.array([1.0, 10.0, 100.0])
     v2 = np.array([2.0, 20.0, 200.0])
     v3 = np.array([5.0, 33.0, 366.0])
-    data = sc.parallelize([v1, v2, v3]) # an RDD of Vectors
+    data = sc.parallelize([v1, v2, v3])  # an RDD of Vectors
 
     # calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
     # If a method is not specified, Pearson's method will be used by default.

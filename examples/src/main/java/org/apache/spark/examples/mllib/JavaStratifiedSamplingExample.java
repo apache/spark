@@ -49,8 +49,12 @@ public class JavaStratifiedSamplingExample {
         list.add(new Tuple2(2, 'e'));
         list.add(new Tuple2(3,'f'));
 
-        JavaPairRDD<Integer, Character> data = jsc.parallelizePairs(list); // an RDD of any key value pairs JavaPairRDD<K, V>
-        Map<Integer, Object> fractions = new HashMap<>(); // specify the exact fraction desired from each key Map<K, Object>
+        // an RDD of any key value pairs JavaPairRDD<K, V>
+        JavaPairRDD<Integer, Character> data = jsc.parallelizePairs(list);
+
+        // specify the exact fraction desired from each key Map<K, Object>
+        Map<Integer, Object> fractions = new HashMap<>();
+
         fractions.put(1, 0.1);
         fractions.put(2, 0.6);
         fractions.put(3, 0.3);

@@ -18,12 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object SummaryStatisticsExample {
 
@@ -31,7 +30,6 @@ object SummaryStatisticsExample {
 
     val conf = new SparkConf().setAppName("SummaryStatisticsExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // $example on$
     val v1 = Vectors.dense(1.0, 10.0, 100.0)

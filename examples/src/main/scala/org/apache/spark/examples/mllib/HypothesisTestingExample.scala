@@ -18,6 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -25,8 +26,6 @@ import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.rdd.RDD
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object HypothesisTestingExample {
 
@@ -34,23 +33,23 @@ object HypothesisTestingExample {
 
     val conf = new SparkConf().setAppName("HypothesisTestingExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // $example on$
-    val vec: Vector = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25) // a vector composed of the frequencies of events
+    // a vector composed of the frequencies of events
+    val vec: Vector = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25)
 
-    // compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
-    // the test runs against a uniform distribution.
+    // compute the goodness of fit. If a second vector to test against is not supplied
+    // as a parameter, the test runs against a uniform distribution.
     val goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-    println(goodnessOfFitTestResult) // summary of the test including the p-value, degrees of freedom,
-    // test statistic, the method used, and the null hypothesis.
+    println(goodnessOfFitTestResult) // summary of the test including the p-value,
+    // degrees of freedom, test statistic, the method used, and the null hypothesis.
 
-    // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
-    val mat: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0)) // a contingency matrix
+    // a contingency matrix. Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
+    val mat: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
 
     // conduct Pearson's independence test on the input contingency matrix
     val independenceTestResult = Statistics.chiSqTest(mat)
-    println(independenceTestResult) // summary of the test including the p-value, degrees of freedom...
+    println(independenceTestResult) // summary of the test including the p-value, degrees of freedom
 
     val p1 = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
     val p2 = LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0))

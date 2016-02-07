@@ -18,12 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.stat.KernelDensity
 import org.apache.spark.rdd.RDD
 // $example off$
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.{SparkConf, SparkContext}
 
 object KernelDensityEstimationExample {
 
@@ -31,13 +30,13 @@ object KernelDensityEstimationExample {
 
     val conf = new SparkConf().setAppName("KernelDensityEstimationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // $example on$
-    val data: RDD[Double] = sc.parallelize(Seq(1,1,1,2,3,4,5,5,6,7,8,9,9)) // an RDD of sample data
+    // an RDD of sample data
+    val data: RDD[Double] = sc.parallelize(Seq(1, 1, 1, 2, 3, 4, 5, 5, 6, 7, 8, 9, 9))
 
-    // Construct the density estimator with the sample data and a standard deviation for the Gaussian
-    // kernels
+    // Construct the density estimator with the sample data and a standard deviation
+    // for the Gaussian kernels
     val kd = new KernelDensity()
       .setSample(data)
       .setBandwidth(3.0)

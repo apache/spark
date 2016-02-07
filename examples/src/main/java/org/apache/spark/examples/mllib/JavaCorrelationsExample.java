@@ -35,12 +35,15 @@ public class JavaCorrelationsExample {
     public static void main(String[] args) {
 
         SparkConf conf = new SparkConf().setAppName("JavaCorrelationsExample").setMaster("local[*]");
-
-        // $example on$
         JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        JavaDoubleRDD seriesX = jsc.parallelizeDoubles(Arrays.asList(new Double[]{1.0, 2.0, 3.0, 3.0, 5.0})); // a series
-        JavaDoubleRDD seriesY = jsc.parallelizeDoubles(Arrays.asList(new Double[]{11.0, 22.0, 33.0, 33.0, 555.0})); // must have the same number of partitions and cardinality as seriesX
+        // $example on$
+        JavaDoubleRDD seriesX = jsc.parallelizeDoubles(
+                Arrays.asList(new Double[]{1.0, 2.0, 3.0, 3.0, 5.0})); // a series
+
+        // must have the same number of partitions and cardinality as seriesX
+        JavaDoubleRDD seriesY = jsc.parallelizeDoubles(
+                Arrays.asList(new Double[]{11.0, 22.0, 33.0, 33.0, 555.0}));
 
         // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
         // method is not specified, Pearson's method will be used by default.
@@ -50,7 +53,9 @@ public class JavaCorrelationsExample {
         Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
         Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
         Vector v3 = Vectors.dense(5.0, 33.0, 366.0);
-        JavaRDD<Vector> data = jsc.parallelize(Arrays.asList(v1, v2, v3)); // note that each Vector is a row and not a column
+
+        // note that each Vector is a row and not a column
+        JavaRDD<Vector> data = jsc.parallelize(Arrays.asList(v1, v2, v3));
 
         // calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
         // If a method is not specified, Pearson's method will be used by default.
