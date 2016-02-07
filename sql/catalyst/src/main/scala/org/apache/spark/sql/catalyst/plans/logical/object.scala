@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -89,6 +90,22 @@ case class MapPartitions(
     serializer: Seq[NamedExpression],
     child: LogicalPlan) extends UnaryNode with ObjectOperator {
   override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
+}
+
+object PythonMapPartitions {
+  def apply(func: PythonFunction, schema: StructType, child: LogicalPlan): PythonMapPartitions = {
+    PythonMapPartitions(func, schema, schema.toAttributes, child)
+  }
+}
+
+case class PythonMapPartitions(
+    func: PythonFunction,
+    outputSchema: StructType,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override lazy val schema: StructType = outputSchema
+
+  override def expressions: Seq[Expression] = Nil
 }
 
 /** Factory for constructing new `AppendColumn` nodes. */
@@ -207,8 +224,6 @@ case class CoGroup(
     rightAttr: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectOperator {
-
-  override def producedAttributes: AttributeSet = outputSet
 
   override def deserializers: Seq[(Expression, Seq[Attribute])] =
     // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to resolve

@@ -1153,6 +1153,17 @@ class SQLTests(ReusedPySparkTestCase):
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
 
+    def test_dataset(self):
+        ds = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
+        process = lambda row: {"key": 33, "value": "abc"}
+        ds2 = ds.mapPartitions2(lambda iterator: map(process, iterator))
+
+        schema = StructType().add("key", IntegerType()).add("value", StringType())
+        ds3 = ds2.applySchema(schema)
+        result = ds3.select("key").collect()
+        self.assertEqual(result[0][0], 33)
+        self.assertEqual(result[1][0], 33)
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 

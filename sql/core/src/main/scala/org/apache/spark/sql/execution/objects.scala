@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.JavaConverters._
+
+import net.razorvine.pickle.{Pickler, Unpickler}
+
+import org.apache.spark.TaskContext
+import org.apache.spark.api.python.{PythonFunction, PythonRunner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.ObjectType
+import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.types.{BinaryType, ObjectType, StructType}
 
 /**
  * Helper functions for physical operators that work with user defined objects.
@@ -63,6 +70,76 @@ case class MapPartitions(
       val getObject = generateToObject(deserializer, child.output)
       val outputObject = generateToRow(serializer)
       func(iter.map(getObject)).map(outputObject)
+    }
+  }
+}
+
+case class PythonMapPartitions(
+    func: PythonFunction,
+    outputSchema: StructType,
+    output: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override def producedAttributes: AttributeSet = outputSet
+
+  override lazy val schema: StructType = outputSchema
+
+  private def isPickled(schema: StructType): Boolean = {
+    schema.length == 1 && schema.head.dataType == BinaryType &&
+      schema.head.metadata.contains("pickled")
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val inputRDD = child.execute().map(_.copy())
+    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
+    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    val childSchema = child.schema
+    val childIsPickled = isPickled(childSchema)
+    val outputIsPickled = isPickled(outputSchema)
+
+    inputRDD.mapPartitions { iter =>
+      val inputIterator = if (childIsPickled) {
+        iter.map(_.getBinary(0))
+      } else {
+        EvaluatePython.registerPicklers()  // register pickler for Row
+
+        val pickle = new Pickler
+
+        // Input iterator to Python: input rows are grouped so we send them in batches to Python.
+        // For each row, add it to the queue.
+        iter.grouped(100).map { inputRows =>
+          val toBePickled = inputRows.map { row =>
+            EvaluatePython.toJava(row, childSchema)
+          }.toArray
+          pickle.dumps(toBePickled)
+        }
+      }
+
+      val context = TaskContext.get()
+
+      // Output iterator for results from Python.
+      val outputIterator =
+        new PythonRunner(
+          func.command,
+          func.envVars,
+          func.pythonIncludes,
+          func.pythonExec,
+          func.pythonVer,
+          func.broadcastVars,
+          func.accumulator,
+          bufferSize,
+          reuseWorker
+        ).compute(inputIterator, context.partitionId(), context)
+
+      if (outputIsPickled) {
+        outputIterator.map(bytes => InternalRow(bytes))
+      } else {
+        val unpickle = new Unpickler
+        outputIterator.flatMap { pickedResult =>
+          val unpickledBatch = unpickle.loads(pickedResult)
+          unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+        }.map(result => EvaluatePython.fromJava(result, outputSchema).asInstanceOf[InternalRow])
+      }
     }
   }
 }

@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonFunction, PythonRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -1759,6 +1759,13 @@ class DataFrame private[sql](
     withNewExecutionId {
       PythonRDD.collectAndServe(javaToPython.rdd)
     }
+  }
+
+  protected[sql] def pythonMapPartitions(
+      func: PythonFunction,
+      schemaJson: String): DataFrame = withPlan {
+    val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
+    PythonMapPartitions(func, schema, logicalPlan)
   }
 
   /**
