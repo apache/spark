@@ -18,27 +18,26 @@
 package org.apache.spark.streaming.kafka
 
 import java.util.{Collections, Properties}
+
 import scala.collection.JavaConverters._
 import scala.reflect._
 
 import org.apache.kafka.clients.consumer.{ConsumerRecord, ConsumerRecords, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{SparkContext, Logging, TaskContext}
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.util.NextIterator
-
 
 private class NewKafkaRDDIterator[
 K: ClassTag,
 V: ClassTag,
 R: ClassTag] private[spark] (
-  sc: SparkContext,
   part: KafkaRDDPartition,
   context: TaskContext,
   kafkaParams: Map[String, String],
-  messageHandler: ConsumerRecord[K, V] => R) extends NextIterator[R] with Logging {
-
-    private val pollTime = sc.getConf.getLong("spark.kafka.poll.time", 1000L)
+  messageHandler: ConsumerRecord[K, V] => R,
+  pollTime: Long = KafkaUtils.DEFAULT_NEW_KAFKA_API_POLL_TIME) extends NextIterator[R] with
+  Logging {
 
     context.addTaskCompletionListener { context => closeIfNeeded() }
 

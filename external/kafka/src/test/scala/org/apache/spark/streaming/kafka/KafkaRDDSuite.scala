@@ -17,14 +17,13 @@
 
 package org.apache.spark.streaming.kafka
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.apache.kafka.common.TopicPartition
-
 import scala.util.Random
 
 import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.StringDecoder
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.TopicPartition
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._

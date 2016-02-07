@@ -23,7 +23,7 @@ import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 
-import org.apache.spark.{TaskContext, Logging, Partition, SparkContext}
+import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 /**
  * A batch-oriented interface for consuming from Kafka.

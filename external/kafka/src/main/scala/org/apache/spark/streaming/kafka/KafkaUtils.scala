@@ -21,11 +21,6 @@ import java.io.OutputStream
 import java.lang.{Integer => JInt, Long => JLong}
 import java.util.{List => JList, Map => JMap, Set => JSet}
 
-import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.consumer.ConsumerRecord
-import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.config.SslConfigs
-
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -34,8 +29,12 @@ import kafka.common.TopicAndPartition
 import kafka.message.MessageAndMetadata
 import kafka.serializer.{Decoder, DefaultDecoder, StringDecoder}
 import net.razorvine.pickle.{IObjectPickler, Opcodes, Pickler}
+import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.config.SslConfigs
 
-import org.apache.spark.{SSLOptions, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException, SSLOptions}
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.api.python.SerDeUtil
@@ -1011,6 +1010,8 @@ object KafkaUtils {
       kc.close()
     }
   }
+
+  private[kafka] val DEFAULT_NEW_KAFKA_API_POLL_TIME = 1000L
 
   // End - Kafka functions using the new Consumer API
 

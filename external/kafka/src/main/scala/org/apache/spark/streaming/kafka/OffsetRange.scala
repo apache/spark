@@ -75,7 +75,8 @@ final class OffsetRange private(
       this.topic == that.topic &&
         this.partition == that.partition &&
         this.fromOffset == that.fromOffset &&
-        this.untilOffset == that.untilOffset
+        this.untilOffset == that.untilOffset &&
+        this.leaderHost == that.leaderHost
     case _ => false
   }
 
