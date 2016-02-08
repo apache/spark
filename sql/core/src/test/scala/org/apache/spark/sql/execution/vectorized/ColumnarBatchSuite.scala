@@ -27,6 +27,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnarBatchSuite extends SparkFunSuite {
   test("Null Apis") {
@@ -439,10 +440,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c2.putDouble(1, 5.67)
 
       val s = column.getStruct(0)
-      assert(s.fields(0).getInt(0) == 123)
-      assert(s.fields(0).getInt(1) == 456)
-      assert(s.fields(1).getDouble(0) == 3.45)
-      assert(s.fields(1).getDouble(1) == 5.67)
+      assert(s.columns()(0).getInt(0) == 123)
+      assert(s.columns()(0).getInt(1) == 456)
+      assert(s.columns()(1).getDouble(0) == 3.45)
+      assert(s.columns()(1).getDouble(1) == 5.67)
 
       assert(s.getInt(0) == 123)
       assert(s.getDouble(1) == 3.45)
@@ -571,7 +572,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
-
   private def doubleEquals(d1: Double, d2: Double): Boolean = {
     if (d1.isNaN && d2.isNaN) {
       true
@@ -585,13 +585,23 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(r1.isNullAt(v._2) == r2.isNullAt(v._2), "Seed = " + seed)
       if (!r1.isNullAt(v._2)) {
         v._1.dataType match {
+          case BooleanType => assert(r1.getBoolean(v._2) == r2.getBoolean(v._2), "Seed = " + seed)
           case ByteType => assert(r1.getByte(v._2) == r2.getByte(v._2), "Seed = " + seed)
+          case ShortType => assert(r1.getShort(v._2) == r2.getShort(v._2), "Seed = " + seed)
           case IntegerType => assert(r1.getInt(v._2) == r2.getInt(v._2), "Seed = " + seed)
           case LongType => assert(r1.getLong(v._2) == r2.getLong(v._2), "Seed = " + seed)
+          case FloatType => assert(doubleEquals(r1.getFloat(v._2), r2.getFloat(v._2)),
+            "Seed = " + seed)
           case DoubleType => assert(doubleEquals(r1.getDouble(v._2), r2.getDouble(v._2)),
             "Seed = " + seed)
+          case t: DecimalType =>
+            val d1 = r1.getDecimal(v._2, t.precision, t.scale).toBigDecimal
+            val d2 = r2.getDecimal(v._2)
+            assert(d1.compare(d2) == 0, "Seed = " + seed)
           case StringType =>
             assert(r1.getString(v._2) == r2.getString(v._2), "Seed = " + seed)
+          case CalendarIntervalType =>
+            assert(r1.getInterval(v._2) === r2.get(v._2).asInstanceOf[CalendarInterval])
           case ArrayType(childType, n) =>
             val a1 = r1.getArray(v._2).array
             val a2 = r2.getList(v._2).toArray
@@ -605,6 +615,27 @@ class ColumnarBatchSuite extends SparkFunSuite {
                   i += 1
                 }
               }
+              case FloatType => {
+                var i = 0
+                while (i < a1.length) {
+                  assert(doubleEquals(a1(i).asInstanceOf[Float], a2(i).asInstanceOf[Float]),
+                    "Seed = " + seed)
+                  i += 1
+                }
+              }
+
+              case t: DecimalType =>
+                var i = 0
+                while (i < a1.length) {
+                  assert((a1(i) == null) == (a2(i) == null), "Seed = " + seed)
+                  if (a1(i) != null) {
+                    val d1 = a1(i).asInstanceOf[Decimal].toBigDecimal
+                    val d2 = a2(i).asInstanceOf[java.math.BigDecimal]
+                    assert(d1.compare(d2) == 0, "Seed = " + seed)
+                  }
+                  i += 1
+                }
+
               case _ => assert(a1 === a2, "Seed = " + seed)
             }
           case StructType(childFields) =>
@@ -644,10 +675,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
    * results.
    */
   def testRandomRows(flatSchema: Boolean, numFields: Int) {
-    // TODO: add remaining types. Figure out why StringType doesn't work on jenkins.
-    val types = Array(ByteType, IntegerType, LongType, DoubleType)
+    // TODO: Figure out why StringType doesn't work on jenkins.
+    val types = Array(
+      BooleanType, ByteType, FloatType, DoubleType,
+      IntegerType, LongType, ShortType, DecimalType.IntDecimal, new DecimalType(30, 10),
+      CalendarIntervalType)
     val seed = System.nanoTime()
-    val NUM_ROWS = 500
+    val NUM_ROWS = 200
     val NUM_ITERS = 1000
     val random = new Random(seed)
     var i = 0
@@ -682,7 +716,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("Random flat schema") {
-    testRandomRows(true, 10)
+    testRandomRows(true, 15)
   }
 
   test("Random nested schema") {

@@ -35,6 +35,8 @@ class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
     val startTime: Date,
     val endTime: Date,
+    val lastUpdated: Date,
+    val duration: Long,
     val sparkUser: String,
     val completed: Boolean = false)
 
@@ -55,6 +57,7 @@ class ExecutorSummary private[spark](
     val rddBlocks: Int,
     val memoryUsed: Long,
     val diskUsed: Long,
+    val totalCores: Int,
     val maxTasks: Int,
     val activeTasks: Int,
     val failedTasks: Int,

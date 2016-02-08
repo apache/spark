@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
 
@@ -25,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -86,13 +89,23 @@ public final class ColumnarBatch {
    * performance is lost with this translation.
    */
   public static final class Row extends InternalRow {
-    private int rowId;
+    protected int rowId;
     private final ColumnarBatch parent;
     private final int fixedLenRowSize;
+    private final ColumnVector[] columns;
 
+    // Ctor used if this is a top level row.
     private Row(ColumnarBatch parent) {
       this.parent = parent;
       this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
+      this.columns = parent.columns;
+    }
+
+    // Ctor used if this is a struct.
+    protected Row(ColumnVector[] columns) {
+      this.parent = null;
+      this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(columns.length);
+      this.columns = columns;
     }
 
     /**
@@ -103,23 +116,23 @@ public final class ColumnarBatch {
       parent.markFiltered(rowId);
     }
 
+    public ColumnVector[] columns() { return columns; }
+
     @Override
-    public final int numFields() {
-      return parent.numCols();
-    }
+    public final int numFields() { return columns.length; }
 
     @Override
     /**
      * Revisit this. This is expensive.
      */
     public final InternalRow copy() {
-      UnsafeRow row = new UnsafeRow(parent.numCols());
+      UnsafeRow row = new UnsafeRow(numFields());
       row.pointTo(new byte[fixedLenRowSize], fixedLenRowSize);
-      for (int i = 0; i < parent.numCols(); i++) {
+      for (int i = 0; i < numFields(); i++) {
         if (isNullAt(i)) {
           row.setNullAt(i);
         } else {
-          DataType dt = parent.schema.fields()[i].dataType();
+          DataType dt = columns[i].dataType();
           if (dt instanceof IntegerType) {
             row.setInt(i, getInt(i));
           } else if (dt instanceof LongType) {
@@ -140,70 +153,71 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) {
-      return parent.column(ordinal).getIsNull(rowId);
-    }
+    public final boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
 
     @Override
-    public final boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
 
     @Override
-    public final byte getByte(int ordinal) { return parent.column(ordinal).getByte(rowId); }
+    public final byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
 
     @Override
-    public final short getShort(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
 
     @Override
-    public final int getInt(int ordinal) {
-      return parent.column(ordinal).getInt(rowId);
-    }
+    public final int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
 
     @Override
-    public final long getLong(int ordinal) { return parent.column(ordinal).getLong(rowId); }
+    public final long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
 
     @Override
-    public final float getFloat(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
 
     @Override
-    public final double getDouble(int ordinal) {
-      return parent.column(ordinal).getDouble(rowId);
-    }
+    public final double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
 
     @Override
     public final Decimal getDecimal(int ordinal, int precision, int scale) {
-      throw new NotImplementedException();
+      if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        return Decimal.apply(getLong(ordinal), precision, scale);
+      } else {
+        // TODO: best perf?
+        byte[] bytes = getBinary(ordinal);
+        BigInteger bigInteger = new BigInteger(bytes);
+        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+        return Decimal.apply(javaDecimal, precision, scale);
+      }
     }
 
     @Override
     public final UTF8String getUTF8String(int ordinal) {
-      ColumnVector.Array a = parent.column(ordinal).getByteArray(rowId);
+      ColumnVector.Array a = columns[ordinal].getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     }
 
     @Override
     public final byte[] getBinary(int ordinal) {
-      throw new NotImplementedException();
+      ColumnVector.Array array = columns[ordinal].getByteArray(rowId);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
     }
 
     @Override
     public final CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
+      final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
+      final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
+      return new CalendarInterval(months, microseconds);
     }
 
     @Override
     public final InternalRow getStruct(int ordinal, int numFields) {
-      return parent.column(ordinal).getStruct(rowId);
+      return columns[ordinal].getStruct(rowId);
     }
 
     @Override
     public final ArrayData getArray(int ordinal) {
-      return parent.column(ordinal).getArray(rowId);
+      return columns[ordinal].getArray(rowId);
     }
 
     @Override
