@@ -18,16 +18,14 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import scala.collection.mutable.LinkedList
-import scala.reflect.ClassTag
-import scala.util.Random
-
 import akka.actor._
 import com.typesafe.config.ConfigFactory
-
 import org.apache.spark.SparkConf
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.akka.{ActorReceiver, AkkaUtils}
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+
+import scala.collection.mutable._
+import scala.util.Random
 
 case class SubscribeReceiver(receiverActor: ActorRef)
 case class UnsubscribeReceiver(receiverActor: ActorRef)
@@ -39,7 +37,7 @@ case class UnsubscribeReceiver(receiverActor: ActorRef)
 class FeederActor extends Actor {
 
   val rand = new Random()
-  var receivers: LinkedList[ActorRef] = new LinkedList[ActorRef]()
+  var receivers: MutableList[ActorRef] = new MutableList[ActorRef]()
 
   val strings: Array[String] = Array("words ", "may ", "count ")
 
@@ -63,7 +61,7 @@ class FeederActor extends Actor {
   def receive: Receive = {
     case SubscribeReceiver(receiverActor: ActorRef) =>
       println("received subscribe from %s".format(receiverActor.toString))
-      receivers = LinkedList(receiverActor) ++ receivers
+      receivers = MutableList(receiverActor) ++ receivers
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
       println("received unsubscribe from %s".format(receiverActor.toString))
