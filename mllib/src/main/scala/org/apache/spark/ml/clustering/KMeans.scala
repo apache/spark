@@ -241,6 +241,23 @@ class KMeans @Since("1.5.0") (
   @Since("2.0.0")
   def setInitialModel(value: KMeansModel): this.type = set(initialModel, value)
 
+  /** @group setParam */
+  @Since("2.0.0")
+  def setInitialModel(value: Model[_]): this.type = {
+    value match {
+      case m: KMeansModel => set(initialModel, m)
+      case other =>
+        logInfo(s"KMeansModel required but ${other.getClass.getSimpleName} found.")
+        this
+    }
+  }
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setInitialModel(clusterCenters: Array[Vector]): this.type = {
+    set(initialModel, new KMeansModel("initial model", new MLlibKMeansModel(clusterCenters)))
+  }
+
   @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
