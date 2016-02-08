@@ -1293,10 +1293,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-12982: Add table name validation in temp table registration") {
-    val rows = List(Row("foo"), Row("bar"))
-    val schema = StructType(Seq(StructField("col", StringType)))
-    val rdd = sparkContext.parallelize(rows)
-    val df = sqlContext.createDataFrame(rdd, schema)
+    val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     //invalid table name test as below
     intercept[AnalysisException](df.registerTempTable("t~"))
     //valid table name test as below
