@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
+import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -45,13 +46,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
-
   test("SPARK-12404: Datatype Helper Serializablity") {
     val ds = sparkContext.parallelize((
-          new Timestamp(0),
-          new Date(0),
-          java.math.BigDecimal.valueOf(1),
-          scala.math.BigDecimal(1)) :: Nil).toDS()
+      new Timestamp(0),
+      new Date(0),
+      java.math.BigDecimal.valueOf(1),
+      scala.math.BigDecimal(1)) :: Nil).toDS()
 
     ds.collect()
   }
@@ -523,7 +523,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("verify mismatching field names fail with a good error") {
     val ds = Seq(ClassData("a", 1)).toDS()
     val e = intercept[AnalysisException] {
-      ds.as[ClassData2].collect()
+      ds.as[ClassData2]
     }
     assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
@@ -553,9 +553,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       buildDataset(Row(Row("hello", null))).collect()
     }.getMessage
 
-    assert(message.contains(
-      "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
-    ))
+    assert(message.contains("Null value appeared in non-nullable field"))
   }
 
   test("SPARK-12478: top level null field") {
@@ -567,6 +565,58 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(ds1, DeepNestedStruct(NestedStruct(null)))
     checkAnswer(ds1.toDF(), Row(Row(null)))
   }
+
+  test("support inner class in Dataset") {
+    val outer = new OuterClass
+    OuterScopes.addOuterScope(outer)
+    val ds = Seq(outer.InnerClass("1"), outer.InnerClass("2")).toDS()
+    checkAnswer(ds.map(_.a), "1", "2")
+  }
+
+  test("grouping key and grouped value has field with same name") {
+    val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
+    val agged = ds.groupBy(d => ClassNullableData(d.a, null)).mapGroups {
+      case (key, values) => key.a + values.map(_.b).sum
+    }
+
+    checkAnswer(agged, "a3")
+  }
+
+  test("cogroup's left and right side has field with same name") {
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+    val right = Seq(ClassNullableData("a", 3), ClassNullableData("b", 4)).toDS()
+    val cogrouped = left.groupBy(_.a).cogroup(right.groupBy(_.a)) {
+      case (key, lData, rData) => Iterator(key + lData.map(_.b).sum + rData.map(_.b.toInt).sum)
+    }
+
+    checkAnswer(cogrouped, "a13", "b24")
+  }
+
+  test("give nice error message when the real number of fields doesn't match encoder schema") {
+    val ds = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
+
+    val message = intercept[AnalysisException] {
+      ds.as[(String, Int, Long)]
+    }.message
+    assert(message ==
+      "Try to map struct<a:string,b:int> to Tuple3, " +
+        "but failed as the number of fields does not line up.\n" +
+        " - Input schema: struct<a:string,b:int>\n" +
+        " - Target schema: struct<_1:string,_2:int,_3:bigint>")
+
+    val message2 = intercept[AnalysisException] {
+      ds.as[Tuple1[String]]
+    }.message
+    assert(message2 ==
+      "Try to map struct<a:string,b:int> to Tuple1, " +
+        "but failed as the number of fields does not line up.\n" +
+        " - Input schema: struct<a:string,b:int>\n" +
+        " - Target schema: struct<_1:string>")
+  }
+}
+
+class OuterClass extends Serializable {
+  case class InnerClass(a: String)
 }
 
 case class ClassData(a: String, b: Int)

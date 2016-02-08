@@ -124,7 +124,7 @@ private[spark] object Benchmark {
     }
     val best = runTimes.min
     val avg = runTimes.sum / iters
-    Result(avg / 1000000, num / (best / 1000), best / 1000000)
+    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
   }
 }
 
