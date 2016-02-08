@@ -49,17 +49,13 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  * are considered new or updated. These are replayed to create a new [[FsApplicationAttemptInfo]]
  * entry and update or create a matching [[FsApplicationHistoryInfo]] element in the list
  * of applications.
- * - Updated attempts are checked by scanning all known attempts, and if their file size
- * has changed, considering them as updated. A new [[FsApplicationAttemptInfo]] instance
- * is created copying over all the original data, the current size, and an incremented version
- * counter. Accordingly, the fact the attempt is updated is detected, but there is no replay
- * cost.
+ * - Updated attempts are also found in [[checkForLogs]] -- if the attempt's log file has grown, the
+ * [[FsApplicationAttemptInfo]] is replaced by another one with a larger log size.
  * - When [[updateProbe()]] is invoked to check if a loaded [[SparkUI]]
- * instance is out of date, the version counter of the application attempt loaded is
- * compared with that attempt's current value; the loaded UI is considered out of date
- * if its version is less than that of the current listing.
+ * instance is out of date, the log size of the cached instance is checked against the app last
+ * loaded by [[checkForLogs]].
  *
- * The use of a version counter, rather than simply relying on modification times, is needed to
+ * The use of log size, rather than simply relying on modification times, is needed to
  * address the following issues
  * - some filesystems do not appear to update the `modtime` value whenever data is flushed to
  * an open file output stream. Changes to the history may not be picked up.
@@ -631,22 +627,26 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
-   * The update probe of the is the generational counter of attempts:
-   * if the filesize is less than that of the latest attempt's size, it is out of date.
+   * Return true iff a newer version of the UI is available.  The check is based on whether the
+   * fileSize for the currently loaded UI is smaller than the file size the last time
+   * the logs were loaded.
+   *
+   * This is a very cheap operation -- the work of loading the new attempt was already done
+   * by [[checkForLogs]].
    * @param appId application to probe
    * @param attemptId attempt to probe
-   * @param fileSize the file size of the last attempt's logs
+   * @param prevFileSize the file size of the logs for the currently displayed UI
    */
   private def updateProbe(
       appId: String,
       attemptId: Option[String],
-      fileSize: Long)(): Boolean = {
+      prevFileSize: Long)(): Boolean = {
     lookup(appId, attemptId) match {
       case None =>
         logDebug(s"Application Attempt $appId/$attemptId not found")
         false
       case Some(latest) =>
-        fileSize < latest.fileSize
+        prevFileSize < latest.fileSize
     }
   }
 }

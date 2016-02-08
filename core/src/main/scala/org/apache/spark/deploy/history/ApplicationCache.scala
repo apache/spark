@@ -430,14 +430,15 @@ private[history] class CacheMetrics(prefix: String) extends Source {
    * This includes registering metrics with [[metricRegistry]]
    */
   private def init(): Unit = {
-    allMetrics.foreach(e =>
-      metricRegistry.register(MetricRegistry.name(prefix, e._1), e._2))
+    allMetrics.foreach { case (name, metric) =>
+      metricRegistry.register(MetricRegistry.name(prefix, name), metric)
+    }
   }
 
   override def toString: String = {
     val sb = new StringBuilder()
-    counters.foreach { e =>
-      sb.append(e._1).append(" = ").append(e._2.getCount).append('\n')
+    counters.foreach { case (name, counter) =>
+      sb.append(name).append(" = ").append(counter.getCount).append('\n')
     }
     sb.toString()
   }
@@ -605,7 +606,7 @@ private[history] object ApplicationCacheCheckFilterRelay extends Logging {
    * @param cache new cache
    */
   def setApplicationCache(cache: ApplicationCache): Unit = {
-    applicationCache.foreach( c => logDebug(s"Overwriting application cache $c"))
+    applicationCache.foreach( c => logWarning(s"Overwriting application cache $c"))
     applicationCache = Some(cache)
   }
 

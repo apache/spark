@@ -29,7 +29,6 @@ import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
-import org.json4s._
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
@@ -447,7 +446,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       getNumJobsRestful() should be(2)
     }
 
-    // and again, without any intermediate sleep, so relying on size changes rather than modtime
     d.count()
     d.count()
     eventually(stdTimeout, stdInterval) {
