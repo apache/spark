@@ -292,7 +292,7 @@ object JavaTypeInference {
           val setter = if (nullable) {
             constructor
           } else {
-            AssertNotNull(constructor, other.getName, fieldName, fieldType.toString)
+            AssertNotNull(constructor, Seq("currently no type path record in java"))
           }
           p.getWriteMethod.getName -> setter
         }.toMap
