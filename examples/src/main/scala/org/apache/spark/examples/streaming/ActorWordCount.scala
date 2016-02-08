@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import scala.collection.mutable.MutableList
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -39,7 +39,7 @@ case class UnsubscribeReceiver(receiverActor: ActorRef)
 class FeederActor extends Actor {
 
   val rand = new Random()
-  var receivers: MutableList[ActorRef] = new MutableList[ActorRef]()
+  var receivers: ArrayBuffer[ActorRef] = new ArrayBuffer[ActorRef]()
 
   val strings: Array[String] = Array("words ", "may ", "count ")
 
