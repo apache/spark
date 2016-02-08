@@ -22,6 +22,7 @@ import org.apache.spark.annotation.Experimental
 /**
  * :: Experimental ::
  * A handle to a query that is executing continuously in the background as new data arrives.
+ * All these methods are thread-safe.
  * @since 2.0.0
  */
 @Experimental
@@ -30,6 +31,7 @@ trait ContinuousQuery {
   /** Returns the name of the query */
   def name: String
 
+  /** Returns the SQLContext associated with `this` query */
   def sqlContext: SQLContext
 
   /** Whether the query is currently active or not */
@@ -59,7 +61,7 @@ trait ContinuousQuery {
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
-   * Stops the execution of this query if it is running.  This method blocks until the threads
+   * Stops the execution of this query if it is running. This method blocks until the threads
    * performing execution has stopped.
    */
   def stop(): Unit

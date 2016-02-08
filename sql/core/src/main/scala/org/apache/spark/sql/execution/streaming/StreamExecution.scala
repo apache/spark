@@ -59,7 +59,7 @@ class StreamExecution(
   private val sources =
     logicalPlan.collect { case s: StreamingRelation => s.source }
 
-  /** When false, signals to the microBatchThread that it should stop running. */
+  /** Defines the internal state of execution */
   @volatile
   private var state: State = INITIALIZED
 
@@ -112,12 +112,12 @@ class StreamExecution(
       state = ACTIVE
       postEvent(new QueryStarted(this)) // Assumption: Does not throw exception.
 
-      // Unblock starting thread, so that
+      // Unblock starting thread
       startLatch.countDown()
 
       // While active, repeatedly attempt to run batches.
       SQLContext.setActive(sqlContext)
-      findStartOffsets()
+      populateStartOffsets()
       logInfo(s"Stream running at $streamProgress")
       while (isActive) {
         attemptBatch()
@@ -138,10 +138,10 @@ class StreamExecution(
   }
 
   /**
-   * Get the start offsets to start the execution at the current offsets stored in the sink
+   * Populate the start offsets to start the execution at the current offsets stored in the sink
    * (i.e. avoid reprocessing data that we have already processed).
    */
-  private def findStartOffsets(): Unit = {
+  private def populateStartOffsets(): Unit = {
     sink.currentOffset match {
       case Some(c: CompositeOffset) =>
         val storedProgress = c.offsets
@@ -233,6 +233,8 @@ class StreamExecution(
    * batch. This method blocks until the thread stops running.
    */
   override def stop(): Unit = {
+    // Set the state to TERMINATED so that the batching thread knows that it was interrupted
+    // intentionally
     state = TERMINATED
     if (microBatchThread.isAlive) {
       microBatchThread.interrupt()
@@ -258,8 +260,9 @@ class StreamExecution(
   }
 
   override def awaitTermination(): Unit = {
-    require(state != INITIALIZED,
-      "Cannot wait for termination on a query that has not started")
+    if (state != INITIALIZED) {
+      throw new IllegalStateException("Cannot wait for termination on a query that has not started")
+    }
     terminationLatch.await()
     if (streamDeathCause != null) {
       throw streamDeathCause
@@ -267,8 +270,9 @@ class StreamExecution(
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    require(state != INITIALIZED,
-      "Cannot wait for termination on a query that has not started")
+    if (state != INITIALIZED) {
+      throw new IllegalStateException("Cannot wait for termination on a query that has not started")
+    }
     require(timeoutMs > 0, "Timeout has to be positive")
     terminationLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
     if (streamDeathCause != null) {

@@ -85,7 +85,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
   }
 
   /**
-   * A [[StreamAction]] to test the behavior of `StandingQuery.awaitTermination()`.
+   * A [[StreamAction]] to test the behavior of `ContinuousQuery.awaitTermination()`.
    *
    * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
    * @param timeoutMs         Timeout in milliseconds
@@ -110,7 +110,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
   object TestAwaitTermination {
 
     /**
-     * Tests the behavior of `StandingQuery.awaitTermination`.
+     * Tests the behavior of `ContinuousQuery.awaitTermination`.
      *
      * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
      * @param timeoutMs         Timeout in milliseconds

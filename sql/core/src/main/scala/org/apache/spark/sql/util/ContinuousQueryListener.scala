@@ -24,6 +24,7 @@ import org.apache.spark.sql.util.ContinuousQueryListener._
 /**
  * :: Experimental ::
  * Interface for listening to events related to [[ContinuousQuery ContinuousQueries]].
+ * @note The methods are not thread-safe as they may be called from different threads.
  */
 @Experimental
 abstract class ContinuousQueryListener {

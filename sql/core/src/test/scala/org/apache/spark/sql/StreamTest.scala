@@ -455,7 +455,7 @@ trait StreamTest extends QueryTest with Timeouts {
         testTimeout: Span = DEFAULT_TEST_TIMEOUT
       ): Unit = {
 
-        expectedBehavior match {
+      expectedBehavior match {
         case ExpectNotBlocked =>
           withClue("Got blocked when expected non-blocking.") {
             failAfter(testTimeout) {
