@@ -579,10 +579,9 @@ class SQLContext private[sql](
     DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
-
   /**
    * :: Experimental ::
-   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")
