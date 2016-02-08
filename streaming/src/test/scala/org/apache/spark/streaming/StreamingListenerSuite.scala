@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.convert.decorateAsScala._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future

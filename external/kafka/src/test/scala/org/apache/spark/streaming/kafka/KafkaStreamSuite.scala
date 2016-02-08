@@ -17,9 +17,7 @@
 
 package org.apache.spark.streaming.kafka
 
-import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.convert.decorateAsScala._
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
@@ -67,10 +65,9 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
-    val result = new ConcurrentHashMap[String, Long].asScala
+    val result = new mutable.HashMap[String, Long]()
     stream.map(_._2).countByValue().foreachRDD { r =>
-      val ret = r.collect()
-      ret.toMap.foreach { kv =>
+      r.collect().foreach { kv =>
         result.synchronized {
           val count = result.getOrElseUpdate(kv._1, 0) + kv._2
           result.put(kv._1, count)
@@ -81,7 +78,7 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
     ssc.start()
 
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(sent === result)
+      assert(result.synchronized { sent === result })
     }
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kinesis
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.convert.decorateAsScala._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps

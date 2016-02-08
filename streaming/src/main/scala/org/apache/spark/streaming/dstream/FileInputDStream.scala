@@ -20,7 +20,7 @@ package org.apache.spark.streaming.dstream
 import java.io.{IOException, ObjectInputStream}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.convert.decorateAsScala._
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
