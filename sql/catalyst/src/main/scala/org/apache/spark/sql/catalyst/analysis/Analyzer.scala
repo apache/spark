@@ -222,7 +222,12 @@ class Analyzer(
         val aggExprs = g.aggregations.map(_.transform {
           case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.groupingIdName) => gid
         }.asInstanceOf[NamedExpression])
-        g.copy(aggregations = aggExprs, groupByExprs = g.groupByExprs :+ gid)
+        if (aggExprs != g.aggregations) {
+          g.copy(aggregations = aggExprs, groupByExprs = g.groupByExprs :+ gid)
+        }
+        else {
+          g
+        }
       case x: GroupingSets =>
         // Find the grouping ID AttributeReference that has been added above
         val (groupingID, groupByExprsWithoutGroupingID) = x.groupByExprs.partition {
