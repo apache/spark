@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.receiver
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.collection.mutable
 import scala.language.reflectiveCalls
 
@@ -231,9 +233,9 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
   /** A listener for BlockGenerator that records the data in the callbacks */
   private class TestBlockGeneratorListener extends BlockGeneratorListener {
-    val pushedData = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
-    val addedData = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
-    val addedMetadata = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any]
+    val pushedData = new ConcurrentLinkedQueue[Any]
+    val addedData = new ConcurrentLinkedQueue[Any]
+    val addedMetadata = new ConcurrentLinkedQueue[Any]
     @volatile var onGenerateBlockCalled = false
     @volatile var onAddDataCalled = false
     @volatile var onPushBlockCalled = false
