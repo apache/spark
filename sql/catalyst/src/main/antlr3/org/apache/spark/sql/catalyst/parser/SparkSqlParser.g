@@ -2223,9 +2223,8 @@ setOperator
     : KW_UNION KW_ALL -> ^(TOK_UNIONALL)
     | KW_UNION KW_DISTINCT? -> ^(TOK_UNIONDISTINCT)
     | KW_EXCEPT -> ^(TOK_EXCEPT)
-    | KW_INTERSECT (all=KW_ALL | distinct=KW_DISTINCT)?
-    -> {$all == null}? ^(TOK_INTERSECTDISTINCT)
-    ->                 ^(TOK_INTERSECTALL)
+    | KW_INTERSECT KW_ALL -> ^(TOK_INTERSECTALL)
+    | KW_INTERSECT KW_DISTINCT? -> ^(TOK_INTERSECTDISTINCT)
     ;
 
 queryStatementExpression[boolean topLevel]
