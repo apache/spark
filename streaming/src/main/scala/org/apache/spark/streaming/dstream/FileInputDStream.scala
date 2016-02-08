@@ -118,7 +118,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   // Map of batch-time to selected file info for the remembered batches
   // This is a concurrent map because it's also accessed in unit tests
-  @transient private[streaming] var batchTimeToSelectedFiles = new ConcurrentHashMap[Time, Array[String]]
+  @transient private[streaming] var batchTimeToSelectedFiles =
+    new ConcurrentHashMap[Time, Array[String]]
 
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
