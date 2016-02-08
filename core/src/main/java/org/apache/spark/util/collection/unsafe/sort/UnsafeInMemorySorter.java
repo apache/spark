@@ -155,7 +155,7 @@ public final class UnsafeInMemorySorter {
    */
   public void insertRecord(long recordPointer, long keyPrefix) {
     if (!hasSpaceForAnotherRecord()) {
-      expandPointerArray(consumer.allocateArray(array.size() * 2));
+      throw new IllegalStateException("There is no space for new record");
     }
     array.set(pos, recordPointer);
     pos++;
