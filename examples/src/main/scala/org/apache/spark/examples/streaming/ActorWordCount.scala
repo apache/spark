@@ -18,14 +18,17 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
+
+import scala.collection.mutable.MutableList
+import scala.reflect.ClassTag
+import scala.util.Random
+
 import akka.actor._
 import com.typesafe.config.ConfigFactory
-import org.apache.spark.SparkConf
-import org.apache.spark.streaming.akka.{ActorReceiver, AkkaUtils}
-import org.apache.spark.streaming.{Seconds, StreamingContext}
 
-import scala.collection.mutable._
-import scala.util.Random
+import org.apache.spark.SparkConf
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.akka.{ActorReceiver, AkkaUtils}
 
 case class SubscribeReceiver(receiverActor: ActorRef)
 case class UnsubscribeReceiver(receiverActor: ActorRef)
