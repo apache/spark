@@ -55,7 +55,7 @@ R: ClassTag](
   val fromOffsets: Map[TopicPartition, Long],
   messageHandler: ConsumerRecord[K, V] => R
 ) extends DirectKafkaInputDStreamBase[K, V, scala.Null, scala.Null, R](_ssc, kafkaParams,
-  NewDirectKafkaInputDStream.offsetsToTopicAndPartition(fromOffsets)) {
+  KafkaUtils.newTopicPartitionToOld(fromOffsets)) {
 
   // Keep this consistent with how other streams are named (e.g. "Flume polling stream [2]")
   private[streaming] override def name: String = s"Kafka (new consumer API) direct stream [$id]"
@@ -67,18 +67,17 @@ R: ClassTag](
 
   protected final override def latestLeaderOffsets(retries: Int): Map[TopicAndPartition,
     LeaderOffset] = {
-    NewDirectKafkaInputDStream.offsetsToTopicAndPartition(
+    KafkaUtils.newTopicPartitionToOld(
       kc.getLatestOffsetsWithLeaders(
-        NewDirectKafkaInputDStream.offsetsToTopicPartition(currentOffsets).keySet
+        KafkaUtils.oldTopicPartitionToNew(currentOffsets).keySet
       )
     )
   }
 
   override def getRdd(untilOffsets: Map[TopicAndPartition, LeaderOffset]): KafkaRDDBase[K, V,
     scala.Null, scala.Null, R] = {
-    NewKafkaRDD[K, V, R](context.sparkContext, kafkaParams, NewDirectKafkaInputDStream
-      .offsetsToTopicPartition(currentOffsets), NewDirectKafkaInputDStream
-      .offsetsToTopicPartition(untilOffsets), messageHandler)
+    NewKafkaRDD[K, V, R](context.sparkContext, kafkaParams, KafkaUtils.oldTopicPartitionToNew
+    (currentOffsets), KafkaUtils.oldTopicPartitionToNew(untilOffsets), messageHandler)
   }
 
   override def stop(): Unit = {
@@ -90,7 +89,7 @@ R: ClassTag](
 
   private[streaming]
   class NewDirectKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
-    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long, String)]] = {
+    def batchForTime: mutable.HashMap[Time, Array[(String, Int, Long, Long)]] = {
       data.asInstanceOf[mutable.HashMap[Time, Array[OffsetRange.OffsetRangeTuple]]]
     }
 
@@ -106,29 +105,13 @@ R: ClassTag](
 
     override def restore() {
       // this is assuming that the topics don't change during execution, which is true currently
-
+      val topics = fromOffsets.keySet
+      val leaders = kc.findLeaders(topics)
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
         generatedRDDs += t -> new NewKafkaRDD[K, V, R](
-          context.sparkContext, kafkaParams, b.map(OffsetRange(_)), messageHandler)
+          context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
       }
-    }
-  }
-
-}
-
-private object NewDirectKafkaInputDStream {
-  private def offsetsToTopicPartition[T](offsets: Map[TopicAndPartition, T]):
-  Map[TopicPartition, T] = {
-    offsets.map {
-      case (k, v) => new TopicPartition(k.topic, k.partition) -> v
-    }
-  }
-
-  private def offsetsToTopicAndPartition[T](offsets: Map[TopicPartition, T]):
-  Map[TopicAndPartition, T] = {
-    offsets.map {
-      case (k, v) => TopicAndPartition(k.topic, k.partition) -> v
     }
   }
 }

@@ -190,6 +190,14 @@ object KafkaUtils {
     KafkaCluster.checkErrors(leaders)
   }
 
+  /** get leaders for the given offset ranges, or throw an exception */
+  private def newLeadersForRanges[K, V](
+    kc: NewKafkaCluster[K, V],
+    offsetRanges: Array[OffsetRange]): Map[TopicPartition, (String, Int)] = {
+    val topics = offsetRanges.map(_.topic).toSet
+    kc.getPartitionsLeader(topics)
+  }
+
   /** Make sure offsets are available in kafka, or throw an exception */
   private def checkOffsets(
       kc: KafkaCluster,
@@ -664,8 +672,7 @@ object KafkaUtils {
       }
 
       offsetRanges.map { o =>
-        OffsetRange(o.topic, o.partition, o.fromOffset, o.untilOffset,
-          high(o.topicPartition()).host)
+        OffsetRange(o.topic, o.partition, o.fromOffset, o.untilOffset)
       }
     } finally {
       kc.close()
@@ -691,10 +698,12 @@ object KafkaUtils {
     kafkaParams: Map[String, String],
     offsetRanges: Array[OffsetRange]): RDD[(K, V)] = sc.withScope {
     val messageHandler = (cr: ConsumerRecord[K, V]) => (cr.key, cr.value)
+    val kc = new NewKafkaCluster[K, V](kafkaParams)
     new NewKafkaRDD[K, V, (K, V)](
       sc,
       addSSLOptions(kafkaParams, sc),
       newCheckOffsets(kafkaParams, offsetRanges),
+      newLeadersForRanges(kc, offsetRanges),
       messageHandler)
   }
 
@@ -723,9 +732,11 @@ object KafkaUtils {
     offsetRanges: Array[OffsetRange],
     messageHandler: ConsumerRecord[K, V] => R): RDD[R] = sc.withScope {
     val cleanedHandler = sc.clean(messageHandler)
+    val kc = new NewKafkaCluster[K, V](kafkaParams)
     new NewKafkaRDD[K, V, R](sc,
       addSSLOptions(kafkaParams, sc),
       newCheckOffsets(kafkaParams, offsetRanges),
+      newLeadersForRanges(kc, offsetRanges),
       cleanedHandler)
   }
 
@@ -1008,6 +1019,20 @@ object KafkaUtils {
       }
     } finally {
       kc.close()
+    }
+  }
+
+  def oldTopicPartitionToNew[T](offsets: Map[TopicAndPartition, T]):
+  Map[TopicPartition, T] = {
+    offsets.map {
+      case (k, v) => new TopicPartition(k.topic, k.partition) -> v
+    }
+  }
+
+  def newTopicPartitionToOld[T](offsets: Map[TopicPartition, T]):
+  Map[TopicAndPartition, T] = {
+    offsets.map {
+      case (k, v) => TopicAndPartition(k.topic, k.partition) -> v
     }
   }
 
