@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
 
-object SparkRWrappers {
+private[r] object SparkRWrappers {
   def fitRModelFormula(
       value: String,
       df: DataFrame,
