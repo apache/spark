@@ -314,8 +314,9 @@ class Word2Vec extends Serializable with Logging {
               // break wordIndexes into trunks of maxSentenceLength when has more
               val sentenceSplit = wordIndexes.grouped(maxSentenceLength)
               sentenceSplit.map(_.toArray)
-            } else
+            } else {
               None
+            }
           }
         }
     }
