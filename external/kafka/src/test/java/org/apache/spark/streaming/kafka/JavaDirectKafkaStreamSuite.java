@@ -175,7 +175,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
     kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"
     );
-    kafkaParams.put("auto.offset.reset", "smallest");
+    kafkaParams.put("auto.offset.reset", "earliest");
 
     JavaDStream<String> stream1 = KafkaUtils.createNewDirectStream(
             ssc,
