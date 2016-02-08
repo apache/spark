@@ -1297,6 +1297,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val schema = StructType(Seq(StructField("col", StringType)))
     val rdd = sparkContext.parallelize(rows)
     val df = sqlContext.createDataFrame(rdd, schema)
+    //invalid table name test as below
     intercept[AnalysisException](df.registerTempTable("t~"))
+    //valid table name test as below
+    df.registerTempTable("table1")
+    //another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    //another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("table!#"))
   }
 }
