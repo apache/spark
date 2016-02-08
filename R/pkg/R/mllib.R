@@ -127,11 +127,6 @@ setMethod("summary", signature(object = "PipelineModel"),
             }
           })
 
-#' @title S4 class that represents a KMeansModel
-#' @param model A Java object reference to the backing Scala KMeansModel
-#' @export
-setClass("KMeansModel", representation(model = "jobj"))
-
 #' Fit a k-means model
 #'
 #' Fit a k-means model, similarly to R's kmeans().
@@ -139,20 +134,19 @@ setClass("KMeansModel", representation(model = "jobj"))
 #' @param x DataFrame for training
 #' @param centers Number of centers
 #' @param iter.max Maximum iteration number
-#' @param nstart Number of start points
 #' @param algorithm Algorithm choosen to fit the model
-#' @return A k-means model
+#' @return A fitted k-means model
 #' @rdname kmeans
 #' @export
 #' @examples
 #'\dontrun{
-#' model <- kmeans(x, algorithm="random")
+#' model <- kmeans(x, centers = 2, algorithm="random")
 #'}
-setMethod("kmeans", signature(x = "DataFrame", centers = "numeric"),
-          function(x, centers) {
+setMethod("kmeans", signature(x = "DataFrame"),
+          function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
             columnNames <- as.array(colnames(x))
-            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitKMeans", "random", x@sdf, 10,
-                                 10, centers, columnNames)
-            return(new("KMeansModel", model = model))
+            algorithm <- if(missing(algorithm)) "random" else match.arg(algorithm)
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitKMeans", x@sdf,
+                                 algorithm, iter.max, centers, columnNames)
+            return(new("PipelineModel", model = model))
          })

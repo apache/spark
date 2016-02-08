@@ -17,14 +17,13 @@
 
 package org.apache.spark.ml.api.r
 
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.ml.clustering.{KMeansModel, KMeans}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.feature.{VectorAssembler, RFormula}
+import org.apache.spark.ml.clustering.KMeans
+import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
-import org.apache.spark.sql.{Row, SQLContext, DataFrame}
+import org.apache.spark.sql.DataFrame
 
 object SparkRWrappers {
   def fitRModelFormula(
@@ -56,23 +55,17 @@ object SparkRWrappers {
   def fitKMeans(
       df: DataFrame,
       initMode: String,
-      initSteps: Double,
       maxIter: Double,
-      seed: Double,
-      epsilon: Double,
       k: Double,
-      columns: Array[String]): KMeansModel = {
+      columns: Array[String]): PipelineModel = {
     val assembler = new VectorAssembler().setInputCols(columns).setOutputCol("temp-features")
-    val features = assembler.transform(df)
     val kMeans = new KMeans()
       .setInitMode(initMode)
-      .setInitSteps(initSteps.toInt)
       .setMaxIter(maxIter.toInt)
-      .setSeed(seed.toLong)
-      .setTol(epsilon)
       .setK(k.toInt)
       .setFeaturesCol("temp-features")
-    kMeans.fit(features)
+    val pipeline = new Pipeline().setStages(Array(assembler, kMeans))
+    pipeline.fit(df)
   }
 
   def getModelCoefficients(model: PipelineModel): Array[Double] = {
