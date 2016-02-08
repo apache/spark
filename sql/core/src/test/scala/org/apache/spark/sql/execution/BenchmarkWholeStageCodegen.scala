@@ -22,6 +22,7 @@ import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
@@ -122,10 +123,10 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("broadcast hash join") {
-    val N = 20 << 20
+    val N = 100 << 20
     val dim = broadcast(sqlContext.range(1 << 16).selectExpr("id as k", "cast(id as string) as v"))
 
-    runBenchmark("BroadcastHashJoin", N) {
+    runBenchmark("Join w long", N) {
       sqlContext.range(N).join(dim, (col("id") % 60000) === col("k")).count()
     }
 
@@ -133,9 +134,27 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     BroadcastHashJoin:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    BroadcastHashJoin codegen=false          4405 / 6147          4.0         250.0       1.0X
-    BroadcastHashJoin codegen=true           1857 / 1878         11.0          90.9       2.4X
+    Join w long codegen=false        10174 / 10317         10.0         100.0       1.0X
+    Join w long codegen=true           1069 / 1107         98.0          10.2       9.5X
     */
+
+    val dim2 = broadcast(sqlContext.range(1 << 16)
+      .selectExpr("cast(id as int) as k1", "cast(id as int) as k2", "cast(id as string) as v"))
+
+    runBenchmark("Join w 2 ints", N) {
+      sqlContext.range(N).join(dim2,
+        (col("id") bitwiseAND 60000).cast(IntegerType) === col("k1")
+          && (col("id") bitwiseAND 50000).cast(IntegerType) === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    BroadcastHashJoin:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Join w 2 ints codegen=false           11435 / 11530          9.0         111.1       1.0X
+    Join w 2 ints codegen=true              1265 / 1424         82.0          12.2       9.0X
+    */
+
   }
 
   ignore("hash and BytesToBytesMap") {

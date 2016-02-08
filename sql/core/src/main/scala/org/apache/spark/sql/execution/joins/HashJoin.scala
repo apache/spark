@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
-
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
   self: SparkPlan =>
@@ -47,11 +47,49 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
+  /**
+    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+    *
+    * If not, returns the original expressions.
+    */
+  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+    var keyExpr: Expression = null
+    var width = 0
+    keys.foreach { e =>
+      e.dataType match {
+        case dt: IntegralType if dt.defaultSize <= 8 - width =>
+          if (width == 0) {
+            if (e.dataType != LongType) {
+              keyExpr = Cast(e, LongType)
+            } else {
+              keyExpr = e
+            }
+            width = dt.defaultSize
+          } else {
+            val bits = dt.defaultSize * 8
+            keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
+              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
+            width -= bits
+          }
+        // TODO: support BooleanType, DateType and TimestampType
+        case other =>
+          return keys
+      }
+    }
+    keyExpr :: Nil
+  }
+
+  protected val canJoinKeyFitWithinLong: Boolean = {
+    val sameTypes = buildKeys.map(_.dataType) == streamedKeys.map(_.dataType)
+    val key = rewriteKeyExpr(buildKeys)
+    sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
+  }
+
   protected def buildSideKeyGenerator: Projection =
-    UnsafeProjection.create(buildKeys, buildPlan.output)
+    UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
 
   protected def streamSideKeyGenerator: Projection =
-    UnsafeProjection.create(streamedKeys, streamedPlan.output)
+    UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)

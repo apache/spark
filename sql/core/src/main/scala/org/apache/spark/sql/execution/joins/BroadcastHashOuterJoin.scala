@@ -116,12 +116,7 @@ case class BroadcastHashOuterJoin(
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
-
-      hashTable match {
-        case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
-        case _ =>
-      }
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashTable.getMemorySize)
 
       val resultProj = resultProjection
       joinType match {
