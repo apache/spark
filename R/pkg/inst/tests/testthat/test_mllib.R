@@ -118,8 +118,13 @@ test_that("kmeans", {
   newIris <- iris
   newIris$Species <- NULL
   training <- suppressWarnings(createDataFrame(sqlContext, newIris))
-  model <- kmeans(x = training)
-  print("Is there any problems?")
-  print(model)
-  #expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
+
+  # Cahce the DataFrame here to work around the bug SPARK-13178.
+  cache(training)
+  take(training, 1)
+
+  model <- kmeans(x = training, centers = 2)
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 1)
 })
