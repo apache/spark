@@ -119,10 +119,13 @@ object SamplePushDown extends Rule[LogicalPlan] {
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case m @ MapPartitions(_, input, _, child: ObjectOperator)
-        if !input.isInstanceOf[Attribute] && m.input.dataType == child.outputObject.dataType =>
+    case m @ MapPartitions(_, deserializer, _, child: ObjectOperator)
+        if !deserializer.isInstanceOf[Attribute] &&
+          deserializer.dataType == child.outputObject.dataType =>
       val childWithoutSerialization = child.withObjectOutput
-      m.copy(input = childWithoutSerialization.output.head, child = childWithoutSerialization)
+      m.copy(
+        deserializer = childWithoutSerialization.output.head,
+        child = childWithoutSerialization)
   }
 }
 
