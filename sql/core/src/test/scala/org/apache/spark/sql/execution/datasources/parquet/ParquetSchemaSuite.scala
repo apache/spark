@@ -261,7 +261,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
-  testSchemaInference[Tuple1[Pair[Int, String]]](
+  testSchemaInference[Tuple1[(Int, String)]](
     "struct",
     """
       |message root {
