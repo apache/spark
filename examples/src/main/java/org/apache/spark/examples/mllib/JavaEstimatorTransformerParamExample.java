@@ -15,23 +15,30 @@
  * limitations under the License.
  */
 
+package org.apache.spark.examples.mllib;
+
+//$example on$
 import java.util.Arrays;
-import java.util.List;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+//$example off$
 
+/**
+ * Java example for Estimator, Transformer, and Param.
+ */
 public class JavaEstimatorTransformerParamExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaEstimatorTransformerParamExample");
+    SparkConf conf = new SparkConf()
+        .setAppName("JavaEstimatorTransformerParamExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
 
@@ -66,9 +73,11 @@ public class JavaEstimatorTransformerParamExample {
         + model1.parent().extractParamMap());
 
     // We may alternatively specify parameters using a ParamMap.
-    ParamMap paramMap = new ParamMap().put(lr.maxIter().w(20)) // Specify 1 Param.
+    ParamMap paramMap = new ParamMap().put(lr.maxIter().w(20)) // Specify 1
+                                                               // Param.
         .put(lr.maxIter(), 30) // This overwrites the original maxIter.
-        .put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple Params.
+        .put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple
+                                                            // Params.
 
     // One can also combine ParamMaps.
     ParamMap paramMap2 = new ParamMap().put(lr.probabilityCol().w(

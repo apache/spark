@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+package org.apache.spark.examples.mllib;
+
+//$example on$
 import java.util.Arrays;
-import java.util.List;
-import java.io.Serializable;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
@@ -30,55 +31,14 @@ import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+//$example off$
 
-// Labeled and unlabeled instance types.
-// Spark SQL can infer schema from Java Beans.
-class Document implements Serializable {
-  private long id;
-  private String text;
-
-  public Document(long id, String text) {
-    this.id = id;
-    this.text = text;
-  }
-
-  public long getId() {
-    return this.id;
-  }
-
-  public void setId(long id) {
-    this.id = id;
-  }
-
-  public String getText() {
-    return this.text;
-  }
-
-  public void setText(String text) {
-    this.text = text;
-  }
-}
-
-class LabeledDocument extends Document implements Serializable {
-  private double label;
-
-  public LabeledDocument(long id, String text, double label) {
-    super(id, text);
-    this.label = label;
-  }
-
-  public double getLabel() {
-    return this.label;
-  }
-
-  public void setLabel(double label) {
-    this.label = label;
-  }
-}
-
+/**
+ * Java example for simple text document 'Pipeline'.
+ */
 public class JavaPipelineExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaEstimatorTransformerParamExample");
+    SparkConf conf = new SparkConf().setAppName("JavaPipelineExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
 

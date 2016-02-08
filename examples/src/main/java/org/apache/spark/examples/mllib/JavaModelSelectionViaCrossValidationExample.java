@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
+package org.apache.spark.examples.mllib;
+
+//$example on$
 import java.util.Arrays;
-import java.util.List;
-import java.io.Serializable;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
@@ -34,70 +35,30 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+//$example off$
 
-// Labeled and unlabeled instance types.
-// Spark SQL can infer schema from Java Beans.
-class Document1 implements Serializable {
-  private long id;
-  private String text;
-
-  public Document1(long id, String text) {
-    this.id = id;
-    this.text = text;
-  }
-
-  public long getId() {
-    return this.id;
-  }
-
-  public void setId(long id) {
-    this.id = id;
-  }
-
-  public String getText() {
-    return this.text;
-  }
-
-  public void setText(String text) {
-    this.text = text;
-  }
-}
-
-class LabeledDocument1 extends Document1 implements Serializable {
-  private double label;
-
-  public LabeledDocument1(long id, String text, double label) {
-    super(id, text);
-    this.label = label;
-  }
-
-  public double getLabel() {
-    return this.label;
-  }
-
-  public void setLabel(double label) {
-    this.label = label;
-  }
-}
-
+/**
+ * Java example for Model Selection via Cross Validation.
+ */
 public class JavaModelSelectionViaCrossValidationExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaModelSelectionViaCrossValidationExample");
+    SparkConf conf = new SparkConf()
+        .setAppName("JavaModelSelectionViaCrossValidationExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
 
     // $example on$
     // Prepare training documents, which are labeled.
     DataFrame training = sqlContext.createDataFrame(Arrays.asList(
-        new LabeledDocument1(0L, "a b c d e spark", 1.0), new LabeledDocument1(
-            1L, "b d", 0.0), new LabeledDocument1(2L, "spark f g h", 1.0),
-        new LabeledDocument1(3L, "hadoop mapreduce", 0.0), new LabeledDocument1(
-            4L, "b spark who", 1.0), new LabeledDocument1(5L, "g d a y", 0.0),
-        new LabeledDocument1(6L, "spark fly", 1.0), new LabeledDocument1(7L,
-            "was mapreduce", 0.0), new LabeledDocument1(8L, "e spark program",
-            1.0), new LabeledDocument1(9L, "a e c l", 0.0), new LabeledDocument1(
-            10L, "spark compile", 1.0), new LabeledDocument1(11L,
-            "hadoop software", 0.0)), LabeledDocument1.class);
+        new LabeledDocument(0L, "a b c d e spark", 1.0), new LabeledDocument(
+            1L, "b d", 0.0), new LabeledDocument(2L, "spark f g h", 1.0),
+        new LabeledDocument(3L, "hadoop mapreduce", 0.0), new LabeledDocument(
+            4L, "b spark who", 1.0), new LabeledDocument(5L, "g d a y", 0.0),
+        new LabeledDocument(6L, "spark fly", 1.0), new LabeledDocument(7L,
+            "was mapreduce", 0.0), new LabeledDocument(8L, "e spark program",
+            1.0), new LabeledDocument(9L, "a e c l", 0.0), new LabeledDocument(
+            10L, "spark compile", 1.0), new LabeledDocument(11L,
+            "hadoop software", 0.0)), LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer,
     // hashingTF, and lr.
@@ -135,9 +96,9 @@ public class JavaModelSelectionViaCrossValidationExample {
     CrossValidatorModel cvModel = cv.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    DataFrame test = sqlContext.createDataFrame(Arrays.asList(new Document1(4L,
-        "spark i j k"), new Document1(5L, "l m n"), new Document1(6L,
-        "mapreduce spark"), new Document1(7L, "apache hadoop")), Document1.class);
+    DataFrame test = sqlContext.createDataFrame(Arrays.asList(new Document(4L,
+        "spark i j k"), new Document(5L, "l m n"), new Document(6L,
+        "mapreduce spark"), new Document(7L, "apache hadoop")), Document.class);
 
     // Make predictions on test documents. cvModel uses the best model found
     // (lrModel).

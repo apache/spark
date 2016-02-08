@@ -15,20 +15,28 @@
  * limitations under the License.
  */
 
+package org.apache.spark.examples.mllib;
+
+//$example on$
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
-//$example on$
 import org.apache.spark.ml.regression.LinearRegression;
-//$example off$
-import org.apache.spark.ml.tuning.*;
+import org.apache.spark.ml.tuning.ParamGridBuilder;
+import org.apache.spark.ml.tuning.TrainValidationSplit;
+import org.apache.spark.ml.tuning.TrainValidationSplitModel;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
+//$example off$
 
+/**
+ * Java example for Model Selection via Train Validation Split.
+ */
 public class JavaModelSelectionViaTrainValidationSplitExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaModelSelectionViaTrainValidationSplitExample");
+    SparkConf conf = new SparkConf()
+        .setAppName("JavaModelSelectionViaTrainValidationSplitExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext jsql = new SQLContext(sc);
 
