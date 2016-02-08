@@ -101,15 +101,16 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val pool = Executors.newScheduledThreadPool(1, new ThreadFactoryBuilder()
     .setNameFormat("spark-history-task-%d").setDaemon(true).build())
 
-  // The modification time of the newest log detected during the last scan. This is used
-  // to ignore logs that are older during subsequent scans, to avoid processing data that
-  // is already known.
+  // The modification time of the newest log detected during the last scan.   Currently only
+  // used for logging msgs (logs are re-scanned based on file size, rather than modtime)
   private var lastScanTime = -1L
 
   // Mapping of application IDs to their metadata, in descending end time order. Apps are inserted
   // into the map in order, so the LinkedHashMap maintains the correct ordering.
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
+
+  val fileToAppInfo = new mutable.HashMap[Path, FsApplicationAttemptInfo]()
 
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
@@ -277,7 +278,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           try {
-            !entry.isDirectory() && (entry.getModificationTime() >= lastScanTime)
+            val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
+            !entry.isDirectory() && prevFileSize < entry.getLen()
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
@@ -543,6 +545,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       bus: ReplayListenerBus): Option[FsApplicationAttemptInfo] = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
+    // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
+    // and when we read the file here.  That is OK -- it may result in an unnecessary refresh
+    // when there is no update, but will not result in missing an update.  We *must* prevent
+    // an error the other way -- if we report a size bigger (ie later) than the file that is
+    // actually read, we may never refresh the app
+    // we expect FileStatus to return the file size when it was initially created, but the api
+    // is not explicit about this so lets be extra-safe.
+    val eventLogLength = eventLog.getLen()
     val logInput = EventLoggingListener.openEventLog(logPath, fs)
     try {
       val appListener = new ApplicationEventListener
@@ -553,7 +563,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
       // try to show their UI.
       if (appListener.appId.isDefined) {
-        Some(new FsApplicationAttemptInfo(
+        val attemptInfo = new FsApplicationAttemptInfo(
           logPath.getName(),
           appListener.appName.getOrElse(NOT_STARTED),
           appListener.appId.getOrElse(logPath.getName()),
@@ -563,7 +573,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           eventLog.getModificationTime(),
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          eventLog.getLen))
+          eventLogLength
+        )
+        fileToAppInfo(logPath) = attemptInfo
+        Some(attemptInfo)
       } else {
         None
       }
