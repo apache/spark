@@ -63,7 +63,7 @@ class FeederActor extends Actor {
   def receive: Receive = {
     case SubscribeReceiver(receiverActor: ActorRef) =>
       println("received subscribe from %s".format(receiverActor.toString))
-      receivers = MutableList(receiverActor) ++ receivers
+      receiverActor +=: receivers
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
       println("received unsubscribe from %s".format(receiverActor.toString))
