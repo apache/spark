@@ -110,9 +110,9 @@ object OffsetRange {
     new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
 
   def create(
-    topicPartition: TopicPartition,
-    fromOffset: Long,
-    untilOffset: Long): OffsetRange =
+      topicPartition: TopicPartition,
+      fromOffset: Long,
+      untilOffset: Long): OffsetRange =
     new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
 
 
@@ -126,10 +126,60 @@ object OffsetRange {
     new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
 
   def apply(
-    topicPartition: TopicPartition,
-    fromOffset: Long,
-    untilOffset: Long): OffsetRange =
+      topicPartition: TopicPartition,
+      fromOffset: Long,
+      untilOffset: Long): OffsetRange =
     new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
+
+  def create(
+      topic: String,
+      partition: Int,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, leaderHost)
+
+  def create(
+      topicAndPartition: TopicAndPartition,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset,
+      untilOffset, leaderHost)
+
+  def create(
+      topicPartition: TopicPartition,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
+      leaderHost)
+
+
+  def apply(
+      topic: String,
+      partition: Int,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topic, partition, fromOffset, untilOffset, leaderHost)
+
+  def apply(
+      topicAndPartition: TopicAndPartition,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset,
+      untilOffset, leaderHost)
+
+  def apply(
+      topicPartition: TopicPartition,
+      fromOffset: Long,
+      untilOffset: Long,
+      leaderHost: String): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
+      leaderHost)
+
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka]
