@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.LinkedHashSet
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -39,7 +39,7 @@ case class UnsubscribeReceiver(receiverActor: ActorRef)
 class FeederActor extends Actor {
 
   val rand = new Random()
-  val receivers = new ArrayBuffer[ActorRef]()
+  val receivers = new LinkedHashSet[ActorRef]()
 
   val strings: Array[String] = Array("words ", "may ", "count ")
 
@@ -63,11 +63,11 @@ class FeederActor extends Actor {
   def receive: Receive = {
     case SubscribeReceiver(receiverActor: ActorRef) =>
       println("received subscribe from %s".format(receiverActor.toString))
-      receiverActor +=: receivers
+      receivers += receiverActor
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
       println("received unsubscribe from %s".format(receiverActor.toString))
-      receivers.dropWhile(x => x eq receiverActor)
+      receivers -= receiverActor
   }
 }
 
