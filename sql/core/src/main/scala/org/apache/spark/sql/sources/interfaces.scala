@@ -203,7 +203,9 @@ trait HadoopFsRelationProvider extends StreamSourceProvider {
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): Source = {
-    val path = parameters("path")
+    val path = parameters.getOrElse("path", {
+      throw new IllegalArgumentException("'path' is not specified")
+    })
     val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
 
     def dataFrameBuilder(files: Array[String]): DataFrame = {
