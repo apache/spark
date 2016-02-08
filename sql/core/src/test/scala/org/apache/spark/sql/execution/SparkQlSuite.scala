@@ -72,7 +72,7 @@ class SparkQlSuite extends PlanTest {
       "('2008-08-08', 'us') STORED AS DIRECTORIES")
     parser.parsePlan("ALTER TABLE table_name SKEWED BY (dt, country) ON " +
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk'))")
-       
+
     // Alter Table skewed location
     parser.parsePlan("ALTER TABLE table_name SET SKEWED LOCATION " +
       "('123'='location1', 'test'='location2')")
@@ -94,10 +94,10 @@ class SparkQlSuite extends PlanTest {
 
     // Alter Table drop partitions
     parser.parsePlan("ALTER TABLE table_name DROP IF EXISTS PARTITION " +
-      "(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')") 
+      "(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')")
     parser.parsePlan("ALTER TABLE table_name DROP IF EXISTS PARTITION " +
       "(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk') " +
-      "PURGE FOR METADATA REPLICATION ('test')") 
+      "PURGE FOR METADATA REPLICATION ('test')")
 
     // Alter Table archive partition
     parser.parsePlan("ALTER TABLE table_name ARCHIVE PARTITION (dt='2008-08-08', country='us')")
@@ -133,7 +133,7 @@ class SparkQlSuite extends PlanTest {
 
     // Alter Table change column name/type/position/comment
     parser.parsePlan("ALTER TABLE table_name CHANGE col_old_name col_new_name INT")
- 
+
     parser.parsePlan("ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT " +
       "COMMENT 'col_comment' FIRST CASCADE")
     parser.parsePlan("ALTER TABLE table_name CHANGE COLUMN col_old_name col_new_name INT " +
