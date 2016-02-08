@@ -54,11 +54,17 @@ class Param(object):
             raise ValueError("Cannot copy from non-dummy parent %s." % parent)
 
     def _validate(self, value):
+        """Check if `value` is valid and raise `ValueError` if not."""
         if not self.isValid(value):
             raise ValueError("{parent} parameter {name} given invalid value {value}"
                              .format(parent=self.parent, name=self.name, value=str(value)))
 
     def _convertAndValidate(self, value):
+        """
+        Check that `value` is the expected type for this param and convert
+        to the correct type if not. Additionally check that value meets validation
+        requirements a specific `Param` instance.
+        """
         self._validate(value)
         return value
 
