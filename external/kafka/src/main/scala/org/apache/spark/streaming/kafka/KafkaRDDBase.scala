@@ -49,12 +49,6 @@ R: ClassTag] private[spark](
   offsetRanges: Array[OffsetRange],
   leaders: Map[TopicAndPartition, (String, Int)]
 ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
-  override def getPartitions: Array[Partition] = {
-    offsetRanges.zipWithIndex.map { case (o, i) =>
-      val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
-      new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
-    }.toArray
-  }
 
   override def count(): Long = offsetRanges.map(_.count).sum
 
