@@ -1197,6 +1197,21 @@ class ConnectionTest(unittest.TestCase):
         del os.environ['AIRFLOW_CONN_AIRFLOW_DB']
 
 
+class WebHDFSHookTest(unittest.TestCase):
+    def setUp(self):
+        configuration.test_mode()
+    
+    def test_simple_init(self):
+        from airflow.hooks.webhdfs_hook import WebHDFSHook
+        c = WebHDFSHook()
+        assert c.proxy_user == None
+
+    def test_init_proxy_user(self):
+        from airflow.hooks.webhdfs_hook import WebHDFSHook
+        c = WebHDFSHook(proxy_user='someone')
+        assert c.proxy_user == 'someone'
+
+
 @unittest.skipUnless("S3Hook" in dir(hooks),
                      "Skipping test because S3Hook is not installed")
 class S3HookTest(unittest.TestCase):
