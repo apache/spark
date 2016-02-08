@@ -24,6 +24,7 @@ import java.util.List;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 
@@ -102,8 +103,7 @@ public class ColumnVectorUtils {
         dst.getChildColumn(0).appendInt(c.months);
         dst.getChildColumn(1).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
-        Date date = (Date)o;
-        dst.appendInt((int)date.getTime());
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
         throw new NotImplementedException("Type " + t);
       }

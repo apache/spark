@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.sql.Date;
 import java.util.Arrays;
 import java.util.Iterator;
 
@@ -27,13 +26,11 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
-import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.commons.lang.NotImplementedException;
 
 /**
