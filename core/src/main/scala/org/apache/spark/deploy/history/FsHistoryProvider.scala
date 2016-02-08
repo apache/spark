@@ -218,18 +218,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   override def getListing(): Iterable[FsApplicationHistoryInfo] = applications.values
 
-  /**
-   * Look up an application attempt
-   * @param appId application ID
-   * @param attemptId Attempt ID, if set
-   * @return the matching attempt, if found
-   */
-  def lookup(appId: String, attemptId: Option[String]): Option[FsApplicationAttemptInfo] = {
-    applications.get(appId).flatMap { appInfo =>
-      appInfo.attempts.find(_.attemptId == attemptId)
-    }
-  }
-
   override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
     try {
       applications.get(appId).flatMap { appInfo =>
@@ -329,8 +317,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               logError("Exception while merging application listings", e)
           }
         }
-      // now scan for updated file sizes
-      scanAndUpdateIncompleteAttemptInfo()
 
       lastScanTime = newLastScanTime
     } catch {
@@ -420,43 +406,20 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       }
     }
 
-    updateApplicationsWithNewAttempts(newAttempts)
-  }
-
-  /**
-   * Merge in all new attempts with those in [[applications]], updating the [[applications]]
-   * field afterwards. It _must not_ be executed concurrently, else attempt information may
-   * be lost.
-   * @param newAttempts a possibly empty list of new attempts
-   */
-  private def updateApplicationsWithNewAttempts(
-      newAttempts: Iterable[FsApplicationAttemptInfo]): Unit = {
-    if (newAttempts.nonEmpty) {
-      applications = mergeAttempts(newAttempts, applications)
+    if (newAttempts.isEmpty) {
+      return
     }
-  }
 
-  /**
-   * Build a map containing all apps that contain new attempts. The app information in this map
-   * contains both the new app attempt, and those that were already loaded in the existing apps
-   * map. If an attempt has been updated, it replaces the old attempt in the list.
-   * The ordering is maintained
-   * @param newAttempts new attempt list
-   * @param current the current attempt list
-   * @return the updated list
-   */
-  private def mergeAttempts(
-      newAttempts: Iterable[FsApplicationAttemptInfo],
-      current: mutable.LinkedHashMap[String, FsApplicationHistoryInfo])
-      : mutable.LinkedHashMap[String, FsApplicationHistoryInfo] = {
-
+    // Build a map containing all apps that contain new attempts. The app information in this map
+    // contains both the new app attempt, and those that were already loaded in the existing apps
+    // map. If an attempt has been updated, it replaces the old attempt in the list.
     val newAppMap = new mutable.HashMap[String, FsApplicationHistoryInfo]()
     newAttempts.foreach { attempt =>
       val appInfo = newAppMap.get(attempt.appId)
-        .orElse(current.get(attempt.appId))
+        .orElse(applications.get(attempt.appId))
         .map { app =>
           val attempts =
-            app.attempts.filter(_.attemptId != attempt.attemptId) ++ List(attempt)
+            app.attempts.filter(_.attemptId != attempt.attemptId).toList ++ List(attempt)
           new FsApplicationHistoryInfo(attempt.appId, attempt.name,
             attempts.sortWith(compareAttemptInfo))
         }
@@ -476,7 +439,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val newIterator = newApps.iterator.buffered
-    val oldIterator = current.values.iterator.buffered
+    val oldIterator = applications.values.iterator.buffered
     while (newIterator.hasNext && oldIterator.hasNext) {
       if (newAppMap.contains(oldIterator.head.id)) {
         oldIterator.next()
@@ -488,59 +451,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
     newIterator.foreach(addIfAbsent)
     oldIterator.foreach(addIfAbsent)
-    logDebug(s" completed apps=${mergedApps.count(_._2.completed)}")
-    logDebug(s" incomplete apps=${mergedApps.count(!_._2.completed)}")
-    mergedApps
-  }
 
-
-  /**
-   * Build list of incomplete apps that have been updated since they were last examined.
-   *
-   * After the scan, if there were any updated attempts, [[applications]] is updated
-   * with the new values.
-   *
-   * 1. No attempt to replay the application is made; this scan is a low cost operation.
-   * 2. As this overwrites [[applications]] with a new value, it must not run concurrently
-   * with the main scan for new applications. That is: it must be in the [[checkForLogs()]]
-   * operation.
-   * 3. If an attempt's files are no longer present, the existing attempt is not considered
-   * out of date or otherwise modified.
-   */
-  private[history] def scanAndUpdateIncompleteAttemptInfo(): Unit = {
-    val newAttempts: Iterable[FsApplicationAttemptInfo] = applications
-        .filter( e => !e._2.completed)
-        .flatMap { e =>
-          // build list of (false, attempt) or (true, attempt') values
-          e._2.attempts.flatMap { prevInfo: FsApplicationAttemptInfo =>
-            val path = new Path(logDir, prevInfo.logPath)
-            try {
-              val status = fs.getFileStatus(path)
-              val size = status.getLen
-              val aS = prevInfo.fileSize
-              if (size > aS) {
-                logDebug(s"Attempt ${prevInfo.name}/${prevInfo.appId} size => $size")
-                Some(new FsApplicationAttemptInfo(prevInfo.logPath, prevInfo.name, prevInfo.appId,
-                  prevInfo.attemptId, prevInfo.startTime, prevInfo.endTime, prevInfo.lastUpdated,
-                  prevInfo.sparkUser, prevInfo.completed, size))
-              } else {
-                None
-              }
-            } catch {
-              case ex: FileNotFoundException =>
-                // the file no longer exists
-                // catching an FNFE is faster than doing exists() + getFileStatus(),
-                // as exists() is usually getFileStatus() plus the catch.
-                logInfo(s"missing file: $path")
-                None
-            }
-          }
-        }
-
-    if (newAttempts.nonEmpty) {
-      logDebug(s"Updating ${newAttempts.size} attempts from size changes")
-    }
-    updateApplicationsWithNewAttempts(newAttempts)
+    applications = mergedApps
   }
 
   /**
