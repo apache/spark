@@ -55,12 +55,6 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>org.fusesource.leveldbjni</groupId>
-          <artifactId>leveldbjni-all</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -151,23 +145,4 @@
       </plugin>
     </plugins>
   </build>
-
-  <profiles>
-    <profile>
-      <id>leveldb-provided</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-network-shuffle_${scala.binary.version}</artifactId>
-          <version>${project.version}</version>
-          <exclusions>
-            <exclusion>
-              <groupId>org.fusesource.leveldbjni</groupId>
-              <artifactId>leveldbjni-all</artifactId>
-            </exclusion>
-          </exclusions>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 </project>
