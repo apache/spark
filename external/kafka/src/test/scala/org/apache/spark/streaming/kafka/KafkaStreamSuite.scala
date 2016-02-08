@@ -17,7 +17,9 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.convert.decorateAsScala._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
@@ -29,9 +31,6 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
-
-import java.util.concurrent.ConcurrentHashMap
-import scala.collection.convert.decorateAsScala._
 
 class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfterAll {
   private var ssc: StreamingContext = _
@@ -72,8 +71,10 @@ class KafkaStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter
     stream.map(_._2).countByValue().foreachRDD { r =>
       val ret = r.collect()
       ret.toMap.foreach { kv =>
-        val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-        result.put(kv._1, count)
+        result.synchronized {
+          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
+          result.put(kv._1, count)
+        }
       }
     }
 

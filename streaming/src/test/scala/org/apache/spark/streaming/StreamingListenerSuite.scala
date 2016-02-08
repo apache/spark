@@ -17,7 +17,10 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, SynchronizedBuffer}
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.convert.decorateAsScala._
+import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -32,8 +35,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.scheduler._
-import java.util.concurrent.ConcurrentHashMap
-import scala.collection.convert.decorateAsScala._
 
 class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
@@ -269,7 +270,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       }
     }
     _ssc.stop()
-    failureReasonsCollector.failureReasons.toMap
+    failureReasonsCollector.failureReasons.asScala.toMap
   }
 
   /** Check if a sequence of numbers is in increasing order */
@@ -359,12 +360,12 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
  */
 class FailureReasonsCollector extends StreamingListener {
 
-  val failureReasons = new java.util.concurrent.ConcurrentHashMap[Int, String].asScala
+  val failureReasons = new ConcurrentHashMap[Int, String]
 
   override def onOutputOperationCompleted(
       outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
     outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
-      failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+      failureReasons.put(outputOperationCompleted.outputOperationInfo.id, f)
     }
   }
 }
