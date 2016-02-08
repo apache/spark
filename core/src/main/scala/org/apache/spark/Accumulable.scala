@@ -79,11 +79,11 @@ class Accumulable[R, T] private (
       param: AccumulableParam[R, T],
       name: Option[String],
       countFailedValues: Boolean) = {
-    this(initialValue, param, name, false /* internal */, countFailedValues)
+    this(initialValue, param, name, internal = false, countFailedValues)
   }
 
   def this(initialValue: R, param: AccumulableParam[R, T], name: Option[String]) =
-    this(initialValue, param, name, false /* internal */, false /* countFailedValues */)
+    this(initialValue, param, name, internal = false, countFailedValues = false)
 
   def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
