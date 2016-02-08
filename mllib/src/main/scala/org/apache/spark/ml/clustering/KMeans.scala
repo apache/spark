@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol {
+  with HasSeed with HasPredictionCol with HasTol with HasInitialModel[KMeansModel] {
 
   /**
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
@@ -96,7 +96,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    private val parentModel: MLlibKMeansModel)
+    private[ml] val parentModel: MLlibKMeansModel)
   extends Model[KMeansModel] with KMeansParams with MLWritable {
 
   @Since("1.5.0")
@@ -237,6 +237,10 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /** @group setParam */
+  @Since("2.0.0")
+  def setInitialModel(value: KMeansModel): this.type = set(initialModel, value)
+
   @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
@@ -248,6 +252,11 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+
+    if (isSet(initialModel)) {
+      algo.setInitialModel($(initialModel).parentModel)
+    }
+
     val parentModel = algo.run(rdd)
     val model = new KMeansModel(uid, parentModel)
     copyValues(model)

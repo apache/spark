@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
+import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -105,6 +105,38 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     }
     val kmeans = new KMeans()
     testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+  }
+
+  test("Initialize using given cluster centers") {
+    val points = Array(
+      Vectors.dense(0.0, 0.0, 0.0),
+      Vectors.dense(1.0, 1.0, 1.0),
+      Vectors.dense(2.0, 2.0, 2.0),
+      Vectors.dense(3.0, 3.0, 3.0),
+      Vectors.dense(4.0, 4.0, 4.0)
+    )
+
+    // creating an initial model
+    val initialModel = new KMeansModel("test model", new MLlibKMeansModel(points))
+
+    val predictionColName = "kmeans_prediction"
+    val kmeans = new KMeans()
+      .setK(k)
+      .setPredictionCol(predictionColName)
+      .setSeed(1)
+      .setInitialModel(initialModel)
+    val model = kmeans.fit(dataset)
+    assert(model.clusterCenters.length === k)
+
+    val transformed = model.transform(dataset)
+    val expectedColumns = Array("features", predictionColName)
+    expectedColumns.foreach { column =>
+      assert(transformed.columns.contains(column))
+    }
+    val clusters =
+      transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
+    assert(clusters.size === k)
+    assert(clusters === Set(0, 1, 2, 3, 4))
   }
 }
 
