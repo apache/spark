@@ -360,6 +360,9 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
       // the generated code will be huge if there are too many columns
       val haveManyColumns = plan.output.length > 200
       !willFallback && !haveManyColumns
+    // Collapse a broadcast into the stage - it should not contain any code that can be
+    // codegenerated.
+    case _: Broadcast => true
     case _ => false
   }
 
@@ -367,8 +370,6 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
     if (sqlContext.conf.wholeStageEnabled) {
       plan.transform {
         case plan: CodegenSupport if supportCodegen(plan) &&
-          // A broadcast operator cannot be at the top level.
-          !plan.isInstanceOf[Broadcast] &&
           // Whole stage codegen is only useful when there are at least two levels of operators that
           // support it (save at least one projection/iterator).
           (Utils.isTesting || plan.children.exists(supportCodegen)) =>

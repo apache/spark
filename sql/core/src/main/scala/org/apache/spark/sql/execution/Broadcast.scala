@@ -29,13 +29,8 @@ import org.apache.spark.util.ThreadUtils
 
 /**
  * A broadcast collects, transforms and finally broadcasts the result of a transformed SparkPlan.
- *
- * TODO whole stage codegen.
  */
-case class Broadcast(
-    f: Iterable[InternalRow] => Any,
-    child: SparkPlan)
-  extends UnaryNode with CodegenSupport {
+case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 
@@ -74,12 +69,6 @@ case class Broadcast(
       }
     }(Broadcast.executionContext)
   }
-
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
-  }
-
-  override def doProduce(ctx: CodegenContext): String = ""
 
   override protected def doPrepare(): Unit = {
     // Materialize the future.
