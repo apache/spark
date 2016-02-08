@@ -219,6 +219,7 @@ class StreamExecution(
 
       val batchTime = (System.nanoTime() - startTime).toDouble / 1000000
       logInfo(s"Completed up to $newOffsets in ${batchTime}ms")
+      postEvent(new QueryProgress(this))
     }
 
     logDebug(s"Waiting for data, current: $streamProgress")
