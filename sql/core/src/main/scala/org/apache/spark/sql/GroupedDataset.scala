@@ -116,6 +116,7 @@ class GroupedDataset[K, V] private[sql](
       MapGroups(
         f,
         groupingAttributes,
+        dataAttributes,
         logicalPlan))
   }
 
@@ -310,6 +311,8 @@ class GroupedDataset[K, V] private[sql](
         f,
         this.groupingAttributes,
         other.groupingAttributes,
+        this.dataAttributes,
+        other.dataAttributes,
         this.logicalPlan,
         other.logicalPlan))
   }

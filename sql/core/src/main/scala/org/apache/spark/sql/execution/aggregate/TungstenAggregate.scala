@@ -471,6 +471,8 @@ case class TungstenAggregate(
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
        UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        $outputCode
+
+       if (shouldStop()) return;
      }
 
      $iterTerm.close();
@@ -480,7 +482,7 @@ case class TungstenAggregate(
      """
   }
 
-  private def doConsumeWithKeys( ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
 
     // create grouping key
     ctx.currentVars = input
