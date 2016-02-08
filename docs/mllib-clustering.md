@@ -355,7 +355,7 @@ Refer to the [`LDA` Scala docs](api/scala/index.html#org.apache.spark.mllib.clus
 <div data-lang="java" markdown="1">
 Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.html) and [`DistributedLDAModel` Java docs](api/java/org/apache/spark/mllib/clustering/DistributedLDAModel.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaKLatentDirichletAllocation.java %}
+{% include_example java/org/apache/spark/examples/mllib/JavaLatentDirichletAllocationExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">

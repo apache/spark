@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 
 import org.apache.spark.SparkConf;
 
-public class JavaKLatentDirichletAllocationExample {
+public class JavaLatentDirichletAllocationExample {
     public static void main(String[] args) {
 
         SparkConf conf = new SparkConf().setAppName("JavaKLatentDirichletAllocationExample")
