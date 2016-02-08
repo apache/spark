@@ -20,37 +20,39 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
+import org.apache.spark.mllib.clustering.{DistributedLDAModel, LDA}
+import org.apache.spark.mllib.linalg.Vectors
 // $example off$
 
-object PowerIterationClusteringExample {
+object LatentDirichletAllocationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("PowerIterationClusteringExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("LatentDirichletAllocationExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
     // $example on$
     // Load and parse the data
-    val data = sc.textFile("data/mllib/pic_data.txt")
-    val similarities = data.map { line =>
-      val parts = line.split(' ')
-      (parts(0).toLong, parts(1).toLong, parts(2).toDouble)
+    val data = sc.textFile("data/mllib/sample_lda_data.txt")
+    val parsedData = data.map(s => Vectors.dense(s.trim.split(' ').map(_.toDouble)))
+    // Index documents with unique IDs
+    val corpus = parsedData.zipWithIndex.map(_.swap).cache()
+
+    // Cluster the documents into three topics using LDA
+    val ldaModel = new LDA().setK(3).run(corpus)
+
+    // Output topics. Each is a distribution over words (matching word count vectors)
+    println("Learned topics (as distributions over vocab of " + ldaModel.vocabSize + " words):")
+    val topics = ldaModel.topicsMatrix
+    for (topic <- Range(0, 3)) {
+      print("Topic " + topic + ":")
+      for (word <- Range(0, ldaModel.vocabSize)) { print(" " + topics(word, topic)); }
+      println()
     }
 
-    // Cluster the data into two classes using PowerIterationClustering
-    val pic = new PowerIterationClustering()
-      .setK(2)
-      .setMaxIterations(10)
-    val model = pic.run(similarities)
-
-    model.assignments.foreach { a =>
-      println(s"${a.id} -> ${a.cluster}")
-    }
-
-    // Save and load model
-    model.save(sc, "myModelPath")
-    val sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
+    // Save and load model.
+    ldaModel.save(sc, "myLDAModel")
+    val sameModel = DistributedLDAModel.load(sc, "myLDAModel")
     // $example off$
 
     sc.stop()

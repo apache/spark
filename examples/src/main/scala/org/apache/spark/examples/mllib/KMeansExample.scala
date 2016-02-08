@@ -20,37 +20,35 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
+import org.apache.spark.mllib.clustering.{KMeans, KMeansModel}
+import org.apache.spark.mllib.linalg.Vectors
 // $example off$
 
-object PowerIterationClusteringExample {
+object KMeansExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("PowerIterationClusteringExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("KMeansExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
     // $example on$
     // Load and parse the data
-    val data = sc.textFile("data/mllib/pic_data.txt")
-    val similarities = data.map { line =>
-      val parts = line.split(' ')
-      (parts(0).toLong, parts(1).toLong, parts(2).toDouble)
-    }
+    val data = sc.textFile("data/mllib/kmeans_data.txt")
+    val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
 
-    // Cluster the data into two classes using PowerIterationClustering
-    val pic = new PowerIterationClustering()
-      .setK(2)
-      .setMaxIterations(10)
-    val model = pic.run(similarities)
+    // Cluster the data into two classes using KMeans
+    val numClusters = 2
+    val numIterations = 20
+    val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
-    model.assignments.foreach { a =>
-      println(s"${a.id} -> ${a.cluster}")
-    }
+    // Evaluate clustering by computing Within Set Sum of Squared Errors
+    val WSSSE = clusters.computeCost(parsedData)
+    println("Within Set Sum of Squared Errors = " + WSSSE)
 
     // Save and load model
-    model.save(sc, "myModelPath")
-    val sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
+    clusters.save(sc, "myModelPath")
+    val sameModel = KMeansModel.load(sc, "myModelPath")
+
     // $example off$
 
     sc.stop()

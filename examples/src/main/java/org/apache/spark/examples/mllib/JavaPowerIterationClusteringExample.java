@@ -17,41 +17,55 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import scala.Tuple3;
 
-import com.google.common.collect.Lists;
-
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.PowerIterationClustering;
 import org.apache.spark.mllib.clustering.PowerIterationClusteringModel;
+// $example off$
 
-/**
- * Java example for graph clustering using power iteration clustering (PIC).
- */
+import org.apache.spark.SparkConf;
+import org.apache.spark.sql.SQLContext;
+
 public class JavaPowerIterationClusteringExample {
   public static void main(String[] args) {
-    SparkConf sparkConf = new SparkConf().setAppName("JavaPowerIterationClusteringExample");
-    JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
-    @SuppressWarnings("unchecked")
-    JavaRDD<Tuple3<Long, Long, Double>> similarities = sc.parallelize(Lists.newArrayList(
-      new Tuple3<Long, Long, Double>(0L, 1L, 0.9),
-      new Tuple3<Long, Long, Double>(1L, 2L, 0.9),
-      new Tuple3<Long, Long, Double>(2L, 3L, 0.9),
-      new Tuple3<Long, Long, Double>(3L, 4L, 0.1),
-      new Tuple3<Long, Long, Double>(4L, 5L, 0.9)));
+    SparkConf conf = new SparkConf().setAppName("JavaPowerIterationClusteringExample")
+            .setMaster("local[*]");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext sqlContext = new SQLContext(jsc);
 
+    // $example on$
+    // Load and parse the data
+    JavaRDD<String> data = jsc.textFile("data/mllib/pic_data.txt");
+    JavaRDD<Tuple3<Long, Long, Double>> similarities = data.map(
+            new Function<String, Tuple3<Long, Long, Double>>() {
+              public Tuple3<Long, Long, Double> call(String line) {
+                String[] parts = line.split(" ");
+                return new Tuple3<>(new Long(parts[0]), new Long(parts[1]), new Double(parts[2]));
+              }
+            }
+    );
+
+    // Cluster the data into two classes using PowerIterationClustering
     PowerIterationClustering pic = new PowerIterationClustering()
-      .setK(2)
-      .setMaxIterations(10);
+            .setK(2)
+            .setMaxIterations(10);
     PowerIterationClusteringModel model = pic.run(similarities);
 
     for (PowerIterationClustering.Assignment a: model.assignments().toJavaRDD().collect()) {
       System.out.println(a.id() + " -> " + a.cluster());
     }
 
-    sc.stop();
+    // Save and load model
+    model.save(jsc.sc(), "myModelPath");
+    PowerIterationClusteringModel sameModel = PowerIterationClusteringModel
+            .load(jsc.sc(), "myModelPath");
+    // $example off$
+
+    jsc.stop();
   }
 }

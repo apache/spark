@@ -20,37 +20,34 @@ package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.mllib.clustering.{PowerIterationClustering, PowerIterationClusteringModel}
+import org.apache.spark.mllib.clustering.{GaussianMixture, GaussianMixtureModel}
+import org.apache.spark.mllib.linalg.Vectors
 // $example off$
 
-object PowerIterationClusteringExample {
+object GaussianMixtureExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("PowerIterationClusteringExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("GaussianMixtureExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
     // $example on$
     // Load and parse the data
-    val data = sc.textFile("data/mllib/pic_data.txt")
-    val similarities = data.map { line =>
-      val parts = line.split(' ')
-      (parts(0).toLong, parts(1).toLong, parts(2).toDouble)
-    }
+    val data = sc.textFile("data/mllib/gmm_data.txt")
+    val parsedData = data.map(s => Vectors.dense(s.trim.split(' ').map(_.toDouble))).cache()
 
-    // Cluster the data into two classes using PowerIterationClustering
-    val pic = new PowerIterationClustering()
-      .setK(2)
-      .setMaxIterations(10)
-    val model = pic.run(similarities)
-
-    model.assignments.foreach { a =>
-      println(s"${a.id} -> ${a.cluster}")
-    }
+    // Cluster the data into two classes using GaussianMixture
+    val gmm = new GaussianMixture().setK(2).run(parsedData)
 
     // Save and load model
-    model.save(sc, "myModelPath")
-    val sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
+    gmm.save(sc, "myGMMModel")
+    val sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
+
+    // output parameters of max-likelihood model
+    for (i <- 0 until gmm.k) {
+      println("weight=%f\nmu=%s\nsigma=\n%s\n" format
+        (gmm.weights(i), gmm.gaussians(i).mu, gmm.gaussians(i).sigma))
+    }
     // $example off$
 
     sc.stop()
