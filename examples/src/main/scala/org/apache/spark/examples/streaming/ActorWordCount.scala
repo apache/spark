@@ -18,7 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-
 import scala.collection.mutable.MutableList
 import scala.reflect.ClassTag
 import scala.util.Random
