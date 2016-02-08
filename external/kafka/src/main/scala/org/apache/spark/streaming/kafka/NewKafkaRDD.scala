@@ -39,15 +39,18 @@ class NewKafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
   sc: SparkContext,
   kafkaParams: Map[String, String],
   val offsetRanges: Array[OffsetRange],
+  leaders: Map[TopicPartition, (String, Int)],
   messageHandler: ConsumerRecord[K, V] => R
-) extends KafkaRDDBase[K, V, scala.Null, scala.Null, R](sc, kafkaParams, offsetRanges, null) with
+) extends KafkaRDDBase[K, V, scala.Null, scala.Null, R](sc, kafkaParams, offsetRanges, KafkaUtils
+  .newTopicPartitionToOld(leaders)) with
   Logging with HasOffsetRanges {
 
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map {
       case (o, i) =>
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, o.leaderHost,
-          Int.MinValue)
+        println("new"+o)
+        val (host, port) = leaders(new TopicPartition(o.topic, o.partition))
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
     }.toArray
   }
 
@@ -86,12 +89,16 @@ object NewKafkaRDD {
       fromOffsets: Map[TopicPartition, Long],
       untilOffsets: Map[TopicPartition, LeaderOffset],
       messageHandler: ConsumerRecord[K, V] => R): NewKafkaRDD[K, V, R] = {
+    val leaders = untilOffsets.map { case (tp, lo) =>
+      tp -> (lo.host, lo.port)
+    }.toMap
+
     val offsetRanges = fromOffsets.map {
       case (tp, fo) =>
         val uo = untilOffsets(tp)
-        OffsetRange(tp.topic, tp.partition, fo, uo.offset, uo.host)
+        OffsetRange(tp.topic, tp.partition, fo, uo.offset)
     }.toArray
 
-    new NewKafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, messageHandler)
+    new NewKafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 }

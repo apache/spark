@@ -44,22 +44,13 @@ trait HasOffsetRanges {
  * @param partition Kafka partition id
  * @param fromOffset Inclusive starting offset
  * @param untilOffset Exclusive ending offset
- * @param leaderHost preferred kafka host, i.e. the leader at the time the RDD was created
  */
 final class OffsetRange private(
     val topic: String,
     val partition: Int,
     val fromOffset: Long,
-    val untilOffset: Long,
-    val leaderHost: String) extends Serializable {
+    val untilOffset: Long) extends Serializable {
   import OffsetRange.OffsetRangeTuple
-
-  def this(topic: String,
-    partition: Int,
-    fromOffset: Long,
-    untilOffset: Long) = {
-    this(topic, partition, fromOffset, untilOffset, null)
-  }
 
   /** Kafka TopicAndPartition object, for convenience */
   def topicAndPartition(): TopicAndPartition = TopicAndPartition(topic, partition)
@@ -75,8 +66,7 @@ final class OffsetRange private(
       this.topic == that.topic &&
         this.partition == that.partition &&
         this.fromOffset == that.fromOffset &&
-        this.untilOffset == that.untilOffset &&
-        this.leaderHost == that.leaderHost
+        this.untilOffset == that.untilOffset
     case _ => false
   }
 
@@ -85,13 +75,12 @@ final class OffsetRange private(
   }
 
   override def toString(): String = {
-    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset], " +
-      s"leaderHost: '$leaderHost')"
+    s"OffsetRange(topic: '$topic', partition: $partition, range: [$fromOffset -> $untilOffset])"
   }
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[streaming]
-  def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset, leaderHost)
+  def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset)
 
 
 }
@@ -131,61 +120,11 @@ object OffsetRange {
       untilOffset: Long): OffsetRange =
     new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
 
-  def create(
-      topic: String,
-      partition: Int,
-      fromOffset: Long,
-      untilOffset: Long,
-      leaderHost: String): OffsetRange =
-    new OffsetRange(topic, partition, fromOffset, untilOffset, leaderHost)
-
-  def create(
-      topicAndPartition: TopicAndPartition,
-      fromOffset: Long,
-      untilOffset: Long,
-      leaderHost: String): OffsetRange =
-    new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset,
-      untilOffset, leaderHost)
-
-  def create(
-      topicPartition: TopicPartition,
-      fromOffset: Long,
-      untilOffset: Long,
-      leaderHost: String): OffsetRange =
-    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
-      leaderHost)
-
-
-  def apply(
-      topic: String,
-      partition: Int,
-      fromOffset: Long,
-      untilOffset: Long,
-      leaderHost: String): OffsetRange =
-    new OffsetRange(topic, partition, fromOffset, untilOffset, leaderHost)
-
-  def apply(
-      topicAndPartition: TopicAndPartition,
-      fromOffset: Long,
-      untilOffset: Long,
-      leaderHost: String): OffsetRange =
-    new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset,
-      untilOffset, leaderHost)
-
-  def apply(
-      topicPartition: TopicPartition,
-      fromOffset: Long,
-      untilOffset: Long,
-      leaderHost: String): OffsetRange =
-    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset,
-      leaderHost)
-
-
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka]
-  type OffsetRangeTuple = (String, Int, Long, Long, String)
+  type OffsetRangeTuple = (String, Int, Long, Long)
 
   private[kafka]
   def apply(t: OffsetRangeTuple) =
-    new OffsetRange(t._1, t._2, t._3, t._4, t._5)
+    new OffsetRange(t._1, t._2, t._3, t._4)
 }
