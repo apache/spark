@@ -619,6 +619,18 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   /**
+   * Look up an application attempt
+   * @param appId application ID
+   * @param attemptId Attempt ID, if set
+   * @return the matching attempt, if found
+   */
+  def lookup(appId: String, attemptId: Option[String]): Option[FsApplicationAttemptInfo] = {
+    applications.get(appId).flatMap { appInfo =>
+      appInfo.attempts.find(_.attemptId == attemptId)
+    }
+  }
+
+  /**
    * The update probe of the is the generational counter of attempts:
    * if the filesize is less than that of the latest attempt's size, it is out of date.
    * @param appId application to probe
@@ -626,9 +638,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * @param fileSize the file size of the last attempt's logs
    */
   private def updateProbe(
-    appId: String,
-    attemptId: Option[String],
-    fileSize: Long)(): Boolean = {
+      appId: String,
+      attemptId: Option[String],
+      fileSize: Long)(): Boolean = {
     lookup(appId, attemptId) match {
       case None =>
         logDebug(s"Application Attempt $appId/$attemptId not found")

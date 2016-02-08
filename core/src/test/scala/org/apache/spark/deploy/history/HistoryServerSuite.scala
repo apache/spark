@@ -31,22 +31,19 @@ import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.json4s._
 import org.json4s.JsonAST._
-import org.json4s.JsonAST.JNothing
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
-import org.mockito.Mockito.when
-import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.openqa.selenium.WebDriver
-import org.scalatest.concurrent.Eventually
-import org.scalatest.selenium.WebBrowser
+import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.mock.MockitoSugar
+import org.scalatest.selenium.WebBrowser
 
+import org.apache.spark._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
-import org.apache.spark.util.ResetSystemProperties
-import org.apache.spark._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -60,7 +57,8 @@ import org.apache.spark.util.Utils
  * are considered part of Spark's public api.
  */
 class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext with ResetSystemProperties {
+  with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
+  with ResetSystemProperties {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")

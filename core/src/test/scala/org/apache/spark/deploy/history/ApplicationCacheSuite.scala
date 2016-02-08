@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.util.{Date, NoSuchElementException}
 import javax.servlet.Filter
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -29,17 +29,17 @@ import com.codahale.metrics.Counter
 import com.google.common.cache.LoadingCache
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.ServletContextHandler
-import org.mockito.Mockito._
 import org.mockito.Matchers._
+import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.status.api.v1.{ApplicationAttemptInfo => AttemptInfo, ApplicationInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Clock, ManualClock, Utils}
-import org.apache.spark.{Logging, SparkFunSuite}
 
 class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar with Matchers {
 

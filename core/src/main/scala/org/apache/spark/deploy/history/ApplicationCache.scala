@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -62,7 +62,7 @@ private[history] class ApplicationCache(
    */
   private val appLoader = new CacheLoader[CacheKey, CacheEntry] {
 
-    /** the cache key doesn't match an cached entry ... attempt to load it  */
+    /** the cache key doesn't match a cached entry, or the entry is out-of-date, so load it. */
     override def load(key: CacheKey): CacheEntry = {
       loadApplicationEntry(key.appId, key.attemptId)
     }
