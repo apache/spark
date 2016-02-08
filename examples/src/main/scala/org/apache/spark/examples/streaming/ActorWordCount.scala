@@ -39,7 +39,7 @@ case class UnsubscribeReceiver(receiverActor: ActorRef)
 class FeederActor extends Actor {
 
   val rand = new Random()
-  var receivers: ArrayBuffer[ActorRef] = new ArrayBuffer[ActorRef]()
+  val receivers = new ArrayBuffer[ActorRef]()
 
   val strings: Array[String] = Array("words ", "may ", "count ")
 
@@ -67,7 +67,7 @@ class FeederActor extends Actor {
 
     case UnsubscribeReceiver(receiverActor: ActorRef) =>
       println("received unsubscribe from %s".format(receiverActor.toString))
-      receivers = receivers.dropWhile(x => x eq receiverActor)
+      receivers.dropWhile(x => x eq receiverActor)
   }
 }
 
