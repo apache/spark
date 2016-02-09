@@ -37,9 +37,6 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
-
-  println(projectList)
-
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   override lazy val resolved: Boolean = {
@@ -51,6 +48,26 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     )
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
+  }
+
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  private def getAliasedConstraints: Set[Expression] = {
+    projectList.flatMap {
+      case a @ Alias(e, _) =>
+        child.constraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(e) =>
+            a.toAttribute
+        })
+      case _ =>
+        Set.empty[Expression]
+    }.toSet
+  }
+
+  override def validConstraints: Set[Expression] = {
+    child.constraints.union(getAliasedConstraints)
   }
 }
 
