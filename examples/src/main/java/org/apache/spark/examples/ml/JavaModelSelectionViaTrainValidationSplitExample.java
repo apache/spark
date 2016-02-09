@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.mllib;
+package org.apache.spark.examples.ml;
 
 //$example on$
 import org.apache.spark.SparkConf;
@@ -28,6 +28,7 @@ import org.apache.spark.ml.tuning.TrainValidationSplit;
 import org.apache.spark.ml.tuning.TrainValidationSplitModel;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
+
 //$example off$
 
 /**
@@ -36,13 +37,13 @@ import org.apache.spark.sql.SQLContext;
 public class JavaModelSelectionViaTrainValidationSplitExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf()
-        .setAppName("JavaModelSelectionViaTrainValidationSplitExample");
+      .setAppName("JavaModelSelectionViaTrainValidationSplitExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext jsql = new SQLContext(sc);
 
     // $example on$
     DataFrame data = jsql.read().format("libsvm")
-        .load("data/mllib/sample_libsvm_data.txt");
+      .load("data/mllib/sample_libsvm_data.txt");
 
     // Prepare training and test data.
     DataFrame[] splits = data.randomSplit(new double[] { 0.9, 0.1 }, 12345);
@@ -57,17 +58,17 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     // best model using
     // the evaluator.
     ParamMap[] paramGrid = new ParamGridBuilder()
-        .addGrid(lr.regParam(), new double[] { 0.1, 0.01 })
-        .addGrid(lr.fitIntercept())
-        .addGrid(lr.elasticNetParam(), new double[] { 0.0, 0.5, 1.0 }).build();
+      .addGrid(lr.regParam(), new double[] { 0.1, 0.01 })
+      .addGrid(lr.fitIntercept())
+      .addGrid(lr.elasticNetParam(), new double[] { 0.0, 0.5, 1.0 }).build();
 
     // In this case the estimator is simply the linear regression.
     // A TrainValidationSplit requires an Estimator, a set of Estimator
     // ParamMaps, and an Evaluator.
     TrainValidationSplit trainValidationSplit = new TrainValidationSplit()
-        .setEstimator(lr).setEvaluator(new RegressionEvaluator())
-        // 80% for training and the remaining 20% for validation
-        .setEstimatorParamMaps(paramGrid).setTrainRatio(0.8);
+      .setEstimator(lr).setEvaluator(new RegressionEvaluator())
+      // 80% for training and the remaining 20% for validation
+      .setEstimatorParamMaps(paramGrid).setTrainRatio(0.8);
 
     // Run train validation split, and choose the best set of parameters.
     TrainValidationSplitModel model = trainValidationSplit.fit(training);

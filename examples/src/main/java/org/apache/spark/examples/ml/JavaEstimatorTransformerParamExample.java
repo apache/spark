@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.mllib;
+package org.apache.spark.examples.ml;
 
 //$example on$
 import java.util.Arrays;
@@ -30,6 +30,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+
 //$example off$
 
 /**
@@ -38,7 +39,7 @@ import org.apache.spark.sql.SQLContext;
 public class JavaEstimatorTransformerParamExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf()
-        .setAppName("JavaEstimatorTransformerParamExample");
+      .setAppName("JavaEstimatorTransformerParamExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
 
@@ -48,16 +49,16 @@ public class JavaEstimatorTransformerParamExample {
     // JavaBeans
     // into DataFrames, where it uses the bean metadata to infer the schema.
     DataFrame training = sqlContext.createDataFrame(Arrays.asList(
-        new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)), new LabeledPoint(
-            0.0, Vectors.dense(2.0, 1.0, -1.0)),
-        new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)), new LabeledPoint(
-            1.0, Vectors.dense(0.0, 1.2, -0.5))), LabeledPoint.class);
+      new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)), new LabeledPoint(
+        0.0, Vectors.dense(2.0, 1.0, -1.0)),
+      new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)), new LabeledPoint(
+        1.0, Vectors.dense(0.0, 1.2, -0.5))), LabeledPoint.class);
 
     // Create a LogisticRegression instance. This instance is an Estimator.
     LogisticRegression lr = new LogisticRegression();
     // Print out the parameters, documentation, and any default values.
     System.out.println("LogisticRegression parameters:\n" + lr.explainParams()
-        + "\n");
+      + "\n");
 
     // We may set parameters using setter methods.
     lr.setMaxIter(10).setRegParam(0.01);
@@ -70,18 +71,18 @@ public class JavaEstimatorTransformerParamExample {
     // for this
     // LogisticRegression instance.
     System.out.println("Model 1 was fit using parameters: "
-        + model1.parent().extractParamMap());
+      + model1.parent().extractParamMap());
 
     // We may alternatively specify parameters using a ParamMap.
-    ParamMap paramMap = new ParamMap().put(lr.maxIter().w(20)) // Specify 1
-                                                               // Param.
-        .put(lr.maxIter(), 30) // This overwrites the original maxIter.
-        .put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple
-                                                            // Params.
+    // Specify 1 Param.
+    ParamMap paramMap = new ParamMap().put(lr.maxIter().w(20))
+      .put(lr.maxIter(), 30) // This overwrites the original maxIter.
+      // Specify multiple Params.
+      .put(lr.regParam().w(0.1), lr.threshold().w(0.55));
 
     // One can also combine ParamMaps.
     ParamMap paramMap2 = new ParamMap().put(lr.probabilityCol().w(
-        "myProbability")); // Change output column name
+      "myProbability")); // Change output column name
     ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 
     // Now learn a new model using the paramMapCombined parameters.
@@ -89,13 +90,13 @@ public class JavaEstimatorTransformerParamExample {
     // methods.
     LogisticRegressionModel model2 = lr.fit(training, paramMapCombined);
     System.out.println("Model 2 was fit using parameters: "
-        + model2.parent().extractParamMap());
+      + model2.parent().extractParamMap());
 
     // Prepare test documents.
     DataFrame test = sqlContext.createDataFrame(Arrays.asList(new LabeledPoint(
-        1.0, Vectors.dense(-1.0, 1.5, 1.3)),
-        new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)), new LabeledPoint(
-            1.0, Vectors.dense(0.0, 2.2, -1.5))), LabeledPoint.class);
+      1.0, Vectors.dense(-1.0, 1.5, 1.3)),
+      new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)), new LabeledPoint(
+        1.0, Vectors.dense(0.0, 2.2, -1.5))), LabeledPoint.class);
 
     // Make predictions on test documents using the Transformer.transform()
     // method.
@@ -106,9 +107,9 @@ public class JavaEstimatorTransformerParamExample {
     // previously.
     DataFrame results = model2.transform(test);
     for (Row r : results.select("features", "label", "myProbability",
-        "prediction").collect()) {
+      "prediction").collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob="
-          + r.get(2) + ", prediction=" + r.get(3));
+        + r.get(2) + ", prediction=" + r.get(3));
     }
     // $example off$
 

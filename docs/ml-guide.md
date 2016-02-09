@@ -213,15 +213,15 @@ This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 <div class="codetabs">
 
 <div data-lang="scala">
-{% include_example scala/org/apache/spark/examples/mllib/EstimatorTransformerParamExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/EstimatorTransformerParamExample.scala %}
 </div>
 
 <div data-lang="java">
-{% include_example java/org/apache/spark/examples/mllib/JavaEstimatorTransformerParamExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaEstimatorTransformerParamExample.java %}
 </div>
 
 <div data-lang="python">
-{% include_example python/mllib/estimator_transformer_param_example.py %}
+{% include_example python/ml/estimator_transformer_param_example.py %}
 </div>
 
 </div>
@@ -233,15 +233,15 @@ This example follows the simple text document `Pipeline` illustrated in the figu
 <div class="codetabs">
 
 <div data-lang="scala">
-{% include_example scala/org/apache/spark/examples/mllib/PipelineExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/PipelineExample.scala %}
 </div>
 
 <div data-lang="java">
-{% include_example java/org/apache/spark/examples/mllib/JavaPipelineExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaPipelineExample.java %}
 </div>
 
 <div data-lang="python">
-{% include_example python/mllib/pipeline_example.py %}
+{% include_example python/ml/pipeline_example.py %}
 </div>
 
 </div>
@@ -276,11 +276,11 @@ However, it is also a well-established method for choosing parameters which is m
 <div class="codetabs">
 
 <div data-lang="scala">
-{% include_example scala/org/apache/spark/examples/mllib/ModelSelectionViaCrossValidationExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaCrossValidationExample.scala %}
 </div>
 
 <div data-lang="java">
-{% include_example java/org/apache/spark/examples/mllib/JavaModelSelectionViaCrossValidationExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaCrossValidationExample.java %}
 </div>
 
 </div>
@@ -304,12 +304,12 @@ The `ParamMap` which produces the best evaluation metric is selected as the best
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-{% include_example scala/org/apache/spark/examples/mllib/ModelSelectionViaTrainValidationSplitExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaTrainValidationSplitExample.scala %}
 {% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
-{% include_example java/org/apache/spark/examples/mllib/JavaModelSelectionViaTrainValidationSplitExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaTrainValidationSplitExample.java %}
 </div>
 
 </div>

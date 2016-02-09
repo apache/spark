@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.mllib
+package org.apache.spark.examples.ml
 
 import org.apache.spark.{ SparkConf, SparkContext }
 import org.apache.spark.ml.evaluation.RegressionEvaluator

@@ -15,21 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.mllib;
+package org.apache.spark.examples.ml;
 
 import java.io.Serializable;
 
 /**
  * Unlabeled instance type, Spark SQL can infer schema from Java Beans.
  */
-public class Document implements Serializable {
+public class JavaDocument implements Serializable {
 
   /** Serializable version identifier */
   private static final long serialVersionUID = 7090547542135729169L;
   private long id;
   private String text;
 
-  public Document(long id, String text) {
+  public JavaDocument(long id, String text) {
     this.id = id;
     this.text = text;
   }

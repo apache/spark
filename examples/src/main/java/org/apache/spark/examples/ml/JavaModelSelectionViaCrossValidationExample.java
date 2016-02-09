@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples.mllib;
+package org.apache.spark.examples.ml;
 
 //$example on$
 import java.util.Arrays;
@@ -35,6 +35,7 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+
 //$example off$
 
 /**
@@ -43,33 +44,35 @@ import org.apache.spark.sql.SQLContext;
 public class JavaModelSelectionViaCrossValidationExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf()
-        .setAppName("JavaModelSelectionViaCrossValidationExample");
+      .setAppName("JavaModelSelectionViaCrossValidationExample");
     SparkContext sc = new SparkContext(conf);
     SQLContext sqlContext = new SQLContext(sc);
 
     // $example on$
     // Prepare training documents, which are labeled.
-    DataFrame training = sqlContext.createDataFrame(Arrays.asList(
-        new LabeledDocument(0L, "a b c d e spark", 1.0), new LabeledDocument(
-            1L, "b d", 0.0), new LabeledDocument(2L, "spark f g h", 1.0),
-        new LabeledDocument(3L, "hadoop mapreduce", 0.0), new LabeledDocument(
-            4L, "b spark who", 1.0), new LabeledDocument(5L, "g d a y", 0.0),
-        new LabeledDocument(6L, "spark fly", 1.0), new LabeledDocument(7L,
-            "was mapreduce", 0.0), new LabeledDocument(8L, "e spark program",
-            1.0), new LabeledDocument(9L, "a e c l", 0.0), new LabeledDocument(
-            10L, "spark compile", 1.0), new LabeledDocument(11L,
-            "hadoop software", 0.0)), LabeledDocument.class);
+    DataFrame training = sqlContext.createDataFrame(Arrays
+      .asList(new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
+        new JavaLabeledDocument(1L, "b d", 0.0), new JavaLabeledDocument(2L,
+          "spark f g h", 1.0),
+        new JavaLabeledDocument(3L, "hadoop mapreduce", 0.0), new JavaLabeledDocument(
+          4L, "b spark who", 1.0), new JavaLabeledDocument(5L, "g d a y", 0.0),
+        new JavaLabeledDocument(6L, "spark fly", 1.0), new JavaLabeledDocument(7L,
+          "was mapreduce", 0.0),
+        new JavaLabeledDocument(8L, "e spark program", 1.0), new JavaLabeledDocument(
+          9L, "a e c l", 0.0), new JavaLabeledDocument(10L, "spark compile", 1.0),
+        new JavaLabeledDocument(11L, "hadoop software", 0.0)),
+      JavaLabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer,
     // hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer().setInputCol("text").setOutputCol(
-        "words");
+      "words");
     HashingTF hashingTF = new HashingTF().setNumFeatures(1000)
-        .setInputCol(tokenizer.getOutputCol()).setOutputCol("features");
+      .setInputCol(tokenizer.getOutputCol()).setOutputCol("features");
     LogisticRegression lr = new LogisticRegression().setMaxIter(10)
-        .setRegParam(0.01);
+      .setRegParam(0.01);
     Pipeline pipeline = new Pipeline().setStages(new PipelineStage[] {
-        tokenizer, hashingTF, lr });
+      tokenizer, hashingTF, lr });
 
     // We use a ParamGridBuilder to construct a grid of parameters to search
     // over.
@@ -77,8 +80,8 @@ public class JavaModelSelectionViaCrossValidationExample {
     // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to
     // choose from.
     ParamMap[] paramGrid = new ParamGridBuilder()
-        .addGrid(hashingTF.numFeatures(), new int[] { 10, 100, 1000 })
-        .addGrid(lr.regParam(), new double[] { 0.1, 0.01 }).build();
+      .addGrid(hashingTF.numFeatures(), new int[] { 10, 100, 1000 })
+      .addGrid(lr.regParam(), new double[] { 0.1, 0.01 }).build();
 
     // We now treat the Pipeline as an Estimator, wrapping it in a
     // CrossValidator instance.
@@ -89,24 +92,24 @@ public class JavaModelSelectionViaCrossValidationExample {
     // default metric
     // is areaUnderROC.
     CrossValidator cv = new CrossValidator().setEstimator(pipeline)
-        .setEvaluator(new BinaryClassificationEvaluator())
-        .setEstimatorParamMaps(paramGrid).setNumFolds(2); // Use 3+ in practice
+      .setEvaluator(new BinaryClassificationEvaluator())
+      .setEstimatorParamMaps(paramGrid).setNumFolds(2); // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
     CrossValidatorModel cvModel = cv.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    DataFrame test = sqlContext.createDataFrame(Arrays.asList(new Document(4L,
-        "spark i j k"), new Document(5L, "l m n"), new Document(6L,
-        "mapreduce spark"), new Document(7L, "apache hadoop")), Document.class);
+    DataFrame test = sqlContext.createDataFrame(Arrays.asList(new JavaDocument(4L,
+      "spark i j k"), new JavaDocument(5L, "l m n"), new JavaDocument(6L,
+      "mapreduce spark"), new JavaDocument(7L, "apache hadoop")), JavaDocument.class);
 
     // Make predictions on test documents. cvModel uses the best model found
     // (lrModel).
     DataFrame predictions = cvModel.transform(test);
     for (Row r : predictions.select("id", "text", "probability", "prediction")
-        .collect()) {
+      .collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob="
-          + r.get(2) + ", prediction=" + r.get(3));
+        + r.get(2) + ", prediction=" + r.get(3));
     }
     // $example off$
 
