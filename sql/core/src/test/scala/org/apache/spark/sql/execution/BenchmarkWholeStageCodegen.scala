@@ -211,7 +211,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         var i = 0
         while (i < N) {
           key.setInt(0, i % 65536)
-          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, i % 65536)
+          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+            Murmur3_x86_32.hashLong(i % 65536, 42))
           if (loc.isDefined) {
             value.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
             value.setInt(0, value.getInt(0) + 1)
@@ -231,8 +232,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     hash                                      651 /  678         80.0          12.5       1.0X
     fast hash                                 336 /  343        155.9           6.4       1.9X
     arrayEqual                                417 /  428        125.0           8.0       1.6X
-    BytesToBytesMap (off Heap)               1697 / 1744         30.0          33.3       0.4X
-    BytesToBytesMap (on Heap)                1766 / 1877         29.0          34.5       0.4X
+    BytesToBytesMap (off Heap)               2594 / 2664         20.2          49.5       0.2X
+    BytesToBytesMap (on Heap)                2693 / 2989         19.5          51.4       0.2X
       */
     benchmark.run()
   }
