@@ -70,6 +70,48 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
         """
         raise NotImplementedError()
 
+    def get_pandas_df(self, bql, parameters=None):
+        """
+        Returns a Pandas DataFrame for the results produced by a BigQuery
+        query. The DbApiHook method must be overridden because Pandas
+        doesn't support PEP 249 connections, except for SQLite. See:
+
+        https://github.com/pydata/pandas/blob/master/pandas/io/sql.py#L447
+        https://github.com/pydata/pandas/issues/6900
+
+        :param bql: The BigQuery SQL to execute.
+        :type bql: string
+        """
+        service = self.get_service()
+        connection_extras = self._extras_dejson()
+        project = connection_extras['project']
+        connector = BigQueryPandasConnector(project, service)
+        schema, pages = connector.run_query(bql, verbose=False)
+        dataframe_list = []
+
+        while len(pages) > 0:
+            page = pages.pop()
+            dataframe_list.append(gbq_parse_data(schema, page))
+
+        if len(dataframe_list) > 0:
+            return concat(dataframe_list, ignore_index=True)
+        else:
+            return gbq_parse_data(schema, [])
+
+class BigQueryPandasConnector(GbqConnector):
+    """
+    This connector behaves identically to GbqConnector (from Pandas), except
+    that it allows the service to be injected, and disables a call to
+    self.get_credentials(). This allows Airflow to use BigQuery with Pandas
+    without forcing a three legged OAuth connection. Instead, we can inject
+    service account credentials into the binding.
+    """
+    def __init__(self, project_id, service, reauth=False):
+        self.test_google_api_imports()
+        self.project_id = project_id
+        self.reauth = reauth
+        self.service = service
+
 class BigQueryConnection(object):
     """
     BigQuery does not have a notion of a persistent connection. Thus, these
