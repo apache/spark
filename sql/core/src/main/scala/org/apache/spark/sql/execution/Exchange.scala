@@ -207,7 +207,7 @@ object Exchange {
           val mutablePair = new MutablePair[InternalRow, Null]()
           iter.map(row => mutablePair.update(row.copy(), null))
         }
-        implicit val ordering = new LazilyGenerateOrdering(sortingExpressions, child.output)
+        implicit val ordering = new LazilyGenerateOrdering(sortingExpressions, outputAttributes)
         new RangePartitioner(numPartitions, rddForSampling, ascending = true)
       case SinglePartition =>
         new Partitioner {
