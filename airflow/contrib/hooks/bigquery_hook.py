@@ -87,7 +87,9 @@ class BigQueryConnection(object):
         raise NotSupportedError("BigQueryConnection does not have transactions")
 
 class BigQueryBaseCursor(object):
+    # TODO pydocs
     def __init__(self, service, project_id):
+        # TODO pydocs
         self.service = service
         self.project_id = project_id
 
@@ -227,7 +229,7 @@ class BigQueryCursor(BigQueryBaseCursor):
         self.buffersize = None
         self.page_token = None
         self.job_id = None
-        self.buffer = None
+        self.buffer = []
 
     @property
     def description(self):
@@ -265,7 +267,7 @@ class BigQueryCursor(BigQueryBaseCursor):
         if not self.job_id:
             return None
 
-        if not self.buffer or len(self.buffer) == 0:
+        if len(self.buffer) == 0:
             query_results = self.service.jobs().getQueryResults(projectId=self.project_id, jobId=self.job_id, pageToken=self.page_token).execute()
 
             if len(query_results['rows']) == 0:
@@ -275,11 +277,14 @@ class BigQueryCursor(BigQueryBaseCursor):
                 self.page_token = None
                 return None
             else:
-                self.page_token = query_results['page_token']
+                self.page_token = query_results.get('pageToken')
+                fields = query_results['schema']['fields']
+                col_types = [field['type'] for field in fields]
                 rows = query_results['rows']
 
-                for row in rows:
-                    self.buffer.append(map(lambda vs: vs['v'], row['f']))
+                for idx, dict_row in enumerate(rows):
+                    typed_row = [_bq_cast(vs['v'], col_types[idx]) for vs in dict_row['f']]
+                    self.buffer.append(typed_row)
 
         return self.buffer.pop(0)
 
@@ -320,10 +325,12 @@ class BigQueryCursor(BigQueryBaseCursor):
         return result
 
     def get_arraysize(self):
+        # TODO pydocs
         # PEP 249
         return self._buffersize if self.buffersize else 1
 
     def set_arraysize(self, arraysize):
+        # TODO pydocs
         # PEP 249
         self.buffersize = arraysize
 
@@ -338,6 +345,7 @@ class BigQueryCursor(BigQueryBaseCursor):
         pass
 
 def _bind_parameters(operation, parameters):
+    # TODO pydocs
     # inspired by MySQL Python Connector (conversion.py)
     string_parameters = {}
     for (name, value) in parameters.iteritems():
@@ -350,6 +358,7 @@ def _bind_parameters(operation, parameters):
     return operation % string_parameters
 
 def _escape(s):
+    # TODO pydocs
     e = s
     e = e.replace('\\', '\\\\')
     e = e.replace('\n', '\\n')
@@ -357,3 +366,14 @@ def _escape(s):
     e = e.replace("'", "\\'")
     e = e.replace('"', '\\"')
     return e
+
+def _bq_cast(string_field, bq_type):
+    # TODO pydocs
+    if bq_type == 'INTEGER' or bq_type == 'TIMESTAMP':
+        return int(string_field)
+    elif bq_type == 'FLOAT':
+        return float(string_field)
+    elif bq_type == 'BOOLEAN':
+        return bool(string_field)
+    else:
+        return string_field
