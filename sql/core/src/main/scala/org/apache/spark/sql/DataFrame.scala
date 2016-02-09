@@ -474,6 +474,7 @@ class DataFrame private[sql](
           val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
           Alias(Coalesce(Seq(leftCol, rightCol)), col)()
         }
+      case NaturalJoin(_) => sys.error("NaturalJoin with using clause is not supported.")
     }
     // The nullability of output of joined could be different than original column,
     // so we can only compare them by exprId
@@ -1383,6 +1384,10 @@ class DataFrame private[sql](
 
   /**
    * Returns the first `n` rows.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @group action
    * @since 1.3.0
    */

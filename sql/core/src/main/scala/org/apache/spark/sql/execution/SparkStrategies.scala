@@ -306,11 +306,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.MapPartitions(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumns(f, in, out, child) =>
         execution.AppendColumns(f, in, out, planLater(child)) :: Nil
-      case logical.MapGroups(f, key, in, out, grouping, child) =>
-        execution.MapGroups(f, key, in, out, grouping, planLater(child)) :: Nil
-      case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, left, right) =>
+      case logical.MapGroups(f, key, in, out, grouping, data, child) =>
+        execution.MapGroups(f, key, in, out, grouping, data, planLater(child)) :: Nil
+      case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr, left, right) =>
         execution.CoGroup(
-          f, keyObj, lObj, rObj, out, lGroup, rGroup, planLater(left), planLater(right)) :: Nil
+          f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr,
+          planLater(left), planLater(right)) :: Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
@@ -337,8 +338,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
+      case logical.ReturnAnswer(logical.Limit(IntegerLiteral(limit), child)) =>
+        execution.CollectLimit(limit, planLater(child)) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
-        execution.Limit(limit, planLater(child)) :: Nil
+        val perPartitionLimit = execution.LocalLimit(limit, planLater(child))
+        val globalLimit = execution.GlobalLimit(limit, perPartitionLimit)
+        globalLimit :: Nil
       case logical.Union(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
@@ -357,6 +362,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
+      case logical.ReturnAnswer(child) => planLater(child) :: Nil
       case _ => Nil
     }
   }

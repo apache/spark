@@ -168,6 +168,32 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     assert(LastOptions.parameters("path") == "/test")
   }
 
+  test("test different data types for options") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .option("intOpt", 56)
+      .option("boolOpt", false)
+      .option("doubleOpt", 6.7)
+      .stream("/test")
+
+    assert(LastOptions.parameters("intOpt") == "56")
+    assert(LastOptions.parameters("boolOpt") == "false")
+    assert(LastOptions.parameters("doubleOpt") == "6.7")
+
+    LastOptions.parameters = null
+    df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("intOpt", 56)
+      .option("boolOpt", false)
+      .option("doubleOpt", 6.7)
+      .stream("/test")
+      .stop()
+
+    assert(LastOptions.parameters("intOpt") == "56")
+    assert(LastOptions.parameters("boolOpt") == "false")
+    assert(LastOptions.parameters("doubleOpt") == "6.7")
+  }
+
   test("unique query names") {
 
     /** Start a query with a specific name */
