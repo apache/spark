@@ -224,15 +224,13 @@ object HiveTypeCoercion {
 
       case s @ Except(left, right) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        Except(newChildren.head, newChildren.last)
+        val Seq(newLeft, newRight) = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+        Except(newLeft, newRight)
 
       case s @ Intersect(left, right, distinct) if s.childrenResolved &&
           left.output.length == right.output.length && !s.resolved =>
-        val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(left :: right :: Nil)
-        assert(newChildren.length == 2)
-        Intersect(newChildren.head, newChildren.last, distinct)
+        val Seq(newLeft, newRight) = buildNewChildrenWithWiderTypes(left :: right :: Nil)
+        Intersect(newLeft, newRight, distinct)
 
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>

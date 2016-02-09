@@ -1070,12 +1070,12 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right, distinct) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map(EqualNullSafe.tupled)
+      val joinCond = left.output.zip(right.output).map(EqualNullSafe.tupled).reduceLeftOption(And)
       if (distinct) {
-        Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
+        Distinct(Join(left, right, LeftSemi, joinCond))
       }
       else {
-        Join(left, right, LeftSemi, joinCond.reduceLeftOption(And))
+        Join(left, right, LeftSemi, joinCond)
       }
   }
 }
