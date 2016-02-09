@@ -211,7 +211,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     val irlsModel = optimizer.fit(instances)
 
     val model = copyValues(new GeneralizedLinearRegressionModel(uid,
-      irlsModel.coefficients, irlsModel.intercept))
+      irlsModel.coefficients, irlsModel.intercept).setParent(this))
     model
   }
 
