@@ -16,7 +16,7 @@ import inspect
 import traceback
 
 import sqlalchemy as sqla
-from sqlalchemy import or_, desc
+from sqlalchemy import or_, desc, and_
 
 
 from flask import redirect, url_for, request, Markup, Response, current_app, render_template
@@ -548,13 +548,36 @@ class Airflow(BaseView):
             task_ids += dag.task_ids
             if not dag.is_subdag:
                 dag_ids.append(dag.dag_id)
+
         TI = models.TaskInstance
+        DagRun = models.DagRun
         session = Session()
+
+        LastDagRun = (
+            session.query(DagRun.dag_id, sqla.func.max(DagRun.execution_date).label('execution_date'))
+            .group_by(DagRun.dag_id)
+            .subquery('last_dag_run')
+        )
+
+        # Select all task_instances from active dag_runs.
+        # If no dag_run is active, return task instances from most recent dag_run.
         qry = (
             session.query(TI.dag_id, TI.state, sqla.func.count(TI.task_id))
-                .filter(TI.task_id.in_(task_ids))
-                .filter(TI.dag_id.in_(dag_ids))
-                .group_by(TI.dag_id, TI.state)
+            .outerjoin(DagRun, and_(
+                DagRun.dag_id == TI.dag_id,
+                DagRun.execution_date == TI.execution_date,
+                DagRun.state == State.RUNNING))
+            .outerjoin(LastDagRun, and_(
+                LastDagRun.c.dag_id == TI.dag_id,
+                LastDagRun.c.execution_date == TI.execution_date)
+            )
+            .filter(TI.task_id.in_(task_ids))
+            .filter(TI.dag_id.in_(dag_ids))
+            .filter(or_(
+                DagRun.dag_id != None,
+                LastDagRun.c.dag_id != None
+            ))
+            .group_by(TI.dag_id, TI.state)
         )
 
         data = {}
