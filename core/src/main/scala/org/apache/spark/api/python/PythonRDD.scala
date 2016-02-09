@@ -875,10 +875,10 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
 
 private[spark] class FilePhantomReference(@transient var f:File, var q: ReferenceQueue[File]) extends PhantomReference(f,q){
 
-	private def cleanup()
-	{
-   		f.delete()
-	}
+  private def cleanup()
+  {
+    f.delete()
+  }
 }
 
 /**
@@ -924,18 +924,16 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   }
   /** Create a seperate daemon thread to remove phantomreferences from queue and invoke cleanup */
       
-      val referenceThread= new Thread {
-      setDaemon(true)
-      override def run() {
-        try {
-           val ref=queue.remove().asInstanceOf[FilePhantomReference]
-           phantomReferences-=ref 
-          
+  val referenceThread= new Thread {
+    setDaemon(true)
+    override def run() {
+    try {
+      val ref=queue.remove().asInstanceOf[FilePhantomReference]
+      phantomReferences-=ref 
         } catch{
           case e: Exception => logError(s"Error removing reference",e)
         }
-      }
-    }.start() 
-   
+    }
+  }.start() 
 }
 // scalastyle:on no.finalize
