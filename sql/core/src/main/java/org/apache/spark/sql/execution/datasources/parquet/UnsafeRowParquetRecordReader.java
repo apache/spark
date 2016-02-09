@@ -219,7 +219,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     if (rowsReturned >= totalRowCount) return false;
     checkEndOfRowGroup();
 
-    int num = (int)Math.min((long) columnarBatch.capacity(), totalRowCount - rowsReturned);
+    int num = (int)Math.min((long) columnarBatch.capacity(), totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
       columnReaders[i].readBatch(num, columnarBatch.column(i));
     }
