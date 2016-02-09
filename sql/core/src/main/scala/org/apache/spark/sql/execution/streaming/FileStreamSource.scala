@@ -47,11 +47,11 @@ class FileStreamSource(
   private var maxBatchId = -1
   private val seenFiles = new OpenHashSet[String]
 
-  /** Cache files for each batch. The content of this map is also stored in the disk.  */
+  /** Map of batch id to files. This map is also stored in `metadataPath`. */
   private val batchToMetadata = new HashMap[Long, Seq[String]]
 
   {
-    // Restore statues from the metadata files
+    // Restore file paths from the metadata files
     val existingBatchFiles = fetchAllBatchFiles()
     if (existingBatchFiles.nonEmpty) {
       val existingBatchIds = existingBatchFiles.map(_.getPath.getName.toInt)
@@ -61,7 +61,9 @@ class FileStreamSource(
         val files = readBatch(batchId)
         if (files.isEmpty) {
           // Assert that the corrupted file must be the latest metadata file.
-          require(batchId == maxBatchId, "Invalid metadata files")
+          if (batchId != maxBatchId) {
+            throw new IllegalStateException("Invalid metadata files")
+          }
           maxBatchId = maxBatchId - 1
         } else {
           batchToMetadata(batchId) = files
@@ -83,7 +85,7 @@ class FileStreamSource(
           throw new IllegalArgumentException("No schema specified")
         }
       } else {
-        // There are some existing files. Use them to infer the schema
+        // There are some existing files. Use them to infer the schema.
         dataFrameBuilder(filesPresent.toArray).schema
       }
     }
@@ -117,11 +119,15 @@ class FileStreamSource(
   }
 
   /**
-   * For test only. Run `action` and return the current offset. When `action` is running, the method
-   * guarantee that the current offset won't be changed and no new batch will be emitted.
+   * For test only. Run `func` with the internal lock to make sure when `func` is running,
+   * the current offset won't be changed and no new batch will be emitted.
    */
-  def currentOffset(action: => Unit = {}): LongOffset = synchronized {
-    action
+  def withBatchingLocked[T](func: => T): T = synchronized {
+    func
+  }
+
+  /** Return the latest offset in the source */
+  def currentOffset: LongOffset = synchronized {
     new LongOffset(maxBatchId)
   }
 
@@ -172,7 +178,7 @@ class FileStreamSource(
    *   END
    * }}}
    *
-   * Note: <FileStreamSource.VERSION> means the value of `FileStreamSource.VERSION`.  Every file
+   * Note: <FileStreamSource.VERSION> means the value of `FileStreamSource.VERSION`. Every file
    * path starts with "-" so that we can know if a line is a file path easily.
    */
   private def writeBatch(id: Int, files: Seq[String]): Unit = {
@@ -183,7 +189,7 @@ class FileStreamSource(
       // scalastyle:off println
       writer.println(FileStreamSource.VERSION)
       writer.println(FileStreamSource.START_TAG)
-      files.foreach(file => writer.println("-" + file))
+      files.foreach(file => writer.println(FileStreamSource.PATH_PREFIX + file))
       writer.println(FileStreamSource.END_TAG)
       // scalastyle:on println
     } finally {
@@ -207,7 +213,8 @@ object FileStreamSource {
 
   private val START_TAG = "START"
   private val END_TAG = "END"
-  val VERSION = "FILESTREAM1"
+  private val PATH_PREFIX = "-"
+  val VERSION = "FILESTREAM_V1"
 
   /**
    * Parse a metadata file and return the content. If the metadata file is corrupted, it will return
@@ -228,6 +235,6 @@ object FileStreamSource {
     if (lines.last != END_TAG) {
       return Nil
     }
-    lines.slice(2, lines.length - 1).map(_.drop(1)) // Drop character "-"
+    lines.slice(2, lines.length - 1).map(_.stripPrefix(PATH_PREFIX)) // Drop character "-"
   }
 }
