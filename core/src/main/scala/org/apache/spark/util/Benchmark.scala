@@ -35,7 +35,8 @@ import org.apache.commons.lang3.SystemUtils
  * If outputPerIteration is true, the timing for each run will be printed to stdout.
  */
 private[spark] class Benchmark(
-    name: String, valuesPerIteration: Long,
+    name: String,
+    valuesPerIteration: Long,
     iters: Int = 5,
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
@@ -61,7 +62,6 @@ private[spark] class Benchmark(
     println
 
     val firstBest = results.head.bestMs
-    val firstAvg = results.head.avgMs
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
     printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
