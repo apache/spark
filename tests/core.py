@@ -707,6 +707,10 @@ class CliTests(unittest.TestCase):
             '-s', DEFAULT_DATE.isoformat()]))
 
         cli.backfill(self.parser.parse_args([
+            'backfill', 'example_bash_operator','-t', 'runme_0', '--dry_run',
+            '-s', DEFAULT_DATE.isoformat()]))
+
+        cli.backfill(self.parser.parse_args([
             'backfill', 'example_bash_operator', '--dry_run',
             '-s', DEFAULT_DATE.isoformat()]))
 
