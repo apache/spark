@@ -1678,6 +1678,9 @@ class BaseOperator(object):
         for k, v in list(self.__dict__.items()):
             if k not in ('user_defined_macros', 'params'):
                 setattr(result, k, copy.deepcopy(v, memo))
+        result.params = self.params
+        if hasattr(self, 'user_defined_macros'):
+            result.user_defined_macros = self.user_defined_macros
         return result
 
     def render_template_from_field(self, content, context, jinja_env):
