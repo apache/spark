@@ -29,8 +29,6 @@ import org.apache.spark.mllib.util.MLUtils;
 // $example off$
 import org.apache.spark.SparkConf;
 
-
-
 public class JavaChiSqSelectorExample {
     public static void main(String[] args) {
 

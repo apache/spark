@@ -28,8 +28,6 @@ import org.apache.spark.mllib.linalg.Vectors;
 // $example off$
 import org.apache.spark.SparkConf;
 
-
-
 public class JavaElementwiseProductExample {
     public static void main(String[] args) {
 
