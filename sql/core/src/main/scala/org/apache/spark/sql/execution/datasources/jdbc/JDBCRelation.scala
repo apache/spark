@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.util.Properties
 
+import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
@@ -83,14 +85,14 @@ private[sql] case class JDBCRelation(
     parts: Array[Partition],
     properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
   extends BaseRelation
-  with PrunedFilteredScan
+  with CatalystScan
   with InsertableRelation {
 
   override val needConversion: Boolean = false
 
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
-  override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
+  override def buildScan(requiredColumns: Seq[Attribute], predicates: Seq[Expression]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
@@ -99,7 +101,7 @@ private[sql] case class JDBCRelation(
       properties,
       table,
       requiredColumns,
-      filters,
+      predicates,
       parts).asInstanceOf[RDD[Row]]
   }
 
