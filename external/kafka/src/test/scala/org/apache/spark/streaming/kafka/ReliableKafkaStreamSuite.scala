@@ -25,7 +25,7 @@ import scala.language.postfixOps
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
-import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
+import kafka.utils.{ZKGroupTopicDirs}
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
