@@ -458,25 +458,14 @@ case class AesEncrypt(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = BinaryType
-  override def nullable: Boolean = true
-
   override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val cipher = Cipher.getInstance("AES")
-    val secretKey: SecretKeySpec = input2.asInstanceOf[Array[Byte]].length match {
-      case 16 | 24 | 32 =>
-        new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
-          input2.asInstanceOf[Array[Byte]].length, "AES")
-      case _ => null
-    }
-
-    try {
-      cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-      cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0, input1.asInstanceOf[Array[Byte]].length)
-    } catch {
-      case e: GeneralSecurityException => null
-    }
+    val secretKey: SecretKeySpec = new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
+      input2.asInstanceOf[Array[Byte]].length, "AES")
+    cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+    cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0, input1.asInstanceOf[Array[Byte]].length)
   }
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
@@ -486,16 +475,11 @@ case class AesEncrypt(left: Expression, right: Expression)
       s"""
           try {
             $Cipher cipher = $Cipher.getInstance("AES");
-            $SecretKeySpec secret;
-            if ($key.length == 16 || $key.length == 24 || $key.length == 32) {
-              secret = new $SecretKeySpec($key, 0, $key.length, "AES");
-            } else {
-              secret = null;
-            }
+            $SecretKeySpec secret = new $SecretKeySpec($key, 0, $key.length, "AES");
             cipher.init($Cipher.ENCRYPT_MODE, secret);
             ${ev.value} = cipher.doFinal($str, 0, $str.length);
           } catch (java.security.GeneralSecurityException e) {
-            ${ev.isNull} = true;
+            org.apache.spark.unsafe.Platform.throwException(e);
           }
       """
     })
@@ -515,27 +499,17 @@ case class AesDecrypt(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = StringType
-  override def nullable: Boolean = true
-
   override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     val cipher = Cipher.getInstance("AES")
-    val secretKey = input2.asInstanceOf[Array[Byte]].length match {
-      case 16 | 24 | 32 =>
-        new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
-          input2.asInstanceOf[Array[Byte]].length, "AES")
-      case _ => null
-    }
+    val secretKey = new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
+      input2.asInstanceOf[Array[Byte]].length, "AES")
 
-    try {
-      cipher.init(Cipher.DECRYPT_MODE, secretKey)
-      UTF8String.fromBytes(
-        cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0,
-          input1.asInstanceOf[Array[Byte]].length))
-    } catch {
-      case e: GeneralSecurityException => null
-    }
+    cipher.init(Cipher.DECRYPT_MODE, secretKey)
+    UTF8String.fromBytes(
+      cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0,
+        input1.asInstanceOf[Array[Byte]].length))
   }
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
@@ -545,16 +519,11 @@ case class AesDecrypt(left: Expression, right: Expression)
       s"""
           try {
             $Cipher cipher = $Cipher.getInstance("AES");
-            $SecretKeySpec secret;
-            if ($key.length == 16 || $key.length == 24 || $key.length == 32) {
-              secret = new $SecretKeySpec($key, 0, $key.length, "AES");
-            } else {
-              secret = null;
-            }
+            $SecretKeySpec secret = new $SecretKeySpec($key, 0, $key.length, "AES");
             cipher.init($Cipher.DECRYPT_MODE, secret);
             ${ev.value} = UTF8String.fromBytes(cipher.doFinal($str, 0, $str.length));
           } catch (java.security.GeneralSecurityException e) {
-            ${ev.isNull} = true;
+            org.apache.spark.unsafe.Platform.throwException(e);
           }
       """
     })

@@ -142,9 +142,6 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // input is null
     checkEvaluation(AesEncrypt(Literal.create(null, BinaryType),
       Literal("1234567890123456".getBytes)), null)
-    // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
-    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
-      Literal("1234567890".getBytes))), null)
     // key is null
     checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
       Literal.create(null, BinaryType))), null)
@@ -162,9 +159,6 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // input is null
     checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
       Literal("1234567890123456".getBytes)), null)
-    // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
-    checkEvaluation(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
-      Literal("1234567890".getBytes)), null)
     // key is null
     checkEvaluation(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
       Literal.create(null, BinaryType)), null)
