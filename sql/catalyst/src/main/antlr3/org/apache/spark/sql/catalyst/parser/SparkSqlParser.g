@@ -96,6 +96,10 @@ TOK_RIGHTOUTERJOIN;
 TOK_FULLOUTERJOIN;
 TOK_UNIQUEJOIN;
 TOK_CROSSJOIN;
+TOK_NATURALJOIN;
+TOK_NATURALLEFTOUTERJOIN;
+TOK_NATURALRIGHTOUTERJOIN;
+TOK_NATURALFULLOUTERJOIN;
 TOK_LOAD;
 TOK_EXPORT;
 TOK_IMPORT;
@@ -142,6 +146,7 @@ TOK_UNIONTYPE;
 TOK_COLTYPELIST;
 TOK_CREATEDATABASE;
 TOK_CREATETABLE;
+TOK_CREATETABLEUSING;
 TOK_TRUNCATETABLE;
 TOK_CREATEINDEX;
 TOK_CREATEINDEX_INDEXTBLNAME;
@@ -371,6 +376,17 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_REFRESHTABLE;
+TOK_TABLEPROVIDER;
+TOK_TABLEOPTIONS;
+TOK_TABLEOPTION;
+TOK_CACHETABLE;
+TOK_UNCACHETABLE;
+TOK_CLEARCACHE;
+TOK_SETCONFIG;
+TOK_DFS;
+TOK_ADDFILE;
+TOK_ADDJAR;
 }
 
 
@@ -515,6 +531,11 @@ import java.util.HashMap;
     xlateMap.put("KW_WEEK", "WEEK");
     xlateMap.put("KW_MILLISECOND", "MILLISECOND");
     xlateMap.put("KW_MICROSECOND", "MICROSECOND");
+    xlateMap.put("KW_CLEAR", "CLEAR");
+    xlateMap.put("KW_LAZY", "LAZY");
+    xlateMap.put("KW_CACHE", "CACHE");
+    xlateMap.put("KW_UNCACHE", "UNCACHE");
+    xlateMap.put("KW_DFS", "DFS");
 
     // Operators
     xlateMap.put("DOT", ".");
@@ -648,6 +669,12 @@ import java.util.HashMap;
   }
   private char [] excludedCharForColumnName = {'.', ':'};
   private boolean containExcludedCharForCreateTableColumnName(String input) {
+    if (input.length() > 0) {
+      if (input.charAt(0) == '`' && input.charAt(input.length() - 1) == '`') {
+        // When column name is backquoted, we don't care about excluded chars.
+        return false;
+      }
+    }
     for(char c : excludedCharForColumnName) {
       if(input.indexOf(c)>-1) {
         return true;
@@ -687,8 +714,12 @@ catch (RecognitionException e) {
 
 // starting rule
 statement
-	: explainStatement EOF
-	| execStatement EOF
+    : explainStatement EOF
+    | execStatement EOF
+    | KW_ADD KW_JAR -> ^(TOK_ADDJAR)
+    | KW_ADD KW_FILE -> ^(TOK_ADDFILE)
+    | KW_DFS -> ^(TOK_DFS)
+    | (KW_SET)=> KW_SET -> ^(TOK_SETCONFIG)
 	;
 
 explainStatement
@@ -717,6 +748,7 @@ execStatement
     | deleteStatement
     | updateStatement
     | sqlTransactionStatement
+    | cacheStatement
     ;
 
 loadStatement
@@ -764,6 +796,7 @@ ddlStatement
     | truncateTableStatement
     | alterStatement
     | descStatement
+    | refreshStatement
     | showStatement
     | metastoreCheck
     | createViewStatement
@@ -890,12 +923,31 @@ createTableStatement
 @init { pushMsg("create table statement", state); }
 @after { popMsg(state); }
     : KW_CREATE (temp=KW_TEMPORARY)? (ext=KW_EXTERNAL)? KW_TABLE ifNotExists? name=tableName
-      (  like=KW_LIKE likeName=tableName
+      (
+         like=KW_LIKE likeName=tableName
          tableRowFormat?
          tableFileFormat?
          tableLocation?
          tablePropertiesPrefixed?
+      -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+         ^(TOK_LIKETABLE $likeName?)
+         tableRowFormat?
+         tableFileFormat?
+         tableLocation?
+         tablePropertiesPrefixed?
+         )
+      |
+         tableProvider
+         tableOpts?
+         (KW_AS selectStatementWithCTE)?
+      -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+          tableProvider
+          tableOpts?
+          selectStatementWithCTE?
+          )
        | (LPAREN columnNameTypeList RPAREN)?
+         (p=tableProvider?)
+         tableOpts?
          tableComment?
          tablePartition?
          tableBuckets?
@@ -905,8 +957,15 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          (KW_AS selectStatementWithCTE)?
-      )
-    -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+      -> {p != null}?
+         ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+         columnNameTypeList?
+         $p
+         tableOpts?
+         selectStatementWithCTE?
+         )
+      ->
+         ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
          ^(TOK_LIKETABLE $likeName?)
          columnNameTypeList?
          tableComment?
@@ -918,7 +977,8 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          selectStatementWithCTE?
-        )
+         )
+      )
     ;
 
 truncateTableStatement
@@ -1362,6 +1422,13 @@ tabPartColTypeExpr
     :  tableName partitionSpec? extColumnName? -> ^(TOK_TABTYPE tableName partitionSpec? extColumnName?)
     ;
 
+refreshStatement
+@init { pushMsg("refresh statement", state); }
+@after { popMsg(state); }
+    :
+    KW_REFRESH KW_TABLE tableName -> ^(TOK_REFRESHTABLE tableName)
+    ;
+
 descStatement
 @init { pushMsg("describe statement", state); }
 @after { popMsg(state); }
@@ -1390,7 +1457,7 @@ showStatement
 @init { pushMsg("show statement", state); }
 @after { popMsg(state); }
     : KW_SHOW (KW_DATABASES|KW_SCHEMAS) (KW_LIKE showStmtIdentifier)? -> ^(TOK_SHOWDATABASES showStmtIdentifier?)
-    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES (TOK_FROM $db_name)? showStmtIdentifier?)
+    | KW_SHOW KW_TABLES ((KW_FROM|KW_IN) db_name=identifier)? (KW_LIKE showStmtIdentifier|showStmtIdentifier)?  -> ^(TOK_SHOWTABLES ^(TOK_FROM $db_name)? showStmtIdentifier?)
     | KW_SHOW KW_COLUMNS (KW_FROM|KW_IN) tableName ((KW_FROM|KW_IN) db_name=identifier)?
     -> ^(TOK_SHOWCOLUMNS tableName $db_name?)
     | KW_SHOW KW_FUNCTIONS (KW_LIKE showFunctionIdentifier|showFunctionIdentifier)?  -> ^(TOK_SHOWFUNCTIONS KW_LIKE? showFunctionIdentifier?)
@@ -1757,6 +1824,30 @@ showStmtIdentifier
     | StringLiteral
     ;
 
+tableProvider
+@init { pushMsg("table's provider", state); }
+@after { popMsg(state); }
+    :
+      KW_USING Identifier (DOT Identifier)*
+    -> ^(TOK_TABLEPROVIDER Identifier+)
+    ;
+
+optionKeyValue
+@init { pushMsg("table's option specification", state); }
+@after { popMsg(state); }
+    :
+       (looseIdentifier (DOT looseIdentifier)*) StringLiteral
+    -> ^(TOK_TABLEOPTION looseIdentifier+ StringLiteral)
+    ;
+
+tableOpts
+@init { pushMsg("table's options", state); }
+@after { popMsg(state); }
+    :
+      KW_OPTIONS LPAREN optionKeyValue (COMMA optionKeyValue)* RPAREN
+    -> ^(TOK_TABLEOPTIONS optionKeyValue+)
+    ;
+
 tableComment
 @init { pushMsg("table's comment", state); }
 @after { popMsg(state); }
@@ -2115,7 +2206,7 @@ structType
 mapType
 @init { pushMsg("map type", state); }
 @after { popMsg(state); }
-    : KW_MAP LESSTHAN left=primitiveType COMMA right=type GREATERTHAN
+    : KW_MAP LESSTHAN left=type COMMA right=type GREATERTHAN
     -> ^(TOK_MAP $left $right)
     ;
 
@@ -2438,12 +2529,11 @@ BEGIN user defined transaction boundaries; follows SQL 2003 standard exactly exc
 sqlTransactionStatement
 @init { pushMsg("transaction statement", state); }
 @after { popMsg(state); }
-  :
-  startTransactionStatement
-	|	commitStatement
-	|	rollbackStatement
-	| setAutoCommitStatement
-	;
+  : startTransactionStatement
+  | commitStatement
+  | rollbackStatement
+  | setAutoCommitStatement
+  ;
 
 startTransactionStatement
   :
@@ -2489,3 +2579,31 @@ setAutoCommitStatement
 /*
 END user defined transaction boundaries
 */
+
+/*
+Table Caching statements.
+ */
+cacheStatement
+@init { pushMsg("cache statement", state); }
+@after { popMsg(state); }
+  :
+  cacheTableStatement
+  | uncacheTableStatement
+  | clearCacheStatement
+  ;
+
+cacheTableStatement
+  :
+  KW_CACHE (lazy=KW_LAZY)? KW_TABLE identifier (KW_AS selectStatementWithCTE)? -> ^(TOK_CACHETABLE identifier $lazy? selectStatementWithCTE?)
+  ;
+
+uncacheTableStatement
+  :
+  KW_UNCACHE KW_TABLE identifier -> ^(TOK_UNCACHETABLE identifier)
+  ;
+
+clearCacheStatement
+  :
+  KW_CLEAR KW_CACHE -> ^(TOK_CLEARCACHE)
+  ;
+

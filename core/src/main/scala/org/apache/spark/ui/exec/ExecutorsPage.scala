@@ -50,6 +50,8 @@ private[ui] class ExecutorsPage(
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
   private val listener = parent.listener
+  // When GCTimePercent is edited change ToolTips.TASK_TIME to match
+  private val GCTimePercent = 0.1
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val (storageStatusList, execInfo) = listener.synchronized {
@@ -73,11 +75,12 @@ private[ui] class ExecutorsPage(
           <th>RDD Blocks</th>
           <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
           <th>Disk Used</th>
+          <th>Cores</th>
           <th>Active Tasks</th>
           <th>Failed Tasks</th>
           <th>Complete Tasks</th>
           <th>Total Tasks</th>
-          <th>Task Time</th>
+          <th data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</th>
           <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
           <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
           <th>
@@ -129,13 +132,9 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
       </td>
-      <td>{info.activeTasks}</td>
-      <td>{info.failedTasks}</td>
-      <td>{info.completedTasks}</td>
-      <td>{info.totalTasks}</td>
-      <td sorttable_customkey={info.totalDuration.toString}>
-        {Utils.msDurationToString(info.totalDuration)}
-      </td>
+      <td>{info.totalCores}</td>
+      {taskData(info.maxTasks, info.activeTasks, info.failedTasks, info.completedTasks,
+      info.totalTasks, info.totalDuration, info.totalGCTime)}
       <td sorttable_customkey={info.totalInputBytes.toString}>
         {Utils.bytesToString(info.totalInputBytes)}
       </td>
@@ -177,7 +176,7 @@ private[ui] class ExecutorsPage(
     val maximumMemory = execInfo.map(_.maxMemory).sum
     val memoryUsed = execInfo.map(_.memoryUsed).sum
     val diskUsed = execInfo.map(_.diskUsed).sum
-    val totalDuration = execInfo.map(_.totalDuration).sum
+    val totalCores = execInfo.map(_.totalCores).sum
     val totalInputBytes = execInfo.map(_.totalInputBytes).sum
     val totalShuffleRead = execInfo.map(_.totalShuffleRead).sum
     val totalShuffleWrite = execInfo.map(_.totalShuffleWrite).sum
@@ -192,13 +191,14 @@ private[ui] class ExecutorsPage(
         <td sorttable_customkey={diskUsed.toString}>
           {Utils.bytesToString(diskUsed)}
         </td>
-        <td>{execInfo.map(_.activeTasks).sum}</td>
-        <td>{execInfo.map(_.failedTasks).sum}</td>
-        <td>{execInfo.map(_.completedTasks).sum}</td>
-        <td>{execInfo.map(_.totalTasks).sum}</td>
-        <td sorttable_customkey={totalDuration.toString}>
-          {Utils.msDurationToString(totalDuration)}
-        </td>
+        <td>{totalCores}</td>
+        {taskData(execInfo.map(_.maxTasks).sum,
+        execInfo.map(_.activeTasks).sum,
+        execInfo.map(_.failedTasks).sum,
+        execInfo.map(_.completedTasks).sum,
+        execInfo.map(_.totalTasks).sum,
+        execInfo.map(_.totalDuration).sum,
+        execInfo.map(_.totalGCTime).sum)}
         <td sorttable_customkey={totalInputBytes.toString}>
           {Utils.bytesToString(totalInputBytes)}
         </td>
@@ -215,11 +215,12 @@ private[ui] class ExecutorsPage(
         <th>RDD Blocks</th>
         <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
         <th>Disk Used</th>
+        <th>Cores</th>
         <th>Active Tasks</th>
         <th>Failed Tasks</th>
         <th>Complete Tasks</th>
         <th>Total Tasks</th>
-        <th>Task Time</th>
+        <th data-toggle="tooltip" title={ToolTips.TASK_TIME}>Task Time (GC Time)</th>
         <th><span data-toggle="tooltip" title={ToolTips.INPUT}>Input</span></th>
         <th><span data-toggle="tooltip" title={ToolTips.SHUFFLE_READ}>Shuffle Read</span></th>
         <th>
@@ -233,6 +234,70 @@ private[ui] class ExecutorsPage(
       </tbody>
     </table>
   }
+
+  private def taskData(
+    maxTasks: Int,
+    activeTasks: Int,
+    failedTasks: Int,
+    completedTasks: Int,
+    totalTasks: Int,
+    totalDuration: Long,
+    totalGCTime: Long):
+  Seq[Node] = {
+    // Determine Color Opacity from 0.5-1
+    // activeTasks range from 0 to maxTasks
+    val activeTasksAlpha =
+      if (maxTasks > 0) {
+        (activeTasks.toDouble / maxTasks) * 0.5 + 0.5
+      } else {
+        1
+      }
+    // failedTasks range max at 10% failure, alpha max = 1
+    val failedTasksAlpha =
+      if (totalTasks > 0) {
+        math.min(10 * failedTasks.toDouble / totalTasks, 1) * 0.5 + 0.5
+      } else {
+        1
+      }
+    // totalDuration range from 0 to 50% GC time, alpha max = 1
+    val totalDurationAlpha =
+      if (totalDuration > 0) {
+        math.min(totalGCTime.toDouble / totalDuration + 0.5, 1)
+      } else {
+        1
+      }
+
+    val tableData =
+    <td style={
+      if (activeTasks > 0) {
+        "background:hsla(240, 100%, 50%, " + activeTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+      }>{activeTasks}</td>
+    <td style={
+      if (failedTasks > 0) {
+        "background:hsla(0, 100%, 50%, " + failedTasksAlpha + ");color:white"
+      } else {
+        ""
+      }
+      }>{failedTasks}</td>
+    <td>{completedTasks}</td>
+    <td>{totalTasks}</td>
+    <td sorttable_customkey={totalDuration.toString} style={
+      // Red if GC time over GCTimePercent of total time
+      if (totalGCTime > GCTimePercent * totalDuration) {
+        "background:hsla(0, 100%, 50%, " + totalDurationAlpha + ");color:white"
+      } else {
+        ""
+      }
+    }>
+      {Utils.msDurationToString(totalDuration)}
+      ({Utils.msDurationToString(totalGCTime)})
+    </td>;
+
+    tableData
+  }
 }
 
 private[spark] object ExecutorsPage {
@@ -245,11 +310,14 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
+    val maxTasks = listener.executorToTasksMax.getOrElse(execId, 0)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
     val totalTasks = activeTasks + failedTasks + completedTasks
     val totalDuration = listener.executorToDuration.getOrElse(execId, 0L)
+    val totalGCTime = listener.executorToJvmGCTime.getOrElse(execId, 0L)
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
@@ -261,11 +329,14 @@ private[spark] object ExecutorsPage {
       rddBlocks,
       memUsed,
       diskUsed,
+      totalCores,
+      maxTasks,
       activeTasks,
       failedTasks,
       completedTasks,
       totalTasks,
       totalDuration,
+      totalGCTime,
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
