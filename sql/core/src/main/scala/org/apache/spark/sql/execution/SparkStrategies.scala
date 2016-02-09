@@ -34,9 +34,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
   /**
-   * Implements planning rules which should only be applied at the root of the logical plan.
+   * Plans special cases of limit operators.
    */
-  object ReturnAnswerOperators extends Strategy {
+  object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ReturnAnswer(rootPlan) => rootPlan match {
         case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
@@ -49,6 +49,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           execution.CollectLimit(limit, planLater(child)) :: Nil
         case other => planLater(other) :: Nil
       }
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
+        execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
+      case logical.Limit(
+          IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
+        execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
   }

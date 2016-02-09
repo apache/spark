@@ -183,10 +183,10 @@ class PlannerSuite extends SharedSQLContext {
     assert(planned.output === testData.select('value).logicalPlan.output)
   }
 
-  test("TakeOrderedAndProject can appear in the middle of a plan when caching is used") {
-    val query = testData.select('key, 'value).sort('key).limit(2).cache()
-    val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[TakeOrderedAndProject])
+  test("TakeOrderedAndProject can appear in the middle of plans") {
+    val query = testData.select('key, 'value).sort('key).limit(2).filter('key === 3)
+    val planned = query.queryExecution.executedPlan
+    assert(planned.find(_.isInstanceOf[TakeOrderedAndProject]).isDefined)
   }
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
