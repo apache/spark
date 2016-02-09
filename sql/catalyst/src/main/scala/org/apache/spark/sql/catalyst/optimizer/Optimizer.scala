@@ -162,13 +162,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     case LocalLimit(exp, Union(children)) =>
       LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
     case LocalLimit(exp, join @ Join(left, right, joinType, condition)) =>
-      joinType match {
+      val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLimit(exp, left))
         case FullOuter =>
           join.copy(left = maybePushLimit(exp, left), right = maybePushLimit(exp, right))
         case _ => join
       }
+      LocalLimit(exp, newJoin)
   }
 }
 

@@ -78,21 +78,21 @@ class LimitPushdownSuite extends PlanTest {
   test("push down left outer join") {
     val originalQuery = x.join(y, LeftOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = GlobalLimit(1, LocalLimit(1, y).join(y, LeftOuter)).analyze
+    val correctAnswer = Limit(1, LocalLimit(1, y).join(y, LeftOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("push down right outer join") {
     val originalQuery = x.join(y, RightOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = GlobalLimit(1, x.join(LocalLimit(1, y), RightOuter)).analyze
+    val correctAnswer = Limit(1, x.join(LocalLimit(1, y), RightOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("push down full outer join") {
     val originalQuery = x.join(y, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = GlobalLimit(1, LocalLimit(1, x).join(LocalLimit(1, y), FullOuter)).analyze
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), FullOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }
