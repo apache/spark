@@ -16,5 +16,13 @@
  */
 package org.apache.spark.streaming.kafka
 
-private[spark]
+import org.apache.spark.annotation.DeveloperApi
+
+/**
+ * :: DeveloperApi ::
+ * @param host
+ * @param port
+ * @param offset
+ */
+@DeveloperApi
 case class LeaderOffset(host: String, port: Int, offset: Long)

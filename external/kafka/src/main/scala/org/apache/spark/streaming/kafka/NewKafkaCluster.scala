@@ -27,14 +27,19 @@ import org.apache.kafka.clients.consumer.{KafkaConsumer, OffsetAndMetadata, Offs
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 
 import org.apache.spark.SparkException
+import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
+ * Convenience methods for interacting with a Kafka cluster, using the new Kafka consumer API.
+ * See <a href="https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol">
+ * A Guide To The Kafka Protocol</a> for more details on individual api calls.
  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
- *                    configuration parameters</a>.
- *                    Requires "bootstrap.servers" to be set with Kafka broker(s),
- *                    NOT zookeeper servers, specified in host1:port1,host2:port2 form
+ * configuration parameters</a>.
+ *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+ *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
  */
-private[spark]
+@DeveloperApi
 class NewKafkaCluster[K: ClassTag, V: ClassTag](val kafkaParams: Map[String, String])
   extends Serializable {
 
