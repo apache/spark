@@ -19,7 +19,7 @@ package org.apache.spark.sql.streaming.test
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{ContinuousQuery, AnalysisException, SQLContext, StreamTest}
+import org.apache.spark.sql.{AnalysisException, ContinuousQuery, SQLContext, StreamTest}
 import org.apache.spark.sql.execution.streaming.{Batch, Offset, Sink, Source}
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
