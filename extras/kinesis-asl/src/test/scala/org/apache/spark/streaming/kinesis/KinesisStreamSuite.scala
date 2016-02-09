@@ -243,7 +243,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     kinesisStream.foreachRDD((rdd: RDD[Array[Byte]], time: Time) => {
       val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
       val data = rdd.map { bytes => new String(bytes).toInt }.collect().toSeq
-      collectedData.put(time,(kRdd.arrayOfseqNumberRanges, data))
+      collectedData.put(time, (kRdd.arrayOfseqNumberRanges, data))
     })
 
     ssc.remember(Minutes(60)) // remember all the batches so that they are all saved in checkpoint
