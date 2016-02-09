@@ -48,7 +48,6 @@ class NewKafkaRDD[K: ClassTag, V: ClassTag, R: ClassTag] private[spark](
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map {
       case (o, i) =>
-        println("new"+o)
         val (host, port) = leaders(new TopicPartition(o.topic, o.partition))
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
     }.toArray

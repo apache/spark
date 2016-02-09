@@ -400,6 +400,7 @@ class DirectKafkaStreamSuite
     getOffsetRangesFunc: (DStream[(String, String)]) => Seq[(Time, Array[OffsetRange])]):
   Unit = {
     testDir = Utils.createTempDir()
+    DirectKafkaStreamSuite.collectedData.clear()
 
     // Send data to Kafka and wait for it to be received
     def sendDataAndWaitForReceive(data: Seq[Int]) {
@@ -443,8 +444,6 @@ class DirectKafkaStreamSuite
 
     // Verify that offset ranges were generated
     val offsetRangesBeforeStop = getOffsetRangesFunc(kafkaStream)
-    println(s"getOffsetRangesFunc returned ${offsetRangesBeforeStop.size}")
-    println(s"first element is ${offsetRangesBeforeStop(0)}")
     assert(offsetRangesBeforeStop.size >= 1, "No offset ranges generated")
     assert(
       offsetRangesBeforeStop.head._2.forall {
