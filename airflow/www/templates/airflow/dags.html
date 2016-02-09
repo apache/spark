@@ -20,7 +20,8 @@
                 <th>DAG</th>
                 <th>Schedule</th>
                 <th>Owner</th>
-                <th style="padding-left: 5px;">Statuses
+                <th style="padding-left: 5px;">Recent Statuses
+                  <span id="statuses_info" class="glyphicon glyphicon-info-sign" aria-hidden="true" title="Status of tasks from all active DAG runs or, if not currently active, from most recent run."></span>
                   <img id="loading" width="15" src="{{ url_for("static", filename="loading.gif") }}">
                 </th>
                 <th class="text-center">Links</th>
@@ -211,6 +212,7 @@
             d3.select("#loading").remove();
         }
         $("#pause_header").tooltip();
+        $("#statuses_info").tooltip();
 
         $("circle").tooltip({
           html: true,
