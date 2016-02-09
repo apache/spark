@@ -47,4 +47,6 @@ class BigQueryOperator(BaseOperator):
     def execute(self, context):
         logging.info('Executing: %s', str(self.bql))
         hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, delegate_to=self.delegate_to)
-        hook.run(self.bql, self.destination_dataset_table, self.write_disposition)
+        conn = hook.get_conn()
+        cursor = conn.cursor()
+        cursor.run_query(self.bql, self.destination_dataset_table, self.write_disposition)

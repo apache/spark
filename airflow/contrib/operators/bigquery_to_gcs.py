@@ -67,7 +67,9 @@ class BigQueryToCloudStorageOperator(BaseOperator):
     def execute(self, context):
         logging.info('Executing extract of %s into: %s', self.source_dataset_table, self.destination_cloud_storage_uris)
         hook = BigQueryHook(bigquery_conn_id=self.bigquery_conn_id, delegate_to=self.delegate_to)
-        hook.run_extract(
+        conn = hook.get_conn()
+        cursor = conn.cursor()
+        cursor.run_extract(
             self.source_dataset_table,
             self.destination_cloud_storage_uris,
             self.compression,
