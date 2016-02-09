@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.StructType
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
   /** Check if a command should not be explained. */
-  protected def isNoExplainCommand(command: String): Boolean = "TOK_DESCTABLE" == command
+  protected def isNoExplainCommand(command: String): Boolean =
+    "TOK_DESCTABLE" == command || "TOK_ALTERTABLE" == command
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
@@ -55,7 +56,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
         ExplainCommand(nodeToPlan(crtTbl), extended = extended.isDefined)
 
-      case Token("TOK_EXPLAIN", explainArgs) =>
+      case Token("TOK_EXPLAIN", explainArgs) if "TOK_QUERY" == explainArgs.head.text =>
         // Ignore FORMATTED if present.
         val Some(query) :: _ :: extended :: Nil =
           getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)

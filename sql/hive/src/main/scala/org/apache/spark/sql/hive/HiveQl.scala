@@ -147,7 +147,8 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   protected val noExplainCommands = Seq(
     "TOK_DESCTABLE",
     "TOK_SHOWTABLES",
-    "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_TRUNCATETABLE",     // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_ALTERTABLE"
   ) ++ nativeCommands
 
   /**
