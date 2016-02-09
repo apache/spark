@@ -508,7 +508,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   /** -------------------------------- *
    | Util methods for comparing events |
-    * --------------------------------- */
+   * --------------------------------- */
 
   private[spark] def assertEquals(event1: SparkListenerEvent, event2: SparkListenerEvent) {
     (event1, event2) match {
@@ -773,7 +773,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
 
   /** ----------------------------------- *
    | Util methods for constructing events |
-    * ------------------------------------ */
+   * ------------------------------------ */
 
   private val properties = {
     val p = new Properties
