@@ -312,7 +312,7 @@ public class TaskMemoryManager {
 
   @VisibleForTesting
   public static int decodePageNumber(long pagePlusOffsetAddress) {
-    return (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> OFFSET_BITS);
+    return (int) (pagePlusOffsetAddress >>> OFFSET_BITS);
   }
 
   private static long decodeOffset(long pagePlusOffsetAddress) {
