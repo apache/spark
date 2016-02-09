@@ -559,7 +559,7 @@ class HiveContext private[hive](
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,
-      TakeOrderedAndProject,
+      ReturnAnswerOperators,
       InMemoryScans,
       HiveTableScans,
       DataSinks,

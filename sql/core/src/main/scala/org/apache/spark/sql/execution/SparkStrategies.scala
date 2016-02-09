@@ -33,6 +33,26 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
+  /**
+   * Implements planning rules which should only be applied at the root of the logical plan.
+   */
+  object ReturnAnswerOperators extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ReturnAnswer(rootPlan) => rootPlan match {
+        case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
+          execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
+        case logical.Limit(
+            IntegerLiteral(limit),
+            logical.Project(projectList, logical.Sort(order, true, child))) =>
+          execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
+        case logical.Limit(IntegerLiteral(limit), child) =>
+          execution.CollectLimit(limit, planLater(child)) :: Nil
+        case other => planLater(other) :: Nil
+      }
+      case _ => Nil
+    }
+  }
+
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
@@ -269,8 +289,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
         execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
       case logical.Limit(
-             IntegerLiteral(limit),
-             logical.Project(projectList, logical.Sort(order, true, child))) =>
+           IntegerLiteral(limit),
+           logical.Project(projectList, logical.Sort(order, true, child))) =>
         execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
       case _ => Nil
     }
@@ -338,8 +358,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
-      case logical.ReturnAnswer(logical.Limit(IntegerLiteral(limit), child)) =>
-        execution.CollectLimit(limit, planLater(child)) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         val perPartitionLimit = execution.LocalLimit(limit, planLater(child))
         val globalLimit = execution.GlobalLimit(limit, perPartitionLimit)
@@ -362,7 +380,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
-      case logical.ReturnAnswer(child) => planLater(child) :: Nil
       case _ => Nil
     }
   }

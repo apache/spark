@@ -30,7 +30,8 @@ import org.apache.spark.sql.types._
  * the logical plan before invoking the query planner.
  *
  * Rules can pattern-match on this node in order to apply transformations that only take effect
- * at the top of the logical query plan.
+ * at the top of the logical query plan. Any rule matching on this node should be placed in
+ * the `ReturnAnswerOperators` planning strategy.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output

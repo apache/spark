@@ -31,7 +31,7 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
     sqlContext.experimental.extraStrategies ++ (
       DataSourceStrategy ::
       DDLStrategy ::
-      TakeOrderedAndProject ::
+      ReturnAnswerOperators ::
       Aggregation ::
       LeftSemiJoin ::
       EquiJoinSelection ::
