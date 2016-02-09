@@ -24,7 +24,7 @@ from pyspark.mllib.util import MLUtils
 
 if __name__ == "__main__":
 
-    sc = SparkContext(appName="SummaryStatisticsExample") # SparkContext
+    sc = SparkContext(appName="LabeledPointSparseDataExample") # SparkContext
 
     # $example on$
     examples = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")

@@ -28,7 +28,8 @@ import org.apache.spark.api.java.JavaRDD;
 public class JavaLabeledPointSparseDataExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaCorrelationsExample").setMaster("local[*]");
+        SparkConf conf = new SparkConf().setAppName("JavaLabeledPointSparseDataExample")
+                .setMaster("local[*]");
         JavaSparkContext jsc = new JavaSparkContext(conf);
 
         // $example on$

@@ -29,7 +29,7 @@ object RowMatrixExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("SummaryStatisticsExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("RowMatrixExample").setMaster("local[*]")
     val sc = new SparkContext(conf)
 
     val v1 = Vectors.dense(1.0, 10.0, 100.0)

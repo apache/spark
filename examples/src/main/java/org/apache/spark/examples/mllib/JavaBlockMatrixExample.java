@@ -35,7 +35,7 @@ import java.util.Arrays;
 public class JavaBlockMatrixExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaIndexedRowMatrixExample")
+        SparkConf conf = new SparkConf().setAppName("JavaBlockMatrixExample")
                 .setMaster("local[*]");
         JavaSparkContext jsc = new JavaSparkContext(conf);
 
