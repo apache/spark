@@ -178,90 +178,6 @@ case class BroadcastHashJoin(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    if (joinType == Inner) {
-      doConsumeInnerJoin(ctx, input)
-    } else {
-      doConsumeOuterJoin(ctx, input)
-    }
-  }
-
-  private def doConsumeInnerJoin(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    // generate the key as UnsafeRow or Long
-    ctx.currentVars = input
-    val (keyVal, anyNull) = if (canJoinKeyFitWithinLong) {
-      val expr = rewriteKeyExpr(streamedKeys).head
-      val ev = BindReferences.bindReference(expr, streamedPlan.output).gen(ctx)
-      (ev, ev.isNull)
-    } else {
-      val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
-      val ev = GenerateUnsafeProjection.createCode(ctx, keyExpr)
-      (ev, s"${ev.value}.anyNull()")
-    }
-
-    // find the matches from HashedRelation
-    val matched = ctx.freshName("matched")
-
-    // create variables for output
-    ctx.currentVars = null
-    ctx.INPUT_ROW = matched
-    val buildColumns = buildPlan.output.zipWithIndex.map { case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).gen(ctx)
-    }
-    val resultVars = buildSide match {
-      case BuildLeft => buildColumns ++ input
-      case BuildRight => input ++ buildColumns
-    }
-
-    val outputCode = if (condition.isDefined) {
-      // filter the output via condition
-      ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
-      s"""
-         | ${ev.code}
-         | if (!${ev.isNull} && ${ev.value}) {
-         |   ${consume(ctx, resultVars)}
-         | }
-       """.stripMargin
-    } else {
-      consume(ctx, resultVars)
-    }
-
-    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
-      s"""
-         | // generate join key
-         | ${keyVal.code}
-         | // find matches from HashedRelation
-         | UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyVal.value});
-         | if ($matched != null) {
-         |   ${buildColumns.map(_.code).mkString("\n")}
-         |   $outputCode
-         | }
-     """.stripMargin
-
-    } else {
-      val matches = ctx.freshName("matches")
-      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
-      val i = ctx.freshName("i")
-      val size = ctx.freshName("size")
-      s"""
-         | // generate join key
-         | ${keyVal.code}
-         | // find matches from HashRelation
-         | $bufferType $matches = ${anyNull} ? null :
-         |  ($bufferType) $relationTerm.get(${keyVal.value});
-         | if ($matches != null) {
-         |   int $size = $matches.size();
-         |   for (int $i = 0; $i < $size; $i++) {
-         |     UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
-         |     ${buildColumns.map(_.code).mkString("\n")}
-         |     $outputCode
-         |   }
-         | }
-     """.stripMargin
-    }
-  }
-
-  private def doConsumeOuterJoin(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // generate the key as UnsafeRow or Long
     ctx.currentVars = input
     val (keyVal, anyNull) = if (canJoinKeyFitWithinLong) {
@@ -283,18 +199,22 @@ case class BroadcastHashJoin(
     ctx.INPUT_ROW = matched
     val buildColumns = buildPlan.output.zipWithIndex.map { case (a, i) =>
       val ev = BoundReference(i, a.dataType, a.nullable).gen(ctx)
-      val isNull = ctx.freshName("isNull")
-      val value = ctx.freshName("value")
-      val code = s"""
-                    |boolean $isNull = true;
-                    |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
-                    |if ($matched != null) {
-                    |  ${ev.code}
-                    |  $isNull = ${ev.isNull};
-                    |  $value = ${ev.value};
-                    |}
-       """.stripMargin
-      ExprCode(code, isNull, value)
+      if (joinType == Inner) {
+        ev
+      } else {
+        val isNull = ctx.freshName("isNull")
+        val value = ctx.freshName("value")
+        val code = s"""
+          |boolean $isNull = true;
+          |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
+          |if ($matched != null) {
+          |  ${ev.code}
+          |  $isNull = ${ev.isNull};
+          |  $value = ${ev.value};
+          |}
+         """.stripMargin
+        ExprCode(code, isNull, value)
+      }
     }
 
     // output variables
@@ -303,23 +223,74 @@ case class BroadcastHashJoin(
       case BuildRight => input ++ buildColumns
     }
 
-    // filter the output via condition
-    val checkCondition = if (condition.isDefined) {
-      ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
-      s"""
+    if (joinType == Inner) {
+      val outputCode = if (condition.isDefined) {
+        // filter the output via condition
+        ctx.currentVars = resultVars
+        val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
+        s"""
+         |${ev.code}
+         |if (!${ev.isNull} && ${ev.value}) {
+         |  ${consume(ctx, resultVars)}
+         |}
+         """.stripMargin
+      } else {
+        consume(ctx, resultVars)
+      }
+
+      if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+        s"""
+         |// generate join key
+         |${keyVal.code}
+         |// find matches from HashedRelation
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyVal.value});
+         |if ($matched != null) {
+         |  ${buildColumns.map(_.code).mkString("\n")}
+         |  $outputCode
+         |}
+         """.stripMargin
+
+      } else {
+        val matches = ctx.freshName("matches")
+        val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
+        val i = ctx.freshName("i")
+        val size = ctx.freshName("size")
+        s"""
+         |// generate join key
+         |${keyVal.code}
+         |// find matches from HashRelation
+         |$bufferType $matches = $anyNull ? null : ($bufferType) $relationTerm.get(${keyVal.value});
+         |if ($matches != null) {
+         |  int $size = $matches.size();
+         |  for (int $i = 0; $i < $size; $i++) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
+         |    ${buildColumns.map(_.code).mkString("\n")}
+         |    $outputCode
+         |  }
+         |}
+         """.stripMargin
+      }
+
+    } else {
+      // LeftOuter and RightOuter
+
+      // filter the output via condition
+      val checkCondition = if (condition.isDefined) {
+        ctx.currentVars = resultVars
+        val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
+        s"""
          |boolean $valid = true;
          |if ($matched != null) {
          |  ${ev.code}
          |  $valid = !${ev.isNull} && ${ev.value};
          |}
-       """.stripMargin
-    } else {
-      s"final boolean $valid = true;"
-    }
+         """.stripMargin
+      } else {
+        s"final boolean $valid = true;"
+      }
 
-    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
-      s"""
+      if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+        s"""
          |// generate join key
          |${keyVal.code}
          |// find matches from HashedRelation
@@ -331,20 +302,19 @@ case class BroadcastHashJoin(
          |  ${buildColumns.map(v => s"${v.isNull} = true;").mkString("\n")}
          |}
          |${consume(ctx, resultVars)}
-       """.stripMargin
+         """.stripMargin
 
-    } else {
-      val matches = ctx.freshName("matches")
-      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
-      val i = ctx.freshName("i")
-      val size = ctx.freshName("size")
-      val found = ctx.freshName("found")
-      s"""
+      } else {
+        val matches = ctx.freshName("matches")
+        val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
+        val i = ctx.freshName("i")
+        val size = ctx.freshName("size")
+        val found = ctx.freshName("found")
+        s"""
          |// generate join key
          |${keyVal.code}
          |// find matches from HashRelation
-         |$bufferType $matches = $anyNull ? null :
-         | ($bufferType) $relationTerm.get(${keyVal.value});
+         |$bufferType $matches = $anyNull ? null : ($bufferType) $relationTerm.get(${keyVal.value});
          |int $size = $matches != null ? $matches.size() : 0;
          |boolean $found = false;
          |for (int $i = 0; $i <= $size; $i++) {
@@ -356,7 +326,8 @@ case class BroadcastHashJoin(
          |    ${consume(ctx, resultVars)}
          |  }
          |}
-       """.stripMargin
+         """.stripMargin
+      }
     }
   }
 }
