@@ -18,8 +18,9 @@
 package org.apache.spark.streaming
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectOutputStream}
+import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import com.google.common.base.Charsets
@@ -105,7 +106,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     val operatedStream = operation(inputStream)
     operatedStream.print()
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
-      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
+      new ConcurrentLinkedQueue[Seq[Seq[V]]])
     outputStream.register()
     ssc.checkpoint(checkpointDir)
 
@@ -166,7 +167,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
         // are written to make sure that both of them have been written.
         assert(checkpointFilesOfLatestTime.size === 2)
       }
-      outputStream.output.map(_.flatten)
+      outputStream.output.asScala.map(_.flatten).toSeq
 
     } finally {
       ssc.stop(stopSparkContext = stopSparkContext)
@@ -591,7 +592,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     // Set up the streaming context and input streams
     val batchDuration = Seconds(2)  // Due to 1-second resolution of setLastModified() on some OS's.
     val testDir = Utils.createTempDir()
-    val outputBuffer = new ArrayBuffer[Seq[Int]] with SynchronizedBuffer[Seq[Int]]
+    val outputBuffer = new ConcurrentLinkedQueue[Seq[Int]]
 
     /**
      * Writes a file named `i` (which contains the number `i`) to the test directory and sets its
@@ -671,7 +672,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         ssc.stop()
         // Check that we shut down while the third batch was being processed
         assert(batchCounter.getNumCompletedBatches === 2)
-        assert(outputStream.output.flatten === Seq(1, 3))
+        assert(outputStream.output.asScala.toSeq.flatten === Seq(1, 3))
       }
 
       // The original StreamingContext has now been stopped.
@@ -721,7 +722,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
             assert(batchCounter.getNumCompletedBatches === index + numBatchesAfterRestart + 1)
           }
         }
-        logInfo("Output after restart = " + outputStream.output.mkString("[", ", ", "]"))
+        logInfo("Output after restart = " + outputStream.output.asScala.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed after restart")
         ssc.stop()
 
@@ -730,11 +731,11 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         assert(recordedFiles(ssc) === (1 to 9))
 
         // Append the new output to the old buffer
-        outputBuffer ++= outputStream.output
+        outputBuffer.addAll(outputStream.output)
 
         // Verify whether all the elements received are as expected
         val expectedOutput = Seq(1, 3, 6, 10, 15, 21, 28, 36, 45)
-        assert(outputBuffer.flatten.toSet === expectedOutput.toSet)
+        assert(outputBuffer.asScala.flatten.toSet === expectedOutput.toSet)
       }
     } finally {
       Utils.deleteRecursively(testDir)
@@ -894,7 +895,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] =
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long):
+      Iterable[Seq[V]] =
   {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.getTimeMillis())
@@ -908,7 +910,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     val outputStream = ssc.graph.getOutputStreams().filter { dstream =>
       dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
     }.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
-    outputStream.output.map(_.flatten)
+    outputStream.output.asScala.map(_.flatten)
   }
 }
 
