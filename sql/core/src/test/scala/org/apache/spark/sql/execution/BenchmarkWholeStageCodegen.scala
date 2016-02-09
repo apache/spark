@@ -155,6 +155,17 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Join w 2 ints codegen=true              1265 / 1424         82.0          12.2       9.0X
     */
 
+    runBenchmark("outer join w long", N) {
+      sqlContext.range(N).join(dim, (col("id") % 60000) === col("k"), "left").count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    outer join w long:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    outer join w long codegen=false         19438 / 19879          5.4         185.4       1.0X
+    outer join w long codegen=true            1098 / 1129         95.5          10.5      17.7X
+      */
   }
 
   ignore("hash and BytesToBytesMap") {

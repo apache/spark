@@ -76,10 +76,15 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
 
     if (joinType != FullOuter) {
       test(s"$testName using BroadcastHashOuterJoin") {
+        val buildSide = joinType match {
+          case LeftOuter => BuildRight
+          case RightOuter => BuildLeft
+        }
         extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _) =>
           withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-              BroadcastHashOuterJoin(leftKeys, rightKeys, joinType, boundCondition, left, right),
+              BroadcastHashJoin(
+                leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }

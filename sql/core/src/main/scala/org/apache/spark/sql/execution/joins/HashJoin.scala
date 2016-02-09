@@ -21,19 +21,37 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
+import org.apache.spark.util.collection.CompactBuffer
 
 trait HashJoin {
   self: SparkPlan =>
 
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
+  val joinType: JoinType
   val buildSide: BuildSide
   val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case Inner =>
+        left.output ++ right.output
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
+      case x =>
+        throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
+    }
+  }
 
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
@@ -44,8 +62,6 @@ trait HashJoin {
     case BuildLeft => (leftKeys, rightKeys)
     case BuildRight => (rightKeys, leftKeys)
   }
-
-  override def output: Seq[Attribute] = left.output ++ right.output
 
   /**
     * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
@@ -97,6 +113,9 @@ trait HashJoin {
     (r: InternalRow) => true
   }
 
+  protected def createResultProjection: (InternalRow) => InternalRow =
+    UnsafeProjection.create(self.schema)
+
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
       numStreamRows: LongSQLMetric,
@@ -110,8 +129,7 @@ trait HashJoin {
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow
-      private[this] val resultProjection: (InternalRow) => InternalRow =
-        UnsafeProjection.create(self.schema)
+      private[this] val resultProjection = createResultProjection
 
       private[this] val joinKeys = streamSideKeyGenerator
 
@@ -164,5 +182,74 @@ trait HashJoin {
         }
       }
     }
+  }
+
+  @transient protected[this] lazy val EMPTY_LIST = CompactBuffer[InternalRow]()
+
+  @transient private[this] lazy val leftNullRow = new GenericInternalRow(left.output.length)
+  @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
+
+  protected[this] def leftOuterIterator(
+    key: InternalRow,
+    joinedRow: JoinedRow,
+    rightIter: Iterable[InternalRow],
+    resultProjection: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val ret: Iterable[InternalRow] = {
+      if (!key.anyNull) {
+        val temp = if (rightIter != null) {
+          rightIter.collect {
+            case r if boundCondition(joinedRow.withRight(r)) => {
+              numOutputRows += 1
+              resultProjection(joinedRow).copy()
+            }
+          }
+        } else {
+          List.empty
+        }
+        if (temp.isEmpty) {
+          numOutputRows += 1
+          resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
+        } else {
+          temp
+        }
+      } else {
+        numOutputRows += 1
+        resultProjection(joinedRow.withRight(rightNullRow)) :: Nil
+      }
+    }
+    ret.iterator
+  }
+
+  protected[this] def rightOuterIterator(
+    key: InternalRow,
+    leftIter: Iterable[InternalRow],
+    joinedRow: JoinedRow,
+    resultProjection: InternalRow => InternalRow,
+    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+    val ret: Iterable[InternalRow] = {
+      if (!key.anyNull) {
+        val temp = if (leftIter != null) {
+          leftIter.collect {
+            case l if boundCondition(joinedRow.withLeft(l)) => {
+              numOutputRows += 1
+              resultProjection(joinedRow).copy()
+            }
+          }
+        } else {
+          List.empty
+        }
+        if (temp.isEmpty) {
+          numOutputRows += 1
+          resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
+        } else {
+          temp
+        }
+      } else {
+        numOutputRows += 1
+        resultProjection(joinedRow.withLeft(leftNullRow)) :: Nil
+      }
+    }
+    ret.iterator
   }
 }
