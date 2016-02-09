@@ -75,24 +75,43 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
-  test("push down left outer join") {
+  test("left outer join") {
     val originalQuery = x.join(y, LeftOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, LocalLimit(1, y).join(y, LeftOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
-  test("push down right outer join") {
+  test("right outer join") {
     val originalQuery = x.join(y, RightOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, x.join(LocalLimit(1, y), RightOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
-  test("push down full outer join") {
+  test("full outer join where neither side is limited and both sides have same statistics") {
+    assert(x.statistics.sizeInBytes === y.statistics.sizeInBytes)
     val originalQuery = x.join(y, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), FullOuter)).analyze
+    val correctAnswer = Limit(1, LocalLimit(1, x).join(y, FullOuter)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("full outer join where neither side is limited and left side has larger statistics") {
+    val xBig = testRelation.copy(data = Seq.fill(2)(null)).subquery('x)
+    assert(xBig.statistics.sizeInBytes > y.statistics.sizeInBytes)
+    val originalQuery = xBig.join(y, FullOuter).limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(1, LocalLimit(1, xBig).join(y, FullOuter)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("full outer join where neither side is limited and right side has larger statistics") {
+    val yBig = testRelation.copy(data = Seq.fill(2)(null)).subquery('y)
+    assert(x.statistics.sizeInBytes < yBig.statistics.sizeInBytes)
+    val originalQuery = x.join(yBig, FullOuter).limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(1, x.join(LocalLimit(1, yBig), FullOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }

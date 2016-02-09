@@ -161,12 +161,23 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
       LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
+    // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
+    // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
+    // because we need to ensure that rows from the limited side still have an opportunity to match
+    // against all candidates from the non-limited side. In order to try to achieve the greatest
+    // reduction in the number of rows process, we push the limit to the side of the join with the
+    // greater expected size.
     case LocalLimit(exp, join @ Join(left, right, joinType, condition)) =>
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLimit(exp, left))
         case FullOuter =>
-          join.copy(left = maybePushLimit(exp, left), right = maybePushLimit(exp, right))
+          val rightHasLargerSizeStats = left.statistics.sizeInBytes < right.statistics.sizeInBytes
+          if ((left.maxRows.isDefined && right.maxRows.isEmpty) || rightHasLargerSizeStats) {
+            join.copy(right = maybePushLimit(exp, right))
+          } else {
+            join.copy(left = maybePushLimit(exp, left))
+          }
         case _ => join
       }
       LocalLimit(exp, newJoin)
