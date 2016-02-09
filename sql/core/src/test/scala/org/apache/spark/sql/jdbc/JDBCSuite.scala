@@ -226,8 +226,6 @@ class JDBCSuite extends SparkFunSuite
       assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.Filter])
       df
     }
-    sql("SELECT * FROM foobar WHERE THEID < 1").explain(true)
-    sql("SELECT * FROM foobar WHERE (THEID + 1) < 2").explain(true)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 2) != 4")).collect().size == 2)
   }
