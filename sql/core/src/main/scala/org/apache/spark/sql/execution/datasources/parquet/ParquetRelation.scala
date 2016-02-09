@@ -38,11 +38,12 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.hadoop.util.ContextUtil
 import org.apache.parquet.schema.MessageType
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.slf4j.bridge.SLF4JBridgeHandler
 
 import org.apache.spark.{Logging, Partition => SparkPartition, SparkException}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
+import org.apache.spark.rdd.{BatchedSqlNewHadoopRDD, RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
@@ -223,6 +224,13 @@ private[sql] class ParquetRelation(
 
   override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
 
+  // Cache of input to buildInternalScan()
+  // TODO: this is not the right way to do this.
+  private[this] var requiredColumns: Array[String] = _
+  private[this] var filters: Array[Filter] = _
+  private[this] var inputFiles: Array[FileStatus] = _
+  private[this] var broadcastedConf: Broadcast[SerializableConfiguration] = _
+
   override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
@@ -299,11 +307,10 @@ private[sql] class ParquetRelation(
     }
   }
 
-  override def buildInternalScan(
+  private[this] def createInitLocalJobFunc(
       requiredColumns: Array[String],
       filters: Array[Filter],
-      inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+      broadcastedConf: Broadcast[SerializableConfiguration]) = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
@@ -315,16 +322,37 @@ private[sql] class ParquetRelation(
     val parquetBlockSize = ParquetOutputFormat.getLongBlockSize(broadcastedConf.value.value)
 
     // Create the function to set variable Parquet confs at both driver and executor side.
-    val initLocalJobFuncOpt =
-      ParquetRelation.initializeLocalJobFunc(
-        requiredColumns,
-        filters,
-        dataSchema,
-        parquetBlockSize,
-        useMetadataCache,
-        parquetFilterPushDown,
-        assumeBinaryIsString,
-        assumeInt96IsTimestamp) _
+    ParquetRelation.initializeLocalJobFunc(
+      requiredColumns,
+      filters,
+      dataSchema,
+      parquetBlockSize,
+      useMetadataCache,
+      parquetFilterPushDown,
+      assumeBinaryIsString,
+      assumeInt96IsTimestamp) _
+  }
+
+  override def buildInternalScan(
+    requiredColumns: Array[String],
+    filters: Array[Filter],
+    inputFiles: Array[FileStatus],
+    broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+
+    this.requiredColumns = requiredColumns
+    this.filters = filters
+    this.inputFiles = inputFiles
+    this.broadcastedConf = broadcastedConf
+
+    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
+
+    // Parquet row group size. We will use this value as the value for
+    // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
+    // of these flags are smaller than the parquet row group size.
+    val parquetBlockSize = ParquetOutputFormat.getLongBlockSize(broadcastedConf.value.value)
+
+    // Create the function to set variable Parquet confs at both driver and executor side.
+    val initLocalJobFuncOpt = createInitLocalJobFunc(requiredColumns, filters, broadcastedConf)
 
     // Create the function to set input paths at the driver side.
     val setInputPaths =
@@ -376,6 +404,92 @@ private[sql] class ParquetRelation(
         }
       }
     }
+  }
+
+  /**
+   * Returns an RDD that returns batches of rows.
+   * TODO: the split of packages and class hierarchy makes this code duplication hard to remove.
+   * The hierarchy of the RDDs is:
+   *                      RDD
+   *               SqlNewHadoopRDDBase
+   *   SqlNewHadoopRDD              BatchedSqlNewHadoopRDD
+   *   Subclassed with caching      Subclassed with caching
+   * The caching should probably be moved into an earlier object.
+   */
+  def buildBatchedScan(
+    requiredColumns: Array[String],
+    filters: Array[Filter],
+    inputFiles: Array[FileStatus],
+    broadcastedConf: Broadcast[SerializableConfiguration]): RDD[ColumnarBatch] = {
+    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
+
+    // Parquet row group size. We will use this value as the value for
+    // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
+    // of these flags are smaller than the parquet row group size.
+    val parquetBlockSize = ParquetOutputFormat.getLongBlockSize(broadcastedConf.value.value)
+
+    // Create the function to set variable Parquet confs at both driver and executor side.
+    val initLocalJobFuncOpt = createInitLocalJobFunc(requiredColumns, filters, broadcastedConf)
+
+    // Create the function to set input paths at the driver side.
+    val setInputPaths =
+      ParquetRelation.initializeDriverSideJobFunc(inputFiles, parquetBlockSize) _
+
+    Utils.withDummyCallSite(sqlContext.sparkContext) {
+      new BatchedSqlNewHadoopRDD(
+        sqlContext = sqlContext,
+        broadcastedConf = broadcastedConf,
+        initDriverSideJobFuncOpt = Some(setInputPaths),
+        initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
+        inputFormatClass = classOf[ParquetInputFormat[InternalRow]]) {
+
+        val cacheMetadata = useMetadataCache
+
+        @transient val cachedStatuses = inputFiles.map { f =>
+          // In order to encode the authority of a Path containing special characters such as '/'
+          // (which does happen in some S3N credentials), we need to use the string returned by the
+          // URI of the path to create a new Path.
+          val pathWithEscapedAuthority = escapePathUserInfo(f.getPath)
+          new FileStatus(
+            f.getLen, f.isDir, f.getReplication, f.getBlockSize, f.getModificationTime,
+            f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
+        }.toSeq
+
+        private def escapePathUserInfo(path: Path): Path = {
+          val uri = path.toUri
+          new Path(new URI(
+            uri.getScheme, uri.getRawUserInfo, uri.getHost, uri.getPort, uri.getPath,
+            uri.getQuery, uri.getFragment))
+        }
+
+        // Overridden so we can inject our own cached files statuses.
+        override def getPartitions: Array[SparkPartition] = {
+          val inputFormat = new ParquetInputFormat[InternalRow] {
+            override def listStatus(jobContext: JobContext): JList[FileStatus] = {
+              if (cacheMetadata) cachedStatuses.asJava else super.listStatus(jobContext)
+            }
+          }
+
+          val jobContext = new JobContextImpl(getConf(isDriverSide = true), jobId)
+          val rawSplits = inputFormat.getSplits(jobContext)
+
+          Array.tabulate[SparkPartition](rawSplits.size) { i =>
+            new SqlNewHadoopPartition(
+              id, i, rawSplits.get(i).asInstanceOf[InputSplit with Writable])
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Crates a ColumnarBatch RDD. This is only callable to convert a relation that has produced
+   * an Row RDD.
+   * TODO: remove this when datasources don't just pass things around as RDDs
+   */
+  def toBatchedScan(): RDD[ColumnarBatch] = {
+    require(broadcastedConf != null, "Can only be called after buildInternalScan()")
+    buildBatchedScan(requiredColumns, filters, inputFiles, broadcastedConf)
   }
 
   private class MetadataCache {

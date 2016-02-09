@@ -127,8 +127,8 @@ case class BroadcastHashJoin(
   // the term for hash relation
   private var relationTerm: String = _
 
-  override def upstream(): RDD[InternalRow] = {
-    streamedPlan.asInstanceOf[CodegenSupport].upstream()
+  override def pipelineStart(): CodegenSupport = {
+    streamedPlan.asInstanceOf[CodegenSupport].pipelineStart()
   }
 
   override def doProduce(ctx: CodegenContext): String = {

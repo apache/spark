@@ -81,6 +81,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
     }
     checkParquetFile(data)
+
+    withParquetDataFrame(data) { df =>
+      assert(df.filter("_1 = true").agg("_2" -> "sum").collect().head.getLong(0) == 6)
+    }
   }
 
   test("raw binary") {

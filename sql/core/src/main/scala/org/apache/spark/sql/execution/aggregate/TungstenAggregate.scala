@@ -124,8 +124,8 @@ case class TungstenAggregate(
     !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
   }
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def pipelineStart(): CodegenSupport = {
+    child.asInstanceOf[CodegenSupport].pipelineStart()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {

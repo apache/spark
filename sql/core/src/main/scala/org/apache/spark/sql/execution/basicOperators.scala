@@ -34,8 +34,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def pipelineStart(): CodegenSupport = {
+    child.asInstanceOf[CodegenSupport].pipelineStart()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -77,8 +77,8 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def pipelineStart(): CodegenSupport = {
+    child.asInstanceOf[CodegenSupport].pipelineStart()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -163,7 +163,9 @@ case class Range(
     output: Seq[Attribute])
   extends LeafNode with CodegenSupport {
 
-  override def upstream(): RDD[InternalRow] = {
+  override  def pipelineStart(): CodegenSupport = this
+
+  override def startPipeline(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
   }
 

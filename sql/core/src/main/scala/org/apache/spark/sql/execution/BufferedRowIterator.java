@@ -25,6 +25,7 @@ import scala.collection.Iterator;
 import org.apache.spark.TaskContext;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
 
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
@@ -35,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 public class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
   protected Iterator<InternalRow> input;
+  protected Iterator<ColumnarBatch> inputBatches;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
@@ -52,6 +54,7 @@ public class BufferedRowIterator {
   public void setInput(Iterator<InternalRow> iter) {
     input = iter;
   }
+  public void setInputBatch(Iterator<ColumnarBatch> iter) { inputBatches = iter; }
 
   /**
    * Returns whether `processNext()` should stop processing next row from `input` or not.
