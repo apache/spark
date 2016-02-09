@@ -231,8 +231,12 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SELECT COUNT(1) WHERE (predicates)") {
-    // Check if an answer is correct when filters are pushed down into JDBC data sources
-    // and some columns are pruned in DataSourceStrategy.
+    // Check if an answer is correct when Filter is removed from operations such as count() which
+    // does not require any columns. In some data sources, e.g., Parquet, `requiredColumns` in
+    // org.apache.spark.sql.sources.interfaces is not given in logical plans, but some filters
+    // are applied for columns with Filter producing wrong results. On the other hand, JDBCRDD
+    // correctly handles this case by assigning `requiredColumns` properly. See PR 10427 for more
+    // discussions.
     assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1)))
   }
 
