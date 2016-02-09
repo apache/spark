@@ -37,6 +37,9 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
 }
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
+
+  println(projectList)
+
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   override lazy val resolved: Boolean = {
