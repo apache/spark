@@ -354,8 +354,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
       Join(left, prunedChild(right, allReferences), LeftSemi, condition)
 
     // Push down project through limit, so that we may have chance to push it further.
-      case Project(projectList, Limit(exp, child)) =>
-        Limit(exp, Project(projectList, child))
+    case Project(projectList, Limit(exp, child)) =>
+      Limit(exp, Project(projectList, child))
 
     // Push down project if possible when the child is sort.
     case p @ Project(projectList, s @ Sort(_, _, grandChild)) =>
