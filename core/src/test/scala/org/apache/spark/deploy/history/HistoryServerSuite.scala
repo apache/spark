@@ -345,13 +345,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val historyServerRoot = new URL(s"http://localhost:$port/")
     val historyServerIncompleted = new URL(historyServerRoot, "?page=1&showIncomplete=true")
 
-    // assert the body of a URL contains a string; return that body
-    def assertUrlContains(url: URL, str: String): String = {
-      val body = HistoryServerSuite.getUrl(url)
-      assert(body.contains(str), s"did not find $str at $url : $body")
-      body
-    }
-
     // start initial job
     val d = sc.parallelize(1 to 10)
     d.count()
@@ -362,9 +355,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       apps should have size 1
       (apps.head \ "id").extract[String]
     }
-
-    // which lists as incomplete
-//    assertUrlContains(historyServerIncompleted, appId)
 
     val appIdRoot = buildURL(appId, "")
     val rootAppPage = HistoryServerSuite.getUrl(appIdRoot)
