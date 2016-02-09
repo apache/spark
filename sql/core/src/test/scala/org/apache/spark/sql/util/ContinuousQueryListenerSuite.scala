@@ -67,7 +67,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
         AddDataMemory(input, Seq(1, 2, 3)),
         CheckAnswer(1, 2, 3),
         Assert("Incorrect query status in onQueryProgress") {
-          eventually(Timeout(streamingTimout)) {
+          eventually(Timeout(streamingTimeout)) {
 
             // There should be only on progress event as batch has been processed
             assert(listener.progressStatuses.size === 1)
@@ -83,9 +83,10 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
         },
         StopStream,
         Assert("Incorrect query status in onQueryTerminated") {
-          eventually(Timeout(streamingTimout)) {
+          eventually(Timeout(streamingTimeout)) {
             val status = listener.terminationStatus
             assert(status != null)
+
             assert(status.active === false) // must be inactive by the time onQueryTerm is called
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
             assert(status.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(0))))
@@ -181,7 +182,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     }
 
     def checkAsyncErrors(): Unit = {
-      asyncTestWaiter.await(timeout(streamingTimout))
+      asyncTestWaiter.await(timeout(streamingTimeout))
     }
 
 

@@ -69,7 +69,7 @@ trait StreamTest extends QueryTest with Timeouts {
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */
-  val streamingTimout = 10.seconds
+  val streamingTimeout = 10.seconds
 
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
@@ -236,7 +236,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
     def eventually[T](message: String)(func: => T): T = {
       try {
-        Eventually.eventually(Timeout(streamingTimout)) {
+        Eventually.eventually(Timeout(streamingTimeout)) {
           func
         }
       } catch {
@@ -280,7 +280,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
           case StopStream =>
             verify(currentStream != null, "can not stop a stream that is not running")
-            try failAfter(streamingTimout) {
+            try failAfter(streamingTimeout) {
               currentStream.stop()
               verify(!currentStream.microBatchThread.isAlive,
                 s"microbatch thread not stopped")
@@ -305,7 +305,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
-            try failAfter(streamingTimout) {
+            try failAfter(streamingTimeout) {
               val thrownException = intercept[ContinuousQueryException] {
                 currentStream.awaitTermination()
               }
@@ -349,7 +349,7 @@ trait StreamTest extends QueryTest with Timeouts {
 
             // Block until all data added has been processed
             awaiting.foreach { case (source, offset) =>
-              failAfter(streamingTimout) {
+              failAfter(streamingTimeout) {
                 currentStream.awaitOffset(source, offset)
               }
             }

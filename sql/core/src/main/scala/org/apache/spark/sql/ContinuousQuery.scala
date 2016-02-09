@@ -28,41 +28,73 @@ import org.apache.spark.annotation.Experimental
 @Experimental
 trait ContinuousQuery {
 
-  /** Returns the name of the query */
+  /**
+   * Returns the name of the query.
+   * @since 2.0.0
+   */
   def name: String
 
-  /** Returns the SQLContext associated with `this` query */
+  /**
+   * Returns the SQLContext associated with `this` query
+   * @since 2.0.0
+   */
   def sqlContext: SQLContext
 
-  /** Whether the query is currently active or not */
+  /**
+   * Whether the query is currently active or not
+   * @since 2.0.0
+   */
   def isActive: Boolean
 
-  /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
+  /**
+   * Returns the [[ContinuousQueryException]] if the query was terminated by an exception.
+   * @since 2.0.0
+   */
   def exception: Option[ContinuousQueryException]
 
-  /** Returns current status of all the sources. */
-  def sourceStatuses: Array[SourceStatus]
+  /**
+   * Returns current status of all the sources.
+   * @since 2.0.0
+   */
+   def sourceStatuses: Array[SourceStatus]
 
   /** Returns current status of the sink. */
   def sinkStatus: SinkStatus
 
   /**
-   * Waits for the termination of this query, either by `stop` or by any exception.
-   * @throws ContinuousQueryException, if the query terminated by an exception.
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
+   * If the query has terminated with an exception, then the exception will be thrown.
+   *
+   * If the query has terminated, then all subsequent calls to this method will either return
+   * `true` immediately (if the query was terminated by `stop()`), or throw the exception
+   * immediately (if the query has terminated with exception).
+   *
+   * @throws ContinuousQueryException, if `this` query has terminated with an exception.
+   *
+   * @since 2.0.0
    */
   def awaitTermination(): Unit
 
   /**
-   * Waits for the termination of this query, either by `stop` or by any exception.
-   * Returns whether the query has terminated or not.
-   * @throws ContinuousQueryException, if the query terminated by an exception before
-   *         `timeoutMs` milliseconds
+   * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
+   * If the query has terminated with an exception, then the exception will be throw.
+   * Otherwise, it returns whether the query has terminated or not within the `timeoutMs`
+   * milliseconds.
+   *
+   * If the query has terminated, then all subsequent calls to this method will either return
+   * `true` immediately (if the query was terminated by `stop()`), or throw the exception
+   * immediately (if the query has terminated with exception).
+   *
+   * @throws ContinuousQueryException, if `this` query has terminated with an exception
+   *
+   * @since 2.0.0
    */
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
    * Stops the execution of this query if it is running. This method blocks until the threads
    * performing execution has stopped.
+   * @since 2.0.0
    */
   def stop(): Unit
 }
