@@ -204,12 +204,9 @@ class SQLContext private[sql](
   protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
 
   @transient
-  protected[sql] val sqlParser: ParserInterface = new SparkSQLParser(new SparkQl(conf))
+  protected[sql] val sqlParser: ParserInterface = new SparkQl(conf)
 
-  @transient
-  protected[sql] val ddlParser: DDLParser = new DDLParser(sqlParser)
-
-  protected[sql] def parseSql(sql: String): LogicalPlan = ddlParser.parse(sql, false)
+  protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
   protected[sql] def executeSql(sql: String):
     org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
@@ -582,10 +579,9 @@ class SQLContext private[sql](
     DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
-
   /**
    * :: Experimental ::
-   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")

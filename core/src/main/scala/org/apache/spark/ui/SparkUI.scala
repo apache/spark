@@ -114,6 +114,8 @@ private[spark] class SparkUI private (
         attemptId = None,
         startTime = new Date(startTime),
         endTime = new Date(-1),
+        duration = 0,
+        lastUpdated = new Date(startTime),
         sparkUser = "",
         completed = false
       ))
@@ -195,7 +197,7 @@ private[spark] object SparkUI {
 
     val environmentListener = new EnvironmentListener
     val storageStatusListener = new StorageStatusListener
-    val executorsListener = new ExecutorsListener(storageStatusListener)
+    val executorsListener = new ExecutorsListener(storageStatusListener, conf)
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 

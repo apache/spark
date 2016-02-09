@@ -71,8 +71,7 @@ class UnsafeFixedWidthAggregationMapSuite
         taskAttemptId = Random.nextInt(10000),
         attemptNumber = 0,
         taskMemoryManager = taskMemoryManager,
-        metricsSystem = null,
-        internalAccumulators = Seq.empty))
+        metricsSystem = null))
 
       try {
         f

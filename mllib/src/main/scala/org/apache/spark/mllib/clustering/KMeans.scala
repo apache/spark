@@ -70,13 +70,13 @@ class KMeans private (
   }
 
   /**
-   * Maximum number of iterations to run.
+   * Maximum number of iterations allowed.
    */
   @Since("1.4.0")
   def getMaxIterations: Int = maxIterations
 
   /**
-   * Set maximum number of iterations to run. Default: 20.
+   * Set maximum number of iterations allowed. Default: 20.
    */
   @Since("0.8.0")
   def setMaxIterations(maxIterations: Int): this.type = {
@@ -482,12 +482,15 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   * @param seed random seed value for cluster initialization
+   * @param data Training points as an `RDD` of `Vector` types.
+   * @param k Number of clusters to create.
+   * @param maxIterations Maximum number of iterations allowed.
+   * @param runs Number of runs to execute in parallel. The best model according to the cost
+   *             function will be returned. (default: 1)
+   * @param initializationMode The initialization algorithm. This can either be "random" or
+   *                           "k-means||". (default: "k-means||")
+   * @param seed Random seed for cluster initialization. Default is to generate seed based
+   *             on system time.
    */
   @Since("1.3.0")
   def train(
@@ -508,11 +511,13 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   * @param data Training points as an `RDD` of `Vector` types.
+   * @param k Number of clusters to create.
+   * @param maxIterations Maximum number of iterations allowed.
+   * @param runs Number of runs to execute in parallel. The best model according to the cost
+   *             function will be returned. (default: 1)
+   * @param initializationMode The initialization algorithm. This can either be "random" or
+   *                           "k-means||". (default: "k-means||")
    */
   @Since("0.8.0")
   def train(
