@@ -127,7 +127,10 @@ class StreamExecution(
       case _: InterruptedException if state == TERMINATED => // interrupted by stop()
       case NonFatal(e) =>
         streamDeathCause = new ContinuousQueryException(
-          s"Query terminated with exception", e, Some(streamProgress.toCompositeOffset(sources)))
+          this,
+          s"Query terminated with exception",
+          e,
+          Some(streamProgress.toCompositeOffset(sources)))
         logError(s"Query $name terminated with error", e)
     } finally {
       state = TERMINATED
@@ -261,7 +264,7 @@ class StreamExecution(
   }
 
   override def awaitTermination(): Unit = {
-    if (state != INITIALIZED) {
+    if (state == INITIALIZED) {
       throw new IllegalStateException("Cannot wait for termination on a query that has not started")
     }
     terminationLatch.await()
@@ -271,7 +274,7 @@ class StreamExecution(
   }
 
   override def awaitTermination(timeoutMs: Long): Boolean = {
-    if (state != INITIALIZED) {
+    if (state == INITIALIZED) {
       throw new IllegalStateException("Cannot wait for termination on a query that has not started")
     }
     require(timeoutMs > 0, "Timeout has to be positive")

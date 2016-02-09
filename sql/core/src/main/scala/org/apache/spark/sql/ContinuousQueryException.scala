@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.streaming.Offset
 /**
  * :: Experimental ::
  * Exception that stopped a [[ContinuousQuery]].
- *
+ * @paaram query      Query that caused the exception
  * @param message     Message of this exception
  * @param cause       Internal cause of this exception
  * @param startOffset Starting offset (if known) of the range of data in which exception occurred
@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming.Offset
  */
 @Experimental
 class ContinuousQueryException private[sql](
+    val query: ContinuousQuery,
     val message: String,
     val cause: Throwable,
     val startOffset: Option[Offset] = None,

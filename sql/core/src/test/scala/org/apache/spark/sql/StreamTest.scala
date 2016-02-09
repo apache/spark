@@ -246,9 +246,18 @@ trait StreamTest extends QueryTest with Timeouts {
     }
 
     def failTest(message: String, cause: Throwable = null) = {
-      val c = Option(cause).map { e =>
-        e.getMessage + e.getStackTrace.take(10).mkString("\n\t", "\n|\t", "\n")
+
+      // Recursively pretty print a exception with truncated stacktrace and internal cause
+      def exceptionToString(e: Throwable, prefix: String = ""): String = {
+        val base = s"$prefix${e.getMessage}" +
+          e.getStackTrace.take(10).mkString(s"\n$prefix", s"\n$prefix\t", "\n")
+        if (e.getCause != null) {
+          base + s"\n$prefix\tCaused by: " + exceptionToString(e.getCause, s"$prefix\t")
+        } else {
+          base
+        }
       }
+      val c = Option(cause).map(exceptionToString(_))
       val m = if (message != null && message.size > 0) Some(message) else None
       fail(
         s"""
@@ -312,6 +321,8 @@ trait StreamTest extends QueryTest with Timeouts {
               eventually("microbatch thread not stopped after termination with failure") {
                 assert(!currentStream.microBatchThread.isAlive)
               }
+              verify(thrownException.query.eq(currentStream),
+                s"incorrect query reference in exception")
               verify(currentStream.exception === Some(thrownException),
                 s"incorrect exception returned by query.exception()")
 
