@@ -58,6 +58,26 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+
+  test("split complex single column expressions") {
+    val cases = 50
+    val conditionClauses = 20
+
+    // Generate an individual case
+    def generateCase(n: Int): (Expression, Expression) = {
+      val condition = (1 to conditionClauses)
+          .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
+          .reduceLeft[Expression]((l, r) => Or(l, r))
+      (condition, Literal(n))
+    }
+
+    val expression = CaseWhen((1 to cases).map(generateCase(_)))
+
+    // Currently this throws a java.util.concurrent.ExecutionException wrapping a
+    // org.codehaus.janino.JaninoRuntimeException: Code of method XXX of class YYY grows beyond 64 KB
+    val plan = GenerateMutableProjection.generate(Seq(expression))()
+  }
+
   test("test generated safe and unsafe projection") {
     val schema = new StructType(Array(
       StructField("a", StringType, true),
