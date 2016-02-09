@@ -1,3 +1,8 @@
+"""
+This module contains a BigQuery Hook, as well as a very basic PEP 249
+implementation for BigQuery.
+"""
+
 import httplib2
 import logging
 import pandas
@@ -43,7 +48,7 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
 
     def get_conn(self):
         """
-        Returns a BigQuery service object.
+        Returns a BigQuery PEP 249 connection object.
         """
         service = self.get_service()
         connection_extras = self._extras_dejson()
@@ -58,6 +63,11 @@ class BigQueryHook(GoogleCloudBaseHook, DbApiHook):
         return build('bigquery', 'v2', http=http_authorized)
 
     def insert_rows(self, table, rows, target_fields=None, commit_every=1000):
+        """
+        Insertion is currently unsupported. Theoretically, you could use
+        BigQuery's streaming API to insert rows into a table, but this hasn't
+        been implemented.
+        """
         raise NotImplementedError()
 
 class BigQueryConnection(object):
@@ -87,9 +97,13 @@ class BigQueryConnection(object):
         raise NotSupportedError("BigQueryConnection does not have transactions")
 
 class BigQueryBaseCursor(object):
-    # TODO pydocs
+    """
+    The BigQuery base cursor contains helper methods to execute queries against
+    BigQuery. The methods can be used directly by operators, in cases where a
+    PEP 249 cursor isn't needed.
+    """
+
     def __init__(self, service, project_id):
-        # TODO pydocs
         self.service = service
         self.project_id = project_id
 
@@ -104,9 +118,9 @@ class BigQueryBaseCursor(object):
 
         :param bql: The BigQuery SQL to execute.
         :type bql: string
-        :param destination_dataset_table: The dotted <dataset>.<table> 
+        :param destination_dataset_table: The dotted <dataset>.<table>
             BigQuery table to save the query results.
-        :param write_disposition: What to do if the table already exists in 
+        :param write_disposition: What to do if the table already exists in
             BigQuery.
         """
         configuration = {
@@ -215,16 +229,14 @@ class BigQueryBaseCursor(object):
 
 class BigQueryCursor(BigQueryBaseCursor):
     """
-    The PyHive PEP 249 implementation was used as a reference:
+    A very basic BigQuery PEP 249 cursor implementation. The PyHive PEP 249
+    implementation was used as a reference:
 
     https://github.com/dropbox/PyHive/blob/master/pyhive/presto.py
     https://github.com/dropbox/PyHive/blob/master/pyhive/common.py
     """
 
     def __init__(self, service, project_id):
-        """
-        # TODO param docs
-        """
         super(BigQueryCursor, self).__init__(service=service, project_id=project_id)
         self.buffersize = None
         self.page_token = None
@@ -233,6 +245,7 @@ class BigQueryCursor(BigQueryBaseCursor):
 
     @property
     def description(self):
+        """ The schema description method is not currently implemented. """
         raise NotImplementedError
 
     def close(self):
@@ -246,24 +259,39 @@ class BigQueryCursor(BigQueryBaseCursor):
 
     def execute(self, operation, parameters=None):
         """
-        # TODO javadocs
+        Executes a BigQuery query, and returns the job ID.
+
+        :param operation: The query to execute.
+        :type operation: string
+        :param parameters: Parameters to substitute into the query.
+        :type parameters: dict
         """
         bql = _bind_parameters(operation, parameters) if parameters else operation
         self.job_id = self.run_query(bql)
 
     def executemany(self, operation, seq_of_parameters):
         """
-        Execute an operation multiple times with different parameters.
+        Execute a BigQuery query multiple times with different parameters.
+
+        :param operation: The query to execute.
+        :type operation: string
+        :param parameters: List of dictionary parameters to substitute into the
+            query.
+        :type parameters: list
         """
         for parameters in seq_of_parameters:
             self.execute(operation, parameters)
 
     def fetchone(self):
-        # TODO pydocs
+        """ Fetch the next row of a query result set. """
         return self.next()
 
     def next(self):
-        # TODO pydocs
+        """
+        Helper method for fetchone, which returns the next row from a buffer.
+        If the buffer is empty, attempts to paginate through the result set for
+        the next page, and load it into the buffer.
+        """
         if not self.job_id:
             return None
 
@@ -325,13 +353,11 @@ class BigQueryCursor(BigQueryBaseCursor):
         return result
 
     def get_arraysize(self):
-        # TODO pydocs
-        # PEP 249
+        """ Specifies the number of rows to fetch at a time with .fetchmany() """
         return self._buffersize if self.buffersize else 1
 
     def set_arraysize(self, arraysize):
-        # TODO pydocs
-        # PEP 249
+        """ Specifies the number of rows to fetch at a time with .fetchmany() """
         self.buffersize = arraysize
 
     arraysize = property(get_arraysize, set_arraysize)
@@ -345,7 +371,7 @@ class BigQueryCursor(BigQueryBaseCursor):
         pass
 
 def _bind_parameters(operation, parameters):
-    # TODO pydocs
+    """ Helper method that binds parameters to a SQL query. """
     # inspired by MySQL Python Connector (conversion.py)
     string_parameters = {}
     for (name, value) in parameters.iteritems():
@@ -358,7 +384,7 @@ def _bind_parameters(operation, parameters):
     return operation % string_parameters
 
 def _escape(s):
-    # TODO pydocs
+    """ Helper method that escapes parameters to a SQL query. """
     e = s
     e = e.replace('\\', '\\\\')
     e = e.replace('\n', '\\n')
@@ -368,7 +394,10 @@ def _escape(s):
     return e
 
 def _bq_cast(string_field, bq_type):
-    # TODO pydocs
+    """
+    Helper method that casts a BigQuery row to the appropriate data types.
+    This is useful because BigQuery returns all fields as strings.
+    """
     if bq_type == 'INTEGER' or bq_type == 'TIMESTAMP':
         return int(string_field)
     elif bq_type == 'FLOAT':
