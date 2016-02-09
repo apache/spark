@@ -75,7 +75,7 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     if (joinType != FullOuter) {
-      test(s"$testName using BroadcastHashOuterJoin") {
+      test(s"$testName using BroadcastHashJoin") {
         val buildSide = joinType match {
           case LeftOuter => BuildRight
           case RightOuter => BuildLeft
