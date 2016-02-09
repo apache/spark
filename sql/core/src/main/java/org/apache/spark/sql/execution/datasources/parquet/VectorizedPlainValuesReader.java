@@ -32,10 +32,9 @@ import org.apache.parquet.io.api.Binary;
 public class VectorizedPlainValuesReader extends ValuesReader implements VectorizedValuesReader {
   private byte[] buffer;
   private int offset;
-  private final int byteSize;
+  private int bitOffset; // Only used for booleans.
 
-  public VectorizedPlainValuesReader(int byteSize) {
-    this.byteSize = byteSize;
+  public VectorizedPlainValuesReader() {
   }
 
   @Override
@@ -46,12 +45,15 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
   @Override
   public void skip() {
-    offset += byteSize;
+    throw new UnsupportedOperationException();
   }
 
   @Override
-  public void skip(int n) {
-    offset += n * byteSize;
+  public final void readBooleans(int total, ColumnVector c, int rowId) {
+    // TODO: properly vectorize this
+    for (int i = 0; i < total; i++) {
+      c.putBoolean(rowId + i, readBoolean());
+    }
   }
 
   @Override
@@ -67,6 +69,18 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public final void readFloats(int total, ColumnVector c, int rowId) {
+    c.putFloats(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 4 * total;
+  }
+
+  @Override
+  public final void readDoubles(int total, ColumnVector c, int rowId) {
+    c.putDoubles(rowId, total, buffer, offset - Platform.BYTE_ARRAY_OFFSET);
+    offset += 8 * total;
+  }
+
+  @Override
   public final void readBytes(int total, ColumnVector c, int rowId) {
     for (int i = 0; i < total; i++) {
       // Bytes are stored as a 4-byte little endian int. Just read the first byte.
@@ -74,6 +88,18 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       c.putInt(rowId + i, buffer[offset]);
       offset += 4;
     }
+  }
+
+  @Override
+  public final boolean readBoolean() {
+    byte b = Platform.getByte(buffer, offset);
+    boolean v = (b & (1 << bitOffset)) != 0;
+    bitOffset += 1;
+    if (bitOffset == 8) {
+      bitOffset = 0;
+      offset++;
+    }
+    return v;
   }
 
   @Override
@@ -96,6 +122,20 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public final float readFloat() {
+    float v = Platform.getFloat(buffer, offset);
+    offset += 4;
+    return v;
+  }
+
+  @Override
+  public final double readDouble() {
+    double v = Platform.getDouble(buffer, offset);
+    offset += 8;
+    return v;
+  }
+
+  @Override
   public final void readBinary(int total, ColumnVector v, int rowId) {
     for (int i = 0; i < total; i++) {
       int len = readInteger();
@@ -103,5 +143,12 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       offset += len;
       v.putByteArray(rowId + i, buffer, start - Platform.BYTE_ARRAY_OFFSET, len);
     }
+  }
+
+  @Override
+  public final Binary readBinary(int len) {
+    Binary result = Binary.fromByteArray(buffer, offset - Platform.BYTE_ARRAY_OFFSET, len);
+    offset += len;
+    return result;
   }
 }

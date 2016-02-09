@@ -44,6 +44,20 @@ import org.apache.spark.sql.types.StructType
 private[sql] trait ParquetTest extends SQLTestUtils {
 
   /**
+   * Reads the parquet file at `path`
+   */
+  protected def readParquetFile(path: String, testVectorized: Boolean = true)
+      (f: DataFrame => Unit) = {
+    (true :: false :: Nil).foreach { vectorized =>
+      if (!vectorized || testVectorized) {
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+          f(sqlContext.read.parquet(path.toString))
+        }
+      }
+    }
+  }
+
+  /**
    * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
    * returns.
    */
@@ -61,9 +75,9 @@ private[sql] trait ParquetTest extends SQLTestUtils {
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
   protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T])
+      (data: Seq[T], testVectorized: Boolean = true)
       (f: DataFrame => Unit): Unit = {
-    withParquetFile(data)(path => f(sqlContext.read.parquet(path)))
+    withParquetFile(data)(path => readParquetFile(path.toString, testVectorized)(f))
   }
 
   /**
@@ -72,9 +86,9 @@ private[sql] trait ParquetTest extends SQLTestUtils {
    * Parquet file will be dropped/deleted after `f` returns.
    */
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
-      (data: Seq[T], tableName: String)
+      (data: Seq[T], tableName: String, testVectorized: Boolean = true)
       (f: => Unit): Unit = {
-    withParquetDataFrame(data) { df =>
+    withParquetDataFrame(data, testVectorized) { df =>
       sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
