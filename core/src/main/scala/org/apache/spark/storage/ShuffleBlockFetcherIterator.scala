@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import scala.util.control.NonFatal
@@ -106,9 +107,8 @@ final class ShuffleBlockFetcherIterator(
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
    * longer place fetched blocks into [[results]].
-   *
-   * Guarded by `this`.
    */
+  @GuardedBy("this")
   private[this] var isZombie = false
 
   initialize()
