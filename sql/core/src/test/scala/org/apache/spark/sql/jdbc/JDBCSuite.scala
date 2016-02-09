@@ -223,7 +223,9 @@ class JDBCSuite extends SparkFunSuite
       val parentPlan = df.queryExecution.executedPlan
       // Check if SparkPlan Filter is not removed in a physical plan because JDBCRDD
       // cannot compile given predicates.
-      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.Filter])
+      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
+      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
+      assert(node.plan.isInstanceOf[org.apache.spark.sql.execution.Filter])
       df
     }
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
