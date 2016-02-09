@@ -113,11 +113,11 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     }
 
     /*
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Aggregate w keys codegen=false           2642 / 3931          7.0         142.9       1.0X
-    Aggregate w keys codegen=true            1092 / 1134         19.0          52.6       2.4X
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------------
+      Aggregate w keys codegen=false           2429 / 2644          8.6         115.8       1.0X
+      Aggregate w keys codegen=true            1535 / 1571         13.7          73.2       1.6X
     */
   }
 
@@ -166,7 +166,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       var s = 0
       while (i < N) {
         key.setInt(0, i % 1000)
-        val h = i % 1000
+        val h = Murmur3_x86_32.hashLong(i % 1000, 42)
         s += h
         i += 1
       }
@@ -229,7 +229,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
     hash                                      651 /  678         80.0          12.5       1.0X
-    fast hash                                 146 /  160        357.0           2.8       4.5X
+    fast hash                                 336 /  343        155.9           6.4       1.9X
     arrayEqual                                417 /  428        125.0           8.0       1.6X
     BytesToBytesMap (off Heap)               1697 / 1744         30.0          33.3       0.4X
     BytesToBytesMap (on Heap)                1766 / 1877         29.0          34.5       0.4X

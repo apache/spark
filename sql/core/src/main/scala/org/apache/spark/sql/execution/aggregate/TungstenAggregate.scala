@@ -502,7 +502,7 @@ case class TungstenAggregate(
     }
 
     // generate hash code for key
-    val hashExpr = FastHash(groupingExpressions)
+    val hashExpr = Murmur3Hash(groupingExpressions, 42)
     ctx.currentVars = input
     val hashEval = BindReferences.bindReference(hashExpr, child.output).gen(ctx)
 
