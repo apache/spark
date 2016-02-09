@@ -621,28 +621,6 @@ abstract class DStream[T: ClassTag] (
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
-   *
-   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
-   */
-  @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
-    this.foreachRDD(foreachFunc)
-  }
-
-  /**
-   * Apply a function to each RDD in this DStream. This is an output operator, so
-   * 'this' DStream will be registered as an output stream and therefore materialized.
-   *
-   * @deprecated As of 0.9.0, replaced by `foreachRDD`.
-   */
-  @deprecated("use foreachRDD", "0.9.0")
-  def foreach(foreachFunc: (RDD[T], Time) => Unit): Unit = ssc.withScope {
-    this.foreachRDD(foreachFunc)
-  }
-
-  /**
-   * Apply a function to each RDD in this DStream. This is an output operator, so
-   * 'this' DStream will be registered as an output stream and therefore materialized.
    */
   def foreachRDD(foreachFunc: RDD[T] => Unit): Unit = ssc.withScope {
     val cleanedF = context.sparkContext.clean(foreachFunc, false)
