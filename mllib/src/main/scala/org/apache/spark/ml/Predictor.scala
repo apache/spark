@@ -17,16 +17,16 @@
 
 package org.apache.spark.ml
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -46,6 +46,7 @@ private[ml] trait PredictorParams extends Params
       schema: StructType,
       fitting: Boolean,
       featuresDataType: DataType): StructType = {
+    validateParams()
     // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
@@ -58,7 +59,6 @@ private[ml] trait PredictorParams extends Params
 
 /**
  * :: DeveloperApi ::
- *
  * Abstraction for prediction problems (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
@@ -88,12 +88,10 @@ abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    copyValues(train(dataset))
+    copyValues(train(dataset).setParent(this))
   }
 
-  override def copy(extra: ParamMap): Learner = {
-    super.copy(extra).asInstanceOf[Learner]
-  }
+  override def copy(extra: ParamMap): Learner
 
   /**
    * Train a model using the given dataset and parameters.
@@ -113,7 +111,7 @@ abstract class Predictor[
    *
    * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
-  protected def featuresDataType: DataType = new VectorUDT
+  private[ml] def featuresDataType: DataType = new VectorUDT
 
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, featuresDataType)
@@ -125,15 +123,12 @@ abstract class Predictor[
    */
   protected def extractLabeledPoints(dataset: DataFrame): RDD[LabeledPoint] = {
     dataset.select($(labelCol), $(featuresCol))
-      .map { case Row(label: Double, features: Vector) =>
-      LabeledPoint(label, features)
-    }
+      .map { case Row(label: Double, features: Vector) => LabeledPoint(label, features) }
   }
 }
 
 /**
  * :: DeveloperApi ::
- *
  * Abstraction for a model for prediction tasks (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
@@ -150,6 +145,10 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
 
   /** @group setParam */
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
+
+  /** Returns the number of features the model was trained on. If unknown, returns -1 */
+  @Since("1.6.0")
+  def numFeatures: Int = -1
 
   /**
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.
@@ -175,12 +174,19 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     if ($(predictionCol).nonEmpty) {
-      dataset.withColumn($(predictionCol), callUDF(predict _, DoubleType, col($(featuresCol))))
+      transformImpl(dataset)
     } else {
       this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
         " since no output columns were set.")
       dataset
     }
+  }
+
+  protected def transformImpl(dataset: DataFrame): DataFrame = {
+    val predictUDF = udf { (features: Any) =>
+      predict(features.asInstanceOf[FeaturesType])
+    }
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   /**

@@ -15,14 +15,15 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.clustering.PowerIterationClustering
 import org.apache.spark.rdd.RDD
-import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * An example Power Iteration Clustering http://www.icml2010.org/papers/387.pdf app.
@@ -154,4 +155,4 @@ object PowerIterationClusteringExample {
     coeff * math.exp(expCoeff * ssquares)
   }
 }
-
+// scalastyle:on println

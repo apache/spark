@@ -17,11 +17,10 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.time.{Millis, Span}
 
-class UnpersistSuite extends FunSuite with LocalSparkContext {
+class UnpersistSuite extends SparkFunSuite with LocalSparkContext {
   test("unpersist RDD") {
     sc = new SparkContext("local", "test")
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()

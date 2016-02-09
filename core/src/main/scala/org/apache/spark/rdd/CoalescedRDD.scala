@@ -69,7 +69,7 @@ private[spark] case class CoalescedRDDPartition(
  * the preferred location of each new partition overlaps with as many preferred locations of its
  * parent partitions
  * @param prev RDD to be coalesced
- * @param maxPartitions number of desired partitions in the coalesced RDD
+ * @param maxPartitions number of desired partitions in the coalesced RDD (must be positive)
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
 private[spark] class CoalescedRDD[T: ClassTag](
@@ -77,6 +77,9 @@ private[spark] class CoalescedRDD[T: ClassTag](
     maxPartitions: Int,
     balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
+
+  require(maxPartitions > 0 || maxPartitions == prev.partitions.length,
+    s"Number of partitions ($maxPartitions) must be positive.")
 
   override def getPartitions: Array[Partition] = {
     val pc = new PartitionCoalescer(maxPartitions, prev, balanceSlack)
@@ -310,11 +313,11 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
   def throwBalls() {
     if (noLocality) {  // no preferredLocations in parent RDD, no randomization needed
       if (maxPartitions > groupArr.size) { // just return prev.partitions
-        for ((p,i) <- prev.partitions.zipWithIndex) {
+        for ((p, i) <- prev.partitions.zipWithIndex) {
           groupArr(i).arr += p
         }
       } else { // no locality available, then simply split partitions based on positions in array
-        for(i <- 0 until maxPartitions) {
+        for (i <- 0 until maxPartitions) {
           val rangeStart = ((i.toLong * prev.partitions.length) / maxPartitions).toInt
           val rangeEnd = (((i.toLong + 1) * prev.partitions.length) / maxPartitions).toInt
           (rangeStart until rangeEnd).foreach{ j => groupArr(i).arr += prev.partitions(j) }

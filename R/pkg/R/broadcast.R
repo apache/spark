@@ -27,9 +27,9 @@
 # @description Broadcast variables can be created using the broadcast
 #              function from a \code{SparkContext}.
 # @rdname broadcast-class
-# @seealso broadcast 
+# @seealso broadcast
 #
-# @param id Id of the backing Spark broadcast variable 
+# @param id Id of the backing Spark broadcast variable
 # @export
 setClass("Broadcast", slots = list(id = "character"))
 
@@ -51,7 +51,6 @@ Broadcast <- function(id, value, jBroadcastRef, objName) {
 #
 # @param bcast The broadcast variable to get
 # @rdname broadcast
-# @aliases value,Broadcast-method
 setMethod("value",
           signature(bcast = "Broadcast"),
           function(bcast) {
@@ -68,7 +67,7 @@ setMethod("value",
 # variable on workers. Not intended for use outside the package.
 #
 # @rdname broadcast-internal
-# @seealso broadcast, value 
+# @seealso broadcast, value
 
 # @param bcastId The id of broadcast variable to set
 # @param value The value to be set

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
@@ -61,3 +62,4 @@ object SparkStreamingExample {
     ssc.stop()
   }
 }
+// scalastyle:on println

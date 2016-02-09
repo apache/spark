@@ -17,20 +17,23 @@
 
 package org.apache.spark.sql
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.test.TestSQLContext.implicits._
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class DataFrameNaFunctionsSuite extends QueryTest {
+class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   def createDF(): DataFrame = {
     Seq[(String, java.lang.Integer, java.lang.Double)](
       ("Bob", 16, 176.5),
       ("Alice", null, 164.3),
       ("David", 60, null),
+      ("Nina", 25, Double.NaN),
       ("Amy", null, null),
-      (null, null, null)).toDF("name", "age", "height")
+      (null, null, null)
+      ).toDF("name", "age", "height")
   }
 
   test("drop") {
@@ -38,12 +41,12 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     val rows = input.collect()
 
     checkAnswer(
-      input.na.drop("name" :: Nil),
-      rows(0) :: rows(1) :: rows(2) :: rows(3) :: Nil)
+      input.na.drop("name" :: Nil).select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Nina") :: Row("Amy") :: Nil)
 
     checkAnswer(
-      input.na.drop("age" :: Nil),
-      rows(0) :: rows(2) :: Nil)
+      input.na.drop("age" :: Nil).select("name"),
+      Row("Bob") :: Row("David") :: Row("Nina") :: Nil)
 
     checkAnswer(
       input.na.drop("age" :: "height" :: Nil),
@@ -66,8 +69,8 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     val rows = input.collect()
 
     checkAnswer(
-      input.na.drop("all"),
-      rows(0) :: rows(1) :: rows(2) :: rows(3) :: Nil)
+      input.na.drop("all").select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Nina") :: Row("Amy") :: Nil)
 
     checkAnswer(
       input.na.drop("any"),
@@ -78,8 +81,8 @@ class DataFrameNaFunctionsSuite extends QueryTest {
       rows(0) :: Nil)
 
     checkAnswer(
-      input.na.drop("all", Seq("age", "height")),
-      rows(0) :: rows(1) :: rows(2) :: Nil)
+      input.na.drop("all", Seq("age", "height")).select("name"),
+      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Nina") :: Nil)
   }
 
   test("drop with threshold") {
@@ -107,6 +110,7 @@ class DataFrameNaFunctionsSuite extends QueryTest {
       Row("Bob", 16, 176.5) ::
         Row("Alice", 50, 164.3) ::
         Row("David", 60, 50.6) ::
+        Row("Nina", 25, 50.6) ::
         Row("Amy", 50, 50.6) ::
         Row(null, 50, 50.6) :: Nil)
 
@@ -116,17 +120,19 @@ class DataFrameNaFunctionsSuite extends QueryTest {
     // string
     checkAnswer(
       input.na.fill("unknown").select("name"),
-      Row("Bob") :: Row("Alice") :: Row("David") :: Row("Amy") :: Row("unknown") :: Nil)
+      Row("Bob") :: Row("Alice") :: Row("David") ::
+        Row("Nina") :: Row("Amy") :: Row("unknown") :: Nil)
     assert(input.na.fill("unknown").columns.toSeq === input.columns.toSeq)
 
     // fill double with subset columns
     checkAnswer(
-      input.na.fill(50.6, "age" :: Nil),
-      Row("Bob", 16, 176.5) ::
-        Row("Alice", 50, 164.3) ::
-        Row("David", 60, null) ::
-        Row("Amy", 50, null) ::
-        Row(null, 50, null) :: Nil)
+      input.na.fill(50.6, "age" :: Nil).select("name", "age"),
+      Row("Bob", 16) ::
+        Row("Alice", 50) ::
+        Row("David", 60) ::
+        Row("Nina", 25) ::
+        Row("Amy", 50) ::
+        Row(null, 50) :: Nil)
 
     // fill string with subset columns
     checkAnswer(
@@ -135,24 +141,26 @@ class DataFrameNaFunctionsSuite extends QueryTest {
   }
 
   test("fill with map") {
-    val df = Seq[(String, String, java.lang.Long, java.lang.Double)](
-      (null, null, null, null)).toDF("a", "b", "c", "d")
+    val df = Seq[(String, String, java.lang.Long, java.lang.Double, java.lang.Boolean)](
+      (null, null, null, null, null)).toDF("a", "b", "c", "d", "e")
     checkAnswer(
       df.na.fill(Map(
         "a" -> "test",
         "c" -> 1,
-        "d" -> 2.2
+        "d" -> 2.2,
+        "e" -> false
       )),
-      Row("test", null, 1, 2.2))
+      Row("test", null, 1, 2.2, false))
 
     // Test Java version
     checkAnswer(
-      df.na.fill(mapAsJavaMap(Map(
+      df.na.fill(Map(
         "a" -> "test",
         "c" -> 1,
-        "d" -> 2.2
-      ))),
-      Row("test", null, 1, 2.2))
+        "d" -> 2.2,
+        "e" -> false
+      ).asJava),
+      Row("test", null, 1, 2.2, false))
   }
 
   test("replace") {
@@ -163,29 +171,27 @@ class DataFrameNaFunctionsSuite extends QueryTest {
       16 -> 61,
       60 -> 6,
       164.3 -> 461.3  // Alice is really tall
-    ))
+    )).collect()
 
-    checkAnswer(
-      out,
-      Row("Bob", 61, 176.5) ::
-        Row("Alice", null, 461.3) ::
-        Row("David", 6, null) ::
-        Row("Amy", null, null) ::
-        Row(null, null, null) :: Nil)
+    assert(out(0) === Row("Bob", 61, 176.5))
+    assert(out(1) === Row("Alice", null, 461.3))
+    assert(out(2) === Row("David", 6, null))
+    assert(out(3).get(2).asInstanceOf[Double].isNaN)
+    assert(out(4) === Row("Amy", null, null))
+    assert(out(5) === Row(null, null, null))
 
     // Replace only the age column
     val out1 = input.na.replace("age", Map(
       16 -> 61,
       60 -> 6,
       164.3 -> 461.3  // Alice is really tall
-    ))
+    )).collect()
 
-    checkAnswer(
-      out1,
-      Row("Bob", 61, 176.5) ::
-        Row("Alice", null, 164.3) ::
-        Row("David", 6, null) ::
-        Row("Amy", null, null) ::
-        Row(null, null, null) :: Nil)
+    assert(out1(0) === Row("Bob", 61, 176.5))
+    assert(out1(1) === Row("Alice", null, 164.3))
+    assert(out1(2) === Row("David", 6, null))
+    assert(out1(3).get(2).asInstanceOf[Double].isNaN)
+    assert(out1(4) === Row("Amy", null, null))
+    assert(out1(5) === Row(null, null, null))
   }
 }

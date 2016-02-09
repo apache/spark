@@ -18,7 +18,7 @@
 package org.apache.spark
 
 /**
- * Spark ML is an ALPHA component that adds a new set of machine learning APIs to let users quickly
+ * Spark ML is a BETA component that adds a new set of machine learning APIs to let users quickly
  * assemble and configure practical machine learning pipelines.
  *
  * @groupname param Parameters

@@ -17,13 +17,12 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.rdd._
-import org.scalatest.FunSuite
 
-class GraphOpsSuite extends FunSuite with LocalSparkContext {
+class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
 
   test("joinVertices") {
     withSpark { sc =>
@@ -59,7 +58,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
   test ("filter") {
     withSpark { sc =>
       val n = 5
-      val vertices = sc.parallelize((0 to n).map(x => (x:VertexId, x)))
+      val vertices = sc.parallelize((0 to n).map(x => (x: VertexId, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
       val graph: Graph[Int, Int] = Graph(vertices, edges).cache()
       val filteredGraph = graph.filter(
@@ -67,11 +66,11 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
           val degrees: VertexRDD[Int] = graph.outDegrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
-        vpred = (vid: VertexId, deg:Int) => deg > 0
+        vpred = (vid: VertexId, deg: Int) => deg > 0
       ).cache()
 
       val v = filteredGraph.vertices.collect().toSet
-      assert(v === Set((0,0)))
+      assert(v === Set((0, 0)))
 
       // the map is necessary because of object-reuse in the edge iterator
       val e = filteredGraph.edges.map(e => Edge(e.srcId, e.dstId, e.attr)).collect().toSet

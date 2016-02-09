@@ -23,13 +23,12 @@ import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 import javax.servlet.http.HttpServletResponse
 
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
 import org.apache.spark.deploy.rest._
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterScheduler
 import org.apache.spark.util.Utils
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
-
 
 /**
  * A server that responds to requests submitted by the [[RestSubmissionClient]].
@@ -59,7 +58,7 @@ private[mesos] class MesosSubmitRequestServlet(
   extends SubmitRequestServlet {
 
   private val DEFAULT_SUPERVISE = false
-  private val DEFAULT_MEMORY = 512 // mb
+  private val DEFAULT_MEMORY = Utils.DEFAULT_DRIVER_MEM_MB // mb
   private val DEFAULT_CORES = 1.0
 
   private val nextDriverNumber = new AtomicLong(0)

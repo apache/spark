@@ -25,7 +25,7 @@ import scala.io.Source
 
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
-import org.scalatest.{FunSuiteLike, BeforeAndAfter, FunSuite}
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -39,7 +39,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
  * logging events, whether the parsing of the file names is correct, and whether the logged events
  * can be read and deserialized into actual SparkListenerEvents.
  */
-class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with BeforeAndAfter
+class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter
   with Logging {
   import EventLoggingListenerSuite._
 
@@ -67,11 +67,11 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
     assert(fileSystem.exists(logPath))
     val logStatus = fileSystem.getFileStatus(logPath)
-    assert(!logStatus.isDir)
+    assert(!logStatus.isDirectory)
 
     // Verify log is renamed after stop()
     eventLogger.stop()
-    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDir)
+    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDirectory)
   }
 
   test("Basic event logging") {
@@ -180,7 +180,7 @@ class EventLoggingListenerSuite extends FunSuite with LocalSparkContext with Bef
     // into SPARK-6688.
     val conf = getLoggingConf(testDirPath, compressionCodec)
       .set("spark.hadoop.fs.defaultFS", "unsupported://example.com")
-    val sc = new SparkContext("local-cluster[2,2,512]", "test", conf)
+    val sc = new SparkContext("local-cluster[2,2,1024]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val eventLogPath = eventLogger.logPath

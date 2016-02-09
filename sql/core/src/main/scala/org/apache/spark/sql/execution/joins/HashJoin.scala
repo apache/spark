@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.util.NoSuchElementException
+
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.util.collection.CompactBuffer
-
+import org.apache.spark.sql.execution.metric.LongSQLMetric
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
   self: SparkPlan =>
@@ -28,6 +31,7 @@ trait HashJoin {
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
   val buildSide: BuildSide
+  val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
 
@@ -43,59 +47,120 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  @transient protected lazy val buildSideKeyGenerator: Projection =
-    newProjection(buildKeys, buildPlan.output)
+  /**
+    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+    *
+    * If not, returns the original expressions.
+    */
+  def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+    var keyExpr: Expression = null
+    var width = 0
+    keys.foreach { e =>
+      e.dataType match {
+        case dt: IntegralType if dt.defaultSize <= 8 - width =>
+          if (width == 0) {
+            if (e.dataType != LongType) {
+              keyExpr = Cast(e, LongType)
+            } else {
+              keyExpr = e
+            }
+            width = dt.defaultSize
+          } else {
+            val bits = dt.defaultSize * 8
+            keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
+              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
+            width -= bits
+          }
+        // TODO: support BooleanType, DateType and TimestampType
+        case other =>
+          return keys
+      }
+    }
+    keyExpr :: Nil
+  }
 
-  @transient protected lazy val streamSideKeyGenerator: () => MutableProjection =
-    newMutableProjection(streamedKeys, streamedPlan.output)
+  protected val canJoinKeyFitWithinLong: Boolean = {
+    val sameTypes = buildKeys.map(_.dataType) == streamedKeys.map(_.dataType)
+    val key = rewriteKeyExpr(buildKeys)
+    sameTypes && key.length == 1 && key.head.dataType.isInstanceOf[LongType]
+  }
 
-  protected def hashJoin(streamIter: Iterator[Row], hashedRelation: HashedRelation): Iterator[Row] =
+  protected def buildSideKeyGenerator: Projection =
+    UnsafeProjection.create(rewriteKeyExpr(buildKeys), buildPlan.output)
+
+  protected def streamSideKeyGenerator: Projection =
+    UnsafeProjection.create(rewriteKeyExpr(streamedKeys), streamedPlan.output)
+
+  @transient private[this] lazy val boundCondition = if (condition.isDefined) {
+    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+  } else {
+    (r: InternalRow) => true
+  }
+
+  protected def hashJoin(
+      streamIter: Iterator[InternalRow],
+      numStreamRows: LongSQLMetric,
+      hashedRelation: HashedRelation,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] =
   {
-    new Iterator[Row] {
-      private[this] var currentStreamedRow: Row = _
-      private[this] var currentHashMatches: CompactBuffer[Row] = _
+    new Iterator[InternalRow] {
+      private[this] var currentStreamedRow: InternalRow = _
+      private[this] var currentHashMatches: Seq[InternalRow] = _
       private[this] var currentMatchPosition: Int = -1
 
       // Mutable per row objects.
-      private[this] val joinRow = new JoinedRow2
+      private[this] val joinRow = new JoinedRow
+      private[this] val resultProjection: (InternalRow) => InternalRow =
+        UnsafeProjection.create(self.schema)
 
-      private[this] val joinKeys = streamSideKeyGenerator()
+      private[this] val joinKeys = streamSideKeyGenerator
 
-      override final def hasNext: Boolean =
-        (currentMatchPosition != -1 && currentMatchPosition < currentHashMatches.size) ||
-          (streamIter.hasNext && fetchNext())
+      override final def hasNext: Boolean = {
+        while (true) {
+          // check if it's end of current matches
+          if (currentHashMatches != null && currentMatchPosition == currentHashMatches.length) {
+            currentHashMatches = null
+            currentMatchPosition = -1
+          }
 
-      override final def next(): Row = {
-        val ret = buildSide match {
-          case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
-          case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
-        }
-        currentMatchPosition += 1
-        ret
-      }
+          // find the next match
+          while (currentHashMatches == null && streamIter.hasNext) {
+            currentStreamedRow = streamIter.next()
+            numStreamRows += 1
+            val key = joinKeys(currentStreamedRow)
+            if (!key.anyNull) {
+              currentHashMatches = hashedRelation.get(key)
+              if (currentHashMatches != null) {
+                currentMatchPosition = 0
+              }
+            }
+          }
+          if (currentHashMatches == null) {
+            return false
+          }
 
-      /**
-       * Searches the streamed iterator for the next row that has at least one match in hashtable.
-       *
-       * @return true if the search is successful, and false if the streamed iterator runs out of
-       *         tuples.
-       */
-      private final def fetchNext(): Boolean = {
-        currentHashMatches = null
-        currentMatchPosition = -1
-
-        while (currentHashMatches == null && streamIter.hasNext) {
-          currentStreamedRow = streamIter.next()
-          if (!joinKeys(currentStreamedRow).anyNull) {
-            currentHashMatches = hashedRelation.get(joinKeys.currentValue)
+          // found some matches
+          buildSide match {
+            case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
+            case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
+          }
+          if (boundCondition(joinRow)) {
+            return true
+          } else {
+            currentMatchPosition += 1
           }
         }
+        false  // unreachable
+      }
 
-        if (currentHashMatches == null) {
-          false
+      override final def next(): InternalRow = {
+        // next() could be called without calling hasNext()
+        if (hasNext) {
+          currentMatchPosition += 1
+          numOutputRows += 1
+          resultProjection(joinRow)
         } else {
-          currentMatchPosition = 0
-          true
+          throw new NoSuchElementException
         }
       }
     }

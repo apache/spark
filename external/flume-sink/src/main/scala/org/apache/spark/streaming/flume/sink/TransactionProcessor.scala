@@ -22,7 +22,7 @@ import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 
 import scala.util.control.Breaks
 
-import org.apache.flume.{Transaction, Channel}
+import org.apache.flume.{Channel, Transaction}
 
 // Flume forces transactions to be thread-local (horrible, I know!)
 // So the sink basically spawns a new thread to pull the events out within a transaction.
@@ -143,7 +143,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
           eventBatch.setErrorMsg(msg)
         } else {
           // At this point, the events are available, so fill them into the event batch
-          eventBatch = new EventBatch("",seqNum, events)
+          eventBatch = new EventBatch("", seqNum, events)
         }
       })
     } catch {

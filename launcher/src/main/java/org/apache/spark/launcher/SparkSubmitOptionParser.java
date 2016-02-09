@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
 
 /**
  * Parser for spark-submit command line options.
- * <p/>
+ * <p>
  * This class encapsulates the parsing code for spark-submit command line options, so that there
  * is a single list of options that needs to be maintained (well, sort of, but it makes it harder
  * to break things).
@@ -51,6 +51,7 @@ class SparkSubmitOptionParser {
   protected final String MASTER = "--master";
   protected final String NAME = "--name";
   protected final String PACKAGES = "--packages";
+  protected final String PACKAGES_EXCLUDE = "--exclude-packages";
   protected final String PROPERTIES_FILE = "--properties-file";
   protected final String PROXY_USER = "--proxy-user";
   protected final String PY_FILES = "--py-files";
@@ -61,6 +62,7 @@ class SparkSubmitOptionParser {
   // Options that do not take arguments.
   protected final String HELP = "--help";
   protected final String SUPERVISE = "--supervise";
+  protected final String USAGE_ERROR = "--usage-error";
   protected final String VERBOSE = "--verbose";
   protected final String VERSION = "--version";
 
@@ -78,10 +80,10 @@ class SparkSubmitOptionParser {
    * This is the canonical list of spark-submit options. Each entry in the array contains the
    * different aliases for the same option; the first element of each entry is the "official"
    * name of the option, passed to {@link #handle(String, String)}.
-   * <p/>
+   * <p>
    * Options not listed here nor in the "switch" list below will result in a call to
    * {@link $#handleUnknown(String)}.
-   * <p/>
+   * <p>
    * These two arrays are visible for tests.
    */
   final String[][] opts = {
@@ -104,6 +106,7 @@ class SparkSubmitOptionParser {
     { NAME },
     { NUM_EXECUTORS },
     { PACKAGES },
+    { PACKAGES_EXCLUDE },
     { PRINCIPAL },
     { PROPERTIES_FILE },
     { PROXY_USER },
@@ -120,13 +123,14 @@ class SparkSubmitOptionParser {
   final String[][] switches = {
     { HELP, "-h" },
     { SUPERVISE },
+    { USAGE_ERROR },
     { VERBOSE, "-v" },
     { VERSION },
   };
 
   /**
    * Parse a list of spark-submit command line options.
-   * <p/>
+   * <p>
    * See SparkSubmitArguments.scala for a more formal description of available options.
    *
    * @throws IllegalArgumentException If an error is found during parsing.

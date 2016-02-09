@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.mllib.util.MLUtils
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * An example app for randomly generated and sampled RDDs. Run with
@@ -125,3 +126,4 @@ object SampledRDDs {
     sc.stop()
   }
 }
+// scalastyle:on println

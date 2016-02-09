@@ -22,13 +22,12 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.util.Utils
 
 
-class ReplSuite extends FunSuite {
+class ReplSuite extends SparkFunSuite {
 
   def runInterpreter(master: String, input: String): String = {
     val CONF_EXECUTOR_CLASSPATH = "spark.executor.extraClassPath"
@@ -212,7 +211,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("local-cluster mode") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |var v = 7
         |def getV() = v
@@ -234,7 +233,7 @@ class ReplSuite extends FunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -257,12 +256,47 @@ class ReplSuite extends FunSuite {
 
   test("SPARK-2576 importing SQLContext.implicits._") {
     // We need to use local-cluster to test this case.
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
         |import sqlContext.implicits._
         |case class TestCaseClass(value: Int)
         |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF().collect()
+        |
+        |// Test Dataset Serialization in the REPL
+        |Seq(TestCaseClass(1)).toDS().collect()
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("SPARK-8461 SQL with codegen") {
+    val output = runInterpreter("local",
+    """
+      |val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+      |sqlContext.setConf("spark.sql.codegen", "true")
+      |sqlContext.range(0, 100).filter('id > 50).count()
+    """.stripMargin)
+    assertContains("Long = 49", output)
+    assertDoesNotContain("java.lang.ClassNotFoundException", output)
+  }
+
+  test("Datasets and encoders") {
+    val output = runInterpreter("local",
+      """
+        |import org.apache.spark.sql.functions._
+        |import org.apache.spark.sql.Encoder
+        |import org.apache.spark.sql.expressions.Aggregator
+        |import org.apache.spark.sql.TypedColumn
+        |val simpleSum = new Aggregator[Int, Int, Int] with Serializable {
+        |  def zero: Int = 0                     // The initial value.
+        |  def reduce(b: Int, a: Int) = b + a    // Add an element to the running total
+        |  def merge(b1: Int, b2: Int) = b1 + b2 // Merge intermediate values.
+        |  def finish(b: Int) = b                // Return the final result.
+        |}.toColumn
+        |
+        |val ds = Seq(1, 2, 3, 4).toDS()
+        |ds.select(simpleSum).collect
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
@@ -305,6 +339,30 @@ class ReplSuite extends FunSuite {
     }
   }
 
+  test("Datasets agg type-inference") {
+    val output = runInterpreter("local",
+      """
+        |import org.apache.spark.sql.functions._
+        |import org.apache.spark.sql.Encoder
+        |import org.apache.spark.sql.expressions.Aggregator
+        |import org.apache.spark.sql.TypedColumn
+        |/** An `Aggregator` that adds up any numeric type returned by the given function. */
+        |class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] with Serializable {
+        |  val numeric = implicitly[Numeric[N]]
+        |  override def zero: N = numeric.zero
+        |  override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
+        |  override def merge(b1: N,b2: N): N = numeric.plus(b1, b2)
+        |  override def finish(reduction: N): N = reduction
+        |}
+        |
+        |def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] = new SumOf(f).toColumn
+        |val ds = Seq((1, 1, 2L), (1, 2, 3L), (1, 3, 4L), (2, 1, 5L)).toDS()
+        |ds.groupBy(_._1).agg(sum(_._2), sum(_._3)).collect()
+      """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
   test("collecting objects of class defined in repl") {
     val output = runInterpreter("local[2]",
       """
@@ -315,9 +373,9 @@ class ReplSuite extends FunSuite {
     assertDoesNotContain("Exception", output)
     assertContains("ret: Array[Foo] = Array(Foo(1),", output)
   }
-  
+
   test("collecting objects of class defined in repl - shuffling") {
-    val output = runInterpreter("local-cluster[1,1,512]",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
         |case class Foo(i: Int)
         |val list = List((1, Foo(1)), (1, Foo(2)))

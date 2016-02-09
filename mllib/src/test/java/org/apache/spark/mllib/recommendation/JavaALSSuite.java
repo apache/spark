@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.recommendation;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 
 import scala.Tuple2;
 import scala.Tuple3;
 
-import com.google.common.collect.Lists;
 import org.jblas.DoubleMatrix;
 import org.junit.After;
 import org.junit.Assert;
@@ -56,11 +56,10 @@ public class JavaALSSuite implements Serializable {
       double matchThreshold,
       boolean implicitPrefs,
       DoubleMatrix truePrefs) {
-    List<Tuple2<Integer, Integer>> localUsersProducts =
-      Lists.newArrayListWithCapacity(users * products);
+    List<Tuple2<Integer, Integer>> localUsersProducts = new ArrayList<>(users * products);
     for (int u=0; u < users; ++u) {
       for (int p=0; p < products; ++p) {
-        localUsersProducts.add(new Tuple2<Integer, Integer>(u, p));
+        localUsersProducts.add(new Tuple2<>(u, p));
       }
     }
     JavaPairRDD<Integer, Integer> usersProducts = sc.parallelizePairs(localUsersProducts);

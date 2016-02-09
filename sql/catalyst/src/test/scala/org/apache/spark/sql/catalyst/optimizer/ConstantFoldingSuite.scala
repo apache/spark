@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedExtractValue, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedExtractValue}
+// For implicit conversions
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types._
-
-// For implicit conversions
-import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class ConstantFoldingSuite extends PlanTest {
 
@@ -35,6 +34,7 @@ class ConstantFoldingSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubQueries) ::
       Batch("ConstantFolding", Once,
+        OptimizeIn,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }
@@ -161,7 +161,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -169,7 +169,7 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select(
           Rand(5L) + Literal(1.0) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+          sum('a) as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -244,6 +244,23 @@ class ConstantFoldingSuite extends PlanTest {
           Literal.create(null, BooleanType) as 'c19,
           Literal.create(null, BooleanType) as 'c20
         ).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Constant folding test: Fold In(v, list) into true or false") {
+    val originalQuery =
+      testRelation
+        .select('a)
+        .where(In(Literal(1), Seq(Literal(1), Literal(2))))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .where(Literal(true))
+        .analyze
 
     comparePlans(optimized, correctAnswer)
   }

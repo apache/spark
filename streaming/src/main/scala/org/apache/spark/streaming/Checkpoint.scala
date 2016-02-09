@@ -21,17 +21,17 @@ import java.io._
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SparkException, SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.util.{MetadataCleaner, Utils}
 import org.apache.spark.streaming.scheduler.JobGenerator
-
+import org.apache.spark.util.Utils
 
 private[streaming]
-class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
+class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   extends Logging with Serializable {
   val master = ssc.sc.master
   val framework = ssc.sc.appName
@@ -40,15 +40,41 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
-  val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConfPairs = ssc.conf.getAll
 
   def createSparkConf(): SparkConf = {
+
+    // Reload properties for the checkpoint application since user wants to set a reload property
+    // or spark had changed its value and user wants to set it back.
+    val propertiesToReload = List(
+      "spark.yarn.app.id",
+      "spark.yarn.app.attemptId",
+      "spark.driver.host",
+      "spark.driver.port",
+      "spark.master",
+      "spark.yarn.keytab",
+      "spark.yarn.principal",
+      "spark.ui.filters")
+
     val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
       .remove("spark.driver.host")
       .remove("spark.driver.port")
-    val newMasterOption = new SparkConf(loadDefaults = true).getOption("spark.master")
-    newMasterOption.foreach { newMaster => newSparkConf.setMaster(newMaster) }
+    val newReloadConf = new SparkConf(loadDefaults = true)
+    propertiesToReload.foreach { prop =>
+      newReloadConf.getOption(prop).foreach { value =>
+        newSparkConf.set(prop, value)
+      }
+    }
+
+    // Add Yarn proxy filter specific configurations to the recovered SparkConf
+    val filter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    val filterPrefix = s"spark.$filter.param."
+    newReloadConf.getAll.foreach { case (k, v) =>
+      if (k.startsWith(filterPrefix) && k.length > filterPrefix.length) {
+        newSparkConf.set(k, v)
+      }
+    }
+
     newSparkConf
   }
 
@@ -86,7 +112,7 @@ object Checkpoint extends Logging {
     }
 
     val path = new Path(checkpointDir)
-    val fs = fsOption.getOrElse(path.getFileSystem(new Configuration()))
+    val fs = fsOption.getOrElse(path.getFileSystem(SparkHadoopUtil.get.conf))
     if (fs.exists(path)) {
       val statuses = fs.listStatus(path)
       if (statuses != null) {
@@ -100,6 +126,44 @@ object Checkpoint extends Logging {
     } else {
       logInfo("Checkpoint directory " + path + " does not exist")
       Seq.empty
+    }
+  }
+
+  /** Serialize the checkpoint, or throw any exception that occurs */
+  def serialize(checkpoint: Checkpoint, conf: SparkConf): Array[Byte] = {
+    val compressionCodec = CompressionCodec.createCodec(conf)
+    val bos = new ByteArrayOutputStream()
+    val zos = compressionCodec.compressedOutputStream(bos)
+    val oos = new ObjectOutputStream(zos)
+    Utils.tryWithSafeFinally {
+      oos.writeObject(checkpoint)
+    } {
+      oos.close()
+    }
+    bos.toByteArray
+  }
+
+  /** Deserialize a checkpoint from the input stream, or throw any exception that occurs */
+  def deserialize(inputStream: InputStream, conf: SparkConf): Checkpoint = {
+    val compressionCodec = CompressionCodec.createCodec(conf)
+    var ois: ObjectInputStreamWithLoader = null
+    Utils.tryWithSafeFinally {
+
+      // ObjectInputStream uses the last defined user-defined class loader in the stack
+      // to find classes, which maybe the wrong class loader. Hence, a inherited version
+      // of ObjectInputStream is used to explicitly use the current thread's default class
+      // loader to find and load classes. This is a well know Java issue and has popped up
+      // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
+      val zis = compressionCodec.compressedInputStream(inputStream)
+      ois = new ObjectInputStreamWithLoader(zis,
+        Thread.currentThread().getContextClassLoader)
+      val cp = ois.readObject.asInstanceOf[Checkpoint]
+      cp.validate()
+      cp
+    } {
+      if (ois != null) {
+        ois.close()
+      }
     }
   }
 }
@@ -119,18 +183,32 @@ class CheckpointWriter(
   val executor = Executors.newFixedThreadPool(1)
   val compressionCodec = CompressionCodec.createCodec(conf)
   private var stopped = false
-  private var fs_ : FileSystem = _
+  private var _fs: FileSystem = _
+
+  @volatile private var latestCheckpointTime: Time = null
 
   class CheckpointWriteHandler(
       checkpointTime: Time,
       bytes: Array[Byte],
       clearCheckpointDataLater: Boolean) extends Runnable {
     def run() {
+      if (latestCheckpointTime == null || latestCheckpointTime < checkpointTime) {
+        latestCheckpointTime = checkpointTime
+      }
       var attempts = 0
       val startTime = System.currentTimeMillis()
       val tempFile = new Path(checkpointDir, "temp")
-      val checkpointFile = Checkpoint.checkpointFile(checkpointDir, checkpointTime)
-      val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, checkpointTime)
+      // We will do checkpoint when generating a batch and completing a batch. When the processing
+      // time of a batch is greater than the batch interval, checkpointing for completing an old
+      // batch may run after checkpointing of a new batch. If this happens, checkpoint of an old
+      // batch actually has the latest information, so we want to recovery from it. Therefore, we
+      // also use the latest checkpoint time as the file name, so that we can recovery from the
+      // latest checkpoint file.
+      //
+      // Note: there is only one thread writting the checkpoint files, so we don't need to worry
+      // about thread-safety.
+      val checkpointFile = Checkpoint.checkpointFile(checkpointDir, latestCheckpointTime)
+      val backupFile = Checkpoint.checkpointBackupFile(checkpointDir, latestCheckpointTime)
 
       while (attempts < MAX_ATTEMPTS && !stopped) {
         attempts += 1
@@ -139,7 +217,9 @@ class CheckpointWriter(
             + "'")
 
           // Write checkpoint to temp file
-          fs.delete(tempFile, true)   // just in case it exists
+          if (fs.exists(tempFile)) {
+            fs.delete(tempFile, true)   // just in case it exists
+          }
           val fos = fs.create(tempFile)
           Utils.tryWithSafeFinally {
             fos.write(bytes)
@@ -150,7 +230,9 @@ class CheckpointWriter(
           // If the checkpoint file exists, back it up
           // If the backup exists as well, just delete it, otherwise rename will fail
           if (fs.exists(checkpointFile)) {
-            fs.delete(backupFile, true) // just in case it exists
+            if (fs.exists(backupFile)){
+              fs.delete(backupFile, true) // just in case it exists
+            }
             if (!fs.rename(checkpointFile, backupFile)) {
               logWarning("Could not rename " + checkpointFile + " to " + backupFile)
             }
@@ -189,18 +271,11 @@ class CheckpointWriter(
   }
 
   def write(checkpoint: Checkpoint, clearCheckpointDataLater: Boolean) {
-    val bos = new ByteArrayOutputStream()
-    val zos = compressionCodec.compressedOutputStream(bos)
-    val oos = new ObjectOutputStream(zos)
-    Utils.tryWithSafeFinally {
-      oos.writeObject(checkpoint)
-    } {
-      oos.close()
-    }
     try {
+      val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
-        checkpoint.checkpointTime, bos.toByteArray, clearCheckpointDataLater))
-      logDebug("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
+        checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
+      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
     } catch {
       case rej: RejectedExecutionException =>
         logError("Could not submit checkpoint task to the thread pool executor", rej)
@@ -223,18 +298,27 @@ class CheckpointWriter(
   }
 
   private def fs = synchronized {
-    if (fs_ == null) fs_ = new Path(checkpointDir).getFileSystem(hadoopConf)
-    fs_
+    if (_fs == null) _fs = new Path(checkpointDir).getFileSystem(hadoopConf)
+    _fs
   }
 
   private def reset() = synchronized {
-    fs_ = null
+    _fs = null
   }
 }
 
 
 private[streaming]
 object CheckpointReader extends Logging {
+
+  /**
+   * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
+   * files, then return None, else try to return the latest valid checkpoint object. If no
+   * checkpoint files could be read correctly, then return None.
+   */
+  def read(checkpointDir: String): Option[Checkpoint] = {
+    read(checkpointDir, new SparkConf(), SparkHadoopUtil.get.conf, ignoreReadError = true)
+  }
 
   /**
    * Read checkpoint files present in the given checkpoint directory. If there are no checkpoint
@@ -260,53 +344,40 @@ object CheckpointReader extends Logging {
 
     // Try to read the checkpoint files in the order
     logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
-    val compressionCodec = CompressionCodec.createCodec(conf)
+    var readError: Exception = null
     checkpointFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file " + file)
       try {
-        var ois: ObjectInputStreamWithLoader = null
-        var cp: Checkpoint = null
-        Utils.tryWithSafeFinally {
-          val fis = fs.open(file)
-          // ObjectInputStream uses the last defined user-defined class loader in the stack
-          // to find classes, which maybe the wrong class loader. Hence, a inherited version
-          // of ObjectInputStream is used to explicitly use the current thread's default class
-          // loader to find and load classes. This is a well know Java issue and has popped up
-          // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
-          val zis = compressionCodec.compressedInputStream(fis)
-          ois = new ObjectInputStreamWithLoader(zis,
-            Thread.currentThread().getContextClassLoader)
-          cp = ois.readObject.asInstanceOf[Checkpoint]
-        } {
-          if (ois != null) {
-            ois.close()
-          }
-        }
-        cp.validate()
+        val fis = fs.open(file)
+        val cp = Checkpoint.deserialize(fis, conf)
         logInfo("Checkpoint successfully loaded from file " + file)
         logInfo("Checkpoint was generated at time " + cp.checkpointTime)
         return Some(cp)
       } catch {
         case e: Exception =>
+          readError = e
           logWarning("Error reading checkpoint from file " + file, e)
       }
     })
 
     // If none of checkpoint files could be read, then throw exception
     if (!ignoreReadError) {
-      throw new SparkException(s"Failed to read checkpoint from directory $checkpointPath")
+      throw new SparkException(
+        s"Failed to read checkpoint from directory $checkpointPath", readError)
     }
     None
   }
 }
 
 private[streaming]
-class ObjectInputStreamWithLoader(inputStream_ : InputStream, loader: ClassLoader)
-  extends ObjectInputStream(inputStream_) {
+class ObjectInputStreamWithLoader(_inputStream: InputStream, loader: ClassLoader)
+  extends ObjectInputStream(_inputStream) {
 
   override def resolveClass(desc: ObjectStreamClass): Class[_] = {
     try {
-      return loader.loadClass(desc.getName())
+      // scalastyle:off classforname
+      return Class.forName(desc.getName(), false, loader)
+      // scalastyle:on classforname
     } catch {
       case e: Exception =>
     }

@@ -17,11 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.FunSuite
-
 import org.apache.spark._
 
-class DoubleRDDSuite extends FunSuite with SharedSparkContext {
+class DoubleRDDSuite extends SparkFunSuite with SharedSparkContext {
   test("sum") {
     assert(sc.parallelize(Seq.empty[Double]).sum() === 0.0)
     assert(sc.parallelize(Seq(1.0)).sum() === 1.0)
@@ -180,7 +178,7 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
   test("WorksWithOutOfRangeWithInfiniteBuckets") {
     // Verify that out of range works with two buckets
     val rdd = sc.parallelize(Seq(10.01, -0.01, Double.NaN))
-    val buckets = Array(-1.0/0.0 , 0.0, 1.0/0.0)
+    val buckets = Array(-1.0/0.0, 0.0, 1.0/0.0)
     val histogramResults = rdd.histogram(buckets)
     val expectedHistogramResults = Array(1, 1)
     assert(histogramResults === expectedHistogramResults)

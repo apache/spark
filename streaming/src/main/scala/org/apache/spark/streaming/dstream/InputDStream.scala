@@ -17,13 +17,19 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Time, Duration, StreamingContext}
-
 import scala.reflect.ClassTag
+
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.streaming.{Duration, StreamingContext, Time}
+import org.apache.spark.streaming.scheduler.RateController
+import org.apache.spark.streaming.scheduler.rate.RateEstimator
+import org.apache.spark.util.Utils
 
 /**
  * This is the abstract base class for all input streams. This class provides methods
- * start() and stop() which is called by Spark Streaming system to start and stop receiving data.
+ * start() and stop() which are called by Spark Streaming system to start and stop
+ * receiving data, respectively.
  * Input streams that can generate RDDs from new data by running a service/thread only on
  * the driver node (that is, without running a receiver on worker nodes), can be
  * implemented by directly inheriting this InputDStream. For example,
@@ -32,10 +38,10 @@ import scala.reflect.ClassTag
  * that requires running a receiver on the worker nodes, use
  * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
  *
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  */
-abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
-  extends DStream[T](ssc_) {
+abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
+  extends DStream[T](_ssc) {
 
   private[streaming] var lastValidTime: Time = null
 
@@ -44,10 +50,34 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   /** This is an unique identifier for the input stream. */
   val id = ssc.getNewInputStreamId()
 
+  // Keep track of the freshest rate for this stream using the rateEstimator
+  protected[streaming] val rateController: Option[RateController] = None
+
+  /** A human-readable name of this InputDStream */
+  private[streaming] def name: String = {
+    // e.g. FlumePollingDStream -> "Flume polling stream"
+    val newName = Utils.getFormattedClassName(this)
+      .replaceAll("InputDStream", "Stream")
+      .split("(?=[A-Z])")
+      .filter(_.nonEmpty)
+      .mkString(" ")
+      .toLowerCase
+      .capitalize
+    s"$newName [$id]"
+  }
+
   /**
-   * The name of this InputDStream. By default, it's the class name with its id.
+   * The base scope associated with the operation that created this DStream.
+   *
+   * For InputDStreams, we use the name of this DStream as the scope name.
+   * If an outer scope is given, we assume that it includes an alternative name for this stream.
    */
-  private[streaming] def name: String = s"${getClass.getSimpleName}-$id"
+  protected[streaming] override val baseScope: Option[String] = {
+    val scopeName = Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
+      .map { json => RDDOperationScope.fromJson(json).name + s" [$id]" }
+      .getOrElse(name.toLowerCase)
+    Some(new RDDOperationScope(scopeName).toJson)
+  }
 
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.

@@ -17,9 +17,9 @@
 
 package org.apache.spark.util.collection
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class CompactBufferSuite extends FunSuite {
+class CompactBufferSuite extends SparkFunSuite {
   test("empty buffer") {
     val b = new CompactBuffer[Int]
     assert(b.size === 0)

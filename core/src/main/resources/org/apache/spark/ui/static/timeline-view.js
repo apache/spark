@@ -46,7 +46,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
       };
 
       $(this).click(function() {
-        var jobPagePath = $(getSelectorForJobEntry(this)).find("a").attr("href")
+        var jobPagePath = $(getSelectorForJobEntry(this)).find("a.name-link").attr("href")
           window.location.href = jobPagePath
       });
 
@@ -66,13 +66,26 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   setupJobEventAction();
 
   $("span.expand-application-timeline").click(function() {
+    var status = window.localStorage.getItem("expand-application-timeline") == "true";
+    status = !status;
+
     $("#application-timeline").toggleClass('collapsed');
 
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-closed');
+
+    window.localStorage.setItem("expand-application-timeline", "" + status);
   });
 }
+
+$(function (){
+  if (window.localStorage.getItem("expand-application-timeline") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-application-timeline", "false");
+    $("span.expand-application-timeline").trigger('click');
+  }
+});
 
 function drawJobTimeline(groupArray, eventObjArray, startTime) {
   var groups = new vis.DataSet(groupArray);
@@ -105,7 +118,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
       };
 
       $(this).click(function() {
-        var stagePagePath = $(getSelectorForStageEntry(this)).find("a").attr("href")
+        var stagePagePath = $(getSelectorForStageEntry(this)).find("a.name-link").attr("href")
         window.location.href = stagePagePath
       });
 
@@ -125,13 +138,90 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   setupStageEventAction();
 
   $("span.expand-job-timeline").click(function() {
+    var status = window.localStorage.getItem("expand-job-timeline") == "true";
+    status = !status;
+
     $("#job-timeline").toggleClass('collapsed');
 
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-closed');
+
+    window.localStorage.setItem("expand-job-timeline", "" + status);
   });
 }
+
+$(function (){
+  if (window.localStorage.getItem("expand-job-timeline") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-job-timeline", "false");
+    $("span.expand-job-timeline").trigger('click');
+  }
+});
+
+function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, maxFinishTime) {
+  var groups = new vis.DataSet(groupArray);
+  var items = new vis.DataSet(eventObjArray);
+  var container = $("#task-assignment-timeline")[0]
+  var options = {
+    groupOrder: function(a, b) {
+      return a.value - b.value
+    },
+    editable: false,
+    align: 'left',
+    selectable: false,
+    showCurrentTime: false,
+    min: minLaunchTime,
+    max: maxFinishTime,
+    zoomable: false
+  };
+
+  var taskTimeline = new vis.Timeline(container)
+  taskTimeline.setOptions(options);
+  taskTimeline.setGroups(groups);
+  taskTimeline.setItems(items);
+
+  // If a user zooms while a tooltip is displayed, the user may zoom such that the cursor is no
+  // longer over the task that the tooltip corresponds to. So, when a user zooms, we should hide
+  // any currently displayed tooltips.
+  var currentDisplayedTooltip = null;
+  $("#task-assignment-timeline").on({
+    "mouseenter": function() {
+      currentDisplayedTooltip = this;
+    },
+    "mouseleave": function() {
+      currentDisplayedTooltip = null;
+    }
+  }, ".task-assignment-timeline-content");
+  taskTimeline.on("rangechange", function(prop) {
+    if (currentDisplayedTooltip !== null) {
+      $(currentDisplayedTooltip).tooltip("hide");
+    }
+  });
+
+  setupZoomable("#task-assignment-timeline-zoom-lock", taskTimeline);
+
+  $("span.expand-task-assignment-timeline").click(function() {
+    var status = window.localStorage.getItem("expand-task-assignment-timeline") == "true";
+    status = !status;
+
+    $("#task-assignment-timeline").toggleClass("collapsed");
+
+     // Switch the class of the arrow from open to closed.
+    $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-open");
+    $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-closed");
+
+    window.localStorage.setItem("expand-task-assignment-timeline", "" + status);
+  });
+}
+
+$(function (){
+  if (window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-task-assignment-timeline", "false");
+    $("span.expand-task-assignment-timeline").trigger('click');
+  }
+});
 
 function setupExecutorEventAction() {
   $(".item.box.executor").each(function () {
@@ -147,7 +237,7 @@ function setupExecutorEventAction() {
 }
 
 function setupZoomable(id, timeline) {
-  $(id + '>input[type="checkbox"]').click(function() {
+  $(id + ' > input[type="checkbox"]').click(function() {
     if (this.checked) {
       timeline.setOptions({zoomable: true});
     } else {
@@ -155,7 +245,7 @@ function setupZoomable(id, timeline) {
     }
   });
 
-  $(id + ">span").click(function() {
+  $(id + " > span").click(function() {
     $(this).parent().find('input:checkbox').trigger('click');
   });
 }

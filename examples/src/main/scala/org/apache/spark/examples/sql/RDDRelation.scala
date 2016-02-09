@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.sql
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -58,10 +59,10 @@ object RDDRelation {
     df.where($"key" === 1).orderBy($"value".asc).select($"key").collect().foreach(println)
 
     // Write out an RDD as a parquet file.
-    df.saveAsParquetFile("pair.parquet")
+    df.write.parquet("pair.parquet")
 
     // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
-    val parquetFile = sqlContext.parquetFile("pair.parquet")
+    val parquetFile = sqlContext.read.parquet("pair.parquet")
 
     // Queries can be run using the DSL on parequet files just like the original RDD.
     parquetFile.where($"key" === 1).select($"value".as("a")).collect().foreach(println)
@@ -73,3 +74,4 @@ object RDDRelation {
     sc.stop()
   }
 }
+// scalastyle:on println

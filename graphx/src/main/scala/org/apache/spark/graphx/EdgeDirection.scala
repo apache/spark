@@ -26,8 +26,8 @@ class EdgeDirection private (private val name: String) extends Serializable {
    * out becomes in and both and either remain the same.
    */
   def reverse: EdgeDirection = this match {
-    case EdgeDirection.In   => EdgeDirection.Out
-    case EdgeDirection.Out  => EdgeDirection.In
+    case EdgeDirection.In => EdgeDirection.Out
+    case EdgeDirection.Out => EdgeDirection.In
     case EdgeDirection.Either => EdgeDirection.Either
     case EdgeDirection.Both => EdgeDirection.Both
   }

@@ -112,4 +112,14 @@ public class SparkFirehoseListener implements SparkListener {
     public final void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) {
         onEvent(executorRemoved);
     }
+
+    @Override
+    public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) {
+        onEvent(blockUpdated);
+    }
+
+    @Override
+    public void onOtherEvent(SparkListenerEvent event) {
+        onEvent(event);
+    }
 }

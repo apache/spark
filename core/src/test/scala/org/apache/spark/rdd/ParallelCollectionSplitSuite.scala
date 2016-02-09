@@ -22,10 +22,11 @@ import scala.collection.immutable.NumericRange
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
-import org.scalatest.FunSuite
 import org.scalatest.prop.Checkers
 
-class ParallelCollectionSplitSuite extends FunSuite with Checkers {
+import org.apache.spark.SparkFunSuite
+
+class ParallelCollectionSplitSuite extends SparkFunSuite with Checkers {
   test("one element per slice") {
     val data = Array(1, 2, 3)
     val slices = ParallelCollectionRDD.slice(data, 3)

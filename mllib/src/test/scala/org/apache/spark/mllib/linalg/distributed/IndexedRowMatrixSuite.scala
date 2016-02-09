@@ -17,15 +17,14 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 
-class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
+class IndexedRowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -136,10 +135,33 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(closeToZero(U * brzDiag(s) * V.t - localA))
   }
 
+  test("validate matrix sizes of svd") {
+    val k = 2
+    val A = new IndexedRowMatrix(indexedRows)
+    val svd = A.computeSVD(k, computeU = true)
+    assert(svd.U.numRows() === m)
+    assert(svd.U.numCols() === k)
+    assert(svd.s.size === k)
+    assert(svd.V.numRows === n)
+    assert(svd.V.numCols === k)
+  }
+
   test("validate k in svd") {
     val A = new IndexedRowMatrix(indexedRows)
     intercept[IllegalArgumentException] {
       A.computeSVD(-1)
+    }
+  }
+
+  test("similar columns") {
+    val A = new IndexedRowMatrix(indexedRows)
+    val gram = A.computeGramianMatrix().toBreeze.toDenseMatrix
+
+    val G = A.columnSimilarities().toBreeze()
+
+    for (i <- 0 until n; j <- i + 1 until n) {
+      val trueResult = gram(i, j) / scala.math.sqrt(gram(i, i) * gram(j, j))
+      assert(math.abs(G(i, j) - trueResult) < 1e-6)
     }
   }
 

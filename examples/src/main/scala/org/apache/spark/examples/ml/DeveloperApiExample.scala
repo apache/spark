@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
 import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -73,7 +75,7 @@ object DeveloperApiExample {
         prediction
       }.sum
     assert(sumPredictions == 0.0,
-      "MyLogisticRegression predicted something other than 0, even though all weights are 0!")
+      "MyLogisticRegression predicted something other than 0, even though all coefficients are 0!")
 
     sc.stop()
   }
@@ -106,9 +108,11 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
  *
  * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
  */
-private class MyLogisticRegression
+private class MyLogisticRegression(override val uid: String)
   extends Classifier[Vector, MyLogisticRegression, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
+
+  def this() = this(Identifiable.randomUID("myLogReg"))
 
   setMaxIter(100) // Initialize
 
@@ -120,13 +124,15 @@ private class MyLogisticRegression
     // Extract columns from data using helper method.
     val oldDataset = extractLabeledPoints(dataset)
 
-    // Do learning to estimate the weight vector.
+    // Do learning to estimate the coefficients vector.
     val numFeatures = oldDataset.take(1)(0).features.size
-    val weights = Vectors.zeros(numFeatures) // Learning would happen here.
+    val coefficients = Vectors.zeros(numFeatures) // Learning would happen here.
 
     // Create a model, and return it.
-    new MyLogisticRegressionModel(this, weights)
+    new MyLogisticRegressionModel(uid, coefficients).setParent(this)
   }
+
+  override def copy(extra: ParamMap): MyLogisticRegression = defaultCopy(extra)
 }
 
 /**
@@ -135,8 +141,8 @@ private class MyLogisticRegression
  * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
  */
 private class MyLogisticRegressionModel(
-    override val parent: MyLogisticRegression,
-    val weights: Vector)
+    override val uid: String,
+    val coefficients: Vector)
   extends ClassificationModel[Vector, MyLogisticRegressionModel]
   with MyLogisticRegressionParams {
 
@@ -157,7 +163,7 @@ private class MyLogisticRegressionModel(
    *          confidence for that label.
    */
   override protected def predictRaw(features: Vector): Vector = {
-    val margin = BLAS.dot(features, weights)
+    val margin = BLAS.dot(features, coefficients)
     // There are 2 classes (binary classification), so we return a length-2 vector,
     // where index i corresponds to class i (i = 0, 1).
     Vectors.dense(-margin, margin)
@@ -166,6 +172,9 @@ private class MyLogisticRegressionModel(
   /** Number of classes the label can take.  2 indicates binary classification. */
   override val numClasses: Int = 2
 
+  /** Number of features the model was trained on. */
+  override val numFeatures: Int = coefficients.size
+
   /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
@@ -173,6 +182,7 @@ private class MyLogisticRegressionModel(
    * This is used for the default implementation of [[transform()]].
    */
   override def copy(extra: ParamMap): MyLogisticRegressionModel = {
-    copyValues(new MyLogisticRegressionModel(parent, weights), extra)
+    copyValues(new MyLogisticRegressionModel(uid, coefficients), extra).setParent(parent)
   }
 }
+// scalastyle:on println

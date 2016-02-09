@@ -17,24 +17,33 @@
 
 package org.apache.spark.network.netty
 
-import org.apache.spark.network.BlockDataManager
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.mockito.Mockito.mock
 import org.scalatest._
 
-class NettyBlockTransferServiceSuite extends FunSuite with BeforeAndAfterEach with ShouldMatchers {
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.network.BlockDataManager
+
+class NettyBlockTransferServiceSuite
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with ShouldMatchers {
+
   private var service0: NettyBlockTransferService = _
   private var service1: NettyBlockTransferService = _
 
   override def afterEach() {
-    if (service0 != null) {
-      service0.close()
-      service0 = null
-    }
+    try {
+      if (service0 != null) {
+        service0.close()
+        service0 = null
+      }
 
-    if (service1 != null) {
-      service1.close()
-      service1 = null
+      if (service1 != null) {
+        service1.close()
+        service1 = null
+      }
+    } finally {
+      super.afterEach()
     }
   }
 

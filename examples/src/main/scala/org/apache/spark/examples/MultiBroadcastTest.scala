@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.rdd.RDD
 
 /**
   * Usage: MultiBroadcastTest [slices] [numElem]
@@ -53,3 +54,4 @@ object MultiBroadcastTest {
     sc.stop()
   }
 }
+// scalastyle:on println

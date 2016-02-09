@@ -18,7 +18,7 @@
 package org.apache.spark.api.r
 
 import java.io.{DataOutputStream, File, FileOutputStream, IOException}
-import java.net.{InetSocketAddress, ServerSocket}
+import java.net.{InetAddress, InetSocketAddress, ServerSocket}
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
@@ -29,7 +29,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 import io.netty.handler.codec.bytes.{ByteArrayDecoder, ByteArrayEncoder}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * Netty-based backend server that is used to communicate between R and Java.
@@ -41,14 +41,15 @@ private[spark] class RBackend {
   private[this] var bossGroup: EventLoopGroup = null
 
   def init(): Int = {
-    bossGroup = new NioEventLoopGroup(2)
+    val conf = new SparkConf()
+    bossGroup = new NioEventLoopGroup(conf.getInt("spark.r.numRBackendThreads", 2))
     val workerGroup = bossGroup
     val handler = new RBackendHandler(this)
-  
+
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
       .channel(classOf[NioServerSocketChannel])
-  
+
     bootstrap.childHandler(new ChannelInitializer[SocketChannel]() {
       def initChannel(ch: SocketChannel): Unit = {
         ch.pipeline()
@@ -65,7 +66,7 @@ private[spark] class RBackend {
       }
     })
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(0))
+    channelFuture = bootstrap.bind(new InetSocketAddress("localhost", 0))
     channelFuture.syncUninterruptibly()
     channelFuture.channel().localAddress().asInstanceOf[InetSocketAddress].getPort()
   }
@@ -94,14 +95,16 @@ private[spark] class RBackend {
 private[spark] object RBackend extends Logging {
   def main(args: Array[String]): Unit = {
     if (args.length < 1) {
+      // scalastyle:off println
       System.err.println("Usage: RBackend <tempFilePath>")
+      // scalastyle:on println
       System.exit(-1)
     }
     val sparkRBackend = new RBackend()
     try {
       // bind to random port
       val boundPort = sparkRBackend.init()
-      val serverSocket = new ServerSocket(0, 1)
+      val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
       val listenPort = serverSocket.getLocalPort()
 
       // tell the R process via temporary file
@@ -110,6 +113,7 @@ private[spark] object RBackend extends Logging {
       val dos = new DataOutputStream(new FileOutputStream(f))
       dos.writeInt(boundPort)
       dos.writeInt(listenPort)
+      SerDe.writeString(dos, RUtils.rPackages.getOrElse(""))
       dos.close()
       f.renameTo(new File(path))
 

@@ -21,15 +21,15 @@ import java.io.File
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
 class WriteAheadLogBackedBlockRDDSuite
-  extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
+  extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val conf = new SparkConf()
     .setMaster("local[2]")
@@ -42,22 +42,32 @@ class WriteAheadLogBackedBlockRDDSuite
   var dir: File = null
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     dir = Utils.createTempDir()
   }
 
   override def afterEach(): Unit = {
-    Utils.deleteRecursively(dir)
+    try {
+      Utils.deleteRecursively(dir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     sparkContext = new SparkContext(conf)
     blockManager = sparkContext.env.blockManager
   }
 
   override def afterAll(): Unit = {
     // Copied from LocalSparkContext, simpler than to introduced test dependencies to core tests.
-    sparkContext.stop()
-    System.clearProperty("spark.driver.port")
+    try {
+      sparkContext.stop()
+      System.clearProperty("spark.driver.port")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("Read data available in both block manager and write ahead log") {

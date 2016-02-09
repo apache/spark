@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.lib
 
 import scala.reflect.ClassTag
+
 import org.apache.spark.graphx._
 
 /** Label Propagation algorithm. */
@@ -43,7 +44,7 @@ object LabelPropagation {
    */
   def run[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
     val lpaGraph = graph.mapVertices { case (vid, _) => vid }
-    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, VertexId])] = {
+    def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, Long])] = {
       Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))
     }
     def mergeMessage(count1: Map[VertexId, Long], count2: Map[VertexId, Long])

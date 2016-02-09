@@ -20,17 +20,15 @@ package org.apache.spark.api.python
 import java.nio.ByteOrder
 import java.util.{ArrayList => JArrayList}
 
-import org.apache.spark.api.java.JavaRDD
-
-import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Failure
 import scala.util.Try
 
-import net.razorvine.pickle.{Unpickler, Pickler}
+import net.razorvine.pickle.{Pickler, Unpickler}
 
 import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 
 /** Utilities for serialization / deserialization between Python and Java, using Pickle. */
@@ -214,7 +212,7 @@ private[spark] object SerDeUtil extends Logging {
         new AutoBatchedPickler(cleaned)
       } else {
         val pickle = new Pickler
-        cleaned.grouped(batchSize).map(batched => pickle.dumps(seqAsJavaList(batched)))
+        cleaned.grouped(batchSize).map(batched => pickle.dumps(batched.asJava))
       }
     }
   }

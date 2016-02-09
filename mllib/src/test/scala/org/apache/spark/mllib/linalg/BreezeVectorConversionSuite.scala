@@ -17,14 +17,14 @@
 
 package org.apache.spark.mllib.linalg
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
+
+import org.apache.spark.SparkFunSuite
 
 /**
  * Test Breeze vector conversions.
  */
-class BreezeVectorConversionSuite extends FunSuite {
+class BreezeVectorConversionSuite extends SparkFunSuite {
 
   val arr = Array(0.1, 0.2, 0.3, 0.4)
   val n = 20

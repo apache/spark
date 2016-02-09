@@ -26,10 +26,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
-import org.apache.spark.{SparkConf, SerializableWritable}
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.streaming._
-import org.apache.spark.util.{TimeStampedHashMap, Utils}
+import org.apache.spark.streaming.scheduler.StreamInputInfo
+import org.apache.spark.util.{SerializableConfiguration, TimeStampedHashMap, Utils}
 
 /**
  * This class represents an input stream that monitors a Hadoop-compatible filesystem for new
@@ -42,6 +42,7 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  * class remembers the information about the files selected in past batches for
  * a certain duration (say, "remember window") as shown in the figure below.
  *
+ * {{{
  *                      |<----- remember window ----->|
  * ignore threshold --->|                             |<--- current batch time
  *                      |____.____.____.____.____.____|
@@ -49,6 +50,7 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  * ---------------------|----|----|----|----|----|----|-----------------------> Time
  *                      |____|____|____|____|____|____|
  *                             remembered batches
+ * }}}
  *
  * The trailing end of the window is the "ignore threshold" and all files whose mod times
  * are less than this threshold are assumed to have already been selected and are therefore
@@ -59,26 +61,27 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  * `isNewFile` for more details.
  *
  * This makes some assumptions from the underlying file system that the system is monitoring.
- * - The clock of the file system is assumed to synchronized with the clock of the machine running
- *   the streaming app.
- * - If a file is to be visible in the directory listings, it must be visible within a certain
- *   duration of the mod time of the file. This duration is the "remember window", which is set to
- *   1 minute (see `FileInputDStream.minRememberDuration`). Otherwise, the file will never be
- *   selected as the mod time will be less than the ignore threshold when it becomes visible.
- * - Once a file is visible, the mod time cannot change. If it does due to appends, then the
- *   processing semantics are undefined.
+ *
+ *  - The clock of the file system is assumed to synchronized with the clock of the machine running
+ *    the streaming app.
+ *  - If a file is to be visible in the directory listings, it must be visible within a certain
+ *    duration of the mod time of the file. This duration is the "remember window", which is set to
+ *    1 minute (see `FileInputDStream.minRememberDuration`). Otherwise, the file will never be
+ *    selected as the mod time will be less than the ignore threshold when it becomes visible.
+ *  - Once a file is visible, the mod time cannot change. If it does due to appends, then the
+ *    processing semantics are undefined.
  */
 private[streaming]
-class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
-    @transient ssc_ : StreamingContext,
+class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
+    _ssc: StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
     conf: Option[Configuration] = None)
     (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
-  extends InputDStream[(K, V)](ssc_) {
+  extends InputDStream[(K, V)](_ssc) {
 
-  private val serializableConfOpt = conf.map(new SerializableWritable(_))
+  private val serializableConfOpt = conf.map(new SerializableConfiguration(_))
 
   /**
    * Minimum duration of remembering the information of selected files. Defaults to 60 seconds.
@@ -86,8 +89,10 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
    * Files with mod times older than this "window" of remembering will be ignored. So if new
    * files are visible within this window, then the file will get selected in the next batch.
    */
-  private val minRememberDurationS =
-    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.minRememberDuration", "60s"))
+  private val minRememberDurationS = {
+    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.fileStream.minRememberDuration",
+      ssc.conf.get("spark.streaming.minRememberDuration", "60s")))
+  }
 
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock
@@ -123,8 +128,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   // Timestamp of the last round of finding files
   @transient private var lastNewFileFindingTime = 0L
 
-  @transient private var path_ : Path = null
-  @transient private var fs_ : FileSystem = null
+  @transient private var _path: Path = null
+  @transient private var _fs: FileSystem = null
 
   override def start() { }
 
@@ -145,7 +150,14 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     batchTimeToSelectedFiles += ((validTime, newFiles))
     recentlySelectedFiles ++= newFiles
-    Some(filesToRDD(newFiles))
+    val rdds = Some(filesToRDD(newFiles))
+    // Copy newFiles to immutable.List to prevent from being modified by the user
+    val metadata = Map(
+      "files" -> newFiles.toList,
+      StreamInputInfo.METADATA_KEY_DESCRIPTION -> newFiles.mkString("\n"))
+    val inputInfo = StreamInputInfo(id, 0, metadata)
+    ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
+    rdds
   }
 
   /** Clear the old time-to-files mappings along with old RDDs */
@@ -251,7 +263,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
 
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    val fileRDDs = files.map(file =>{
+    val fileRDDs = files.map { file =>
       val rdd = serializableConfOpt.map(_.value) match {
         case Some(config) => context.sparkContext.newAPIHadoopFile(
           file,
@@ -267,7 +279,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
           "Refer to the streaming programming guide for more details.")
       }
       rdd
-    })
+    }
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
@@ -277,24 +289,24 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   }
 
   private def directoryPath: Path = {
-    if (path_ == null) path_ = new Path(directory)
-    path_
+    if (_path == null) _path = new Path(directory)
+    _path
   }
 
   private def fs: FileSystem = {
-    if (fs_ == null) fs_ = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
-    fs_
+    if (_fs == null) _fs = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
+    _fs
   }
 
   private def reset()  {
-    fs_ = null
+    _fs = null
   }
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
-    generatedRDDs = new mutable.HashMap[Time, RDD[(K,V)]] ()
+    generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
     batchTimeToSelectedFiles =
       new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()

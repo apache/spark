@@ -23,14 +23,14 @@
 # After running this script the html docs can be found in 
 # $SPARK_HOME/R/pkg/html
 
+set -o pipefail
+set -e
+
 # Figure out where the script is
 export FWDIR="$(cd "`dirname "$0"`"; pwd)"
 pushd $FWDIR
 
-# Generate Rd file
-Rscript -e 'library(devtools); devtools::document(pkg="./pkg", roclets=c("rd"))'
-
-# Install the package
+# Install the package (this will also generate the Rd files)
 ./install-dev.sh
 
 # Now create HTML files
@@ -39,7 +39,7 @@ Rscript -e 'library(devtools); devtools::document(pkg="./pkg", roclets=c("rd"))'
 mkdir -p pkg/html
 pushd pkg/html
 
-Rscript -e 'library(SparkR, lib.loc="../../lib"); library(knitr); knit_rd("SparkR")'
+Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
 
 popd
 

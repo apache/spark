@@ -27,25 +27,30 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-
-
-
+import org.apache.spark.ui.SparkUICssErrorHandler
 
 /**
- * Selenium tests for the Spark Web UI.
+ * Selenium tests for the Spark Streaming Web UI.
  */
 class UISeleniumSuite
-  extends FunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
+  extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll with TestSuiteBase {
 
   implicit var webDriver: WebDriver = _
 
   override def beforeAll(): Unit = {
-    webDriver = new HtmlUnitDriver
+    super.beforeAll()
+    webDriver = new HtmlUnitDriver {
+      getWebClient.setCssErrorHandler(new SparkUICssErrorHandler)
+    }
   }
 
   override def afterAll(): Unit = {
-    if (webDriver != null) {
-      webDriver.quit()
+    try {
+      if (webDriver != null) {
+        webDriver.quit()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
@@ -100,8 +105,8 @@ class UISeleniumSuite
         // Check stat table
         val statTableHeaders = findAll(cssSelector("#stat-table th")).map(_.text).toSeq
         statTableHeaders.exists(
-          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")) should be
-          (true)
+          _.matches("Timelines \\(Last \\d+ batches, \\d+ active, \\d+ completed\\)")
+        ) should be (true)
         statTableHeaders should contain ("Histograms")
 
         val statTableCells = findAll(cssSelector("#stat-table td")).map(_.text).toSeq
@@ -116,12 +121,12 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
-            "Status")
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+            "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay", "Processing Time",
-            "Total Delay")
+          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+            "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
         val batchLinks =
@@ -138,8 +143,9 @@ class UISeleniumSuite
         summaryText should contain ("Total delay:")
 
         findAll(cssSelector("""#batch-job-table th""")).map(_.text).toSeq should be {
-          List("Output Op Id", "Description", "Duration", "Job Id", "Duration",
-            "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total", "Error")
+          List("Output Op Id", "Description", "Output Op Duration", "Status", "Job Id",
+            "Job Duration", "Stages: Succeeded/Total", "Tasks (for all stages): Succeeded/Total",
+            "Error")
         }
 
         // Check we have 2 output op ids
@@ -197,4 +203,3 @@ class UISeleniumSuite
     }
   }
 }
-  

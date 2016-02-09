@@ -17,37 +17,54 @@
 
 package org.apache.spark.repl
 
+import java.io.File
+
+import scala.tools.nsc.GenericRunnerSettings
+
 import org.apache.spark.util.Utils
 import org.apache.spark._
 import org.apache.spark.sql.SQLContext
 
-import scala.tools.nsc.Settings
-import scala.tools.nsc.interpreter.SparkILoop
-
 object Main extends Logging {
 
   val conf = new SparkConf()
-  val tmp = System.getProperty("java.io.tmpdir")
-  val rootDir = conf.get("spark.repl.classdir", tmp)
-  val outputDir = Utils.createTempDir(rootDir)
-  val s = new Settings()
-  s.processArguments(List("-Yrepl-class-based",
-    "-Yrepl-outdir", s"${outputDir.getAbsolutePath}", "-Yrepl-sync"), true)
-  val classServer = new HttpServer(conf, outputDir, new SecurityManager(conf))
+  val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
+  val outputDir = Utils.createTempDir(root = rootDir, namePrefix = "repl")
+
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
-  var interp = new SparkILoop // this is a public var because tests reset it.
+  // this is a public var because tests reset it.
+  var interp: SparkILoop = _
 
-  def main(args: Array[String]) {
-    if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
-    // Start the classServer and store its URI in a spark system property
-    // (which will be passed to executors so that they can connect to it)
-    classServer.start()
-    interp.process(s) // Repl starts and goes in loop of R.E.P.L
-    classServer.stop()
-    Option(sparkContext).map(_.stop)
+  private var hasErrors = false
+
+  private def scalaOptionError(msg: String): Unit = {
+    hasErrors = true
+    Console.err.println(msg)
   }
 
+  def main(args: Array[String]) {
+    doMain(args, new SparkILoop)
+  }
+
+  // Visible for testing
+  private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
+    interp = _interp
+    val interpArguments = List(
+      "-Yrepl-class-based",
+      "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
+      "-classpath", getAddedJars.mkString(File.pathSeparator)
+    ) ++ args.toList
+
+    val settings = new GenericRunnerSettings(scalaOptionError)
+    settings.processArguments(interpArguments, true)
+
+    if (!hasErrors) {
+      if (getMaster == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+      interp.process(settings) // Repl starts and goes in loop of R.E.P.L
+      Option(sparkContext).map(_.stop)
+    }
+  }
 
   def getAddedJars: Array[String] = {
     val envJars = sys.env.get("ADD_JARS")
@@ -64,10 +81,14 @@ object Main extends Logging {
     val jars = getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster)
-      .setAppName("Spark shell")
       .setJars(jars)
-      .set("spark.repl.class.uri", classServer.uri)
-    logInfo("Spark class server started at " + classServer.uri)
+      .setIfMissing("spark.app.name", "Spark shell")
+      // SparkContext will detect this configuration and register it with the RpcEnv's
+      // file server, setting spark.repl.class.uri to the actual URI for executors to
+      // use. This is sort of ugly but since executors are started as part of SparkContext
+      // initialization in certain cases, there's an initialization order issue that prevents
+      // this from being set after SparkContext is instantiated.
+      .set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
@@ -84,10 +105,9 @@ object Main extends Logging {
     val loader = Utils.getContextOrSparkClassLoader
     try {
       sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext] 
+        .newInstance(sparkContext).asInstanceOf[SQLContext]
       logInfo("Created sql context (with Hive support)..")
-    }
-    catch {
+    } catch {
       case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
         sqlContext = new SQLContext(sparkContext)
         logInfo("Created sql context..")

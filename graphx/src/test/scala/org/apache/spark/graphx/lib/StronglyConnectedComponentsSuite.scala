@@ -17,16 +17,14 @@
 
 package org.apache.spark.graphx.lib
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.GraphGenerators
 import org.apache.spark.rdd._
 
 
-class StronglyConnectedComponentsSuite extends FunSuite with LocalSparkContext {
+class StronglyConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Island Strongly Connected Components") {
     withSpark { sc =>

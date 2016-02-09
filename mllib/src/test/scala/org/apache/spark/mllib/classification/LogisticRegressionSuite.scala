@@ -17,14 +17,15 @@
 
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Random
 import scala.util.control.Breaks._
 
-import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
@@ -38,7 +39,7 @@ object LogisticRegressionSuite {
     scale: Double,
     nPoints: Int,
     seed: Int): java.util.List[LabeledPoint] = {
-    seqAsJavaList(generateLogisticInput(offset, scale, nPoints, seed))
+    generateLogisticInput(offset, scale, nPoints, seed).asJava
   }
 
   // Generate input of the form Y = logistic(offset + scale*X)
@@ -101,7 +102,8 @@ object LogisticRegressionSuite {
       // This doesn't work if `vector` is a sparse vector.
       val vectorArray = vector.toArray
       var i = 0
-      while (i < vectorArray.length) {
+      val len = vectorArray.length
+      while (i < len) {
         vectorArray(i) = vectorArray(i) * math.sqrt(xVariance(i)) + xMean(i)
         i += 1
       }
@@ -118,7 +120,7 @@ object LogisticRegressionSuite {
       }
       // Preventing the overflow when we compute the probability
       val maxMargin = margins.max
-      if (maxMargin > 0) for (i <-0 until nClasses) margins(i) -= maxMargin
+      if (maxMargin > 0) for (i <- 0 until nClasses) margins(i) -= maxMargin
 
       // Computing the probabilities for each class from the margins.
       val norm = {
@@ -129,7 +131,7 @@ object LogisticRegressionSuite {
         }
         temp
       }
-      for (i <-0 until nClasses) probs(i) /= norm
+      for (i <- 0 until nClasses) probs(i) /= norm
 
       // Compute the cumulative probability so we can generate a random number and assign a label.
       for (i <- 1 until nClasses) probs(i) += probs(i - 1)
@@ -168,7 +170,7 @@ object LogisticRegressionSuite {
 }
 
 
-class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
+class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext with Matchers {
   def validatePrediction(
       predictions: Seq[Double],
       input: Seq[LabeledPoint],
@@ -195,6 +197,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
       .setStepSize(10.0)
       .setRegParam(0.0)
       .setNumIterations(20)
+      .setConvergenceTol(0.0005)
 
     val model = lr.run(testRDD)
 
@@ -213,6 +216,11 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
   // Test if we can correctly learn A, B where Y = logistic(A + B*X)
   test("logistic regression with LBFGS") {
+    val updaters: List[Updater] = List(new SquaredL2Updater(), new L1Updater())
+    updaters.foreach(testLBFGS)
+  }
+
+  private def testLBFGS(myUpdater: Updater): Unit = {
     val nPoints = 10000
     val A = 2.0
     val B = -1.5
@@ -221,7 +229,15 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
-    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
+
+    // Override the updater
+    class LogisticRegressionWithLBFGSCustomUpdater
+        extends LogisticRegressionWithLBFGS {
+      override val optimizer =
+        new LBFGS(new LogisticGradient, myUpdater)
+    }
+
+    val lr = new LogisticRegressionWithLBFGSCustomUpdater().setIntercept(true)
 
     val model = lr.run(testRDD)
 
@@ -394,10 +410,11 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     assert(modelA1.weights(0) ~== modelA3.weights(0) * 1.0E6 absTol 0.01)
 
     // Training data with different scales without feature standardization
-    // will not yield the same result in the scaled space due to poor
-    // convergence rate.
-    assert(modelB1.weights(0) !~== modelB2.weights(0) * 1.0E3 absTol 0.1)
-    assert(modelB1.weights(0) !~== modelB3.weights(0) * 1.0E6 absTol 0.1)
+    // should still converge quickly since the model still uses standardization but
+    // simply modifies the regularization function. See regParamL1Fun and related
+    // inside of LogisticRegression
+    assert(modelB1.weights(0) ~== modelB2.weights(0) * 1.0E3 absTol 0.1)
+    assert(modelB1.weights(0) ~== modelB3.weights(0) * 1.0E6 absTol 0.1)
   }
 
   test("multinomial logistic regression with LBFGS") {
@@ -540,7 +557,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
 }
 
-class LogisticRegressionClusterSuite extends FunSuite with LocalClusterSparkContext {
+class LogisticRegressionClusterSuite extends SparkFunSuite with LocalClusterSparkContext {
 
   test("task size should be small in both training and prediction using SGD optimizer") {
     val m = 4

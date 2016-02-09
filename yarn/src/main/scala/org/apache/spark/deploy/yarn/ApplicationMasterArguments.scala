@@ -17,20 +17,20 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.spark.util.{MemoryParam, IntParam}
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import collection.mutable.ArrayBuffer
+import org.apache.spark.util.{IntParam, MemoryParam}
 
 class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null
   var userClass: String = null
   var primaryPyFile: String = null
   var primaryRFile: String = null
-  var pyFiles: String = null
-  var userArgs: Seq[String] = Seq[String]()
+  var userArgs: Seq[String] = Nil
   var executorMemory = 1024
   var executorCores = 1
-  var numExecutors = DEFAULT_NUMBER_EXECUTORS
+  var propertiesFile: String = null
 
   parseArgs(args.toList)
 
@@ -59,16 +59,8 @@ class ApplicationMasterArguments(val args: Array[String]) {
           primaryRFile = value
           args = tail
 
-        case ("--py-files") :: value :: tail =>
-          pyFiles = value
-          args = tail
-
         case ("--args" | "--arg") :: value :: tail =>
           userArgsBuffer += value
-          args = tail
-
-        case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
-          numExecutors = value
           args = tail
 
         case ("--worker-memory" | "--executor-memory") :: MemoryParam(value) :: tail =>
@@ -79,13 +71,19 @@ class ApplicationMasterArguments(val args: Array[String]) {
           executorCores = value
           args = tail
 
+        case ("--properties-file") :: value :: tail =>
+          propertiesFile = value
+          args = tail
+
         case _ =>
           printUsageAndExit(1, args)
       }
     }
 
     if (primaryPyFile != null && primaryRFile != null) {
+      // scalastyle:off println
       System.err.println("Cannot have primary-py-file and primary-r-file at the same time")
+      // scalastyle:on println
       System.exit(-1)
     }
 
@@ -93,6 +91,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   }
 
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
+    // scalastyle:off println
     if (unknownParam != null) {
       System.err.println("Unknown/unsupported param " + unknownParam)
     }
@@ -107,10 +106,11 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |                       place on the PYTHONPATH for Python apps.
       |  --args ARGS          Arguments to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
-      |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --properties-file FILE Path to a custom Spark properties file.
       """.stripMargin)
+    // scalastyle:on println
     System.exit(exitCode)
   }
 }

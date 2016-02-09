@@ -27,7 +27,7 @@ from py4j.java_collections import ListConverter, JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-
+from pyspark.sql import DataFrame, SQLContext
 
 # Hack for support float('inf') in Py4j
 _old_smart_decode = py4j.protocol.smart_decode
@@ -73,6 +73,8 @@ def _py2java(sc, obj):
     """ Convert Python object into Java """
     if isinstance(obj, RDD):
         obj = _to_java_object_rdd(obj)
+    elif isinstance(obj, DataFrame):
+        obj = obj._jdf
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
     elif isinstance(obj, list):
@@ -99,6 +101,9 @@ def _java2py(sc, r, encoding="bytes"):
             jrdd = sc._jvm.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
+        if clsName == 'DataFrame':
+            return DataFrame(r, SQLContext.getOrCreate(sc))
+
         if clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)
         elif isinstance(r, (JavaArray, JavaList)):
@@ -120,7 +125,7 @@ def callJavaFunc(sc, func, *args):
 
 def callMLlibFunc(name, *args):
     """ Call API in PythonMLLibAPI """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext.getOrCreate()
     api = getattr(sc._jvm.PythonMLLibAPI(), name)
     return callJavaFunc(sc, api, *args)
 
@@ -130,7 +135,7 @@ class JavaModelWrapper(object):
     Wrapper for the model in JVM
     """
     def __init__(self, java_model):
-        self._sc = SparkContext._active_spark_context
+        self._sc = SparkContext.getOrCreate()
         self._java_model = java_model
 
     def __del__(self):

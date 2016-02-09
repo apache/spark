@@ -17,12 +17,11 @@
 
 package org.apache.spark.mllib.stat
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.TestingUtils._
 
-class MultivariateOnlineSummarizerSuite extends FunSuite {
+class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
 
   test("basic error handing") {
     val summarizer = new MultivariateOnlineSummarizer
@@ -218,5 +217,32 @@ class MultivariateOnlineSummarizerSuite extends FunSuite {
       .add(Vectors.dense(-1.0))
     s0.merge(s1)
     assert(s0.mean(0) ~== 1.0 absTol 1e-14)
+  }
+
+  test("merging summarizer with weighted samples") {
+    val summarizer = (new MultivariateOnlineSummarizer)
+      .add(instance = Vectors.sparse(3, Seq((0, -0.8), (1, 1.7))), weight = 0.1)
+      .add(Vectors.dense(0.0, -1.2, -1.7), 0.2).merge(
+        (new MultivariateOnlineSummarizer)
+          .add(Vectors.sparse(3, Seq((0, -0.7), (1, 0.01), (2, 1.3))), 0.15)
+          .add(Vectors.dense(-0.5, 0.3, -1.5), 0.05))
+
+    assert(summarizer.count === 4)
+
+    // The following values are hand calculated using the formula:
+    // [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]]
+    // which defines the reliability weight used for computing the unbiased estimation of variance
+    // for weighted instances.
+    assert(summarizer.mean ~== Vectors.dense(Array(-0.42, -0.107, -0.44))
+      absTol 1E-10, "mean mismatch")
+    assert(summarizer.variance ~== Vectors.dense(Array(0.17657142857, 1.645115714, 2.42057142857))
+      absTol 1E-8, "variance mismatch")
+    assert(summarizer.numNonzeros ~== Vectors.dense(Array(0.3, 0.5, 0.4))
+      absTol 1E-10, "numNonzeros mismatch")
+    assert(summarizer.max ~== Vectors.dense(Array(0.0, 1.7, 1.3)) absTol 1E-10, "max mismatch")
+    assert(summarizer.min ~== Vectors.dense(Array(-0.8, -1.2, -1.7)) absTol 1E-10, "min mismatch")
+    assert(summarizer.normL2 ~== Vectors.dense(0.387298335, 0.762571308141, 0.9715966241192)
+      absTol 1E-8, "normL2 mismatch")
+    assert(summarizer.normL1 ~== Vectors.dense(0.21, 0.4265, 0.61) absTol 1E-10, "normL1 mismatch")
   }
 }

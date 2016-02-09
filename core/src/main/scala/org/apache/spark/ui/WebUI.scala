@@ -26,9 +26,9 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * The top level component of the UI hierarchy that contains the server.
@@ -38,6 +38,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  */
 private[spark] abstract class WebUI(
     val securityManager: SecurityManager,
+    val sslOptions: SSLOptions,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -62,12 +63,12 @@ private[spark] abstract class WebUI(
     tab.pages.foreach(attachPage)
     tabs += tab
   }
-  
+
   def detachTab(tab: WebUITab) {
     tab.pages.foreach(detachPage)
     tabs -= tab
   }
-  
+
   def detachPage(page: WebUIPage) {
     pageToHandlers.remove(page).foreach(_.foreach(detachHandler))
   }
@@ -76,8 +77,11 @@ private[spark] abstract class WebUI(
   def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
+    val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
+    attachHandler(renderJsonHandler)
     pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
       .append(renderHandler)
   }
@@ -94,7 +98,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  protected def detachHandler(handler: ServletContextHandler) {
+  def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)
@@ -104,6 +108,25 @@ private[spark] abstract class WebUI(
     }
   }
 
+  /**
+   * Add a handler for static content.
+   *
+   * @param resourceBase Root of where to find resources to serve.
+   * @param path Path in UI where to mount the resources.
+   */
+  def addStaticHandler(resourceBase: String, path: String): Unit = {
+    attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
+  }
+
+  /**
+   * Remove a static content handler.
+   *
+   * @param path Path in UI to unmount.
+   */
+  def removeStaticHandler(path: String): Unit = {
+    handlers.find(_.getContextPath() == path).foreach(detachHandler)
+  }
+
   /** Initialize all components of the server. */
   def initialize()
 
@@ -111,7 +134,7 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
+      serverInfo = Some(startJettyServer("0.0.0.0", port, sslOptions, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
     } catch {
       case e: Exception =>

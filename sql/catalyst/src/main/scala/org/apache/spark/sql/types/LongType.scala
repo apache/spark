@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Ordering, Integral, Numeric}
+import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
@@ -26,8 +26,6 @@ import org.apache.spark.sql.catalyst.ScalaReflectionLock
 /**
  * :: DeveloperApi ::
  * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class LongType private() extends IntegralType {

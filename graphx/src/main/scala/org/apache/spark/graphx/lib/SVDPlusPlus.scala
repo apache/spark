@@ -21,8 +21,8 @@ import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.rdd._
 import org.apache.spark.graphx._
+import org.apache.spark.rdd._
 
 /** Implementation of SVD++ algorithm. */
 object SVDPlusPlus {
@@ -210,7 +210,7 @@ object SVDPlusPlus {
   /**
    * Forces materialization of a Graph by count()ing its RDDs.
    */
-  private def materialize(g: Graph[_,_]): Unit = {
+  private def materialize(g: Graph[_, _]): Unit = {
     g.vertices.count()
     g.edges.count()
   }

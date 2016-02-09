@@ -20,7 +20,7 @@ package org.apache.spark.broadcast
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConversions.asJavaEnumeration
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
@@ -45,7 +45,7 @@ import org.apache.spark.util.io.ByteArrayChunkOutputStream
  * BlockManager, ready for other executors to fetch from.
  *
  * This prevents the driver from being the bottleneck in sending out multiple copies of the
- * broadcast data (one per executor) as done by the [[org.apache.spark.broadcast.HttpBroadcast]].
+ * broadcast data (one per executor).
  *
  * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
  *
@@ -210,7 +210,7 @@ private object TorrentBroadcast extends Logging {
       compressionCodec: Option[CompressionCodec]): T = {
     require(blocks.nonEmpty, "Cannot unblockify an empty array of blocks")
     val is = new SequenceInputStream(
-      asJavaEnumeration(blocks.iterator.map(block => new ByteBufferInputStream(block))))
+      blocks.iterator.map(new ByteBufferInputStream(_)).asJavaEnumeration)
     val in: InputStream = compressionCodec.map(c => c.compressedInputStream(is)).getOrElse(is)
     val ser = serializer.newInstance()
     val serIn = ser.deserializeStream(in)

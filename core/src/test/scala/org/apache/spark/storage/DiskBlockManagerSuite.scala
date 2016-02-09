@@ -22,12 +22,12 @@ import java.io.{File, FileWriter}
 import scala.language.reflectiveCalls
 
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.util.Utils
 
-class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
+class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
   private var rootDir0: File = _
   private var rootDir1: File = _
@@ -45,19 +45,27 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   }
 
   override def afterAll() {
-    super.afterAll()
-    Utils.deleteRecursively(rootDir0)
-    Utils.deleteRecursively(rootDir1)
+    try {
+      Utils.deleteRecursively(rootDir0)
+      Utils.deleteRecursively(rootDir1)
+    } finally {
+      super.afterAll()
+    }
   }
 
   override def beforeEach() {
+    super.beforeEach()
     val conf = testConf.clone
     conf.set("spark.local.dir", rootDirs)
     diskBlockManager = new DiskBlockManager(blockManager, conf)
   }
 
   override def afterEach() {
-    diskBlockManager.stop()
+    try {
+      diskBlockManager.stop()
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("basic block creation") {

@@ -33,6 +33,17 @@ class BitSet(numBits: Int) extends Serializable {
   def capacity: Int = numWords * 64
 
   /**
+   * Clear all set bits.
+   */
+  def clear(): Unit = {
+    var i = 0
+    while (i < numWords) {
+      words(i) = 0L
+      i += 1
+    }
+  }
+
+  /**
    * Set all the bits up to a given index
    */
   def setUntil(bitIndex: Int) {
@@ -161,7 +172,7 @@ class BitSet(numBits: Int) extends Serializable {
     override def hasNext: Boolean = ind >= 0
     override def next(): Int = {
       val tmp = ind
-      ind  = nextSetBit(ind + 1)
+      ind = nextSetBit(ind + 1)
       tmp
     }
   }

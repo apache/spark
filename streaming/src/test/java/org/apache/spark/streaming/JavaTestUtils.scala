@@ -17,16 +17,13 @@
 
 package org.apache.spark.streaming
 
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import java.util.{List => JList}
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import java.util.{List => JList}
-import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStreamLike, JavaDStream, JavaStreamingContext}
-import org.apache.spark.streaming._
-import java.util.ArrayList
-import collection.JavaConversions._
 import org.apache.spark.api.java.JavaRDDLike
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.streaming.api.java.{JavaDStreamLike, JavaDStream, JavaStreamingContext}
 
 /** Exposes streaming test functionality in a Java-friendly way. */
 trait JavaTestBase extends TestSuiteBase {
@@ -39,7 +36,7 @@ trait JavaTestBase extends TestSuiteBase {
       ssc: JavaStreamingContext,
       data: JList[JList[T]],
       numPartitions: Int) = {
-    val seqData = data.map(Seq(_:_*))
+    val seqData = data.asScala.map(_.asScala)
 
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
@@ -70,10 +67,9 @@ trait JavaTestBase extends TestSuiteBase {
       ssc: JavaStreamingContext, numBatches: Int, numExpectedOutput: Int): JList[JList[V]] = {
     implicit val cm: ClassTag[V] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    ssc.getState()
     val res = runStreams[V](ssc.ssc, numBatches, numExpectedOutput)
-    val out = new ArrayList[JList[V]]()
-    res.map(entry => out.append(new ArrayList[V](entry)))
-    out
+    res.map(_.asJava).toSeq.asJava
   }
 
   /**
@@ -89,12 +85,7 @@ trait JavaTestBase extends TestSuiteBase {
     implicit val cm: ClassTag[V] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     val res = runStreamsWithPartitions[V](ssc.ssc, numBatches, numExpectedOutput)
-    val out = new ArrayList[JList[JList[V]]]()
-    res.map{entry =>
-      val lists = entry.map(new ArrayList[V](_))
-      out.append(new ArrayList[JList[V]](lists))
-    }
-    out
+    res.map(entry => entry.map(_.asJava).asJava).toSeq.asJava
   }
 }
 

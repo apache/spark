@@ -20,10 +20,11 @@ package org.apache.spark.rdd
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
-import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
+import org.apache.spark.{ComplexFutureAction, FutureAction, JobSubmitter, Logging}
+import org.apache.spark.util.ThreadUtils
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
@@ -63,16 +64,26 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
    * Returns a future for retrieving the first num elements of the RDD.
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = self.withScope {
-    val f = new ComplexFutureAction[Seq[T]]
+    val callSite = self.context.getCallSite
+    val localProperties = self.context.getLocalProperties
+    // Cached thread pool to handle aggregation of subtasks.
+    implicit val executionContext = AsyncRDDActions.futureExecutionContext
+    val results = new ArrayBuffer[T]
+    val totalParts = self.partitions.length
 
-    f.run {
-      val results = new ArrayBuffer[T](num)
-      val totalParts = self.partitions.length
-      var partsScanned = 0
-      while (results.size < num && partsScanned < totalParts) {
+    /*
+      Recursively triggers jobs to scan partitions until either the requested
+      number of elements are retrieved, or the partitions to scan are exhausted.
+      This implementation is non-blocking, asynchronously handling the
+      results of each job and triggering the next job using callbacks on futures.
+     */
+    def continue(partsScanned: Int)(implicit jobSubmitter: JobSubmitter): Future[Seq[T]] =
+      if (results.size >= num || partsScanned >= totalParts) {
+        Future.successful(results.toSeq)
+      } else {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
-        var numPartsToTry = 1
+        var numPartsToTry = 1L
         if (partsScanned > 0) {
           // If we didn't find any rows after the previous iteration, quadruple and retry.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
@@ -81,29 +92,30 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
             numPartsToTry = partsScanned * 4
           } else {
             // the left side of max is >=1 whenever partsScanned >= 2
-            numPartsToTry = Math.max(1, 
+            numPartsToTry = Math.max(1,
               (1.5 * num * partsScanned / results.size).toInt - partsScanned)
-            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
+            numPartsToTry = Math.min(numPartsToTry, partsScanned * 4)
           }
         }
 
         val left = num - results.size
-        val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
 
         val buf = new Array[Array[T]](p.size)
-        f.runJob(self,
+        self.context.setCallSite(callSite)
+        self.context.setLocalProperties(localProperties)
+        val job = jobSubmitter.submitJob(self,
           (it: Iterator[T]) => it.take(left).toArray,
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
           Unit)
-
-        buf.foreach(results ++= _.take(num - results.size))
-        partsScanned += numPartsToTry
+        job.flatMap { _ =>
+          buf.foreach(results ++= _.take(num - results.size))
+          continue(partsScanned + p.size)
+        }
       }
-      results.toSeq
-    }
 
-    f
+    new ComplexFutureAction[Seq[T]](continue(0)(_))
   }
 
   /**
@@ -122,4 +134,9 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
     self.context.submitJob[T, Unit, Unit](self, f, Range(0, self.partitions.length),
       (index, data) => Unit, Unit)
   }
+}
+
+private object AsyncRDDActions {
+  val futureExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("AsyncRDDActions-future", 128))
 }

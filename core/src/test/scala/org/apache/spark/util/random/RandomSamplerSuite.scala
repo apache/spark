@@ -18,12 +18,15 @@
 package org.apache.spark.util.random
 
 import java.util.Random
+
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.commons.math3.distribution.PoissonDistribution
+import org.scalatest.Matchers
 
-import org.scalatest.{FunSuite, Matchers}
+import org.apache.spark.SparkFunSuite
 
-class RandomSamplerSuite extends FunSuite with Matchers {
+class RandomSamplerSuite extends SparkFunSuite with Matchers {
   /**
    * My statistical testing methodology is to run a Kolmogorov-Smirnov (KS) test
    * between the random samplers and simple reference samplers (known to work correctly).
@@ -76,7 +79,7 @@ class RandomSamplerSuite extends FunSuite with Matchers {
   }
 
   // Returns iterator over gap lengths between samples.
-  // This function assumes input data is integers sampled from the sequence of 
+  // This function assumes input data is integers sampled from the sequence of
   // increasing integers: {0, 1, 2, ...}.  This works because that is how I generate them,
   // and the samplers preserve their input order
   def gaps(data: Iterator[Int]): Iterator[Int] = {

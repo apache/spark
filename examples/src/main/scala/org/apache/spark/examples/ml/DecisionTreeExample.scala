@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -26,17 +27,13 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
-import org.apache.spark.ml.feature.{VectorIndexer, StringIndexer}
+import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{DecisionTreeRegressionModel, DecisionTreeRegressor}
 import org.apache.spark.ml.util.MetadataUtils
-import org.apache.spark.mllib.evaluation.{RegressionMetrics, MulticlassMetrics}
+import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.sql.{SQLContext, DataFrame}
-
+import org.apache.spark.sql.{DataFrame, SQLContext}
 
 /**
  * An example runner for decision trees. Run with
@@ -112,7 +109,7 @@ object DecisionTreeExample {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -137,15 +134,18 @@ object DecisionTreeExample {
 
   /** Load a dataset from the given path, using the given format */
   private[ml] def loadData(
-      sc: SparkContext,
+      sqlContext: SQLContext,
       path: String,
       format: String,
-      expectedNumFeatures: Option[Int] = None): RDD[LabeledPoint] = {
+      expectedNumFeatures: Option[Int] = None): DataFrame = {
+    import sqlContext.implicits._
+
     format match {
-      case "dense" => MLUtils.loadLabeledPoints(sc, path)
+      case "dense" => MLUtils.loadLabeledPoints(sqlContext.sparkContext, path).toDF()
       case "libsvm" => expectedNumFeatures match {
-        case Some(numFeatures) => MLUtils.loadLibSVMFile(sc, path, numFeatures)
-        case None => MLUtils.loadLibSVMFile(sc, path)
+        case Some(numFeatures) => sqlContext.read.option("numFeatures", numFeatures.toString)
+          .format("libsvm").load(path)
+        case None => sqlContext.read.format("libsvm").load(path)
       }
       case _ => throw new IllegalArgumentException(s"Bad data format: $format")
     }
@@ -168,36 +168,22 @@ object DecisionTreeExample {
       algo: String,
       fracTest: Double): (DataFrame, DataFrame) = {
     val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
 
     // Load training data
-    val origExamples: RDD[LabeledPoint] = loadData(sc, input, dataFormat)
+    val origExamples: DataFrame = loadData(sqlContext, input, dataFormat)
 
     // Load or create test set
-    val splits: Array[RDD[LabeledPoint]] = if (testInput != "") {
+    val dataframes: Array[DataFrame] = if (testInput != "") {
       // Load testInput.
-      val numFeatures = origExamples.take(1)(0).features.size
-      val origTestExamples: RDD[LabeledPoint] =
-        loadData(sc, testInput, dataFormat, Some(numFeatures))
+      val numFeatures = origExamples.first().getAs[Vector](1).size
+      val origTestExamples: DataFrame =
+        loadData(sqlContext, testInput, dataFormat, Some(numFeatures))
       Array(origExamples, origTestExamples)
     } else {
       // Split input into training, test.
       origExamples.randomSplit(Array(1.0 - fracTest, fracTest), seed = 12345)
     }
 
-    // For classification, convert labels to Strings since we will index them later with
-    // StringIndexer.
-    def labelsToStrings(data: DataFrame): DataFrame = {
-      algo.toLowerCase match {
-        case "classification" =>
-          data.withColumn("labelString", data("label").cast(StringType))
-        case "regression" =>
-          data
-        case _ =>
-          throw new IllegalArgumentException("Algo ${params.algo} not supported.")
-      }
-    }
-    val dataframes = splits.map(_.toDF()).map(labelsToStrings)
     val training = dataframes(0).cache()
     val test = dataframes(1).cache()
 
@@ -229,7 +215,7 @@ object DecisionTreeExample {
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
       val labelIndexer = new StringIndexer()
-        .setInputCol("labelString")
+        .setInputCol("label")
         .setOutputCol(labelColName)
       stages += labelIndexer
     }
@@ -355,3 +341,4 @@ object DecisionTreeExample {
     println(s"  Root mean squared error (RMSE): $RMSE")
   }
 }
+// scalastyle:on println

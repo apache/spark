@@ -128,7 +128,7 @@ private[spark] object SubmitRestProtocolMessage {
    */
   def fromJson(json: String): SubmitRestProtocolMessage = {
     val className = parseAction(json)
-    val clazz = Class.forName(packagePrefix + "." + className)
+    val clazz = Utils.classForName(packagePrefix + "." + className)
       .asSubclass[SubmitRestProtocolMessage](classOf[SubmitRestProtocolMessage])
     fromJson(json, clazz)
   }

@@ -20,4 +20,4 @@ package org.apache.spark.metrics
 /**
  * Sinks used in Spark's metrics system.
  */
-package object sink 
+package object sink

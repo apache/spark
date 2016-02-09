@@ -16,17 +16,21 @@
  */
 package org.apache.spark.deploy.history
 
-import java.io.{File, FileInputStream, FileWriter, IOException}
+import java.io.{File, FileInputStream, FileWriter, InputStream, IOException}
 import java.net.{HttpURLConnection, URL}
+import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import com.google.common.base.Charsets
+import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.mockito.Mockito.when
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf}
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.ui.{SparkUI, UIUtils}
+import org.apache.spark.util.ResetSystemProperties
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -39,8 +43,8 @@ import org.apache.spark.ui.SparkUI
  * expectations.  However, in general this should be done with extreme caution, as the metrics
  * are considered part of Spark's public api.
  */
-class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils {
+class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
+  with JsonTestUtils with ResetSystemProperties {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
@@ -82,7 +86,7 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     "running app list json" -> "applications?status=running",
     "minDate app list json" -> "applications?minDate=2015-02-10",
     "maxDate app list json" -> "applications?maxDate=2015-02-10",
-    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T10:42:40.000CST",
+    "maxDate2 app list json" -> "applications?maxDate=2015-02-03T16:42:40.000GMT",
     "one app json" -> "applications/local-1422981780767",
     "one app multi-attempt json" -> "applications/local-1426533911241",
     "job list json" -> "applications/local-1422981780767/jobs",
@@ -135,7 +139,24 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
       code should be (HttpServletResponse.SC_OK)
       jsonOpt should be ('defined)
       errOpt should be (None)
-      val json = jsonOpt.get
+      val jsonOrg = jsonOpt.get
+
+      // SPARK-10873 added the lastUpdated field for each application's attempt,
+      // the REST API returns the last modified time of EVENT LOG file for this field.
+      // It is not applicable to hard-code this dynamic field in a static expected file,
+      // so here we skip checking the lastUpdated field's value (setting it as "").
+      val json = if (jsonOrg.indexOf("lastUpdated") >= 0) {
+        val subStrings = jsonOrg.split(",")
+        for (i <- subStrings.indices) {
+          if (subStrings(i).indexOf("lastUpdated") >= 0) {
+            subStrings(i) = "\"lastUpdated\":\"\""
+          }
+        }
+        subStrings.mkString(",")
+      } else {
+        jsonOrg
+      }
+
       val exp = IOUtils.toString(new FileInputStream(
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
@@ -145,6 +166,51 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
       val expAst = parse(exp)
       assertValidDataInJson(jsonAst, expAst)
     }
+  }
+
+  test("download all logs for app with multiple attempts") {
+    doDownloadTest("local-1430917381535", None)
+  }
+
+  test("download one log for app with multiple attempts") {
+    (1 to 2).foreach { attemptId => doDownloadTest("local-1430917381535", Some(attemptId)) }
+  }
+
+  // Test that the files are downloaded correctly, and validate them.
+  def doDownloadTest(appId: String, attemptId: Option[Int]): Unit = {
+
+    val url = attemptId match {
+      case Some(id) =>
+        new URL(s"${generateURL(s"applications/$appId")}/$id/logs")
+      case None =>
+        new URL(s"${generateURL(s"applications/$appId")}/logs")
+    }
+
+    val (code, inputStream, error) = HistoryServerSuite.connectAndGetInputStream(url)
+    code should be (HttpServletResponse.SC_OK)
+    inputStream should not be None
+    error should be (None)
+
+    val zipStream = new ZipInputStream(inputStream.get)
+    var entry = zipStream.getNextEntry
+    entry should not be null
+    val totalFiles = {
+      attemptId.map { x => 1 }.getOrElse(2)
+    }
+    var filesCompared = 0
+    while (entry != null) {
+      if (!entry.isDirectory) {
+        val expectedFile = {
+          new File(logDir, entry.getName)
+        }
+        val expected = Files.toString(expectedFile, Charsets.UTF_8)
+        val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
+        actual should be (expected)
+        filesCompared += 1
+      }
+      entry = zipStream.getNextEntry
+    }
+    filesCompared should be (totalFiles)
   }
 
   test("response codes on bad paths") {
@@ -173,36 +239,33 @@ class HistoryServerSuite extends FunSuite with BeforeAndAfter with Matchers with
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
-  test("generate history page with relative links") {
-    val historyServer = mock[HistoryServer]
+  test("relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
+    val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
+    val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
+    val page = new HistoryPage(server)
     val request = mock[HttpServletRequest]
-    val ui = mock[SparkUI]
-    val link = "/history/app1"
-    val info = new ApplicationHistoryInfo("app1", "app1",
-      List(ApplicationAttemptInfo(None, 0, 2, 1, "xxx", true)))
-    when(historyServer.getApplicationList()).thenReturn(Seq(info))
-    when(ui.basePath).thenReturn(link)
-    when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
-    val page = new HistoryPage(historyServer)
 
     // when
+    System.setProperty("spark.ui.proxyBase", uiRoot)
     val response = page.render(request)
+    System.setProperty("spark.ui.proxyBase", Option(proxyBaseBeforeTest).getOrElse(""))
 
     // then
-    val links = response \\ "a"
-    val justHrefs = for {
-      l <- links
-      attrs <- l.attribute("href")
-    } yield (attrs.toString)
-    justHrefs should contain(link)
+    val urls = response \\ "@href" map (_.toString)
+    val siteRelativeLinks = urls filter (_.startsWith("/"))
+    all (siteRelativeLinks) should startWith (uiRoot)
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
-    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getContentAndCode(new URL(s"http://localhost:$port/api/v1/$path"))
   }
 
   def getUrl(path: String): String = {
-    HistoryServerSuite.getUrl(new URL(s"http://localhost:$port/json/v1/$path"))
+    HistoryServerSuite.getUrl(generateURL(path))
+  }
+
+  def generateURL(path: String): URL = {
+    new URL(s"http://localhost:$port/api/v1/$path")
   }
 
   def generateExpectation(name: String, path: String): Unit = {
@@ -233,13 +296,18 @@ object HistoryServerSuite {
   }
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
+    val (code, in, errString) = connectAndGetInputStream(url)
+    val inString = in.map(IOUtils.toString)
+    (code, inString, errString)
+  }
+
+  def connectAndGetInputStream(url: URL): (Int, Option[InputStream], Option[String]) = {
     val connection = url.openConnection().asInstanceOf[HttpURLConnection]
     connection.setRequestMethod("GET")
     connection.connect()
     val code = connection.getResponseCode()
-    val inString = try {
-      val in = Option(connection.getInputStream())
-      in.map(IOUtils.toString)
+    val inStream = try {
+      Option(connection.getInputStream())
     } catch {
       case io: IOException => None
     }
@@ -249,7 +317,7 @@ object HistoryServerSuite {
     } catch {
       case io: IOException => None
     }
-    (code, inString, errString)
+    (code, inStream, errString)
   }
 
 

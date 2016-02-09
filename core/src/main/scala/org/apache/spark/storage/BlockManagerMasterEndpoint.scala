@@ -20,12 +20,12 @@ package org.apache.spark.storage
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, ThreadSafeRpcEndpoint}
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -59,10 +59,10 @@ class BlockManagerMasterEndpoint(
       register(blockManagerId, maxMemSize, slaveEndpoint)
       context.reply(true)
 
-    case UpdateBlockInfo(
-      blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
-      context.reply(updateBlockInfo(
-        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
+    case _updateBlockInfo @
+        UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+      context.reply(updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size))
+      listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
 
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
@@ -73,8 +73,8 @@ class BlockManagerMasterEndpoint(
     case GetPeers(blockManagerId) =>
       context.reply(getPeers(blockManagerId))
 
-    case GetRpcHostPortForExecutor(executorId) =>
-      context.reply(getRpcHostPortForExecutor(executorId))
+    case GetExecutorEndpointRef(executorId) =>
+      context.reply(getExecutorEndpointRef(executorId))
 
     case GetMemoryStatus =>
       context.reply(memoryStatus)
@@ -112,6 +112,17 @@ class BlockManagerMasterEndpoint(
     case BlockManagerHeartbeat(blockManagerId) =>
       context.reply(heartbeatReceived(blockManagerId))
 
+    case HasCachedBlocks(executorId) =>
+      blockManagerIdByExecutor.get(executorId) match {
+        case Some(bm) =>
+          if (blockManagerInfo.contains(bm)) {
+            val bmInfo = blockManagerInfo(bm)
+            context.reply(bmInfo.cachedBlocks.nonEmpty)
+          } else {
+            context.reply(false)
+          }
+        case None => context.reply(false)
+      }
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
@@ -120,7 +131,7 @@ class BlockManagerMasterEndpoint(
 
     // Find all blocks for the given RDD, remove the block from both blockLocations and
     // the blockManagerInfo that is tracking the blocks.
-    val blocks = blockLocations.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    val blocks = blockLocations.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
     blocks.foreach { blockId =>
       val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
       bms.foreach(bm => blockManagerInfo.get(bm).foreach(_.removeBlock(blockId)))
@@ -229,7 +240,7 @@ class BlockManagerMasterEndpoint(
 
   private def storageStatus: Array[StorageStatus] = {
     blockManagerInfo.map { case (blockManagerId, info) =>
-      new StorageStatus(blockManagerId, info.maxMem, info.blocks)
+      new StorageStatus(blockManagerId, info.maxMem, info.blocks.asScala)
     }.toArray
   }
 
@@ -279,7 +290,7 @@ class BlockManagerMasterEndpoint(
           if (askSlaves) {
             info.slaveEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
           } else {
-            Future { info.blocks.keys.filter(filter).toSeq }
+            Future { info.blocks.asScala.keys.filter(filter).toSeq }
           }
         future
       }
@@ -292,16 +303,16 @@ class BlockManagerMasterEndpoint(
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(oldId) =>
           // A block manager of the same executor already exists, so remove it (assumed dead)
-          logError("Got two different block manager registrations on same executor - " 
+          logError("Got two different block manager registrations on same executor - "
               + s" will replace old one $oldId with new one $id")
-          removeExecutor(id.executorId)  
+          removeExecutor(id.executorId)
         case None =>
       }
       logInfo("Registering block manager %s with %s RAM, %s".format(
         id.hostPort, Utils.bytesToString(maxMemSize), id))
-      
+
       blockManagerIdByExecutor(id.executorId) = id
-      
+
       blockManagerInfo(id) = new BlockManagerInfo(
         id, System.currentTimeMillis(), maxMemSize, slaveEndpoint)
     }
@@ -313,8 +324,7 @@ class BlockManagerMasterEndpoint(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long,
-      externalBlockStoreSize: Long): Boolean = {
+      diskSize: Long): Boolean = {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
@@ -331,8 +341,7 @@ class BlockManagerMasterEndpoint(
       return true
     }
 
-    blockManagerInfo(blockManagerId).updateBlockInfo(
-      blockId, storageLevel, memSize, diskSize, externalBlockStoreSize)
+    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
@@ -359,7 +368,8 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
-  private def getLocationsMultipleBlockIds(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
+  private def getLocationsMultipleBlockIds(
+      blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
     blockIds.map(blockId => getLocations(blockId))
   }
 
@@ -374,15 +384,14 @@ class BlockManagerMasterEndpoint(
   }
 
   /**
-   * Returns the hostname and port of an executor, based on the [[RpcEnv]] address of its
-   * [[BlockManagerSlaveEndpoint]].
+   * Returns an [[RpcEndpointRef]] of the [[BlockManagerSlaveEndpoint]] for sending RPC messages.
    */
-  private def getRpcHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+  private def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
       info <- blockManagerInfo.get(blockManagerId)
     ) yield {
-      (info.slaveEndpoint.address.host, info.slaveEndpoint.address.port)
+      info.slaveEndpoint
     }
   }
 
@@ -392,17 +401,13 @@ class BlockManagerMasterEndpoint(
 }
 
 @DeveloperApi
-case class BlockStatus(
-    storageLevel: StorageLevel,
-    memSize: Long,
-    diskSize: Long,
-    externalBlockStoreSize: Long) {
-  def isCached: Boolean = memSize + diskSize + externalBlockStoreSize > 0
+case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long) {
+  def isCached: Boolean = memSize + diskSize > 0
 }
 
 @DeveloperApi
 object BlockStatus {
-  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
 }
 
 private[spark] class BlockManagerInfo(
@@ -418,6 +423,9 @@ private[spark] class BlockManagerInfo(
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
 
+  // Cached blocks held by this BlockManager. This does not include broadcast blocks.
+  private val _cachedBlocks = new mutable.HashSet[BlockId]
+
   def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
 
   def updateLastSeenMs() {
@@ -428,8 +436,7 @@ private[spark] class BlockManagerInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long,
-      externalBlockStoreSize: Long) {
+      diskSize: Long) {
 
     updateLastSeenMs()
 
@@ -451,27 +458,29 @@ private[spark] class BlockManagerInfo(
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
+      var blockStatus: BlockStatus = null
       if (storageLevel.useMemory) {
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0, 0))
+        blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
+        _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize, 0))
+        blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
+        _blocks.put(blockId, blockStatus)
         logInfo("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
       }
-      if (storageLevel.useOffHeap) {
-        _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, externalBlockStoreSize))
-        logInfo("Added %s on ExternalBlockStore on %s (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(externalBlockStoreSize)))
+      if (!blockId.isBroadcast && blockStatus.isCached) {
+        _cachedBlocks += blockId
       }
     } else if (_blocks.containsKey(blockId)) {
       // If isValid is not true, drop the block.
       val blockStatus: BlockStatus = _blocks.get(blockId)
       _blocks.remove(blockId)
+      _cachedBlocks -= blockId
       if (blockStatus.storageLevel.useMemory) {
         logInfo("Removed %s on %s in memory (size: %s, free: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.memSize),
@@ -481,11 +490,6 @@ private[spark] class BlockManagerInfo(
         logInfo("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
       }
-      if (blockStatus.storageLevel.useOffHeap) {
-        logInfo("Removed %s on %s on externalBlockStore (size: %s)".format(
-          blockId, blockManagerId.hostPort,
-          Utils.bytesToString(blockStatus.externalBlockStoreSize)))
-      }
     }
   }
 
@@ -494,6 +498,7 @@ private[spark] class BlockManagerInfo(
       _remainingMem += _blocks.get(blockId).memSize
       _blocks.remove(blockId)
     }
+    _cachedBlocks -= blockId
   }
 
   def remainingMem: Long = _remainingMem
@@ -501,6 +506,9 @@ private[spark] class BlockManagerInfo(
   def lastSeenMs: Long = _lastSeenMs
 
   def blocks: JHashMap[BlockId, BlockStatus] = _blocks
+
+  // This does not include broadcast blocks.
+  def cachedBlocks: collection.Set[BlockId] = _cachedBlocks
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 

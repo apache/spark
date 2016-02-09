@@ -24,7 +24,7 @@ import io.netty.buffer.ByteBuf;
  * Request to fetch a sequence of a single chunk of a stream. This will correspond to a single
  * {@link org.apache.spark.network.protocol.ResponseMessage} (either success or failure).
  */
-public final class ChunkFetchRequest implements RequestMessage {
+public final class ChunkFetchRequest extends AbstractMessage implements RequestMessage {
   public final StreamChunkId streamChunkId;
 
   public ChunkFetchRequest(StreamChunkId streamChunkId) {
@@ -46,6 +46,11 @@ public final class ChunkFetchRequest implements RequestMessage {
 
   public static ChunkFetchRequest decode(ByteBuf buf) {
     return new ChunkFetchRequest(StreamChunkId.decode(buf));
+  }
+
+  @Override
+  public int hashCode() {
+    return streamChunkId.hashCode();
   }
 
   @Override
