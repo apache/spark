@@ -119,7 +119,7 @@ private[spark] object InternalAccumulator {
   /**
    * Accumulators for tracking internal metrics.
    */
-  def create(): Seq[Accumulator[_]] = {
+  def createAll(): Seq[Accumulator[_]] = {
     Seq[String](
       EXECUTOR_DESERIALIZE_TIME,
       EXECUTOR_RUN_TIME,
@@ -188,7 +188,7 @@ private[spark] object InternalAccumulator {
    * values across all tasks within each stage.
    */
   def create(sc: SparkContext): Seq[Accumulator[_]] = {
-    val accums = create()
+    val accums = createAll()
     accums.foreach { accum =>
       Accumulators.register(accum)
       sc.cleaner.foreach(_.registerAccumulatorForCleanup(accum))

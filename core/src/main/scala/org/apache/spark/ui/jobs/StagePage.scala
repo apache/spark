@@ -408,9 +408,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +:
             getFormattedTimeQuantiles(gettingResultTimes)
 
-            val peakExecutionMemory = validTasks.map { case TaskUIData(_, metrics, _) =>
-              metrics.get.peakExecutionMemory.toDouble
-            }
+          val peakExecutionMemory = validTasks.map { case TaskUIData(_, metrics, _) =>
+            metrics.get.peakExecutionMemory.toDouble
+          }
           val peakExecutionMemoryQuantiles = {
             <td>
               <span data-toggle="tooltip"

@@ -739,6 +739,9 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
             If n is 1, return a single Row.
@@ -1329,6 +1332,9 @@ class DataFrame(object):
     @since(1.3)
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
+
+        Note that this method should only be used if the resulting Pandas's DataFrame is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         This is only available if Pandas is installed and available.
 
