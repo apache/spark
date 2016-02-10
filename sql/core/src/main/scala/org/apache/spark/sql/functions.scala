@@ -418,7 +418,7 @@ object functions extends LegacyFunctions {
   /**
     * Aggregate function: returns the level of grouping, equals to
     *
-    *   (grouping(c1) << (n-1)) + (grouping(c1) << (n-2)) + ... + grouping(cn)
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
     *
     * Note: the list of columns should match with grouping columns exactly.
     *
@@ -430,14 +430,14 @@ object functions extends LegacyFunctions {
   /**
     * Aggregate function: returns the level of grouping, equals to
     *
-    *   (grouping(c1) << (n-1)) + (grouping(c1) << (n-2)) + ... + grouping(cn)
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
     *
     * Note: the list of columns should match with grouping columns exactly.
     *
     * @group agg_funcs
     * @since 2.0.0
     */
-  def grouping_id(colName:String, colNames: String*): Column = {
+  def grouping_id(colName: String, colNames: String*): Column = {
     grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
   }
 
