@@ -18,8 +18,8 @@
 package org.apache.spark.api.python
 
 import java.io._
-import java.lang.ref.ReferenceQueue
 import java.lang.ref.PhantomReference
+import java.lang.ref.ReferenceQueue
 import java.net._
 import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
 
@@ -27,8 +27,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
-import scala.util.control.NonFatal
 import scala.language.postfixOps
+import scala.util.control.NonFatal
 import scala.ref
 
 import com.google.common.base.Charsets.UTF_8
@@ -875,7 +875,7 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
  */
 
 private[spark] class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
-  extends PhantomReference(f,q){
+  extends PhantomReference(f, q){
 
   private def cleanup()
   {
@@ -910,7 +910,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   /**
    * Write data into disk, using randomly generated name.
    */
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+ private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
     val file = File.createTempFile("broadcast", "", dir) 
     phantomReferences += new FilePhantomReference(file, queue)
@@ -924,8 +924,8 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   }
   /** Create a seperate daemon thread to remove phantomreferences from queue and invoke cleanup */
       
-  val referenceThread = new Thread {
-  setDaemon(true)
+ val referenceThread = new Thread {
+ setDaemon(true)
     override def run() {
     try {
       val ref = queue.remove().asInstanceOf[FilePhantomReference]
