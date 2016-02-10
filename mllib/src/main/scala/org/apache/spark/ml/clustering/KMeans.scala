@@ -245,9 +245,9 @@ class KMeans @Since("1.5.0") (
   @Since("2.0.0")
   def setInitialModel(value: Model[_]): this.type = {
     value match {
-      case m: KMeansModel => set(initialModel, m)
+      case m: KMeansModel => setInitialModel(m)
       case other =>
-        logInfo(s"KMeansModel required but ${other.getClass.getSimpleName} found.")
+        logWarning(s"KMeansModel required but ${other.getClass.getSimpleName} found.")
         this
     }
   }
@@ -255,7 +255,7 @@ class KMeans @Since("1.5.0") (
   /** @group setParam */
   @Since("2.0.0")
   def setInitialModel(clusterCenters: Array[Vector]): this.type = {
-    set(initialModel, new KMeansModel("initial model", new MLlibKMeansModel(clusterCenters)))
+    setInitialModel(new KMeansModel("initial model", new MLlibKMeansModel(clusterCenters)))
   }
 
   @Since("1.5.0")
@@ -271,6 +271,8 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
 
     if (isSet(initialModel)) {
+      require($(initialModel).parentModel.clusterCenters.length == $(k), "mismatched cluster count")
+      require(rdd.first().size == $(initialModel).clusterCenters.head.size, "mismatched dimension")
       algo.setInitialModel($(initialModel).parentModel)
     }
 
