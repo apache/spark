@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -161,30 +162,37 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("efficient limit -> project -> sort") {
-    {
-      val query =
-        testData.select('key, 'value).sort('key).limit(2).logicalPlan
-      val planned = sqlContext.planner.TakeOrderedAndProject(query)
-      assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
-      assert(planned.head.output === testData.select('key, 'value).logicalPlan.output)
-    }
-
-    {
-      // We need to make sure TakeOrderedAndProject's output is correct when we push a project
-      // into it.
-      val query =
-        testData.select('key, 'value).sort('key).select('value, 'key).limit(2).logicalPlan
-      val planned = sqlContext.planner.TakeOrderedAndProject(query)
-      assert(planned.head.isInstanceOf[execution.TakeOrderedAndProject])
-      assert(planned.head.output === testData.select('value, 'key).logicalPlan.output)
-    }
+  test("efficient terminal limit -> sort should use TakeOrderedAndProject") {
+    val query = testData.select('key, 'value).sort('key).limit(2)
+    val planned = query.queryExecution.executedPlan
+    assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
+    assert(planned.output === testData.select('key, 'value).logicalPlan.output)
   }
 
-  test("terminal limits use CollectLimit") {
+  test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
+    val query = testData.select('key, 'value).sort('key).select('value, 'key).limit(2)
+    val planned = query.queryExecution.executedPlan
+    assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
+    assert(planned.output === testData.select('value, 'key).logicalPlan.output)
+  }
+
+  test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
     val query = testData.select('value).limit(2)
     val planned = query.queryExecution.sparkPlan
     assert(planned.isInstanceOf[CollectLimit])
+    assert(planned.output === testData.select('value).logicalPlan.output)
+  }
+
+  test("TakeOrderedAndProject can appear in the middle of plans") {
+    val query = testData.select('key, 'value).sort('key).limit(2).filter('key === 3)
+    val planned = query.queryExecution.executedPlan
+    assert(planned.find(_.isInstanceOf[TakeOrderedAndProject]).isDefined)
+  }
+
+  test("CollectLimit can appear in the middle of a plan when caching is used") {
+    val query = testData.select('key, 'value).limit(2).cache()
+    val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
+    assert(planned.child.isInstanceOf[CollectLimit])
   }
 
   test("PartitioningCollection") {
