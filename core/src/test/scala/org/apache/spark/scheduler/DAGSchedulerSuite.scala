@@ -988,7 +988,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(countSubmittedMapStageAttempts() === 2)
   }
 
-  test("late task events posted") {
+  test("task events always posted in speculation / when stage is killed") {
     val baseRdd = new MyRDD(sc, 4, Nil)
     val finalRdd = new MyRDD(sc, 4, List(new OneToOneDependency(baseRdd)))
     submit(finalRdd, Array(0, 1, 2, 3))
