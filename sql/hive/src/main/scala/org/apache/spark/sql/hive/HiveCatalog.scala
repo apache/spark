@@ -37,7 +37,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 
   /**

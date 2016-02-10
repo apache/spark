@@ -251,6 +251,13 @@ private[hive] class HiveClientImpl(
         ignoreIfExists)
   }
 
+  override def dropDatabase(
+      name: String,
+      ignoreIfNotExists: Boolean,
+      cascade: Boolean): Unit = withHiveState {
+    client.dropDatabase(name, true, ignoreIfNotExists, cascade)
+  }
+
   override def getDatabaseOption(name: String): Option[Database] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
       Database(

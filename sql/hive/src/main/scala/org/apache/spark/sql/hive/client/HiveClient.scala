@@ -143,6 +143,15 @@ private[hive] trait HiveClient {
   /** Creates a new database with the given name. */
   def createDatabase(database: Database, ignoreIfExists: Boolean): Unit
 
+  /**
+   * Drop the specified database, if it exists.
+   *
+   * @param name database to drop
+   * @param ignoreIfNotExists if true, do not throw error if the database does not exist
+   * @param cascade whether to remove all associated objects such as tables and functions
+   */
+  def dropDatabase(name: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
+
   /** Returns the specified paritition or None if it does not exist. */
   def getPartitionOption(
       hTable: HiveTable,
