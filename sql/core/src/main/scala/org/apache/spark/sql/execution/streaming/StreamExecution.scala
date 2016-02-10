@@ -128,7 +128,7 @@ class StreamExecution(
       case NonFatal(e) =>
         streamDeathCause = new ContinuousQueryException(
           this,
-          s"Query terminated with exception",
+          s"Query $name terminated with exception: ${e.getMessage}",
           e,
           Some(streamProgress.toCompositeOffset(sources)))
         logError(s"Query $name terminated with error", e)
@@ -286,16 +286,28 @@ class StreamExecution(
     }
   }
 
-  override def toString: String =
+  override def toString: String = {
+    s"Continuous Query - $name [state = $state]"
+  }
+
+  def toDebugString: String = {
+    val deathCauseStr = if (streamDeathCause != null) {
+      "Error:\n" + stackTraceToString(streamDeathCause.cause)
+    } else ""
     s"""
-       |=== Streaming Query ===
+       |=== Continuous Query ===
+       |Name: $name
        |Current Offsets: $streamProgress
+       |
        |Current State: $state
        |Thread State: ${microBatchThread.getState}
-       |${if (streamDeathCause != null) stackTraceToString(streamDeathCause) else ""}
        |
+       |Logical Plan:
        |$logicalPlan
+       |
+       |$deathCauseStr
      """.stripMargin
+  }
 
   trait State
   case object INITIALIZED extends State

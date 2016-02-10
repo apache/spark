@@ -18,12 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.Offset
+import org.apache.spark.sql.execution.streaming.{StreamExecution, Offset}
+import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
  * Exception that stopped a [[ContinuousQuery]].
- * @paaram query      Query that caused the exception
+ * @param query      Query that caused the exception
  * @param message     Message of this exception
  * @param cause       Internal cause of this exception
  * @param startOffset Starting offset (if known) of the range of data in which exception occurred
@@ -46,15 +47,9 @@ class ContinuousQueryException private[sql](
     val causeStr =
       s"${cause.getMessage} ${cause.getStackTrace.take(10).mkString("", "\n|\t", "\n")}"
     s"""
-       |$message
-       |
-       |=== Error ===
        |$causeStr
        |
-       |=== Offset range ===
-       |Start: ${startOffset.map { _.toString }.getOrElse("-")}
-       |End:   ${endOffset.map { _.toString }.getOrElse("-")}
-       |
+       |${query.asInstanceOf[StreamExecution].toDebugString}
        """.stripMargin
   }
 }

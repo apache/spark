@@ -66,7 +66,7 @@ trait ContinuousQuery {
    * If the query has terminated with an exception, then the exception will be thrown.
    *
    * If the query has terminated, then all subsequent calls to this method will either return
-   * `true` immediately (if the query was terminated by `stop()`), or throw the exception
+   * immediately (if the query was terminated by `stop()`), or throw the exception
    * immediately (if the query has terminated with exception).
    *
    * @throws ContinuousQueryException, if `this` query has terminated with an exception.

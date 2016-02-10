@@ -28,7 +28,7 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.{ContinuousQueryException, ContinuousQuery, Dataset, StreamTest}
 import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution, StreamingRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -36,6 +36,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
   import AwaitTerminationTester._
   import testImplicits._
+
+  override val streamingTimeout = 20.seconds
 
   before {
     assert(sqlContext.streams.active.isEmpty)
@@ -91,8 +93,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     }
   }
 
-  test("awaitAnyTermination without timeout and reset") {
-    val datasets = Seq.fill(3)(makeDataset._2)
+  test("awaitAnyTermination without timeout and resetTerminated") {
+    val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
       assert(sqlContext.streams.active.toSet === queries.toSet)
@@ -101,9 +103,9 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       testAwaitAnyTermination(ExpectBlocked)
 
       // Stop a query asynchronously and see if it is reported through awaitAnyTermination
-      val q1 = stopRandomQueryAsync(stopAfter = 500 milliseconds, withError = false)
+      val q1 = stopRandomQueryAsync(stopAfter = 100 milliseconds, withError = false)
       testAwaitAnyTermination(ExpectNotBlocked)
-      require(!q1.isActive) // should be marked active by the time the prev awaitAnyTerm returned
+      require(!q1.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should be non-blocking
       testAwaitAnyTermination(ExpectNotBlocked)
@@ -114,9 +116,9 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
       // Terminate a query asynchronously with exception and see awaitAnyTermination throws
       // the exception
-      val q2 = stopRandomQueryAsync(500 milliseconds, withError = true)
+      val q2 = stopRandomQueryAsync(100 milliseconds, withError = true)
       testAwaitAnyTermination(ExpectException[SparkException])
-      require(!q2.isActive) // should be marked active by the time the prev awaitAnyTerm returned
+      require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should throw the exception
       testAwaitAnyTermination(ExpectException[SparkException])
@@ -124,11 +126,21 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       // Resetting termination should make awaitAnyTermination() blocking again
       sqlContext.streams.resetTerminated()
       testAwaitAnyTermination(ExpectBlocked)
+
+      // Terminate multiple queries, one with failure and see whether awaitAnyTermination throws
+      // the exception
+      val q3 = stopRandomQueryAsync(10 milliseconds, withError = false)
+      testAwaitAnyTermination(ExpectNotBlocked)
+      require(!q3.isActive)
+      val q4 = stopRandomQueryAsync(10 milliseconds, withError = true)
+      eventually(Timeout(streamingTimeout)) { require(!q4.isActive) }
+      // After q4 terminates with exception, awaitAnyTerm should start throwing exception
+      testAwaitAnyTermination(ExpectException[SparkException])
     }
   }
 
-  test("awaitTermination with timeout") {
-    val datasets = Seq.fill(5)(makeDataset._2)
+  test("awaitAnyTermination with timeout and resetTerminated") {
+    val datasets = Seq.fill(6)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
       assert(sqlContext.streams.active.toSet === queries.toSet)
@@ -153,7 +165,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         awaitTimeout = 1 second,
         expectedReturnedValue = true,
         testBehaviorFor = 2 seconds)
-      require(!q1.isActive) // should be marked active by the time the prev awaitAnyTerm returned
+      require(!q1.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should be non-blocking even if timeout is high
       testAwaitAnyTermination(
@@ -169,12 +181,12 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
       // Terminate a query asynchronously with exception within timeout, awaitAnyTermination should
       // throws the exception
-      val q2 = stopRandomQueryAsync(500 milliseconds, withError = true)
+      val q2 = stopRandomQueryAsync(100 milliseconds, withError = true)
       testAwaitAnyTermination(
         ExpectException[SparkException],
         awaitTimeout = 1 second,
         testBehaviorFor = 2 seconds)
-      require(!q2.isActive) // should be marked active by the time the prev awaitAnyTerm returned
+      require(!q2.isActive) // should be inactive by the time the prev awaitAnyTerm returned
 
       // All subsequent calls to awaitAnyTermination should throw the exception
       testAwaitAnyTermination(
@@ -197,6 +209,20 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         ExpectException[SparkException],
         awaitTimeout = 100 milliseconds,
         testBehaviorFor = 2 seconds)
+
+
+      // Terminate multiple queries, one with failure and see whether awaitAnyTermination throws
+      // the exception
+      sqlContext.streams.resetTerminated()
+
+      val q4 = stopRandomQueryAsync(10 milliseconds, withError = false)
+      testAwaitAnyTermination(
+        ExpectNotBlocked, awaitTimeout = 1 second, expectedReturnedValue = true)
+      require(!q4.isActive)
+      val q5 = stopRandomQueryAsync(10 milliseconds, withError = true)
+      eventually(Timeout(streamingTimeout)) { require(!q5.isActive) }
+      // After q4 terminates with exception, awaitAnyTerm should start throwing exception
+      //testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 100 milliseconds)
     }
   }
 
@@ -234,7 +260,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       expectedBehavior: ExpectedBehavior,
       expectedReturnedValue: Boolean = false,
       awaitTimeout: Span = null,
-      testBehaviorFor: Span = 1000 milliseconds
+      testBehaviorFor: Span = 2 seconds
     ): Unit = {
 
     def awaitTermFunc(): Unit = {
@@ -268,7 +294,6 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         logDebug(s"Stopping query ${queryToStop.name}")
         queryToStop.stop()
       }
-
     }
     queryToStop
   }

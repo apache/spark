@@ -53,7 +53,7 @@ abstract class ContinuousQueryListener {
 @Experimental
 object ContinuousQueryListener {
 
-  /** Base type of  [[ContinuousQueryListener]] events */
+  /** Base type of [[ContinuousQueryListener]] events */
   trait Event
 
   /** Event representing the start of a query */
