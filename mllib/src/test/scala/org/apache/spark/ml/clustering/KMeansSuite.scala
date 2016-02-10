@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.clustering
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -31,11 +33,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
 
   final val k = 5
   @transient var dataset: DataFrame = _
+  @transient var initialModel: KMeansModel = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+    initialModel = KMeansSuite.generateKMeansModel(3, k)
   }
 
   test("default parameters") {
@@ -109,17 +113,6 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   }
 
   test("Initialize using given cluster centers") {
-    val points = Array(
-      Vectors.dense(0.0, 0.0, 0.0),
-      Vectors.dense(1.0, 1.0, 1.0),
-      Vectors.dense(2.0, 2.0, 2.0),
-      Vectors.dense(3.0, 3.0, 3.0),
-      Vectors.dense(4.0, 4.0, 4.0)
-    )
-
-    // creating an initial model
-    val initialModel = new KMeansModel("test model", new MLlibKMeansModel(points))
-
     val predictionColName = "kmeans_prediction"
     val kmeans = new KMeans()
       .setK(k)
@@ -157,6 +150,11 @@ object KMeansSuite {
     sql.createDataFrame(rdd)
   }
 
+  def generateKMeansModel(dim: Int, k: Int): KMeansModel = {
+    val clusterCenters = (1 to k).map(i => Vectors.dense(Array.fill(dim)(Random.nextDouble)))
+    new KMeansModel("test model", new MLlibKMeansModel(clusterCenters.toArray))
+  }
+
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.
@@ -166,6 +164,7 @@ object KMeansSuite {
     "predictionCol" -> "myPrediction",
     "k" -> 3,
     "maxIter" -> 2,
-    "tol" -> 0.01
+    "tol" -> 0.01,
+    "initialModel" -> generateKMeansModel(5, 3)
   )
 }

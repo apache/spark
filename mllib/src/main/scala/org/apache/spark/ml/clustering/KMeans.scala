@@ -18,6 +18,7 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
+import org.json4s.DefaultFormats
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
@@ -34,7 +35,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol {
+  with HasSeed with HasPredictionCol with HasTol with HasInitialModel[KMeansModel] {
 
   /**
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
@@ -148,12 +149,23 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
   /** [[MLWriter]] instance for [[KMeansModel]] */
   private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
+    import org.json4s.JsonDSL._
 
     private case class Data(clusterCenters: Array[Vector])
 
     override protected def saveImpl(path: String): Unit = {
+      val extraMetadata = if (instance.isSet(instance.initialModel)) {
+        val initialModelPath = new Path(path, "initial-model").toString
+        instance.getInitialModel.save(initialModelPath)
+        instance.clear(instance.initialModel)
+        "hasInitialModel" -> true
+      } else {
+        "hasInitialModel" -> false
+      }
+
       // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+
       // Save model data: cluster centers
       val data = Data(instance.clusterCenters)
       val dataPath = new Path(path, "data").toString
@@ -162,6 +174,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
   }
 
   private class KMeansModelReader extends MLReader[KMeansModel] {
+    implicit val format = DefaultFormats
 
     /** Checked against metadata when loading model */
     private val className = classOf[KMeansModel].getName
@@ -175,6 +188,14 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
 
       DefaultParamsReader.getAndSetParams(model, metadata)
+
+      val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
+      if (hasInitialModel) {
+        val initialModelPath = new Path(path, "initial-model").toString
+        val initialModel = KMeansModel.load(initialModelPath)
+        model.set(model.initialModel, initialModel)
+      }
+
       model
     }
   }
@@ -190,8 +211,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
 @Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel]
-    with KMeansParams with HasInitialModel[KMeansModel] with MLWritable {
+  extends Estimator[KMeansModel] with KMeansParams with MLWritable {
 
   setDefault(
     k -> 2,
@@ -325,6 +345,8 @@ object KMeans extends MLReadable[KMeans] {
     private val className = classOf[KMeans].getName
 
     override def load(path: String): KMeans = {
+      implicit val format = DefaultFormats
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val instance = new KMeans(metadata.uid)
       DefaultParamsReader.getAndSetParams(instance, metadata)
