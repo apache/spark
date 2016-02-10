@@ -8,7 +8,7 @@ class BigQueryOperator(BaseOperator):
     """
     Executes BigQuery SQL queries in a specific BigQuery database
     """
-    template_fields = ('bql',)
+    template_fields = ('bql', 'destination_dataset_table')
     template_ext = ('.sql',)
     ui_color = '#e4f0e8'
 
