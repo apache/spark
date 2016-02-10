@@ -11,6 +11,37 @@ from airflow import models
 from airflow.operators.dummy_operator import DummyOperator
 
 
+class DagTest(unittest.TestCase):
+
+    def test_parms_not_passed_is_empty_dict(self):
+        """
+        Test that when 'params' is _not_ passed to a new Dag, that the params
+        attribute is set to an empty dictionary.
+        """
+        dag = models.DAG('test-dag')
+
+        assert type(dag.params) == dict
+        assert len(dag.params) == 0
+
+    def test_params_passed_and_params_in_default_args_no_override(self):
+        """
+        Test that when 'params' exists as a key passed to the default_args dict
+        in addition to params being passed explicitly as an argument to the
+        dag, that the 'params' key of the default_args dict is merged with the
+        dict of the params argument.
+        """
+        params1 = {'parameter1': 1}
+        params2 = {'parameter2': 2}
+
+        dag = models.DAG('test-dag',
+                         default_args={'params': params1},
+                         params=params2)
+
+        params_combined = params1.copy()
+        params_combined.update(params2)
+        assert dag.params == params_combined
+
+
 class DagRunTest(unittest.TestCase):
     def test_id_for_date(self):
         run_id = models.DagRun.id_for_date(
