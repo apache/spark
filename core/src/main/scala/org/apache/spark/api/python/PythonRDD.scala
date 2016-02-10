@@ -31,7 +31,6 @@ import scala.language.postfixOps
 import scala.ref
 import scala.util.control.NonFatal
 
-
 import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -44,7 +43,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
-
 
 private[spark] class PythonRDD(
     parent: RDD[_],
@@ -923,7 +921,9 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
        in.close();
     }
   }
-  /** Create a seperate daemon thread to remove phantomreferences from queue and invoke cleanup */     
+  /** Create a seperate daemon thread 
+   *  to remove phantomreferences from queue and invoke cleanup 
+   */
     val referenceThread = new Thread(threadName){
     setDaemon(true)
       override def run() {
