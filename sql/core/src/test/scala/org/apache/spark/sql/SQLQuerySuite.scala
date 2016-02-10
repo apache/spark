@@ -2070,12 +2070,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(null, null, 1, 1, 3) :: Nil
     )
 
-    intercept[AnalysisException] {
+    var error = intercept[AnalysisException] {
       sql("select course, year, grouping(course) from courseSales group by course, year")
     }
-    intercept[AnalysisException] {
+    assert(error.getMessage contains "grouping() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
       sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
     }
+    assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
   }
 
   test("SPARK-13056: Null in map value causes NPE") {
