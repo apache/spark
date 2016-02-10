@@ -25,7 +25,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
@@ -96,6 +96,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("union all") {
+    val unionDF = testData.unionAll(testData).unionAll(testData)
+      .unionAll(testData).unionAll(testData)
+
+    // Before optimizer, Union should be combined.
+    assert(unionDF.queryExecution.analyzed.collect {
+      case j: Union if j.children.size == 5 => j }.size === 1)
+
+    checkAnswer(
+      unionDF.agg(avg('key), max('key), min('key), sum('key)),
+      Row(50.5, 100, 1, 25250) :: Nil
+    )
   }
 
   test("empty data frame") {
@@ -335,6 +349,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.intersect(nullInts),
+      Row(1) ::
+      Row(2) ::
+      Row(3) ::
+      Row(null) :: Nil)
+
+    // check if values are de-duplicated
+    checkAnswer(
+      allNulls.intersect(allNulls),
+      Row(null) :: Nil)
+
+    // check if values are de-duplicated
+    val df = Seq(("id1", 1), ("id1", 1), ("id", 1), ("id1", 2)).toDF("id", "value")
+    checkAnswer(
+      df.intersect(df),
+      Row("id1", 1) ::
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
   }
 
   test("intersect - nullability") {
@@ -917,6 +952,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val expected = (1 to 100).map(_ -> random.nextDouble()).sortBy(_._2).map(_._1)
     val actual = df.sort(rand(seed)).collect().map(_.getInt(0))
     assert(expected === actual)
+  }
+
+  test("Sorting columns are not in Filter and Project") {
+    checkAnswer(
+      upperCaseData.filter('N > 1).select('N).filter('N < 6).orderBy('L.asc),
+      Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
   }
 
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {

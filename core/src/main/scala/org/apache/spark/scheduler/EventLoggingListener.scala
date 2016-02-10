@@ -200,7 +200,9 @@ private[spark] class EventLoggingListener(
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
-    logEvent(event, flushLogger = true)
+    if (event.logEvent) {
+      logEvent(event, flushLogger = true)
+    }
   }
 
   /**
@@ -230,8 +232,6 @@ private[spark] object EventLoggingListener extends Logging {
   // Suffix applied to the names of files still being written by applications.
   val IN_PROGRESS = ".inprogress"
   val DEFAULT_LOG_DIR = "/tmp/spark-events"
-  val SPARK_VERSION_KEY = "SPARK_VERSION"
-  val COMPRESSION_CODEC_KEY = "COMPRESSION_CODEC"
 
   private val LOG_FILE_PERMISSIONS = new FsPermission(Integer.parseInt("770", 8).toShort)
 

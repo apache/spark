@@ -233,14 +233,14 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
-    val taskMetrics = metricsUpdate.taskMetrics
+    val accumUpdates = metricsUpdate.accumUpdates
     ("Event" -> Utils.getFormattedClassName(metricsUpdate)) ~
     ("Executor ID" -> execId) ~
-    ("Metrics Updated" -> taskMetrics.map { case (taskId, stageId, stageAttemptId, metrics) =>
+    ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
       ("Task ID" -> taskId) ~
       ("Stage ID" -> stageId) ~
       ("Stage Attempt ID" -> stageAttemptId) ~
-      ("Task Metrics" -> taskMetricsToJson(metrics))
+      ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     })
   }
 
@@ -265,7 +265,7 @@ private[spark] object JsonProtocol {
     ("Completion Time" -> completionTime) ~
     ("Failure Reason" -> failureReason) ~
     ("Accumulables" -> JArray(
-        stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
+      stageInfo.accumulables.values.map(accumulableInfoToJson).toList))
   }
 
   def taskInfoToJson(taskInfo: TaskInfo): JValue = {
@@ -284,11 +284,45 @@ private[spark] object JsonProtocol {
   }
 
   def accumulableInfoToJson(accumulableInfo: AccumulableInfo): JValue = {
+    val name = accumulableInfo.name
     ("ID" -> accumulableInfo.id) ~
-    ("Name" -> accumulableInfo.name) ~
-    ("Update" -> accumulableInfo.update.map(new JString(_)).getOrElse(JNothing)) ~
-    ("Value" -> accumulableInfo.value) ~
-    ("Internal" -> accumulableInfo.internal)
+    ("Name" -> name) ~
+    ("Update" -> accumulableInfo.update.map { v => accumValueToJson(name, v) }) ~
+    ("Value" -> accumulableInfo.value.map { v => accumValueToJson(name, v) }) ~
+    ("Internal" -> accumulableInfo.internal) ~
+    ("Count Failed Values" -> accumulableInfo.countFailedValues) ~
+    ("Metadata" -> accumulableInfo.metadata)
+  }
+
+  /**
+   * Serialize the value of an accumulator to JSON.
+   *
+   * For accumulators representing internal task metrics, this looks up the relevant
+   * [[AccumulatorParam]] to serialize the value accordingly. For all other accumulators,
+   * this will simply serialize the value as a string.
+   *
+   * The behavior here must match that of [[accumValueFromJson]]. Exposed for testing.
+   */
+  private[util] def accumValueToJson(name: Option[String], value: Any): JValue = {
+    import AccumulatorParam._
+    if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
+      (value, InternalAccumulator.getParam(name.get)) match {
+        case (v: Int, IntAccumulatorParam) => JInt(v)
+        case (v: Long, LongAccumulatorParam) => JInt(v)
+        case (v: String, StringAccumulatorParam) => JString(v)
+        case (v, UpdatedBlockStatusesAccumulatorParam) =>
+          JArray(v.asInstanceOf[Seq[(BlockId, BlockStatus)]].toList.map { case (id, status) =>
+            ("Block ID" -> id.toString) ~
+            ("Status" -> blockStatusToJson(status))
+          })
+        case (v, p) =>
+          throw new IllegalArgumentException(s"unexpected combination of accumulator value " +
+            s"type (${v.getClass.getName}) and param (${p.getClass.getName}) in '${name.get}'")
+      }
+    } else {
+      // For all external accumulators, just use strings
+      JString(value.toString)
+    }
   }
 
   def taskMetricsToJson(taskMetrics: TaskMetrics): JValue = {
@@ -303,9 +337,9 @@ private[spark] object JsonProtocol {
       }.getOrElse(JNothing)
     val shuffleWriteMetrics: JValue =
       taskMetrics.shuffleWriteMetrics.map { wm =>
-        ("Shuffle Bytes Written" -> wm.shuffleBytesWritten) ~
-        ("Shuffle Write Time" -> wm.shuffleWriteTime) ~
-        ("Shuffle Records Written" -> wm.shuffleRecordsWritten)
+        ("Shuffle Bytes Written" -> wm.bytesWritten) ~
+        ("Shuffle Write Time" -> wm.writeTime) ~
+        ("Shuffle Records Written" -> wm.recordsWritten)
       }.getOrElse(JNothing)
     val inputMetrics: JValue =
       taskMetrics.inputMetrics.map { im =>
@@ -324,7 +358,6 @@ private[spark] object JsonProtocol {
         ("Block ID" -> id.toString) ~
         ("Status" -> blockStatusToJson(status))
       })
-    ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
     ("Result Size" -> taskMetrics.resultSize) ~
@@ -352,12 +385,12 @@ private[spark] object JsonProtocol {
         ("Message" -> fetchFailed.message)
       case exceptionFailure: ExceptionFailure =>
         val stackTrace = stackTraceToJson(exceptionFailure.stackTrace)
-        val metrics = exceptionFailure.metrics.map(taskMetricsToJson).getOrElse(JNothing)
+        val accumUpdates = JArray(exceptionFailure.accumUpdates.map(accumulableInfoToJson).toList)
         ("Class Name" -> exceptionFailure.className) ~
         ("Description" -> exceptionFailure.description) ~
         ("Stack Trace" -> stackTrace) ~
         ("Full Stack Trace" -> exceptionFailure.fullStackTrace) ~
-        ("Metrics" -> metrics)
+        ("Accumulator Updates" -> accumUpdates)
       case taskCommitDenied: TaskCommitDenied =>
         ("Job ID" -> taskCommitDenied.jobID) ~
         ("Partition ID" -> taskCommitDenied.partitionID) ~
@@ -619,14 +652,15 @@ private[spark] object JsonProtocol {
 
   def executorMetricsUpdateFromJson(json: JValue): SparkListenerExecutorMetricsUpdate = {
     val execInfo = (json \ "Executor ID").extract[String]
-    val taskMetrics = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
+    val accumUpdates = (json \ "Metrics Updated").extract[List[JValue]].map { json =>
       val taskId = (json \ "Task ID").extract[Long]
       val stageId = (json \ "Stage ID").extract[Int]
       val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
-      val metrics = taskMetricsFromJson(json \ "Task Metrics")
-      (taskId, stageId, stageAttemptId, metrics)
+      val updates =
+        (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
+      (taskId, stageId, stageAttemptId, updates)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, taskMetrics)
+    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
   }
 
   /** --------------------------------------------------------------------- *
@@ -647,7 +681,7 @@ private[spark] object JsonProtocol {
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
     val accumulatedValues = (json \ "Accumulables").extractOpt[List[JValue]] match {
-      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
     }
 
@@ -675,7 +709,7 @@ private[spark] object JsonProtocol {
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
     val accumulables = (json \ "Accumulables").extractOpt[Seq[JValue]] match {
-      case Some(values) => values.map(accumulableInfoFromJson(_))
+      case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
     }
 
@@ -690,11 +724,44 @@ private[spark] object JsonProtocol {
 
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
     val id = (json \ "ID").extract[Long]
-    val name = (json \ "Name").extract[String]
-    val update = Utils.jsonOption(json \ "Update").map(_.extract[String])
-    val value = (json \ "Value").extract[String]
+    val name = (json \ "Name").extractOpt[String]
+    val update = Utils.jsonOption(json \ "Update").map { v => accumValueFromJson(name, v) }
+    val value = Utils.jsonOption(json \ "Value").map { v => accumValueFromJson(name, v) }
     val internal = (json \ "Internal").extractOpt[Boolean].getOrElse(false)
-    AccumulableInfo(id, name, update, value, internal)
+    val countFailedValues = (json \ "Count Failed Values").extractOpt[Boolean].getOrElse(false)
+    val metadata = (json \ "Metadata").extractOpt[String]
+    new AccumulableInfo(id, name, update, value, internal, countFailedValues, metadata)
+  }
+
+  /**
+   * Deserialize the value of an accumulator from JSON.
+   *
+   * For accumulators representing internal task metrics, this looks up the relevant
+   * [[AccumulatorParam]] to deserialize the value accordingly. For all other
+   * accumulators, this will simply deserialize the value as a string.
+   *
+   * The behavior here must match that of [[accumValueToJson]]. Exposed for testing.
+   */
+  private[util] def accumValueFromJson(name: Option[String], value: JValue): Any = {
+    import AccumulatorParam._
+    if (name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))) {
+      (value, InternalAccumulator.getParam(name.get)) match {
+        case (JInt(v), IntAccumulatorParam) => v.toInt
+        case (JInt(v), LongAccumulatorParam) => v.toLong
+        case (JString(v), StringAccumulatorParam) => v
+        case (JArray(v), UpdatedBlockStatusesAccumulatorParam) =>
+          v.map { blockJson =>
+            val id = BlockId((blockJson \ "Block ID").extract[String])
+            val status = blockStatusFromJson(blockJson \ "Status")
+            (id, status)
+          }
+        case (v, p) =>
+          throw new IllegalArgumentException(s"unexpected combination of accumulator " +
+            s"value in JSON ($v) and accumulator param (${p.getClass.getName}) in '${name.get}'")
+       }
+     } else {
+       value.extract[String]
+     }
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
@@ -702,7 +769,6 @@ private[spark] object JsonProtocol {
       return TaskMetrics.empty
     }
     val metrics = new TaskMetrics
-    metrics.setHostname((json \ "Host Name").extract[String])
     metrics.setExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
     metrics.setExecutorRunTime((json \ "Executor Run Time").extract[Long])
     metrics.setResultSize((json \ "Result Size").extract[Long])
@@ -745,8 +811,8 @@ private[spark] object JsonProtocol {
     Utils.jsonOption(json \ "Input Metrics").foreach { inJson =>
       val readMethod = DataReadMethod.withName((inJson \ "Data Read Method").extract[String])
       val inputMetrics = metrics.registerInputMetrics(readMethod)
-      inputMetrics.incBytesRead((inJson \ "Bytes Read").extract[Long])
-      inputMetrics.incRecordsRead((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
+      inputMetrics.incBytesReadInternal((inJson \ "Bytes Read").extract[Long])
+      inputMetrics.incRecordsReadInternal((inJson \ "Records Read").extractOpt[Long].getOrElse(0L))
     }
 
     // Updated blocks
@@ -787,10 +853,12 @@ private[spark] object JsonProtocol {
         val className = (json \ "Class Name").extract[String]
         val description = (json \ "Description").extract[String]
         val stackTrace = stackTraceFromJson(json \ "Stack Trace")
-        val fullStackTrace = Utils.jsonOption(json \ "Full Stack Trace").
-          map(_.extract[String]).orNull
-        val metrics = Utils.jsonOption(json \ "Metrics").map(taskMetricsFromJson)
-        ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics, None)
+        val fullStackTrace = (json \ "Full Stack Trace").extractOpt[String].orNull
+        // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
+        val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
+          .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
+          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulatorUpdates())
+        ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled
       case `taskCommitDenied` =>

@@ -28,6 +28,7 @@ import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsFile = "cars.csv"
+  private val carsMalformedFile = "cars-malformed.csv"
   private val carsFile8859 = "cars_iso-8859-1.csv"
   private val carsTsvFile = "cars.tsv"
   private val carsAltFile = "cars-alternative.csv"
@@ -191,6 +192,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
   }
 
+  test("test for tokens more than the fields in the schema") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", "false")
+      .option("comment", "~")
+      .load(testFile(carsMalformedFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
   test("test with null quote character") {
     val cars = sqlContext.read
       .format("csv")
@@ -348,5 +360,31 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val results = cars.collect()
     assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+  }
+
+  test("save csv with compression codec option") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(testFile(carsFile))
+
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", "gZiP")
+        .save(csvDir)
+
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .load(csvDir)
+
+      verifyCars(carsCopy, withHeader = true)
+    }
   }
 }

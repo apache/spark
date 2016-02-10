@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.joins.BroadcastHashJoin
+import org.apache.spark.sql.functions.{avg, broadcast, col, max}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
@@ -34,5 +39,34 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       (p: SparkPlan) => Filter('a == 1, p),
       sortAnswers = false
     )
+  }
+
+  test("Aggregate should be included in WholeStageCodegen") {
+    val df = sqlContext.range(10).groupBy().agg(max(col("id")), avg(col("id")))
+    val plan = df.queryExecution.executedPlan
+    assert(plan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[TungstenAggregate]).isDefined)
+    assert(df.collect() === Array(Row(9, 4.5)))
+  }
+
+  test("Aggregate with grouping keys should be included in WholeStageCodegen") {
+    val df = sqlContext.range(3).groupBy("id").count().orderBy("id")
+    val plan = df.queryExecution.executedPlan
+    assert(plan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[TungstenAggregate]).isDefined)
+    assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
+  }
+
+  test("BroadcastHashJoin should be included in WholeStageCodegen") {
+    val rdd = sqlContext.sparkContext.makeRDD(Seq(Row(1, "1"), Row(1, "1"), Row(2, "2")))
+    val schema = new StructType().add("k", IntegerType).add("v", StringType)
+    val smallDF = sqlContext.createDataFrame(rdd, schema)
+    val df = sqlContext.range(10).join(broadcast(smallDF), col("k") === col("id"))
+    assert(df.queryExecution.executedPlan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[BroadcastHashJoin]).isDefined)
+    assert(df.collect() === Array(Row(1, 1, "1"), Row(1, 1, "1"), Row(2, 2, "2")))
   }
 }

@@ -42,14 +42,22 @@ class ZeroMQStreamSuite extends SparkFunSuite {
 
     // tests the API, does not actually test data receiving
     val test1: ReceiverInputDStream[String] =
-      ZeroMQUtils.createStream(ssc, publishUrl, subscribe, bytesToObjects)
+      ZeroMQUtils.createStream(
+        ssc, publishUrl, subscribe, bytesToObjects, actorSystemCreator = () => null)
     val test2: ReceiverInputDStream[String] = ZeroMQUtils.createStream(
-      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2)
+      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2, () => null)
     val test3: ReceiverInputDStream[String] = ZeroMQUtils.createStream(
       ssc, publishUrl, subscribe, bytesToObjects,
-      StorageLevel.MEMORY_AND_DISK_SER_2, SupervisorStrategy.defaultStrategy)
+      StorageLevel.MEMORY_AND_DISK_SER_2, () => null, SupervisorStrategy.defaultStrategy)
+    val test4: ReceiverInputDStream[String] =
+      ZeroMQUtils.createStream(ssc, publishUrl, subscribe, bytesToObjects)
+    val test5: ReceiverInputDStream[String] = ZeroMQUtils.createStream(
+      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test6: ReceiverInputDStream[String] = ZeroMQUtils.createStream(
+      ssc, publishUrl, subscribe, bytesToObjects,
+      StorageLevel.MEMORY_AND_DISK_SER_2, supervisorStrategy = SupervisorStrategy.defaultStrategy)
 
-    // TODO: Actually test data receiving
+    // TODO: Actually test data receiving. A real test needs the native ZeroMQ library
     ssc.stop()
   }
 }

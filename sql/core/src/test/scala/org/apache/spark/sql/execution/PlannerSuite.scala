@@ -21,8 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row, SQLConf}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.functions._
@@ -49,18 +48,6 @@ class PlannerSuite extends SharedSQLContext {
     assert(
       aggregations.size == 2 || aggregations.size == 4,
       s"The plan of query $query does not have partial aggregations.")
-  }
-
-  test("unions are collapsed") {
-    val planner = sqlContext.planner
-    import planner._
-    val query = testData.unionAll(testData).unionAll(testData).logicalPlan
-    val planned = BasicOperators(query).head
-    val logicalUnions = query collect { case u: logical.Union => u }
-    val physicalUnions = planned collect { case u: execution.Union => u }
-
-    assert(logicalUnions.size === 2)
-    assert(physicalUnions.size === 1)
   }
 
   test("count is partially aggregated") {
@@ -194,6 +181,12 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
+  test("terminal limits use CollectLimit") {
+    val query = testData.select('value).limit(2)
+    val planned = query.queryExecution.sparkPlan
+    assert(planned.isInstanceOf[CollectLimit])
+  }
+
   test("PartitioningCollection") {
     withTempTable("normal", "small", "tiny") {
       testData.registerTempTable("normal")
@@ -213,7 +206,7 @@ class PlannerSuite extends SharedSQLContext {
           ).queryExecution.executedPlan.collect {
             case exchange: Exchange => exchange
           }.length
-          assert(numExchanges === 3)
+          assert(numExchanges === 5)
         }
 
         {
@@ -228,10 +221,22 @@ class PlannerSuite extends SharedSQLContext {
           ).queryExecution.executedPlan.collect {
             case exchange: Exchange => exchange
           }.length
-          assert(numExchanges === 3)
+          assert(numExchanges === 5)
         }
 
       }
+    }
+  }
+
+  test("collapse adjacent repartitions") {
+    val doubleRepartitioned = testData.repartition(10).repartition(20).coalesce(5)
+    def countRepartitions(plan: LogicalPlan): Int = plan.collect { case r: Repartition => r }.length
+    assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
+    assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 1)
+    doubleRepartitioned.queryExecution.optimizedPlan match {
+      case r: Repartition =>
+        assert(r.numPartitions === 5)
+        assert(r.shuffle === false)
     }
   }
 
