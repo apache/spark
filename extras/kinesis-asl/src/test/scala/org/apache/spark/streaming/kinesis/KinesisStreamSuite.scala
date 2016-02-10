@@ -200,7 +200,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
     val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
-      Seconds(10), StorageLevel.MEMORY_ONLY, addFive,
+      Seconds(10), StorageLevel.MEMORY_ONLY, addFive _,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
     stream shouldBe a [ReceiverInputDStream[_]]
