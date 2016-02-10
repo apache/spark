@@ -133,7 +133,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.readSupport = getReadSupportInstance(
         (Class<? extends ReadSupport<T>>) getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
-        taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
+        configuration, toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
     this.fileSchema = fileSchema;
     this.reader = new ParquetFileReader(configuration, file, blocks, requestedSchema.getColumns());
