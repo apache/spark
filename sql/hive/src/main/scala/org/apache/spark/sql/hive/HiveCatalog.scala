@@ -33,47 +33,81 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
 
-  def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = ???
+  def dropDatabase(
+      db: String,
+      ignoreIfNotExists: Boolean,
+      cascade: Boolean): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Alter an existing database. This operation does not support renaming.
    */
-  def alterDatabase(db: String, dbDefinition: Database): Unit = ???
+  def alterDatabase(db: String, dbDefinition: Database): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def getDatabase(db: String): Database = ???
+  def getDatabase(db: String): Database = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def listDatabases(): Seq[String] = ???
+  def listDatabases(): Seq[String] = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def listDatabases(pattern: String): Seq[String] = ???
+  def listDatabases(pattern: String): Seq[String] = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def createTable(db: String, tableDefinition: Table, ignoreIfExists: Boolean): Unit = ???
+  def createTable(
+      db: String,
+      tableDefinition: Table,
+      ignoreIfExists: Boolean): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit = ???
+  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def renameTable(db: String, oldName: String, newName: String): Unit = ???
+  def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Alter an existing table. This operation does not support renaming.
    */
-  def alterTable(db: String, table: String, tableDefinition: Table): Unit = ???
+  def alterTable(db: String, table: String, tableDefinition: Table): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def getTable(db: String, table: String): Table = ???
+  def getTable(db: String, table: String): Table = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def listTables(db: String): Seq[String] = ???
+  def listTables(db: String): Seq[String] = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def listTables(db: String, pattern: String): Seq[String] = ???
+  def listTables(db: String, pattern: String): Seq[String] = synchronized {
+    throw new UnsupportedOperationException
+  }
 
   def createPartitions(
       db: String,
       table: String,
       parts: Seq[TablePartition],
-      ignoreIfExists: Boolean): Unit = ???
+      ignoreIfExists: Boolean): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
   def dropPartitions(
       db: String,
       table: String,
       parts: Seq[PartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = ???
+      ignoreIfNotExists: Boolean): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Alter an existing table partition and optionally override its spec.
@@ -82,23 +116,42 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       table: String,
       spec: PartitionSpec,
-      newPart: TablePartition): Unit = ???
+      newPart: TablePartition): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition = ???
+  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def listPartitions(db: String, table: String): Seq[TablePartition] = ???
+  def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def createFunction(db: String, funcDefinition: Function, ignoreIfExists: Boolean): Unit = ???
+  def createFunction(
+      db: String,
+      funcDefinition: Function,
+      ignoreIfExists: Boolean): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def dropFunction(db: String, funcName: String): Unit = ???
+  def dropFunction(db: String, funcName: String): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Alter an existing function and optionally override its name.
    */
-  def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit = ???
+  def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def getFunction(db: String, funcName: String): Function = ???
+  def getFunction(db: String, funcName: String): Function = synchronized {
+    throw new UnsupportedOperationException
+  }
 
-  def listFunctions(db: String, pattern: String): Seq[String] = ???
+  def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
+    throw new UnsupportedOperationException
+  }
 
 }
