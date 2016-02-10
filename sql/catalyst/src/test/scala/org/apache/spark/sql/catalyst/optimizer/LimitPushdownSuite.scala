@@ -42,6 +42,8 @@ class LimitPushdownSuite extends PlanTest {
   private val x = testRelation.subquery('x)
   private val y = testRelation.subquery('y)
 
+  // Union ---------------------------------------------------------------------------------------
+
   test("Union: limit to each side") {
     val unionQuery = Union(testRelation, testRelation2).limit(1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
@@ -75,6 +77,8 @@ class LimitPushdownSuite extends PlanTest {
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
+  // Outer join ----------------------------------------------------------------------------------
+
   test("left outer join") {
     val originalQuery = x.join(y, LeftOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -86,6 +90,13 @@ class LimitPushdownSuite extends PlanTest {
     val originalQuery = x.join(y, RightOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, x.join(LocalLimit(1, y), RightOuter)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("larger limits are not pushed on top of smaller ones in right outer join") {
+    val originalQuery = x.join(y.limit(5), RightOuter).limit(10)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(10, x.join(Limit(5, y), RightOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -112,6 +123,13 @@ class LimitPushdownSuite extends PlanTest {
     val originalQuery = x.join(yBig, FullOuter).limit(1)
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, x.join(LocalLimit(1, yBig), FullOuter)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("full outer join where both sides are limited") {
+    val originalQuery = x.limit(2).join(y.limit(2), FullOuter).limit(1)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Limit(1, Limit(2, x).join(Limit(2, y), FullOuter)).analyze
     comparePlans(optimized, correctAnswer)
   }
 }
