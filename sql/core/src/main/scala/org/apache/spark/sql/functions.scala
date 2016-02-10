@@ -420,7 +420,8 @@ object functions extends LegacyFunctions {
     *
     *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
     *
-    * Note: the list of columns should match with grouping columns exactly.
+    * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+    * grouping columns).
     *
     * @group agg_funcs
     * @since 2.0.0

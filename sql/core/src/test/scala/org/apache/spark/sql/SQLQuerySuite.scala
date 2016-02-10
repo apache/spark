@@ -2069,6 +2069,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row(null, 2013, 1, 0, 2) ::
         Row(null, null, 1, 1, 3) :: Nil
     )
+
+    intercept[AnalysisException] {
+      sql("select course, year, grouping(course) from courseSales group by course, year")
+    }
+    intercept[AnalysisException] {
+      sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
+    }
   }
 
   test("SPARK-13056: Null in map value causes NPE") {

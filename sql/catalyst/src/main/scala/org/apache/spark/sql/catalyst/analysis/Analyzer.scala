@@ -242,6 +242,7 @@ class Analyzer(
           // collect all the found AggregateExpression, so we can check an expression is part of
           // any AggregateExpression or not.
           val aggsBuffer = ArrayBuffer[Expression]()
+          // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
           def isPartOfAggregation(e: Expression): Boolean = {
             aggsBuffer.exists(a => a.find(_ eq e).isDefined)
           }
@@ -254,7 +255,7 @@ class Analyzer(
               e
             case e if isPartOfAggregation(e) => e
             case e: GroupingID =>
-              if (e.groupByExprs == x.groupByExprs) {
+              if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
                 gid
               } else {
                 throw new AnalysisException(

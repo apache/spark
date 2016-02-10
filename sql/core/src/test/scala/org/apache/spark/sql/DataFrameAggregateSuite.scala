@@ -113,6 +113,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         Row(null, 2013, 1, 0, 2) ::
         Row(null, null, 1, 1, 3) :: Nil
     )
+
+    intercept[AnalysisException] {
+      courseSales.groupBy().agg(grouping("course")).explain()
+    }
+    intercept[AnalysisException] {
+      courseSales.groupBy().agg(grouping_id("course")).explain()
+    }
   }
 
   test("grouping/grouping_id inside window function") {
