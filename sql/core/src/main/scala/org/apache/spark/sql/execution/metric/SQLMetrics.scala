@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.metric
 
-import org.apache.spark.{Accumulable, AccumulableParam, SparkContext}
+import org.apache.spark.{Accumulable, AccumulableParam, Accumulators, SparkContext}
+import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.util.Utils
 
 /**
@@ -27,8 +28,15 @@ import org.apache.spark.util.Utils
  * An implementation of SQLMetric should override `+=` and `add` to avoid boxing.
  */
 private[sql] abstract class SQLMetric[R <: SQLMetricValue[T], T](
-    name: String, val param: SQLMetricParam[R, T])
-  extends Accumulable[R, T](param.zero, param, Some(name), true) {
+    name: String,
+    val param: SQLMetricParam[R, T])
+  extends Accumulable[R, T](param.zero, param, Some(name), internal = true) {
+
+  // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
+  override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
+    new AccumulableInfo(id, Some(name), update, value, isInternal, countFailedValues,
+      Some(SQLMetrics.ACCUM_IDENTIFIER))
+  }
 
   def reset(): Unit = {
     this.value = param.zero
@@ -73,6 +81,14 @@ private[sql] class LongSQLMetricValue(private var _value : Long) extends SQLMetr
 
   // Although there is a boxing here, it's fine because it's only called in SQLListener
   override def value: Long = _value
+
+  // Needed for SQLListenerSuite
+  override def equals(other: Any): Boolean = {
+    other match {
+      case o: LongSQLMetricValue => value == o.value
+      case _ => false
+    }
+  }
 }
 
 /**
@@ -126,11 +142,16 @@ private object StaticsLongSQLMetricParam extends LongSQLMetricParam(
 
 private[sql] object SQLMetrics {
 
+  // Identifier for distinguishing SQL metrics from other accumulators
+  private[sql] val ACCUM_IDENTIFIER = "sql"
+
   private def createLongMetric(
       sc: SparkContext,
       name: String,
       param: LongSQLMetricParam): LongSQLMetric = {
     val acc = new LongSQLMetric(name, param)
+    // This is an internal accumulator so we need to register it explicitly.
+    Accumulators.register(acc)
     sc.cleaner.foreach(_.registerAccumulatorForCleanup(acc))
     acc
   }

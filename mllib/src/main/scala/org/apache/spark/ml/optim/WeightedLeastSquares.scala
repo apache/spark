@@ -31,7 +31,12 @@ import org.apache.spark.rdd.RDD
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
-    val diagInvAtWA: DenseVector) extends Serializable
+    val diagInvAtWA: DenseVector) extends Serializable {
+
+  def predict(features: Vector): Double = {
+    BLAS.dot(coefficients, features) + intercept
+  }
+}
 
 /**
  * Weighted least squares solver via normal equation.
@@ -86,6 +91,24 @@ private[ml] class WeightedLeastSquares(
     val aaBar = summary.aaBar
     val aaValues = aaBar.values
 
+    if (bStd == 0) {
+      if (fitIntercept) {
+        logWarning(s"The standard deviation of the label is zero, so the coefficients will be " +
+          s"zeros and the intercept will be the mean of the label; as a result, " +
+          s"training is not needed.")
+        val coefficients = new DenseVector(Array.ofDim(k-1))
+        val intercept = bBar
+        val diagInvAtWA = new DenseVector(Array(0D))
+        return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA)
+      } else {
+        require(!(regParam > 0.0 && standardizeLabel),
+          "The standard deviation of the label is zero. " +
+            "Model cannot be regularized with standardization=true")
+        logWarning(s"The standard deviation of the label is zero. " +
+          "Consider setting fitIntercept=true.")
+      }
+    }
+
     // add regularization to diagonals
     var i = 0
     var j = 2
@@ -94,8 +117,7 @@ private[ml] class WeightedLeastSquares(
       if (standardizeFeatures) {
         lambda *= aVar(j - 2)
       }
-      if (standardizeLabel) {
-        // TODO: handle the case when bStd = 0
+      if (standardizeLabel && bStd != 0) {
         lambda /= bStd
       }
       aaValues(i) += lambda

@@ -43,7 +43,7 @@ class JoinOrderSuite extends PlanTest {
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
         ColumnPruning,
-        ProjectCollapsing) :: Nil
+        CollapseProject) :: Nil
 
   }
 

@@ -70,8 +70,7 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
    */
   protected def makeMemoryStore(mm: MemoryManager): MemoryStore = {
     val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
-    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any()))
-      .thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
+    when(ms.evictBlocksToFreeSpace(any(), anyLong())).thenAnswer(evictBlocksToFreeSpaceAnswer(mm))
     mm.setMemoryStore(ms)
     ms
   }
@@ -89,9 +88,9 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     * records the number of bytes this is called with. This variable is expected to be cleared
     * by the test code later through [[assertEvictBlocksToFreeSpaceCalled]].
     */
-  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Boolean] = {
-    new Answer[Boolean] {
-      override def answer(invocation: InvocationOnMock): Boolean = {
+  private def evictBlocksToFreeSpaceAnswer(mm: MemoryManager): Answer[Long] = {
+    new Answer[Long] {
+      override def answer(invocation: InvocationOnMock): Long = {
         val args = invocation.getArguments
         val numBytesToFree = args(1).asInstanceOf[Long]
         assert(numBytesToFree > 0)
@@ -101,20 +100,12 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
         if (numBytesToFree <= mm.storageMemoryUsed) {
           // We can evict enough blocks to fulfill the request for space
           mm.releaseStorageMemory(numBytesToFree)
-          args.last.asInstanceOf[mutable.Buffer[(BlockId, BlockStatus)]].append(
-            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
-          // We need to add this call so that that the suite-level `evictedBlocks` is updated when
-          // execution evicts storage; in that case, args.last will not be equal to evictedBlocks
-          // because it will be a temporary buffer created inside of the MemoryManager rather than
-          // being passed in by the test code.
-          if (!(evictedBlocks eq args.last)) {
-            evictedBlocks.append(
-              (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L, 0L)))
-          }
-          true
+          evictedBlocks.append(
+            (null, BlockStatus(StorageLevel.MEMORY_ONLY, numBytesToFree, 0L)))
+          numBytesToFree
         } else {
           // No blocks were evicted because eviction would not free enough space.
-          false
+          0L
         }
       }
     }

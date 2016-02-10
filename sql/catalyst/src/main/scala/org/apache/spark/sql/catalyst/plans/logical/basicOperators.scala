@@ -19,12 +19,22 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.Encoder
-import org.apache.spark.sql.catalyst.encoders._
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
+
+/**
+ * When planning take() or collect() operations, this special node that is inserted at the top of
+ * the logical plan before invoking the query planner.
+ *
+ * Rules can pattern-match on this node in order to apply transformations that only take effect
+ * at the top of the logical query plan.
+ */
+case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
 
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
@@ -88,46 +98,128 @@ case class Generate(
   }
 }
 
-case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+case class Filter(condition: Expression, child: LogicalPlan)
+  extends UnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
+
+  override protected def validConstraints: Set[Expression] = {
+    child.constraints.union(splitConjunctivePredicates(condition).toSet)
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
-  override def output: Seq[Attribute] =
-    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
-      leftAttr.withNullability(leftAttr.nullable || rightAttr.nullable)
-    }
 
-  final override lazy val resolved: Boolean =
-    childrenResolved &&
-      left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+  protected def leftConstraints: Set[Expression] = left.constraints
+
+  protected def rightConstraints: Set[Expression] = {
+    require(left.output.size == right.output.size)
+    val attributeRewrites = AttributeMap(right.output.zip(left.output))
+    right.constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
 }
 
 private[sql] object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
 }
 
-case class Union(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
 
-  override def statistics: Statistics = {
-    val sizeInBytes = left.statistics.sizeInBytes + right.statistics.sizeInBytes
-    Statistics(sizeInBytes = sizeInBytes)
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
+  override def output: Seq[Attribute] =
+    left.output.zip(right.output).map { case (leftAttr, rightAttr) =>
+      leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
+    }
+
+  override protected def validConstraints: Set[Expression] = {
+    leftConstraints.union(rightConstraints)
   }
-}
 
-case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right)
+  // Intersect are only resolved if they don't introduce ambiguous expression ids,
+  // since the Optimizer will convert Intersect to Join.
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      duplicateResolved
+}
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+
+  override protected def validConstraints: Set[Expression] = leftConstraints
+
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      left.output.length == right.output.length &&
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+}
+
+/** Factory for constructing new `Union` nodes. */
+object Union {
+  def apply(left: LogicalPlan, right: LogicalPlan): Union = {
+    Union (left :: right :: Nil)
+  }
+}
+
+case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
+
+  // updating nullability to make all the children consistent
+  override def output: Seq[Attribute] =
+    children.map(_.output).transpose.map(attrs =>
+      attrs.head.withNullability(attrs.exists(_.nullable)))
+
+  override lazy val resolved: Boolean = {
+    // allChildrenCompatible needs to be evaluated after childrenResolved
+    def allChildrenCompatible: Boolean =
+      children.tail.forall( child =>
+        // compare the attribute number with the first child
+        child.output.length == children.head.output.length &&
+        // compare the data types with the first child
+        child.output.zip(children.head.output).forall {
+          case (l, r) => l.dataType == r.dataType }
+      )
+
+    children.length > 1 && childrenResolved && allChildrenCompatible
+  }
+
+  override def statistics: Statistics = {
+    val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+
+  /**
+   * Maps the constraints containing a given (original) sequence of attributes to those with a
+   * given (reference) sequence of attributes. Given the nature of union, we expect that the
+   * mapping between the original and reference sequences are symmetric.
+   */
+  private def rewriteConstraints(
+      reference: Seq[Attribute],
+      original: Seq[Attribute],
+      constraints: Set[Expression]): Set[Expression] = {
+    require(reference.size == original.size)
+    val attributeRewrites = AttributeMap(original.zip(reference))
+    constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
+
+  override protected def validConstraints: Set[Expression] = {
+    children
+      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
+      .reduce(_ intersect _)
+  }
 }
 
 case class Join(
-  left: LogicalPlan,
-  right: LogicalPlan,
-  joinType: JoinType,
-  condition: Option[Expression]) extends BinaryNode {
+    left: LogicalPlan,
+    right: LogicalPlan,
+    joinType: JoinType,
+    condition: Option[Expression])
+  extends BinaryNode with PredicateHelper {
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -144,14 +236,44 @@ case class Join(
     }
   }
 
-  def selfJoinResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+  override protected def validConstraints: Set[Expression] = {
+    joinType match {
+      case Inner if condition.isDefined =>
+        left.constraints
+          .union(right.constraints)
+          .union(splitConjunctivePredicates(condition.get).toSet)
+      case LeftSemi if condition.isDefined =>
+        left.constraints
+          .union(splitConjunctivePredicates(condition.get).toSet)
+      case Inner =>
+        left.constraints.union(right.constraints)
+      case LeftSemi =>
+        left.constraints
+      case LeftOuter =>
+        left.constraints
+      case RightOuter =>
+        right.constraints
+      case FullOuter =>
+        Set.empty[Expression]
+    }
+  }
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
-  override lazy val resolved: Boolean = {
+  // NaturalJoin should be ready for resolution only if everything else is resolved here
+  lazy val resolvedExceptNatural: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
-      selfJoinResolved &&
+      duplicateResolved &&
       condition.forall(_.dataType == BooleanType)
+  }
+
+  // if not a natural join, use `resolvedExceptNatural`. if it is a natural join, we still need
+  // to eliminate natural before we mark it resolved.
+  override lazy val resolved: Boolean = joinType match {
+    case NaturalJoin(_) => false
+    case _ => resolvedExceptNatural
   }
 }
 
@@ -224,7 +346,7 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode {
+    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
   require(step != 0, "step cannot be 0")
   val numElements: BigInt = {
     val safeStart = BigInt(start)
@@ -236,6 +358,9 @@ case class Range(
       (safeEnd - safeStart) / step + 1
     }
   }
+
+  override def newInstance(): Range =
+    Range(start, end, step, numSlices, output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
@@ -479,121 +604,4 @@ case object OneRowRelation extends LeafNode {
    * [[LeafNode]]s must override this.
    */
   override def statistics: Statistics = Statistics(sizeInBytes = 1)
-}
-
-/**
- * A relation produced by applying `func` to each partition of the `child`. tEncoder/uEncoder are
- * used respectively to decode/encode from the JVM object representation expected by `func.`
- */
-case class MapPartitions[T, U](
-    func: Iterator[T] => Iterator[U],
-    tEncoder: ExpressionEncoder[T],
-    uEncoder: ExpressionEncoder[U],
-    output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-  override def producedAttributes: AttributeSet = outputSet
-}
-
-/** Factory for constructing new `AppendColumn` nodes. */
-object AppendColumns {
-  def apply[T, U : Encoder](
-      func: T => U,
-      tEncoder: ExpressionEncoder[T],
-      child: LogicalPlan): AppendColumns[T, U] = {
-    val attrs = encoderFor[U].schema.toAttributes
-    new AppendColumns[T, U](func, tEncoder, encoderFor[U], attrs, child)
-  }
-}
-
-/**
- * A relation produced by applying `func` to each partition of the `child`, concatenating the
- * resulting columns at the end of the input row. tEncoder/uEncoder are used respectively to
- * decode/encode from the JVM object representation expected by `func.`
- */
-case class AppendColumns[T, U](
-    func: T => U,
-    tEncoder: ExpressionEncoder[T],
-    uEncoder: ExpressionEncoder[U],
-    newColumns: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output ++ newColumns
-  override def producedAttributes: AttributeSet = AttributeSet(newColumns)
-}
-
-/** Factory for constructing new `MapGroups` nodes. */
-object MapGroups {
-  def apply[K, T, U : Encoder](
-      func: (K, Iterator[T]) => TraversableOnce[U],
-      kEncoder: ExpressionEncoder[K],
-      tEncoder: ExpressionEncoder[T],
-      groupingAttributes: Seq[Attribute],
-      child: LogicalPlan): MapGroups[K, T, U] = {
-    new MapGroups(
-      func,
-      kEncoder,
-      tEncoder,
-      encoderFor[U],
-      groupingAttributes,
-      encoderFor[U].schema.toAttributes,
-      child)
-  }
-}
-
-/**
- * Applies func to each unique group in `child`, based on the evaluation of `groupingAttributes`.
- * Func is invoked with an object representation of the grouping key an iterator containing the
- * object representation of all the rows with that key.
- */
-case class MapGroups[K, T, U](
-    func: (K, Iterator[T]) => TraversableOnce[U],
-    kEncoder: ExpressionEncoder[K],
-    tEncoder: ExpressionEncoder[T],
-    uEncoder: ExpressionEncoder[U],
-    groupingAttributes: Seq[Attribute],
-    output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-  override def producedAttributes: AttributeSet = outputSet
-}
-
-/** Factory for constructing new `CoGroup` nodes. */
-object CoGroup {
-  def apply[Key, Left, Right, Result : Encoder](
-      func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
-      keyEnc: ExpressionEncoder[Key],
-      leftEnc: ExpressionEncoder[Left],
-      rightEnc: ExpressionEncoder[Right],
-      leftGroup: Seq[Attribute],
-      rightGroup: Seq[Attribute],
-      left: LogicalPlan,
-      right: LogicalPlan): CoGroup[Key, Left, Right, Result] = {
-    CoGroup(
-      func,
-      keyEnc,
-      leftEnc,
-      rightEnc,
-      encoderFor[Result],
-      encoderFor[Result].schema.toAttributes,
-      leftGroup,
-      rightGroup,
-      left,
-      right)
-  }
-}
-
-/**
- * A relation produced by applying `func` to each grouping key and associated values from left and
- * right children.
- */
-case class CoGroup[Key, Left, Right, Result](
-    func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],
-    keyEnc: ExpressionEncoder[Key],
-    leftEnc: ExpressionEncoder[Left],
-    rightEnc: ExpressionEncoder[Right],
-    resultEnc: ExpressionEncoder[Result],
-    output: Seq[Attribute],
-    leftGroup: Seq[Attribute],
-    rightGroup: Seq[Attribute],
-    left: LogicalPlan,
-    right: LogicalPlan) extends BinaryNode {
-  override def producedAttributes: AttributeSet = outputSet
 }

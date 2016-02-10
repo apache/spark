@@ -24,21 +24,23 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.exec.{FunctionRegistry, FunctionInfo}
+import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.parse.EximUtil
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.ParseUtils._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, AnalyzeTable, DropTable, HiveScriptIOSchema}
+import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.AnalysisException
 
@@ -78,7 +80,7 @@ private[hive] case class CreateViewAsSelect(
 }
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
-private[hive] object HiveQl extends SparkQl with Logging {
+private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging {
   protected val nativeCommands = Seq(
     "TOK_ALTERDATABASE_OWNER",
     "TOK_ALTERDATABASE_PROPERTIES",
@@ -112,7 +114,6 @@ private[hive] object HiveQl extends SparkQl with Logging {
     "TOK_CREATEROLE",
 
     "TOK_DESCDATABASE",
-    "TOK_DESCFUNCTION",
 
     "TOK_DROPDATABASE",
     "TOK_DROPFUNCTION",
@@ -150,12 +151,9 @@ private[hive] object HiveQl extends SparkQl with Logging {
     "TOK_SHOW_TRANSACTIONS",
     "TOK_SHOWCOLUMNS",
     "TOK_SHOWDATABASES",
-    "TOK_SHOWFUNCTIONS",
     "TOK_SHOWINDEXES",
     "TOK_SHOWLOCKS",
     "TOK_SHOWPARTITIONS",
-
-    "TOK_SWITCHDATABASE",
 
     "TOK_UNLOCKTABLE"
   )
@@ -166,8 +164,6 @@ private[hive] object HiveQl extends SparkQl with Logging {
     "TOK_SHOWTABLES",
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
-
-  protected val hqlParser = new ExtendedHiveQlParser
 
   /**
    * Returns the HiveConf
@@ -184,9 +180,6 @@ private[hive] object HiveQl extends SparkQl with Logging {
     }
     ss.getConf
   }
-
-  /** Returns a LogicalPlan for a given HiveQL string. */
-  def parseSql(sql: String): LogicalPlan = hqlParser.parse(sql)
 
   protected def getProperties(node: ASTNode): Seq[(String, String)] = node match {
     case Token("TOK_TABLEPROPLIST", list) =>
@@ -229,15 +222,16 @@ private[hive] object HiveQl extends SparkQl with Logging {
     CreateViewAsSelect(tableDesc, nodeToPlan(query), allowExist, replace, sql)
   }
 
-  protected override def createPlan(
-      sql: String,
-      node: ASTNode): LogicalPlan = {
-    if (nativeCommands.contains(node.text)) {
-      HiveNativeCommand(sql)
-    } else {
-      nodeToPlan(node) match {
-        case NativePlaceholder => HiveNativeCommand(sql)
-        case plan => plan
+  /** Creates LogicalPlan for a given SQL string. */
+  override def parsePlan(sql: String): LogicalPlan = {
+    safeParse(sql, ParseDriver.parsePlan(sql, conf)) { ast =>
+      if (nativeCommands.contains(ast.text)) {
+        HiveNativeCommand(sql)
+      } else {
+        nodeToPlan(ast) match {
+          case NativePlaceholder => HiveNativeCommand(sql)
+          case plan => plan
+        }
       }
     }
   }
@@ -247,6 +241,15 @@ private[hive] object HiveQl extends SparkQl with Logging {
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
+      case Token("TOK_DFS", Nil) =>
+        HiveNativeCommand(node.source + " " + node.remainder)
+
+      case Token("TOK_ADDFILE", Nil) =>
+        AddFile(node.remainder)
+
+      case Token("TOK_ADDJAR", Nil) =>
+        AddJar(node.remainder)
+
       // Special drop table that also uncaches.
       case Token("TOK_DROPTABLE", Token("TOK_TABNAME", tableNameParts) :: ifExists) =>
         val tableName = tableNameParts.map { case Token(p, Nil) => p }.mkString(".")
@@ -561,7 +564,7 @@ private[hive] object HiveQl extends SparkQl with Logging {
 
   protected override def nodeToTransformation(
       node: ASTNode,
-      child: LogicalPlan): Option[ScriptTransformation] = node match {
+      child: LogicalPlan): Option[logical.ScriptTransformation] = node match {
     case Token("TOK_SELEXPR",
       Token("TOK_TRANSFORM",
       Token("TOK_EXPLIST", inputExprs) ::
@@ -654,7 +657,7 @@ private[hive] object HiveQl extends SparkQl with Logging {
         schemaLess)
 
       Some(
-        ScriptTransformation(
+        logical.ScriptTransformation(
           inputExprs.map(nodeToExpr),
           unescapedScript,
           output,

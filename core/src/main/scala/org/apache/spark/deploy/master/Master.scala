@@ -74,7 +74,7 @@ private[deploy] class Master(
 
   val workers = new HashSet[WorkerInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
-  val waitingApps = new ArrayBuffer[ApplicationInfo]
+  private val waitingApps = new ArrayBuffer[ApplicationInfo]
   val apps = new HashSet[ApplicationInfo]
 
   private val idToWorker = new HashMap[String, WorkerInfo]
@@ -383,7 +383,7 @@ private[deploy] class Master(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterWorker(
-        id, workerHost, workerPort, workerRef, cores, memory, workerUiPort, publicAddress) => {
+        id, workerHost, workerPort, workerRef, cores, memory, workerWebUiUrl) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -392,7 +392,7 @@ private[deploy] class Master(
         context.reply(RegisterWorkerFailed("Duplicate worker ID"))
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          workerRef, workerUiPort, publicAddress)
+          workerRef, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           context.reply(RegisteredWorker(self, masterWebUiUrl))

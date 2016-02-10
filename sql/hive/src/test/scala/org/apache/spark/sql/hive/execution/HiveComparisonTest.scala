@@ -27,10 +27,10 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.execution.{ExplainCommand, SetCommand}
-import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.execution.datasources.DescribeCommand
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable, SQLBuilder}
+import org.apache.spark.sql.hive.test.TestHive
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -150,7 +150,11 @@ abstract class HiveComparisonTest
        """.stripMargin
     })
 
-    super.afterAll()
+    try {
+      TestHive.reset()
+    } finally {
+      super.afterAll()
+    }
   }
 
   protected def prepareAnswer(
@@ -485,7 +489,7 @@ abstract class HiveComparisonTest
                 val executions = queryList.map(new TestHive.QueryExecution(_))
                 executions.foreach(_.toRdd)
                 val tablesGenerated = queryList.zip(executions).flatMap {
-                  case (q, e) => e.executedPlan.collect {
+                  case (q, e) => e.sparkPlan.collect {
                     case i: InsertIntoHiveTable if tablesRead contains i.table.tableName =>
                       (q, e, i)
                   }

@@ -118,7 +118,7 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
       ((evalE: Long) => ~evalE).asInstanceOf[(Any) => Any]
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c => s"(${ctx.javaType(dataType)}) ~($c)")
   }
 
