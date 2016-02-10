@@ -35,7 +35,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
     val providerConfig = parent.getProviderConfig()
     val content =
-      <div class="row-fluid">
+      <div>
           <div class="span12">
             <ul class="unstyled">
               {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
