@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -103,14 +104,23 @@ private[sql] case class PhysicalRDD(
     override val outputPartitioning: Partitioning = UnknownPartitioning(0))
   extends LeafNode {
 
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   protected override def doExecute(): RDD[InternalRow] = {
-    if (isUnsafeRow) {
+    val unsafeRow = if (isUnsafeRow) {
       rdd
     } else {
       rdd.mapPartitionsInternal { iter =>
         val proj = UnsafeProjection.create(schema)
         iter.map(proj)
       }
+    }
+
+    val numOutputRows = longMetric("numOutputRows")
+    unsafeRow.map { r =>
+      numOutputRows += 1
+      r
     }
   }
 

@@ -29,9 +29,6 @@ import org.apache.spark.util.random.PoissonSampler
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryNode with CodegenSupport {
 
-  override private[sql] lazy val metrics = Map(
-    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows"))
-
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
   override def upstream(): RDD[InternalRow] = {
@@ -55,14 +52,10 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numRows = longMetric("numRows")
     child.execute().mapPartitionsInternal { iter =>
       val project = UnsafeProjection.create(projectList, child.output,
         subexpressionEliminationEnabled)
-      iter.map { row =>
-        numRows += 1
-        project(row)
-      }
+      iter.map(project)
     }
   }
 
@@ -74,7 +67,6 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
   override def output: Seq[Attribute] = child.output
 
   private[sql] override lazy val metrics = Map(
-    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def upstream(): RDD[InternalRow] = {
@@ -104,12 +96,10 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
     child.execute().mapPartitionsInternal { iter =>
       val predicate = newPredicate(condition, child.output)
       iter.filter { row =>
-        numInputRows += 1
         val r = predicate(row)
         if (r) numOutputRows += 1
         r
@@ -135,9 +125,7 @@ case class Sample(
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: SparkPlan)
-  extends UnaryNode
-{
+    child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -162,6 +150,9 @@ case class Range(
     numElements: BigInt,
     output: Seq[Attribute])
   extends LeafNode with CodegenSupport {
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def upstream(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
@@ -241,6 +232,7 @@ case class Range(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
     sqlContext
       .sparkContext
       .parallelize(0 until numSlices, numSlices)
@@ -283,6 +275,7 @@ case class Range(
               overflow = true
             }
 
+            numOutputRows += 1
             unsafeRow.setLong(0, ret)
             unsafeRow
           }
