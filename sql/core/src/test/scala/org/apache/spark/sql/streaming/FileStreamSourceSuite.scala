@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
-class FileStreamSourceTest extends StreamTest with SharedSQLContext {
+abstract class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 
   import testImplicits._
 

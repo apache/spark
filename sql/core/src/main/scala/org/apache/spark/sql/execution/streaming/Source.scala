@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import javax.annotation.concurrent.ThreadSafe
+
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -24,6 +26,7 @@ import org.apache.spark.sql.types.StructType
  * monotonically increasing notion of progress that can be represented as an [[Offset]]. Spark
  * will regularly query each [[Source]] to see if any more data is available.
  */
+@ThreadSafe
 trait Source  {
 
   /** Returns the schema of the data from this source */
