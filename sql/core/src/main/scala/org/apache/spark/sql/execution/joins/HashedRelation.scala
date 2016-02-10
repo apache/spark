@@ -277,13 +277,13 @@ private[joins] final class UnsafeHashedRelation(
       val map = binaryMap  // avoid the compiler error
       val loc = new map.Location  // this could be allocated in stack
       binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, loc)
+        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
       if (loc.isDefined) {
         val buffer = CompactBuffer[UnsafeRow]()
 
-        val base = loc.getValueAddress.getBaseObject
-        var offset = loc.getValueAddress.getBaseOffset
-        val last = loc.getValueAddress.getBaseOffset + loc.getValueLength
+        val base = loc.getValueBase
+        var offset = loc.getValueOffset
+        val last = offset + loc.getValueLength
         while (offset < last) {
           val numFields = Platform.getInt(base, offset)
           val sizeInBytes = Platform.getInt(base, offset + 4)
@@ -311,12 +311,11 @@ private[joins] final class UnsafeHashedRelation(
       out.writeInt(binaryMap.numElements())
 
       var buffer = new Array[Byte](64)
-      def write(addr: MemoryLocation, length: Int): Unit = {
+      def write(base: Object, offset: Long, length: Int): Unit = {
         if (buffer.length < length) {
           buffer = new Array[Byte](length)
         }
-        Platform.copyMemory(addr.getBaseObject, addr.getBaseOffset,
-          buffer, Platform.BYTE_ARRAY_OFFSET, length)
+        Platform.copyMemory(base, offset, buffer, Platform.BYTE_ARRAY_OFFSET, length)
         out.write(buffer, 0, length)
       }
 
@@ -326,8 +325,8 @@ private[joins] final class UnsafeHashedRelation(
         // [key size] [values size] [key bytes] [values bytes]
         out.writeInt(loc.getKeyLength)
         out.writeInt(loc.getValueLength)
-        write(loc.getKeyAddress, loc.getKeyLength)
-        write(loc.getValueAddress, loc.getValueLength)
+        write(loc.getKeyBase, loc.getKeyOffset, loc.getKeyLength)
+        write(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       }
 
     } else {
