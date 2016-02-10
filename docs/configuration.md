@@ -587,13 +587,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.closure.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Serializer class to use for closures. Currently only the Java serializer is supported.
-  </td>
-</tr>
-<tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>lz4</td>
   <td>
