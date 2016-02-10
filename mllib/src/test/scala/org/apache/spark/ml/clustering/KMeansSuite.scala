@@ -22,6 +22,7 @@ import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 
 private[clustering] case class TestRow(features: Vector)
@@ -126,6 +127,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setSeed(1)
       .setInitialModel(initialModel)
     val model = kmeans.fit(dataset)
+
     assert(model.clusterCenters.length === k)
 
     val transformed = model.transform(dataset)
@@ -133,10 +135,17 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     expectedColumns.foreach { column =>
       assert(transformed.columns.contains(column))
     }
-    val clusters =
-      transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
+
+    val clusters = transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
+
+    // Converged initial model should lead to only a single iteration.
+    val convergedModel = kmeans.setInitialModel(model).fit(dataset).clusterCenters
+    val oneIterationModel = kmeans.setInitialModel(model).setMaxIter(1).fit(dataset).clusterCenters
+    convergedModel.zip(oneIterationModel).foreach { case (center1, center2) =>
+      assert(center1 ~== center2 absTol 1E-8)
+    }
   }
 }
 
