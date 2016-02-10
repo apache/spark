@@ -1297,4 +1297,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
   }
+  
+  test("SPARK-13197: Support select from the table with dot character in column name") {
+    val df = Seq((50, 100)).toDF("a_b", "a.c")
+    checkAnswer(df.select("a_b"),Row(50))
+    checkAnswer(df.select("a.c"),Row(100))
+  }
 }
