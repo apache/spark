@@ -131,17 +131,4 @@ class BitwiseFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkConsistencyBetweenInterpretedAndCodegen(BitwiseXor, dt, dt)
     }
   }
-
-  test("BitwiseReverse") {
-    def check(input1: Any, width: Int, expected: Any): Unit = {
-      val expr = BitwiseReverse(Literal(input1), width)
-      checkEvaluation(expr, expected)
-    }
-
-    check(1, 1, 1)
-    check(0, 1, 0)
-    check(1, 2, 2)
-    check(3, 4, 12)
-    check(9, 4, 9)
-  }
 }

@@ -208,7 +208,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       case _ => sys.error("Expect GROUPING SETS clause")
     }
 
-    (keys, bitmasks)
+    val mask = (1 << keys.length) - 1
+    (keys, bitmasks.map(x => (~x) & mask))
   }
 
   protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
