@@ -389,9 +389,10 @@ private[hive] class HiveClientImpl(
     client.dropTable(dbName, tableName, true, ignoreIfNotExists)
   }
 
-  override def alterTable(table: HiveTable): Unit = withHiveState {
+  override def alterTable(tableName: String, table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
-    client.alterTable(table.qualifiedName, qlTable)
+    val qualifiedTableName = s"${table.database}.$tableName"
+    client.alterTable(qualifiedTableName, qlTable)
   }
 
   private def toHivePartition(partition: metadata.Partition): HivePartition = {

@@ -146,7 +146,12 @@ private[hive] trait HiveClient {
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
 
   /** Updates the given table with new metadata. */
-  def alterTable(table: HiveTable): Unit
+  final def alterTable(table: HiveTable): Unit = {
+    alterTable(table.qualifiedName, table)
+  }
+
+  /** Updates the given table with new metadata, optionally renaming the table. */
+  def alterTable(tableName: String, table: HiveTable): Unit
 
   /** Creates a new database with the given name. */
   def createDatabase(database: Database, ignoreIfExists: Boolean): Unit

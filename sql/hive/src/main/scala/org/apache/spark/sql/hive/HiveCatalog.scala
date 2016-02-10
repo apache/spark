@@ -108,7 +108,8 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
-    throw new UnsupportedOperationException
+    val hiveTable = toHiveTable(db, getTable(db, oldName)).copy(name = newName)
+    client.alterTable(oldName, hiveTable)
   }
 
   /**
@@ -118,7 +119,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       table: String,
       tableDefinition: Table): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.alterTable(table, toHiveTable(db, tableDefinition))
   }
 
   override def getTable(db: String, table: String): Table = synchronized {
