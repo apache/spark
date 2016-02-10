@@ -55,6 +55,19 @@ if [ -n "$SPARK_PREPEND_CLASSES" ]; then
   LAUNCH_CLASSPATH="${SPARK_HOME}/launcher/target/scala-$SPARK_SCALA_VERSION/classes:$LAUNCH_CLASSPATH"
 fi
 
+# copy krb5.conf into a temporary file and tell java.security about it
+if [ -n "${SPARK_MESOS_KRB5_CONF_BASE64}" ]; then
+    if base64 --help | grep -q GNU; then
+        BASE64_D="base64 -d" # GNU
+    else
+        BASE64_D="base64 -D" # BSD
+    fi
+    KRB5_TMP_FILE=$(mktemp -t krb5-XXXXX.conf)
+    echo "Writing krb5.conf to $KRB5_TMP_FILE" 1>&2
+    echo "${SPARK_MESOS_KRB5_CONF_BASE64}" | ${BASE64_D} > ${KRB5_TMP_FILE}
+    export SPARK_JAVA_OPTS="${SPARK_JAVA_OPTS} -Djava.security.krb5.conf=${KRB5_TMP_FILE}"
+fi
+
 # For tests
 if [[ -n "$SPARK_TESTING" ]]; then
   unset YARN_CONF_DIR

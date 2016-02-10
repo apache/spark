@@ -21,10 +21,13 @@ import java.net.URL
 import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.xml.bind.DatatypeConverter
 
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -123,6 +126,10 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    case UpdateDelegationTokens(tokens) =>
+      logInfo(s"Got UpdateDelegationTokens message with ${tokens.length} bytes")
+      CoarseGrainedExecutorBackend.addDelegationTokens(tokens, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -174,6 +181,21 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
+  private def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+    logInfo(s"Found delegation tokens of ${tokens.length} bytes")
+
+    // configure to use tokens for HDFS login
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    hadoopConf.set("hadoop.security.authentication", "Token")
+    UserGroupInformation.setConfiguration(hadoopConf)
+
+    // decode tokens and add them to the credentials
+    val creds = UserGroupInformation.getCurrentUser.getCredentials
+    val tokensBuf = new java.io.ByteArrayInputStream(tokens)
+    creds.readTokenStorageStream(new java.io.DataInputStream(tokensBuf))
+    UserGroupInformation.getCurrentUser.addCredentials(creds)
+  }
+
   private def run(
       driverUrl: String,
       executorId: String,
@@ -218,6 +240,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
+      }
+
+      if (driverConf.contains("spark.mesos.kerberos.hdfsDelegationTokens")) {
+        val value = driverConf.get("spark.mesos.kerberos.hdfsDelegationTokens")
+        val tokens = DatatypeConverter.parseBase64Binary(value)
+        addDelegationTokens(tokens, driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(

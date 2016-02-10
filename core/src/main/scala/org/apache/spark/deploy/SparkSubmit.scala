@@ -20,8 +20,10 @@ package org.apache.spark.deploy
 import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
+import java.nio.file.{Files, Paths}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
+import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -463,6 +465,10 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
+      // Mesos cluster only
+      OptionAssigner(args.principal, MESOS, CLUSTER),
+      OptionAssigner(args.keytab, MESOS, CLUSTER),
+
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.cores"),
@@ -564,7 +570,36 @@ object SparkSubmit extends CommandLineUtils {
           // properties and then loaded by SparkConf
           sysProps.put("spark.yarn.keytab", args.keytab)
           sysProps.put("spark.yarn.principal", args.principal)
+        }
+      }
+    }
 
+    if (clusterManager == MESOS && args.principal != null) {
+      sysProps.put("spark.yarn.principal", args.principal)
+
+      // set principal used to renew tokens. We use the job token for now
+      // because we have its keytab here and in the scheduler already.
+      sysProps.put("spark.hadoop.yarn.resourcemanager.principal", args.principal)
+
+      if (!args.sparkProperties.contains("spark.mesos.kerberos.keytabBase64")) {
+        require(args.keytab != null, "Keytab must be specified when principal is specified.")
+        if (args.keytab != null && !new File(args.keytab).exists()) {
+          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
+        }
+
+        val path: String = args.keytab
+        val key: String = s"spark.mesos.kerberos.keytabBase64"
+
+        // load keytab or tgt and pass to the driver via spark property
+        val bytes = Files.readAllBytes(Paths.get(path))
+        sysProps.put(key, DatatypeConverter.printBase64Binary(bytes))
+
+        // set auth mechanism to Kerberos and login locally if in CLIENT mode. In cluster mode
+        // no local Kerberos setup is necessary.
+        if (deployMode == CLIENT) {
+          val hadoopConf = SparkHadoopUtil.get.newConfiguration(new SparkConf())
+          hadoopConf.set("hadoop.security.authentication", "Kerberos")
+          UserGroupInformation.setConfiguration(hadoopConf)
           UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
         }
       }

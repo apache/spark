@@ -386,6 +386,10 @@ private[spark] class MesosClusterScheduler(
     env.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
     }
+
+    // Pass the krb5.conf to the scheduler
+    passKerberosConf(envBuilder)
+
     envBuilder.build()
   }
 
@@ -463,6 +467,16 @@ private[spark] class MesosClusterScheduler(
     desc.conf.getOption("spark.executor.memory").foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
+    desc.conf.get("spark.yarn.principal").map { v =>
+      options ++= Seq("--conf", s"spark.yarn.principal=$v")
+    }
+    desc.conf.get("spark.mesos.kerberos.keytabBase64").map { v =>
+      options ++= Seq("--conf", s"spark.mesos.kerberos.keytabBase64=$v")
+    }
+    desc.conf.get("spark.mesos.kerberos.tgtBase64").map { v =>
+      options ++= Seq("--conf", s"spark.mesos.kerberos.tgtBase64=$v")
+    }
+
     desc.conf.getOption("spark.cores.max").foreach { v =>
       options ++= Seq("--total-executor-cores", v)
     }
