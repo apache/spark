@@ -921,8 +921,8 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
        in.close();
     }
   }
-  /** Create a seperate daemon thread 
-   *  to remove phantomreferences from queue and invoke cleanup 
+  /** Create a seperate daemon thread
+   *  to remove phantomreferences from queue and invoke cleanup
    */
     val referenceThread = new Thread(threadName){
     setDaemon(true)
