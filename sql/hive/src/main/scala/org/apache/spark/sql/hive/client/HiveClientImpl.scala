@@ -382,6 +382,13 @@ private[hive] class HiveClientImpl(
     client.createTable(qlTable)
   }
 
+  override def dropTable(
+      dbName: String,
+      tableName: String,
+      ignoreIfNotExists: Boolean): Unit = withHiveState {
+    client.dropTable(dbName, tableName, true, ignoreIfNotExists)
+  }
+
   override def alterTable(table: HiveTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
     client.alterTable(table.qualifiedName, qlTable)

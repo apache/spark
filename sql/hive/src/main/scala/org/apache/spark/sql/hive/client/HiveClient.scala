@@ -142,6 +142,9 @@ private[hive] trait HiveClient {
   /** Creates a table with the given metadata. */
   def createTable(table: HiveTable): Unit
 
+  /** Drop the specified table. */
+  def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
+
   /** Updates the given table with new metadata. */
   def alterTable(table: HiveTable): Unit
 

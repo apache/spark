@@ -104,7 +104,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       table: String,
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.dropTable(db, table, ignoreIfNotExists)
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
