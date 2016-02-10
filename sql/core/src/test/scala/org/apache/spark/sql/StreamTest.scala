@@ -298,7 +298,8 @@ trait StreamTest extends QueryTest with Timeouts {
               verify(!currentStream.isActive,
                 "query.isActive() is false even after stopping")
               verify(currentStream.exception.isEmpty,
-                "query.exception() is not empty after clean stop")
+                s"query.exception() is not empty after clean stop: " +
+                  currentStream.exception.map(_.toString()).getOrElse(""))
             } catch {
               case _: InterruptedException =>
               case _: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
@@ -434,7 +435,8 @@ trait StreamTest extends QueryTest with Timeouts {
           case r if r < 0.7 => // AddData
             addRandomData()
 
-          case _ => // StartStream
+          case _ => // StopStream
+            addCheck()
             actions += StopStream
             running = false
         }
