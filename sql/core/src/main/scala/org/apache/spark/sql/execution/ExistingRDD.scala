@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.{SQLConf, AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -102,13 +103,15 @@ private[sql] case class PhysicalRDD(
     override val metadata: Map[String, String] = Map.empty,
     isUnsafeRow: Boolean = false,
     override val outputPartitioning: Partitioning = UnknownPartitioning(0))
-  extends LeafNode {
+  extends LeafNode with CodegenSupport {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val unsafeRow = if (isUnsafeRow) {
+    val conf = SQLContext.getActive().get
+    // The vectorized reader does not produce UnsafeRows. In this case we will convert.
+    val unsafeRow = if (isUnsafeRow && !conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)) {
       rdd
     } else {
       rdd.mapPartitionsInternal { iter =>
@@ -127,6 +130,32 @@ private[sql] case class PhysicalRDD(
   override def simpleString: String = {
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+  }
+
+  // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
+  // never requires UnsafeRow as input.
+  override def supportCodegen: Boolean = true
+
+  override def upstream(): RDD[InternalRow] = {
+    rdd
+  }
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val row = ctx.freshName("row")
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns = exprs.map(_.gen(ctx))
+    s"""
+       | while (input.hasNext()) {
+       |   InternalRow $row = (InternalRow) input.next();
+       |   ${columns.map(_.code).mkString("\n").trim}
+       |   ${consume(ctx, columns).trim}
+       |   if (shouldStop()) {
+       |     return;
+       |   }
+       | }
+     """.stripMargin
   }
 }
 
