@@ -121,19 +121,24 @@ public final class UnsafeFixedWidthAggregationMap {
     return getAggregationBufferFromUnsafeRow(unsafeGroupingKeyRow);
   }
 
-  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow unsafeGroupingKeyRow) {
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key) {
+    return getAggregationBufferFromUnsafeRow(key, key.hashCode());
+  }
+
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
-      unsafeGroupingKeyRow.getBaseObject(),
-      unsafeGroupingKeyRow.getBaseOffset(),
-      unsafeGroupingKeyRow.getSizeInBytes());
+      key.getBaseObject(),
+      key.getBaseOffset(),
+      key.getSizeInBytes(),
+      hash);
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
       boolean putSucceeded = loc.putNewKey(
-        unsafeGroupingKeyRow.getBaseObject(),
-        unsafeGroupingKeyRow.getBaseOffset(),
-        unsafeGroupingKeyRow.getSizeInBytes(),
+        key.getBaseObject(),
+        key.getBaseOffset(),
+        key.getSizeInBytes(),
         emptyAggregationBuffer,
         Platform.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
@@ -144,10 +149,9 @@ public final class UnsafeFixedWidthAggregationMap {
     }
 
     // Reset the pointer to point to the value that we just stored or looked up:
-    final MemoryLocation address = loc.getValueAddress();
     currentAggregationBuffer.pointTo(
-      address.getBaseObject(),
-      address.getBaseOffset(),
+      loc.getValueBase(),
+      loc.getValueOffset(),
       loc.getValueLength()
     );
     return currentAggregationBuffer;
@@ -172,16 +176,14 @@ public final class UnsafeFixedWidthAggregationMap {
       public boolean next() {
         if (mapLocationIterator.hasNext()) {
           final BytesToBytesMap.Location loc = mapLocationIterator.next();
-          final MemoryLocation keyAddress = loc.getKeyAddress();
-          final MemoryLocation valueAddress = loc.getValueAddress();
           key.pointTo(
-            keyAddress.getBaseObject(),
-            keyAddress.getBaseOffset(),
+            loc.getKeyBase(),
+            loc.getKeyOffset(),
             loc.getKeyLength()
           );
           value.pointTo(
-            valueAddress.getBaseObject(),
-            valueAddress.getBaseOffset(),
+            loc.getValueBase(),
+            loc.getValueOffset(),
             loc.getValueLength()
           );
           return true;

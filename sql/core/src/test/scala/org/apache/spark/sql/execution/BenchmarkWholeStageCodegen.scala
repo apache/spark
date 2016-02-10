@@ -114,11 +114,11 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     }
 
     /*
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Aggregate w keys codegen=false           2402 / 2551          8.0         125.0       1.0X
-    Aggregate w keys codegen=true            1620 / 1670         12.0          83.3       1.5X
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      Aggregate w keys:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------------
+      Aggregate w keys codegen=false           2429 / 2644          8.6         115.8       1.0X
+      Aggregate w keys codegen=true            1535 / 1571         13.7          73.2       1.6X
     */
   }
 
@@ -165,17 +165,47 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.addCase("hash") { iter =>
       var i = 0
       val keyBytes = new Array[Byte](16)
-      val valueBytes = new Array[Byte](16)
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
-      val value = new UnsafeRow(2)
-      value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       var s = 0
       while (i < N) {
         key.setInt(0, i % 1000)
         val h = Murmur3_x86_32.hashUnsafeWords(
-          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, 0)
+          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes, 42)
         s += h
+        i += 1
+      }
+    }
+
+    benchmark.addCase("fast hash") { iter =>
+      var i = 0
+      val keyBytes = new Array[Byte](16)
+      val key = new UnsafeRow(1)
+      key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      var s = 0
+      while (i < N) {
+        key.setInt(0, i % 1000)
+        val h = Murmur3_x86_32.hashLong(i % 1000, 42)
+        s += h
+        i += 1
+      }
+    }
+
+    benchmark.addCase("arrayEqual") { iter =>
+      var i = 0
+      val keyBytes = new Array[Byte](16)
+      val valueBytes = new Array[Byte](16)
+      val key = new UnsafeRow(1)
+      key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      val value = new UnsafeRow(1)
+      value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+      value.setInt(0, 555)
+      var s = 0
+      while (i < N) {
+        key.setInt(0, i % 1000)
+        if (key.equals(value)) {
+          s += 1
+        }
         i += 1
       }
     }
@@ -195,15 +225,15 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         val valueBytes = new Array[Byte](16)
         val key = new UnsafeRow(1)
         key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
-        val value = new UnsafeRow(2)
+        val value = new UnsafeRow(1)
         value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
         var i = 0
         while (i < N) {
           key.setInt(0, i % 65536)
-          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
+            Murmur3_x86_32.hashLong(i % 65536, 42))
           if (loc.isDefined) {
-            value.pointTo(loc.getValueAddress.getBaseObject, loc.getValueAddress.getBaseOffset,
-              loc.getValueLength)
+            value.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
             value.setInt(0, value.getInt(0) + 1)
             i += 1
           } else {
@@ -218,9 +248,11 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    hash                                      628 /  661         83.0          12.0       1.0X
-    BytesToBytesMap (off Heap)               3292 / 3408         15.0          66.7       0.2X
-    BytesToBytesMap (on Heap)                3349 / 4267         15.0          66.7       0.2X
+    hash                                      651 /  678         80.0          12.5       1.0X
+    fast hash                                 336 /  343        155.9           6.4       1.9X
+    arrayEqual                                417 /  428        125.0           8.0       1.6X
+    BytesToBytesMap (off Heap)               2594 / 2664         20.2          49.5       0.2X
+    BytesToBytesMap (on Heap)                2693 / 2989         19.5          51.4       0.2X
       */
     benchmark.run()
   }

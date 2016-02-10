@@ -322,7 +322,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
-
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
     val childrenHash = children.map { child =>
