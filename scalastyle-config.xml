@@ -169,6 +169,18 @@ This file is divided into 3 sections:
     ]]></customMessage>
   </check>
 
+  <check customId="mutablesynchronizedbuffer" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">mutable\.SynchronizedBuffer</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use mutable.SynchronizedBuffer? In most cases, you should use
+      java.util.concurrent.ConcurrentLinkedQueue instead.
+      If you must use mutable.SynchronizedBuffer, wrap the code block with
+      // scalastyle:off mutablesynchronizedbuffer
+      mutable.SynchronizedBuffer[...]
+      // scalastyle:on mutablesynchronizedbuffer
+    ]]></customMessage>
+  </check>
+
   <check customId="classforname" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
     <parameters><parameter name="regex">Class\.forName</parameter></parameters>
     <customMessage><![CDATA[
