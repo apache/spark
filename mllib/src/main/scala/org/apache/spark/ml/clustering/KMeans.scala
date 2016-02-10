@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol with HasInitialModel[KMeansModel] {
+  with HasSeed with HasPredictionCol with HasTol {
 
   /**
    * Set the number of clusters to create (k). Must be > 1. Default: 2.
@@ -190,7 +190,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
 @Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
+  extends Estimator[KMeansModel]
+    with KMeansParams with HasInitialModel[KMeansModel] with MLWritable {
 
   setDefault(
     k -> 2,
@@ -285,12 +286,58 @@ class KMeans @Since("1.5.0") (
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema)
   }
+
+  @Since("2.0.0")
+  override def write: MLWriter = new KMeans.KMeansWriter(this)
 }
 
 @Since("1.6.0")
-object KMeans extends DefaultParamsReadable[KMeans] {
+object KMeans extends MLReadable[KMeans] {
 
   @Since("1.6.0")
   override def load(path: String): KMeans = super.load(path)
+
+  @Since("2.0.0")
+  override def read: MLReader[KMeans] = new KMeansReader
+
+  /** [[MLWriter]] instance for [[KMeans]] */
+  private[KMeans] class KMeansWriter(instance: KMeans) extends MLWriter {
+    import org.json4s.JsonDSL._
+
+    override protected def saveImpl(path: String): Unit = {
+      val extraMetadata = if (instance.isSet(instance.initialModel)) {
+        val initialModelPath = new Path(path, "initial-model").toString
+        instance.getInitialModel.save(initialModelPath)
+        instance.clear(instance.initialModel)
+        "hasInitialModel" -> true
+      } else {
+        "hasInitialModel" -> false
+      }
+
+      // Save metadata and Params
+      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+    }
+  }
+
+  private class KMeansReader extends MLReader[KMeans] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[KMeans].getName
+
+    override def load(path: String): KMeans = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val instance = new KMeans(metadata.uid)
+      DefaultParamsReader.getAndSetParams(instance, metadata)
+
+      val hasInitialModel = (metadata.metadata \ "hasInitialModel").extract[Boolean]
+      if (hasInitialModel) {
+        val initialModelPath = new Path(path, "initial-model").toString
+        val initialModel = KMeansModel.load(initialModelPath)
+        instance.setInitialModel(initialModel)
+      }
+
+      instance
+    }
+  }
 }
 
