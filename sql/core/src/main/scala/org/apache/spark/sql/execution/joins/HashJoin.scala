@@ -120,8 +120,7 @@ trait HashJoin {
       streamIter: Iterator[InternalRow],
       numStreamRows: LongSQLMetric,
       hashedRelation: HashedRelation,
-      numOutputRows: LongSQLMetric): Iterator[InternalRow] =
-  {
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     new Iterator[InternalRow] {
       private[this] var currentStreamedRow: InternalRow = _
       private[this] var currentHashMatches: Seq[InternalRow] = _
@@ -190,11 +189,11 @@ trait HashJoin {
   @transient private[this] lazy val rightNullRow = new GenericInternalRow(right.output.length)
 
   protected[this] def leftOuterIterator(
-    key: InternalRow,
-    joinedRow: JoinedRow,
-    rightIter: Iterable[InternalRow],
-    resultProjection: InternalRow => InternalRow,
-    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+      key: InternalRow,
+      joinedRow: JoinedRow,
+      rightIter: Iterable[InternalRow],
+      resultProjection: InternalRow => InternalRow,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = if (rightIter != null) {
@@ -222,11 +221,11 @@ trait HashJoin {
   }
 
   protected[this] def rightOuterIterator(
-    key: InternalRow,
-    leftIter: Iterable[InternalRow],
-    joinedRow: JoinedRow,
-    resultProjection: InternalRow => InternalRow,
-    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
+      key: InternalRow,
+      leftIter: Iterable[InternalRow],
+      joinedRow: JoinedRow,
+      resultProjection: InternalRow => InternalRow,
+      numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val ret: Iterable[InternalRow] = {
       if (!key.anyNull) {
         val temp = if (leftIter != null) {
