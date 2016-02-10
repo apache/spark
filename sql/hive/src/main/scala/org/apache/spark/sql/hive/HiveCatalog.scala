@@ -29,6 +29,10 @@ import org.apache.spark.sql.hive.client.HiveClient
 private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   import Catalog._
 
+  // --------------------------------------------------------------------------
+  // Databases
+  // --------------------------------------------------------------------------
+
   def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit = synchronized {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
@@ -44,7 +48,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
    * Alter an existing database. This operation does not support renaming.
    */
   def alterDatabase(db: String, dbDefinition: Database): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.alterDatabase(db, dbDefinition)
   }
 
   def getDatabase(db: String): Database = synchronized {
@@ -58,6 +62,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   def listDatabases(pattern: String): Seq[String] = synchronized {
     throw new UnsupportedOperationException
   }
+
+  // --------------------------------------------------------------------------
+  // Tables
+  // --------------------------------------------------------------------------
 
   def createTable(
       db: String,
@@ -93,6 +101,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
     throw new UnsupportedOperationException
   }
 
+  // --------------------------------------------------------------------------
+  // Partitions
+  // --------------------------------------------------------------------------
+
   def createPartitions(
       db: String,
       table: String,
@@ -127,6 +139,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
     throw new UnsupportedOperationException
   }
+
+  // --------------------------------------------------------------------------
+  // Functions
+  // --------------------------------------------------------------------------
 
   def createFunction(
       db: String,

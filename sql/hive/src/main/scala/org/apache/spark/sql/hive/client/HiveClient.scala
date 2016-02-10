@@ -152,6 +152,11 @@ private[hive] trait HiveClient {
    */
   def dropDatabase(name: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
+  /**
+   * Alter an existing database. This operation does not support renaming.
+   */
+  def alterDatabase(name: String, database: Database): Unit
+
   /** Returns the specified paritition or None if it does not exist. */
   def getPartitionOption(
       hTable: HiveTable,

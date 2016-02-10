@@ -258,6 +258,20 @@ private[hive] class HiveClientImpl(
     client.dropDatabase(name, true, ignoreIfNotExists, cascade)
   }
 
+  /**
+   * Alter an existing database. This operation does not support renaming.
+   */
+  override def alterDatabase(name: String, database: Database): Unit = withHiveState {
+    assert(name == database.name)
+    client.alterDatabase(
+      name,
+      new HiveDatabase(
+        database.name,
+        database.description,
+        database.locationUri,
+        database.properties.asJava))
+  }
+
   override def getDatabaseOption(name: String): Option[Database] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
       Database(
