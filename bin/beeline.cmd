@@ -18,4 +18,4 @@ rem limitations under the License.
 rem
 
 set SPARK_HOME=%~dp0..
-cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.hive.beeline.BeeLine %*
+cmd /V /E /C "%SPARK_HOME%\bin\spark-class.cmd" org.apache.hive.beeline.BeeLine %*

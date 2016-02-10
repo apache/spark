@@ -99,6 +99,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   // a subset of the types (no complex types).
   protected val enableUnsafeRowParquetReader: Boolean =
     sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
+  protected val enableVectorizedParquetReader: Boolean =
+    sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -176,6 +178,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           parquetReader.close()
         } else {
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
+          if (enableVectorizedParquetReader) parquetReader.resultBatch()
         }
       }
 
