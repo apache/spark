@@ -134,14 +134,15 @@ class CatalystQlSuite extends PlanTest {
           Literal("o") ::
           UnresolvedFunction("o", UnresolvedAttribute("bar") :: Nil, false) ::
           Nil, false)))
+
+    intercept[AnalysisException](parser.parseExpression("1 - f('o', o(bar)) hello * world"))
   }
 
   test("table identifier") {
     assert(TableIdentifier("q") === parser.parseTableIdentifier("q"))
     assert(TableIdentifier("q", Some("d")) === parser.parseTableIdentifier("d.q"))
     intercept[AnalysisException](parser.parseTableIdentifier(""))
-    // TODO parser swallows third identifier.
-    // intercept[AnalysisException](parser.parseTableIdentifier("d.q.g"))
+    intercept[AnalysisException](parser.parseTableIdentifier("d.q.g"))
   }
 
   test("parse union/except/intersect") {
