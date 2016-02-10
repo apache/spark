@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.catalyst.catalog.{Catalog, Database, Function, Table, TablePartition}
+import org.apache.spark.sql.hive.client.HiveClient
 
 
 /**
@@ -25,10 +26,12 @@ import org.apache.spark.sql.catalyst.catalog.{Catalog, Database, Function, Table
  *
  * All public methods must be synchronized for thread-safety.
  */
-private[spark] class HiveCatalog extends Catalog {
+private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   import Catalog._
 
-  def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit = ???
+  def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit = synchronized {
+    client.createDatabase(dbDefinition, ignoreIfExists)
+  }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = ???
 

@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.catalyst.catalog.Database
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -60,8 +61,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hadoopVersion = VersionInfo.getVersion,
       config = buildConf(),
       ivyPath = ivyPath).createClient()
-    val db = new HiveDatabase("default", "")
-    badClient.createDatabase(db)
+    val db = new Database("default", "desc", "loc", Map())
+    badClient.createDatabase(db, ignoreIfExists = true)
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -116,8 +117,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: createDatabase") {
-      val db = HiveDatabase("default", "")
-      client.createDatabase(db)
+      val db = Database("default", "desc", "loc", Map())
+      client.createDatabase(db, ignoreIfExists = true)
     }
 
     test(s"$version: createTable") {

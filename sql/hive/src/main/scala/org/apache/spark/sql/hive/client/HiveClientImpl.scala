@@ -26,7 +26,7 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HTableType}
-import org.apache.hadoop.hive.metastore.api.{Database, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
 import org.apache.hadoop.hive.ql.{metadata, Driver}
 import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
@@ -36,6 +36,7 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
+import org.apache.spark.sql.catalyst.catalog.Database
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -238,21 +239,25 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  override def createDatabase(database: HiveDatabase): Unit = withHiveState {
+  override def createDatabase(
+      database: Database,
+      ignoreIfExists: Boolean): Unit = withHiveState {
     client.createDatabase(
-      new Database(
+      new HiveDatabase(
         database.name,
-        "",
-        new File(database.location).toURI.toString,
-        new java.util.HashMap),
-        true)
+        database.description,
+        database.locationUri,
+        database.properties.asJava),
+        ignoreIfExists)
   }
 
-  override def getDatabaseOption(name: String): Option[HiveDatabase] = withHiveState {
+  override def getDatabaseOption(name: String): Option[Database] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
-      HiveDatabase(
+      Database(
         name = d.getName,
-        location = d.getLocationUri)
+        description = d.getDescription,
+        locationUri = d.getLocationUri,
+        properties = d.getParameters.asScala.toMap)
     }
   }
 

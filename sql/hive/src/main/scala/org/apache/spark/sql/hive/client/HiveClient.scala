@@ -22,9 +22,9 @@ import java.util.{Map => JMap}
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.catalog.Database
 import org.apache.spark.sql.catalyst.expressions.Expression
 
-private[hive] case class HiveDatabase(name: String, location: String)
 
 private[hive] abstract class TableType { val name: String }
 private[hive] case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
@@ -113,12 +113,12 @@ private[hive] trait HiveClient {
   def setCurrentDatabase(databaseName: String): Unit
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
-  def getDatabase(name: String): HiveDatabase = {
+  def getDatabase(name: String): Database = {
     getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException)
   }
 
   /** Returns the metadata for a given database, or None if it doesn't exist. */
-  def getDatabaseOption(name: String): Option[HiveDatabase]
+  def getDatabaseOption(name: String): Option[Database]
 
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   def getTable(dbName: String, tableName: String): HiveTable = {
@@ -141,7 +141,7 @@ private[hive] trait HiveClient {
   def alterTable(table: HiveTable): Unit
 
   /** Creates a new database with the given name. */
-  def createDatabase(database: HiveDatabase): Unit
+  def createDatabase(database: Database, ignoreIfExists: Boolean): Unit
 
   /** Returns the specified paritition or None if it does not exist. */
   def getPartitionOption(
