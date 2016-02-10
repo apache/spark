@@ -1016,7 +1016,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def intersect(other: DataFrame): DataFrame = withPlan {
-    Intersect(logicalPlan, other.logicalPlan)
+    Intersect(logicalPlan, other.logicalPlan, distinct = true)
   }
 
   /**

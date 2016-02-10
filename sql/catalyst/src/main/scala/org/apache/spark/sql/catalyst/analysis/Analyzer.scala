@@ -452,7 +452,7 @@ class Analyzer(
       // To resolve duplicate expression IDs for Join and Intersect
       case j @ Join(left, right, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
-      case i @ Intersect(left, right) if !i.duplicateResolved =>
+      case i @ Intersect(left, right, _) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as

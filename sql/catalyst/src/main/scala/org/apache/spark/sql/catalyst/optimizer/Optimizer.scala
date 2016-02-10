@@ -1062,19 +1062,24 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  * {{{
  *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
  *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ *   SELECT a1, a2 FROM Tab1 INTERSECT ALL SELECT b1, b2 FROM Tab2
+ *   ==>  SELECT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
  * }}}
  *
- * Note:
- * 1. This rule is only applicable to INTERSECT DISTINCT. Do not use it for INTERSECT ALL.
- * 2. This rule has to be done after de-duplicating the attributes; otherwise, the generated
+ * Note: This rule has to be done after de-duplicating the attributes; otherwise, the generated
  *    join conditions will be incorrect.
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Intersect(left, right) =>
+    case Intersect(left, right, distinct) =>
       assert(left.output.size == right.output.size)
-      val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
+      val joinCond = left.output.zip(right.output).map(EqualNullSafe.tupled).reduceLeftOption(And)
+      if (distinct) {
+        Distinct(Join(left, right, LeftSemi, joinCond))
+      }
+      else {
+        Join(left, right, LeftSemi, joinCond)
+      }
   }
 }
 
