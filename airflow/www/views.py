@@ -683,6 +683,7 @@ class Airflow(BaseView):
     @expose('/logout')
     def logout(self):
         logout_user()
+        flash('You have been logged out.')
         return redirect(url_for('admin.index'))
 
     @expose('/rendered')

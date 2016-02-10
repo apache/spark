@@ -57,8 +57,10 @@
           {{ layout.menu_links() }}
         </ul>
         {% endblock %}
+        <!-- clock and logout -->
         <ul class="nav navbar-nav navbar-right">
             <li><a id="clock"></a></li>
+            <li><a href="{{ url_for('airflow.logout') }}">Logout</a></li>
         </ul>
           <ul class="nav navbar-nav navbar-right">
               <li><a id="clock"></a></li>
