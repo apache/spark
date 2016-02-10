@@ -39,6 +39,7 @@ class InMemoryCatalog extends Catalog {
     val functions = new mutable.HashMap[String, Function]
   }
 
+  // Database name -> spec
   private val catalog = new scala.collection.mutable.HashMap[String, DatabaseDesc]
 
   private def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
@@ -133,6 +134,10 @@ class InMemoryCatalog extends Catalog {
   override def getDatabase(db: String): Database = synchronized {
     assertDbExists(db)
     catalog(db).db
+  }
+
+  override def databaseExists(db: String): Boolean = synchronized {
+    catalog.contains(db)
   }
 
   override def listDatabases(): Seq[String] = synchronized {

@@ -46,6 +46,8 @@ abstract class Catalog {
 
   def getDatabase(db: String): Database
 
+  def databaseExists(db: String): Boolean
+
   def listDatabases(): Seq[String]
 
   def listDatabases(pattern: String): Seq[String]

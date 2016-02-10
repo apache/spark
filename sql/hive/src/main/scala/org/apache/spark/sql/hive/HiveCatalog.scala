@@ -52,15 +52,19 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   }
 
   def getDatabase(db: String): Database = synchronized {
-    throw new UnsupportedOperationException
+    client.getDatabase(db)
+  }
+
+  def databaseExists(db: String): Boolean = synchronized {
+    client.getDatabaseOption(db).isDefined
   }
 
   def listDatabases(): Seq[String] = synchronized {
-    throw new UnsupportedOperationException
+    client.listDatabases("*")
   }
 
   def listDatabases(pattern: String): Seq[String] = synchronized {
-    throw new UnsupportedOperationException
+    client.listDatabases(pattern)
   }
 
   // --------------------------------------------------------------------------

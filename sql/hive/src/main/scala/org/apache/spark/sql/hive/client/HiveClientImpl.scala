@@ -282,6 +282,10 @@ private[hive] class HiveClientImpl(
     }
   }
 
+  override def listDatabases(pattern: String): Seq[String] = withHiveState {
+    client.getDatabasesByPattern(pattern).asScala.toSeq
+  }
+
   override def getTableOption(
       dbName: String,
       tableName: String): Option[HiveTable] = withHiveState {

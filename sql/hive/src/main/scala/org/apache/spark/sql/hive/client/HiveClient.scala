@@ -113,12 +113,15 @@ private[hive] trait HiveClient {
   def setCurrentDatabase(databaseName: String): Unit
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
-  def getDatabase(name: String): Database = {
+  final def getDatabase(name: String): Database = {
     getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException)
   }
 
   /** Returns the metadata for a given database, or None if it doesn't exist. */
   def getDatabaseOption(name: String): Option[Database]
+
+  /** List the names of all the databases that match the specified pattern. */
+  def listDatabases(pattern: String): Seq[String]
 
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   def getTable(dbName: String, tableName: String): HiveTable = {
