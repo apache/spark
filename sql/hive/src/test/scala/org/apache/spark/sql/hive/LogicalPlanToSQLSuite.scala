@@ -145,6 +145,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT COUNT(DISTINCT id) FROM t0")
   }
 
+  test("TABLESAMPLE") {
+    checkHiveQl("SELECT * FROM t0 TABLESAMPLE(100 PERCENT) s")
+    checkHiveQl("SELECT * FROM t0 TABLESAMPLE(100 PERCENT)")
+    // When a sampling fraction is not 100%, the returned results are random.
+    // Thus, added an always-false filter here to check if the generated plan can be successfully
+    // executed.
+    checkHiveQl("SELECT s.id FROM t0 TABLESAMPLE(0.1 PERCENT) s WHERE 1=0")
+    checkHiveQl("SELECT * FROM t0 TABLESAMPLE(0.1 PERCENT) WHERE 1=0")
+  }
+
   // TODO Enable this
   // Query plans transformed by DistinctAggregationRewriter are not recognized yet
   ignore("multi-distinct columns") {
