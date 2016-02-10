@@ -60,7 +60,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
         child.constraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
-        })
+        }).union(Set(EqualNullSafe(e, a.toAttribute)))
       case _ =>
         Set.empty[Expression]
     }.toSet
