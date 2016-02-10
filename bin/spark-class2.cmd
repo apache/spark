@@ -20,7 +20,7 @@ rem
 rem Figure out where the Spark framework is installed
 set SPARK_HOME=%~dp0..
 
-call %SPARK_HOME%\bin\load-spark-env.cmd
+call "%SPARK_HOME%\bin\load-spark-env.cmd"
 
 rem Test that an argument was given
 if "x%1"=="x" (
@@ -32,9 +32,9 @@ rem Find assembly jar
 set SPARK_ASSEMBLY_JAR=0
 
 if exist "%SPARK_HOME%\RELEASE" (
-  set ASSEMBLY_DIR=%SPARK_HOME%\lib
+  set ASSEMBLY_DIR="%SPARK_HOME%\lib"
 ) else (
-  set ASSEMBLY_DIR=%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%
+  set ASSEMBLY_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%"
 )
 
 for %%d in (%ASSEMBLY_DIR%\spark-assembly*hadoop*.jar) do (
@@ -50,7 +50,7 @@ set LAUNCH_CLASSPATH=%SPARK_ASSEMBLY_JAR%
 
 rem Add the launcher build dir to the classpath if requested.
 if not "x%SPARK_PREPEND_CLASSES%"=="x" (
-  set LAUNCH_CLASSPATH=%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCH_CLASSPATH%
+  set LAUNCH_CLASSPATH="%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCH_CLASSPATH%"
 )
 
 set _SPARK_ASSEMBLY=%SPARK_ASSEMBLY_JAR%
@@ -62,7 +62,7 @@ if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 rem The launcher library prints the command to be executed in a single line suitable for being
 rem executed by the batch interpreter. So read all the output of the launcher into a variable.
 set LAUNCHER_OUTPUT=%temp%\spark-class-launcher-output-%RANDOM%.txt
-"%RUNNER%" -cp %LAUNCH_CLASSPATH% org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
+"%RUNNER%" -cp "%LAUNCH_CLASSPATH%" org.apache.spark.launcher.Main %* > %LAUNCHER_OUTPUT%
 for /f "tokens=*" %%i in (%LAUNCHER_OUTPUT%) do (
   set SPARK_CMD=%%i
 )
