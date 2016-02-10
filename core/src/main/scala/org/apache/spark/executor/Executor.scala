@@ -300,15 +300,15 @@ private[spark] class Executor(
 
           // Collect latest accumulator values to report back to the driver
           val accumulatorUpdates: Seq[AccumulableInfo] =
-          if (task != null) {
-            task.metrics.foreach { m =>
-              m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
-              m.setJvmGCTime(computeTotalGcTime() - startGCTime)
+            if (task != null) {
+              task.metrics.foreach { m =>
+                m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
+                m.setJvmGCTime(computeTotalGcTime() - startGCTime)
+              }
+              task.collectAccumulatorUpdates(taskFailed = true, readFullPartition = false)
+            } else {
+              Seq.empty[AccumulableInfo]
             }
-            task.collectAccumulatorUpdates(taskFailed = true, readFullPartition = false)
-          } else {
-            Seq.empty[AccumulableInfo]
-          }
 
           val serializedTaskEndReason = {
             try {

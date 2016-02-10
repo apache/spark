@@ -31,7 +31,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   import TaskMetricsSuite._
 
   test("create") {
-    val internalAccums = InternalAccumulator.create()
+    val internalAccums = InternalAccumulator.createAll()
     val tm1 = new TaskMetrics
     val tm2 = new TaskMetrics(internalAccums)
     assert(tm1.accumulatorUpdates().size === internalAccums.size)
@@ -51,7 +51,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   test("create with unnamed accum") {
     intercept[IllegalArgumentException] {
       new TaskMetrics(
-        InternalAccumulator.create() ++ Seq(
+        InternalAccumulator.createAll() ++ Seq(
           new Accumulator(0, IntAccumulatorParam, None, internal = true)))
     }
   }
@@ -59,7 +59,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   test("create with duplicate name accum") {
     intercept[IllegalArgumentException] {
       new TaskMetrics(
-        InternalAccumulator.create() ++ Seq(
+        InternalAccumulator.createAll() ++ Seq(
           new Accumulator(0, IntAccumulatorParam, Some(RESULT_SIZE), internal = true)))
     }
   }
@@ -67,7 +67,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   test("create with external accum") {
     intercept[IllegalArgumentException] {
       new TaskMetrics(
-        InternalAccumulator.create() ++ Seq(
+        InternalAccumulator.createAll() ++ Seq(
           new Accumulator(0, IntAccumulatorParam, Some("x"))))
     }
   }
@@ -131,7 +131,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("mutating values") {
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(accums)
     // initial values
     assertValueEquals(tm, _.executorDeserializeTime, accums, EXECUTOR_DESERIALIZE_TIME, 0L)
@@ -180,7 +180,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("mutating shuffle read metrics values") {
     import shuffleRead._
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(accums)
     def assertValEquals[T](tmValue: ShuffleReadMetrics => T, name: String, value: T): Unit = {
       assertValueEquals(tm, tm => tmValue(tm.shuffleReadMetrics.get), accums, name, value)
@@ -234,7 +234,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("mutating shuffle write metrics values") {
     import shuffleWrite._
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(accums)
     def assertValEquals[T](tmValue: ShuffleWriteMetrics => T, name: String, value: T): Unit = {
       assertValueEquals(tm, tm => tmValue(tm.shuffleWriteMetrics.get), accums, name, value)
@@ -267,7 +267,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("mutating input metrics values") {
     import input._
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(accums)
     def assertValEquals(tmValue: InputMetrics => Any, name: String, value: Any): Unit = {
       assertValueEquals(tm, tm => tmValue(tm.inputMetrics.get), accums, name, value,
@@ -296,7 +296,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("mutating output metrics values") {
     import output._
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(accums)
     def assertValEquals(tmValue: OutputMetrics => Any, name: String, value: Any): Unit = {
       assertValueEquals(tm, tm => tmValue(tm.outputMetrics.get), accums, name, value,
@@ -381,7 +381,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("additional accumulables") {
-    val internalAccums = InternalAccumulator.create()
+    val internalAccums = InternalAccumulator.createAll()
     val tm = new TaskMetrics(internalAccums)
     assert(tm.accumulatorUpdates().size === internalAccums.size)
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("a"))
@@ -419,7 +419,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("existing values in shuffle read accums") {
     // set shuffle read accum before passing it into TaskMetrics
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val srAccum = accums.find(_.name === Some(shuffleRead.FETCH_WAIT_TIME))
     assert(srAccum.isDefined)
     srAccum.get.asInstanceOf[Accumulator[Long]] += 10L
@@ -432,7 +432,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("existing values in shuffle write accums") {
     // set shuffle write accum before passing it into TaskMetrics
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val swAccum = accums.find(_.name === Some(shuffleWrite.RECORDS_WRITTEN))
     assert(swAccum.isDefined)
     swAccum.get.asInstanceOf[Accumulator[Long]] += 10L
@@ -445,7 +445,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("existing values in input accums") {
     // set input accum before passing it into TaskMetrics
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val inAccum = accums.find(_.name === Some(input.RECORDS_READ))
     assert(inAccum.isDefined)
     inAccum.get.asInstanceOf[Accumulator[Long]] += 10L
@@ -458,7 +458,7 @@ class TaskMetricsSuite extends SparkFunSuite {
 
   test("existing values in output accums") {
     // set output accum before passing it into TaskMetrics
-    val accums = InternalAccumulator.create()
+    val accums = InternalAccumulator.createAll()
     val outAccum = accums.find(_.name === Some(output.RECORDS_WRITTEN))
     assert(outAccum.isDefined)
     outAccum.get.asInstanceOf[Accumulator[Long]] += 10L
@@ -470,7 +470,7 @@ class TaskMetricsSuite extends SparkFunSuite {
   }
 
   test("from accumulator updates") {
-    val accumUpdates1 = InternalAccumulator.create().map { a =>
+    val accumUpdates1 = InternalAccumulator.createAll().map { a =>
       AccumulableInfo(a.id, a.name, Some(3L), None, a.isInternal, a.countFailedValues, a.consistent)
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)

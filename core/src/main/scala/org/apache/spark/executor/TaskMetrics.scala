@@ -45,13 +45,12 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  *                      these requirements.
  */
 @DeveloperApi
-class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
-
+class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Serializable {
   import InternalAccumulator._
 
   // Needed for Java tests
   def this() {
-    this(InternalAccumulator.create())
+    this(InternalAccumulator.createAll())
   }
 
   /**
@@ -144,6 +143,11 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
     if (updatedBlockStatuses.nonEmpty) Some(updatedBlockStatuses) else None
   }
 
+  @deprecated("setting updated blocks is not allowed", "2.0.0")
+  def updatedBlocks_=(blocks: Option[Seq[(BlockId, BlockStatus)]]): Unit = {
+    blocks.foreach(setUpdatedBlockStatuses)
+  }
+
   // Setters and increment-ers
   private[spark] def setExecutorDeserializeTime(v: Long): Unit =
     _executorDeserializeTime.setValue(v)
@@ -220,6 +224,11 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    */
   def outputMetrics: Option[OutputMetrics] = _outputMetrics
 
+  @deprecated("setting OutputMetrics is for internal use only", "2.0.0")
+  def outputMetrics_=(om: Option[OutputMetrics]): Unit = {
+    _outputMetrics = om
+  }
+
   /**
    * Get or create a new [[OutputMetrics]] associated with this task.
    */
@@ -295,6 +304,11 @@ class TaskMetrics(initialAccums: Seq[Accumulator[_]]) extends Serializable {
    * Metrics related to shuffle write, defined only in shuffle map stages.
    */
   def shuffleWriteMetrics: Option[ShuffleWriteMetrics] = _shuffleWriteMetrics
+
+  @deprecated("setting ShuffleWriteMetrics is for internal use only", "2.0.0")
+  def shuffleWriteMetrics_=(swm: Option[ShuffleWriteMetrics]): Unit = {
+    _shuffleWriteMetrics = swm
+  }
 
   /**
    * Get or create a new [[ShuffleWriteMetrics]] associated with this task.
