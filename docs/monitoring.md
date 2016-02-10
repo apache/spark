@@ -229,8 +229,24 @@ for a running application, at `http://localhost:4040/api/v1`.
     <td>A list of all applications</td>
   </tr>
   <tr>
+     <td></td>
+     <td><code>?status=[completed|running]</code> list only applications in the state</td>
+  </tr>
+  <tr>
+     <td></td>
+     <td><code>?minDate=[date]</code> earliest date to list. e.g <code>?minDate=2015-02-10</code></td>
+  </tr>
+  <tr>
+     <td></td>
+     <td><code>?maxDate=[date]</code> latest date to list. e.g <code>?maxDate=2015-02-03T16:42:40.000GMT</code></td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
     <td>A list of all jobs for a given application</td>
+  </tr>
+  <tr>
+     <td></td>
+     <td><code>?status=[complete|succeeded|failed]</code> list only jobs in the state</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs/[job-id]</code></td>
@@ -245,6 +261,10 @@ for a running application, at `http://localhost:4040/api/v1`.
     <td>A list of all attempts for the given stage</td>
   </tr>
   <tr>
+     <td></td>
+     <td><code>?status=[active|complete|pending|failed]</code> list only stages in the state</td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
     <td>Details for the given stage attempt</td>
   </tr>
@@ -253,8 +273,22 @@ for a running application, at `http://localhost:4040/api/v1`.
     <td>Summary metrics of all tasks in the given stage attempt</td>
   </tr>
   <tr>
+     <td></td>
+     <td><code>?quantiles</code> summarize the metrics with the given quantiles.
+     e.g. <code>?quantiles=0.01,0.5,0.99</code></td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskList</code></td>
     <td>A list of all tasks for the given stage attempt</td>
+  </tr>
+  <tr>
+     <td></td>
+     <td><code>?offset=[offset]&amp;length=[len]</code> list only tasks in the range.
+      e.g. <code>?offset=10&amp;length=50</code></td>
+  </tr>
+  <tr>
+     <td></td>
+     <td><code>?sortBy=[runtime|-runtime]</code> sort the tasks</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/executors</code></td>
