@@ -79,7 +79,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
 
     threshold = FloatParam(Params._dummy(), "threshold",
-                           "threshold in binary classification prediction")
+                           "threshold used to binarize continuous features")
 
     @keyword_only
     def __init__(self, threshold=0.0, inputCol=None, outputCol=None):
