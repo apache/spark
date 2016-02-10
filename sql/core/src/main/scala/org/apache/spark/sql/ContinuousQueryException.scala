@@ -18,8 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{StreamExecution, Offset}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.streaming.{Offset, StreamExecution}
 
 /**
  * :: Experimental ::
