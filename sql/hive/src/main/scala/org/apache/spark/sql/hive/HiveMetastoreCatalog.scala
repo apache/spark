@@ -96,6 +96,8 @@ private[hive] object HiveSerDe {
   }
 }
 
+
+// TODO: replace this with o.a.s.sql.hive.HiveCatalog once we merge SQLContext and HiveContext
 private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveContext)
   extends Catalog with Logging {
 
