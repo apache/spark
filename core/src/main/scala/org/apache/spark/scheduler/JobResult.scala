@@ -30,4 +30,4 @@ sealed trait JobResult
 case object JobSucceeded extends JobResult
 
 @DeveloperApi
-private[spark] case class JobFailed(exception: Exception) extends JobResult
+case class JobFailed(exception: Exception) extends JobResult
