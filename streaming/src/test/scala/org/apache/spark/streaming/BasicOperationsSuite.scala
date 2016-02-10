@@ -528,9 +528,8 @@ class BasicOperationsSuite extends TestSuiteBase {
           Option(state.getOrElse(0L))
         }
       }
-      val x = s.map(x => (x, 1))
-        x.updateStateByKey[StreamingState](updateFunc = updateFunc,
-        partitioner = new HashPartitioner (numInputPartitions),
+      s.map(x => (x, 1)).updateStateByKey[StreamingState](updateFunc = updateFunc,
+        partitioner = new HashPartitioner (numInputPartitions), rememberPartitioner = false,
         initialRDD = Option(initialRDD))
     }
 

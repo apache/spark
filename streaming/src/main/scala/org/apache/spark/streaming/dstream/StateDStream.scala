@@ -41,8 +41,10 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
 
   override val mustCheckpoint = true
 
-  private [this] def computeUsingPreviousRDD (batchTime: Time,
-                                              parentRDD: RDD[(K, V)], prevStateRDD: RDD[(K, S)]) = {
+  private [this] def computeUsingPreviousRDD(
+      batchTime: Time,
+      parentRDD: RDD[(K, V)],
+      prevStateRDD: RDD[(K, S)]) = {
     // Define the function for the mapPartition operation on cogrouped RDD;
     // first map the cogrouped tuple to tuples of required type,
     // and then apply the update function
