@@ -1297,4 +1297,29 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
   }
+
+  test("SPARK-12988: drop columns with ` in column name") {
+    val src = Seq((1, 2, 3)).toDF("a_b", "a.b", "a.c")
+    val df = src.drop("a_b")
+    checkAnswer(df, Row(2, 3))
+    assert(df.schema.map(_.name) === Seq("a.b", "a.c"))
+    val df1 = src.drop("a.b")
+    checkAnswer(df1, Row(1, 3))
+    assert(df1.schema.map(_.name) === Seq("a_b", "a.c"))
+    val df2 = src.drop("`a.c`")
+    checkAnswer(df2, Row(1, 2))
+    assert(df2.schema.map(_.name) === Seq("a_b", "a.b"))
+    val col1 = new Column("a_b")
+    val df4 = src.drop(col1)
+    checkAnswer(df4, Row(2, 3))
+    assert(df4.schema.map(_.name) === Seq("a.b", "a.c"))
+    val col2 = new Column("a.b")
+    val df5 = src.drop(col2)
+    checkAnswer(df5, Row(1, 3))
+    assert(df5.schema.map(_.name) === Seq("a_b", "a.c"))
+    val col3 = new Column("`a.c`")
+    val df6 = src.drop(col3)
+    checkAnswer(df6, Row(1, 2))
+    assert(df6.schema.map(_.name) === Seq("a_b", "a.b"))
+  }
 }

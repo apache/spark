@@ -143,11 +143,22 @@ class DataFrame private[sql](
       queryExecution.analyzed
   }
 
+  /**
+   * Resolves a column path i.e column name may contain "." or "`". .
+   */
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
       throw new AnalysisException(
         s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
     }
+  }
+
+  private[sql] def resolveToIndex(colName: String): Option[Int] = {
+    val resolver = sqlContext.analyzer.resolver
+    // First remove any user supplied quotes.
+    val unquotedColName = colName.stripPrefix("`").stripSuffix("`")
+    val index = queryExecution.analyzed.output.indexWhere(f => resolver(f.name, unquotedColName))
+    if (index >= 0) Some(index) else None
   }
 
   protected[sql] def numericColumns: Seq[Expression] = {
@@ -1176,19 +1187,10 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
+    resolveToIndex(colName).map { index =>
+      select(output.map(attr => Column(attr)).updated(index, col.as(colName)) : _*)
+    }.getOrElse {
       select(Column("*"), col.as(colName))
     }
   }
@@ -1197,19 +1199,10 @@ class DataFrame private[sql](
    * Returns a new [[DataFrame]] by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName, metadata)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
+    resolveToIndex(colName).map {index =>
+      select(output.map(attr => Column(attr)).updated(index, col.as(colName, metadata)) : _*)
+    }.getOrElse {
       select(Column("*"), col.as(colName, metadata))
     }
   }
@@ -1221,19 +1214,11 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
     val output = queryExecution.analyzed.output
-    val shouldRename = output.exists(f => resolver(f.name, existingName))
-    if (shouldRename) {
-      val columns = output.map { col =>
-        if (resolver(col.name, existingName)) {
-          Column(col).as(newName)
-        } else {
-          Column(col)
-        }
-      }
-      select(columns : _*)
-    } else {
+    resolveToIndex(existingName).map {index =>
+      val renamed = Column(output(index)).as(newName)
+      select(output.map(attr => Column(attr)).updated(index, renamed) : _*)
+    }.getOrElse {
       this
     }
   }
@@ -1256,13 +1241,13 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
-    val resolver = sqlContext.analyzer.resolver
-    val remainingCols =
-      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
-    if (remainingCols.size == this.schema.size) {
+    val indexesToDrop = colNames.flatMap(resolveToIndex)
+    if (indexesToDrop.isEmpty) {
       this
     } else {
-      this.select(remainingCols: _*)
+      val output = queryExecution.analyzed.output
+      val remainingCols = output.indices.diff(indexesToDrop).map(index => Column(output(index)))
+      select(remainingCols: _*)
     }
   }
 
@@ -1275,16 +1260,20 @@ class DataFrame private[sql](
    * @since 1.4.1
    */
   def drop(col: Column): DataFrame = {
-    val expression = col match {
+    val expression: Expression = col match {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(u.name, sqlContext.analyzer.resolver).getOrElse(u)
+        resolveToIndex(u.name).map(this.logicalPlan.output).getOrElse(u)
       case Column(expr: Expression) => expr
     }
     val attrs = this.logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
       attr != expression
     }.map(attr => Column(attr))
-    select(colsAfterDrop : _*)
+    if (colsAfterDrop.size == this.schema.size) {
+      this
+    } else {
+      select(colsAfterDrop: _*)
+    }
   }
 
   /**
