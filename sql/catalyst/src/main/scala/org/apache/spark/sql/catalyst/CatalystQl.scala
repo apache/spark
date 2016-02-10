@@ -198,20 +198,20 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val keys = keyASTs.map(nodeToExpr)
     val keyMap = keyASTs.zipWithIndex.toMap
 
-    val chooses: Seq[Int] = setASTs.map {
+    val mask = (1 << keys.length) - 1
+    val bitmasks: Seq[Int] = setASTs.map {
       case Token("TOK_GROUPING_SETS_EXPRESSION", columns) =>
-        columns.foldLeft(0)((bitmap, col) => {
+        columns.foldLeft(mask)((bitmap, col) => {
           val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2).getOrElse(
             throw new AnalysisException(s"${col.treeString} doesn't show up in the GROUP BY list"))
-          bitmap | 1 << (keys.length - 1 - keyIndex)
+          // 0 means that the column at the given index is a grouping column, 1 means it is not,
+          // so we unset the bit in bitmap.
+          bitmap & ~(1 << (keys.length - 1 - keyIndex))
         })
       case _ => sys.error("Expect GROUPING SETS clause")
     }
 
-    val mask = (1 << keys.length) - 1
-    // 0 for choosed key, 1 for not choosed.
-    val masks = chooses.map(x => (~x) & mask)
-    (keys, masks)
+    (keys, bitmasks)
   }
 
   protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
