@@ -28,7 +28,7 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQueryException, ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
 import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution, StreamingRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -221,8 +221,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       require(!q4.isActive)
       val q5 = stopRandomQueryAsync(10 milliseconds, withError = true)
       eventually(Timeout(streamingTimeout)) { require(!q5.isActive) }
-      // After q4 terminates with exception, awaitAnyTerm should start throwing exception
-      //testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 100 milliseconds)
+      // After q5 terminates with exception, awaitAnyTerm should start throwing exception
+      testAwaitAnyTermination(ExpectException[SparkException], awaitTimeout = 100 milliseconds)
     }
   }
 
