@@ -55,12 +55,10 @@ def get_ldap_connection(dn=None, password=None):
 
 def group_contains_user(conn, search_base, group_filter, user_name_attr, username):
     search_filter = '(&({0}))'.format(group_filter)
-    LOG.warn("search_base: %s, search filter: %s, user_name_attr: %s, username: %s", search_base, search_filter, user_name_attr, username)
     if not conn.search(search_base, search_filter, attributes=[user_name_attr]):
         LOG.warn("Unable to find group for %s %s", search_base, search_filter)
     else:
         for resp in conn.response:
-            LOG.warn("resp: %s", resp)
             if 'attributes' in resp and resp['attributes'].get(user_name_attr)[0] == username:
                 return True
     return False
