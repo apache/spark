@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.types.DataType
 
 
 /**
@@ -152,7 +153,7 @@ case class StorageFormat(
  */
 case class Column(
   name: String,
-  dataType: String,
+  dataType: DataType,
   nullable: Boolean,
   comment: String
 )
@@ -177,19 +178,19 @@ case class TablePartition(
  * future once we have a better understanding of how we want to handle skewed columns.
  */
 case class Table(
-  name: String,
-  description: String,
-  schema: Seq[Column],
-  partitionColumns: Seq[Column],
-  sortColumns: Seq[Column],
-  storage: StorageFormat,
-  numBuckets: Int,
-  properties: Map[String, String],
-  tableType: String,
-  createTime: Long,
-  lastAccessTime: Long,
-  viewOriginalText: Option[String],
-  viewText: Option[String]) {
+    name: String,
+    description: String,
+    schema: Seq[Column],
+    partitionColumns: Seq[Column],
+    sortColumns: Seq[Column],
+    storage: StorageFormat,
+    numBuckets: Int,
+    properties: Map[String, String],
+    tableType: String,
+    createTime: Long,
+    lastAccessTime: Long,
+    viewOriginalText: Option[String],
+    viewText: Option[String]) {
 
   require(tableType == "EXTERNAL_TABLE" || tableType == "INDEX_TABLE" ||
     tableType == "MANAGED_TABLE" || tableType == "VIRTUAL_VIEW")

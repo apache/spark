@@ -208,7 +208,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
       partitionColumns = Seq.empty[HiveColumn],
       properties = properties,
       serdeProperties = Map[String, String](),
-      tableType = VirtualView,
+      tableType = TableType.VirtualView,
       location = None,
       inputFormat = None,
       outputFormat = None,
@@ -376,7 +376,12 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           partitionColumns = Seq.empty[HiveColumn],
           properties = Map[String, String](),
           serdeProperties = Map[String, String](),
-          tableType = if (externalTable.isDefined) ExternalTable else ManagedTable,
+          tableType =
+            if (externalTable.isDefined) {
+              TableType.ExternalTable
+            } else {
+              TableType.ManagedTable
+            },
           location = None,
           inputFormat = None,
           outputFormat = None,

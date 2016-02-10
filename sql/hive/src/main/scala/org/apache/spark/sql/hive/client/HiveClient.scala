@@ -26,11 +26,13 @@ import org.apache.spark.sql.catalyst.catalog.Database
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
-private[hive] abstract class TableType { val name: String }
-private[hive] case object ExternalTable extends TableType { override val name = "EXTERNAL_TABLE" }
-private[hive] case object IndexTable extends TableType { override val name = "INDEX_TABLE" }
-private[hive] case object ManagedTable extends TableType { override val name = "MANAGED_TABLE" }
-private[hive] case object VirtualView extends TableType { override val name = "VIRTUAL_VIEW" }
+private[hive] object TableType extends Enumeration {
+  type TableType = Value
+  val ExternalTable = Value("EXTERNAL_TABLE")
+  val IndexTable = Value("INDEX_TABLE")
+  val ManagedTable = Value("MANAGED_TABLE")
+  val VirtualView = Value("VIRTUAL_VIEW")
+}
 
 // TODO: Use this for Tables and Partitions
 private[hive] case class HiveStorageDescriptor(
@@ -52,7 +54,7 @@ private[hive] case class HiveTable(
     partitionColumns: Seq[HiveColumn],
     properties: Map[String, String],
     serdeProperties: Map[String, String],
-    tableType: TableType,
+    tableType: TableType.Value,
     location: Option[String] = None,
     inputFormat: Option[String] = None,
     outputFormat: Option[String] = None,

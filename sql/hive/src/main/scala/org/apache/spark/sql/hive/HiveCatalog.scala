@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.catalyst.catalog.{Catalog, Database, Function, Table, TablePartition}
-import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.hive.client.{HiveClient, HiveColumn, HiveTable, TableType}
 
 
 /**
@@ -28,6 +28,26 @@ import org.apache.spark.sql.hive.client.HiveClient
  */
 private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   import Catalog._
+
+  private def toHiveColumn(c: Column): HiveColumn = {
+    HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment)
+  }
+
+  private def toHiveTable(db: String, t: Table): HiveTable = {
+    HiveTable(
+      specifiedDatabase = Some(db),
+      name = t.name,
+      schema = t.schema.map(toHiveColumn),
+      partitionColumns = t.partitionColumns.map(toHiveColumn),
+      properties = t.properties,
+      serdeProperties = t.storage.serdeProperties,
+      tableType = TableType.withName(t.tableType),
+      location = Some(t.storage.locationUri),
+      inputFormat = Some(t.storage.inputFormat),
+      outputFormat = Some(t.storage.outputFormat),
+      serde = Some(t.storage.serde),
+      viewText = t.viewText)
+  }
 
   // --------------------------------------------------------------------------
   // Databases
@@ -75,7 +95,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       tableDefinition: Table,
       ignoreIfExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.createTable(toHiveTable(db, tableDefinition))
   }
 
   def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit = synchronized {

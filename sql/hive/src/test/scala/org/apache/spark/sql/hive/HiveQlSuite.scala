@@ -25,7 +25,8 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.catalyst.plans.logical.Generate
-import org.apache.spark.sql.hive.client.{ExternalTable, HiveColumn, HiveTable, ManagedTable}
+import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
+import org.apache.spark.sql.hive.client.TableType.{ExternalTable, ManagedTable}
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   val parser = new HiveQl(SimpleParserConf())

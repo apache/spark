@@ -294,7 +294,6 @@ private[hive] class HiveClientImpl(
 
     val hiveTable = Option(client.getTable(dbName, tableName, false))
     val converted = hiveTable.map { h =>
-
       HiveTable(
         name = h.getTableName,
         specifiedDatabase = Option(h.getDbName),
@@ -304,10 +303,10 @@ private[hive] class HiveClientImpl(
         properties = h.getParameters.asScala.toMap,
         serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap,
         tableType = h.getTableType match {
-          case HTableType.MANAGED_TABLE => ManagedTable
-          case HTableType.EXTERNAL_TABLE => ExternalTable
-          case HTableType.VIRTUAL_VIEW => VirtualView
-          case HTableType.INDEX_TABLE => IndexTable
+          case HTableType.MANAGED_TABLE => TableType.ManagedTable
+          case HTableType.EXTERNAL_TABLE => TableType.ExternalTable
+          case HTableType.VIRTUAL_VIEW => TableType.VirtualView
+          case HTableType.INDEX_TABLE => TableType.IndexTable
         },
         location = shim.getDataLocation(h),
         inputFormat = Option(h.getInputFormatClass).map(_.getName),

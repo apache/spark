@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{QueryTest, Row, SaveMode, SQLConf}
-import org.apache.spark.sql.hive.client.{ExternalTable, ManagedTable}
+import org.apache.spark.sql.hive.client.TableType.{ExternalTable, ManagedTable}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}

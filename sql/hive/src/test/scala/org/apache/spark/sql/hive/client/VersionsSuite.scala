@@ -130,7 +130,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           partitionColumns = Seq.empty,
           properties = Map.empty,
           serdeProperties = Map.empty,
-          tableType = ManagedTable,
+          tableType = TableType.ManagedTable,
           location = None,
           inputFormat =
             Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),

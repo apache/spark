@@ -278,10 +278,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     val tableType = if (isExternal) {
       tableProperties.put("EXTERNAL", "TRUE")
-      ExternalTable
+      TableType.ExternalTable
     } else {
       tableProperties.put("EXTERNAL", "FALSE")
-      ManagedTable
+      TableType.ManagedTable
     }
 
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
@@ -422,7 +422,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
       alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
-    } else if (table.tableType == VirtualView) {
+    } else if (table.tableType == TableType.VirtualView) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
         // because hive use things like `_c0` to build the expanded text
@@ -778,7 +778,7 @@ private[hive] case class MetastoreRelation
     tTable.setParameters(tableParameters)
     table.properties.foreach { case (k, v) => tableParameters.put(k, v) }
 
-    tTable.setTableType(table.tableType.name)
+    tTable.setTableType(table.tableType.toString)
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     tTable.setSd(sd)

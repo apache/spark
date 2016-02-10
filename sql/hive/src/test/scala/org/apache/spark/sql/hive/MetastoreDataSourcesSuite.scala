@@ -27,7 +27,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
+import org.apache.spark.sql.hive.client.HiveTable
+import org.apache.spark.sql.hive.client.TableType.ManagedTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
