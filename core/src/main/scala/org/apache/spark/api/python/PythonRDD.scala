@@ -28,8 +28,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
 import scala.language.postfixOps
-import scala.util.control.NonFatal
 import scala.ref
+import scala.util.control.NonFatal
+
 
 import com.google.common.base.Charsets.UTF_8
 import org.apache.hadoop.conf.Configuration
@@ -871,7 +872,7 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
   }
 }
 /**
- * Create a class that extends PhantomReference 
+ * Create a class that extends PhantomReference.
  */
 
 private[spark] class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
@@ -892,8 +893,8 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   with Logging {
 
   val queue = new ReferenceQueue[File]()
-  val phantomReferences = new ListBuffer[FilePhantomReference]();
-
+  val phantomReferences = new ListBuffer[FilePhantomReference]()
+  val threadName = "WeakReference"
 /**
  * Read data from disks, then copy it to `out`
  */
@@ -912,7 +913,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
    */
  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
-    val file = File.createTempFile("broadcast", "", dir) 
+    val file = File.createTempFile("broadcast", "", dir)
     phantomReferences += new FilePhantomReference(file, queue)
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
@@ -922,19 +923,18 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
        in.close();
     }
   }
-  /** Create a seperate daemon thread to remove phantomreferences from queue and invoke cleanup */
-      
- val referenceThread = new Thread {
- setDaemon(true)
-    override def run() {
-    try {
-      val ref = queue.remove().asInstanceOf[FilePhantomReference]
-      phantomReferences -= ref 
-        } catch {
-          case e: Exception => 
+  /** Create a seperate daemon thread to remove phantomreferences from queue and invoke cleanup */     
+    val referenceThread = new Thread(threadName){
+    setDaemon(true)
+      override def run() {
+      try {
+        val ref = queue.remove().asInstanceOf[FilePhantomReference]
+        phantomReferences -= ref
+      } catch {
+          case e: Exception =>
             logError(s"Error removing reference", e)
-        }
-    }
-  }.start() 
+      }
+      }
+    }.start()
 }
 // scalastyle:on no.finalize
