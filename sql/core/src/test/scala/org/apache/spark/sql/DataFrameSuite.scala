@@ -36,6 +36,7 @@ import org.apache.spark.sql.types._
 class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
+
   test("analysis error should be eagerly reported") {
     // Eager analysis.
     withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {
@@ -1296,5 +1297,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
+  }
+
+  test("SPARK-12987: drop column ") {
+    val df = Seq((1, 2)).toDF("a_b", "a.c")
+    val df1 = df.drop("a_b")
+    checkAnswer(df1, Row(2))
+    assert(df1.schema.map(_.name) === Seq("a.c"))
   }
 }
