@@ -596,7 +596,6 @@ class Analyzer(
         return plan
       }
       plan match {
-        //
         case p: Project =>
           val missing = missingAttrs -- p.child.outputSet
           Project(p.projectList ++ missingAttrs, addMissingAttr(p.child, missing))
@@ -614,8 +613,8 @@ class Analyzer(
           }
           val newAggregateExpressions = a.aggregateExpressions ++ missingAttrs
           a.copy(aggregateExpressions = newAggregateExpressions)
-        case f: UnaryNode =>
-          addMissingAttr(f.child, missingAttrs)
+        case u: UnaryNode =>
+          u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>
           throw new AnalysisException(s"Can't add $missingAttrs to $other")
       }
