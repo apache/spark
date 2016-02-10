@@ -18,6 +18,7 @@
 package org.apache.spark.executor
 
 import java.nio.ByteBuffer
+import java.util
 
 import scala.collection.JavaConverters._
 
@@ -72,6 +73,12 @@ private[spark] class MesosExecutorBackend
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     val conf = new SparkConf(loadDefaults = true).setAll(properties)
     val port = conf.getInt("spark.executor.port", 0)
+    val ranges = getRangesFromResources(executorInfo)
+
+    if (ranges.nonEmpty) {
+      Utils.setPortRangeRestriction(conf, ranges)
+    }
+
     val env = SparkEnv.createExecutorEnv(
       conf, executorId, slaveInfo.getHostname, port, cpusPerTask, isLocal = false)
 
@@ -80,6 +87,16 @@ private[spark] class MesosExecutorBackend
       slaveInfo.getHostname,
       env)
   }
+
+  private def getRangesFromResources(executorInfo: ExecutorInfo): List[(Long, Long)] = {
+  val ranges = executorInfo.getResourcesList.asScala
+    .filter(r => r.getType == Value.Type.RANGES & r.getName == "ports")
+    .toList.map(r => r.getRanges.getRangeList)
+
+    // a final list of all ranges in format (Long , Long)
+    ranges.flatMap { ranges => ranges.asScala.map { r => (r.getBegin, r.getEnd) }}
+  }
+
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
     val taskId = taskInfo.getTaskId.getValue.toLong

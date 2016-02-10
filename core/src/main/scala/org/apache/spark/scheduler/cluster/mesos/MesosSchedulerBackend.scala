@@ -21,6 +21,7 @@ import java.io.File
 import java.util.{ArrayList => JArrayList, Collections, List => JList}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.{Scheduler => MScheduler, _}
@@ -140,8 +141,13 @@ private[spark] class MesosSchedulerBackend(
     val (resourcesAfterMem, usedMemResources) =
       partitionResources(resourcesAfterCpu.asJava, "mem", calculateTotalMemory(sc))
 
+    val (resourcesAfterPort, usedPortResources) = resourcesAfterMem.partition {
+      r => ! ( r.getType == Value.Type.RANGES &  r.getName == "ports" )
+    }
+
     builder.addAllResources(usedCpuResources.asJava)
     builder.addAllResources(usedMemResources.asJava)
+    builder.addAllResources(usedPortResources.asJava)
 
     sc.conf.getOption("spark.mesos.uris").foreach(setupUris(_, command))
 
@@ -155,7 +161,7 @@ private[spark] class MesosSchedulerBackend(
         .setupContainerBuilderDockerInfo(image, sc.conf, executorInfo.getContainerBuilder())
     }
 
-    (executorInfo.build(), resourcesAfterMem.asJava)
+    (executorInfo.build(), resourcesAfterPort.asJava)
   }
 
   /**
@@ -164,7 +170,7 @@ private[spark] class MesosSchedulerBackend(
    */
   private def createExecArg(): Array[Byte] = {
     if (execArgs == null) {
-      val props = new HashMap[String, String]
+      val props = new mutable.HashMap[String, String]
       for ((key, value) <- sc.conf.getAll) {
         props(key) = value
       }
@@ -244,20 +250,23 @@ private[spark] class MesosSchedulerBackend(
       val (usableOffers, unUsableOffers) = offersMatchingConstraints.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
+        val ports = getRangeResource(o.getResourcesList, "ports")
         val slaveId = o.getSlaveId.getValue
         val offerAttributes = toAttributeMap(o.getAttributesList)
 
         // check offers for
         //  1. Memory requirements
         //  2. CPU requirements - need at least 1 for executor, 1 for task
+        //  3. ports
         val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
+        val meetsPortRequirements = checkPorts(sc, ports)
         val meetsRequirements =
-          (meetsMemoryRequirements && meetsCPURequirements) ||
+          (meetsMemoryRequirements && meetsCPURequirements && meetsPortRequirements) ||
           (slaveIdToExecutorInfo.contains(slaveId) && cpus >= scheduler.CPUS_PER_TASK)
         val debugstr = if (meetsRequirements) "Accepting" else "Declining"
         logDebug(s"$debugstr offer: ${o.getId.getValue} with attributes: "
-          + s"$offerAttributes mem: $mem cpu: $cpus")
+          + s"$offerAttributes mem: $mem cpu: $cpus ports: ${ports.mkString(",")}")
 
         meetsRequirements
       }

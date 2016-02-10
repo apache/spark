@@ -27,7 +27,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.mesos.Protos._
-import org.apache.mesos.Protos.Value.Scalar
+import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Matchers._
@@ -157,7 +157,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
   }
 
   test("mesos resource offers result in launching tasks") {
-    def createOffer(id: Int, mem: Int, cpu: Int): Offer = {
+    def createOffer(id: Int, mem: Int, cpu: Int, ports: (Long, Long)): Offer = {
       val builder = Offer.newBuilder()
       builder.addResourcesBuilder()
         .setName("mem")
@@ -167,6 +167,11 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
         .setName("cpus")
         .setType(Value.Type.SCALAR)
         .setScalar(Scalar.newBuilder().setValue(cpu))
+      builder.addResourcesBuilder()
+        .setName("ports")
+        .setType(Value.Type.RANGES)
+        .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
+          .setBegin(ports._1).setEnd(ports._2).build()))
       builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
         .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
         .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
@@ -191,11 +196,12 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
+    val offeredPorts = (31100L, 31200L)
 
     val mesosOffers = new java.util.ArrayList[Offer]
-    mesosOffers.add(createOffer(1, minMem, minCpu))
-    mesosOffers.add(createOffer(2, minMem - 1, minCpu))
-    mesosOffers.add(createOffer(3, minMem, minCpu))
+    mesosOffers.add(createOffer(1, minMem, minCpu, offeredPorts))
+    mesosOffers.add(createOffer(2, minMem - 1, minCpu, offeredPorts))
+    mesosOffers.add(createOffer(3, minMem, minCpu, offeredPorts))
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
     expectedWorkerOffers.append(new WorkerOffer(
@@ -242,7 +248,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
 
     // Unwanted resources offered on an existing node. Make sure they are declined
     val mesosOffers2 = new java.util.ArrayList[Offer]
-    mesosOffers2.add(createOffer(1, minMem, minCpu))
+    mesosOffers2.add(createOffer(1, minMem, minCpu, offeredPorts))
     reset(taskScheduler)
     reset(driver)
     when(taskScheduler.resourceOffers(any(classOf[Seq[WorkerOffer]]))).thenReturn(Seq(Seq()))
@@ -269,6 +275,8 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     when(sc.listenerBus).thenReturn(listenerBus)
 
     val id = 1
+    val (devPortBegin, devPortEnd) = (40000, 40100)
+    val (prodPortBegin, prodPortEnd) = (30000, 30100)
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -281,6 +289,12 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
       .setType(Value.Type.SCALAR)
       .setScalar(Scalar.newBuilder().setValue(1))
     builder.addResourcesBuilder()
+      .setName("ports")
+      .setRole("prod")
+      .setType(Value.Type.RANGES)
+      .setRanges(Ranges.newBuilder().addRange(
+        MesosRange.newBuilder().setBegin(prodPortBegin).setEnd(prodPortEnd).build()))
+    builder.addResourcesBuilder()
       .setName("mem")
       .setRole("dev")
       .setType(Value.Type.SCALAR)
@@ -290,6 +304,12 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
       .setRole("dev")
       .setType(Value.Type.SCALAR)
       .setScalar(Scalar.newBuilder().setValue(2))
+    builder.addResourcesBuilder()
+      .setName("ports")
+      .setRole("dev")
+      .setType(Value.Type.RANGES)
+      .setRanges(Ranges.newBuilder().addRange(
+        MesosRange.newBuilder().setBegin(devPortBegin).setEnd(devPortEnd).build()))
     val offer = builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
       .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
       .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
