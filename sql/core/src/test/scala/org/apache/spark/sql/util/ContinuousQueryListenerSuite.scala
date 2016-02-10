@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.util
 
-import scala.collection.mutable
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.util.control.NonFatal
 
 import org.scalatest.BeforeAndAfter
@@ -71,7 +72,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
             // There should be only on progress event as batch has been processed
             assert(listener.progressStatuses.size === 1)
-            val status = listener.progressStatuses.head
+            val status = listener.progressStatuses.peek()
             assert(status != null)
             assert(status.active == true)
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
@@ -167,8 +168,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
     @volatile var startStatus: QueryStatus = null
     @volatile var terminationStatus: QueryStatus = null
-    val progressStatuses = new mutable.ArrayBuffer[QueryStatus]
-      with mutable.SynchronizedBuffer[QueryStatus]
+    val progressStatuses = new ConcurrentLinkedQueue[QueryStatus]
 
     def reset(): Unit = {
       startStatus = null
@@ -195,7 +195,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     override def onQueryProgress(queryProgress: QueryProgress): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryProgress called before onQueryStarted")
-        progressStatuses += QueryStatus(queryProgress.query)
+        progressStatuses.add(QueryStatus(queryProgress.query))
       }
     }
 
