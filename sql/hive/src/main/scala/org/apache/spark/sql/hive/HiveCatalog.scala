@@ -53,11 +53,13 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   // Databases
   // --------------------------------------------------------------------------
 
-  def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit = synchronized {
+  override def createDatabase(
+      dbDefinition: Database,
+      ignoreIfExists: Boolean): Unit = synchronized {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
 
-  def dropDatabase(
+  override def dropDatabase(
       db: String,
       ignoreIfNotExists: Boolean,
       cascade: Boolean): Unit = synchronized {
@@ -67,23 +69,23 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   /**
    * Alter an existing database. This operation does not support renaming.
    */
-  def alterDatabase(db: String, dbDefinition: Database): Unit = synchronized {
+  override def alterDatabase(db: String, dbDefinition: Database): Unit = synchronized {
     client.alterDatabase(db, dbDefinition)
   }
 
-  def getDatabase(db: String): Database = synchronized {
+  override def getDatabase(db: String): Database = synchronized {
     client.getDatabase(db)
   }
 
-  def databaseExists(db: String): Boolean = synchronized {
+  override def databaseExists(db: String): Boolean = synchronized {
     client.getDatabaseOption(db).isDefined
   }
 
-  def listDatabases(): Seq[String] = synchronized {
+  override def listDatabases(): Seq[String] = synchronized {
     client.listDatabases("*")
   }
 
-  def listDatabases(pattern: String): Seq[String] = synchronized {
+  override def listDatabases(pattern: String): Seq[String] = synchronized {
     client.listDatabases(pattern)
   }
 
@@ -91,37 +93,43 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   // Tables
   // --------------------------------------------------------------------------
 
-  def createTable(
+  override def createTable(
       db: String,
       tableDefinition: Table,
       ignoreIfExists: Boolean): Unit = synchronized {
     client.createTable(toHiveTable(db, tableDefinition))
   }
 
-  def dropTable(db: String, table: String, ignoreIfNotExists: Boolean): Unit = synchronized {
+  override def dropTable(
+      db: String,
+      table: String,
+      ignoreIfNotExists: Boolean): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
+  override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
   /**
    * Alter an existing table. This operation does not support renaming.
    */
-  def alterTable(db: String, table: String, tableDefinition: Table): Unit = synchronized {
+  override def alterTable(
+      db: String,
+      table: String,
+      tableDefinition: Table): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def getTable(db: String, table: String): Table = synchronized {
+  override def getTable(db: String, table: String): Table = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def listTables(db: String): Seq[String] = synchronized {
+  override def listTables(db: String): Seq[String] = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def listTables(db: String, pattern: String): Seq[String] = synchronized {
+  override def listTables(db: String, pattern: String): Seq[String] = synchronized {
     throw new UnsupportedOperationException
   }
 
@@ -129,7 +137,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  def createPartitions(
+  override def createPartitions(
       db: String,
       table: String,
       parts: Seq[TablePartition],
@@ -137,7 +145,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
     throw new UnsupportedOperationException
   }
 
-  def dropPartitions(
+  override def dropPartitions(
       db: String,
       table: String,
       parts: Seq[PartitionSpec],
@@ -148,7 +156,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   /**
    * Alter an existing table partition and optionally override its spec.
    */
-  def alterPartition(
+  override def alterPartition(
       db: String,
       table: String,
       spec: PartitionSpec,
@@ -156,11 +164,14 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
     throw new UnsupportedOperationException
   }
 
-  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition = synchronized {
+  override def getPartition(
+      db: String,
+      table: String,
+      spec: PartitionSpec): TablePartition = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
+  override def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
     throw new UnsupportedOperationException
   }
 
@@ -168,29 +179,32 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   // Functions
   // --------------------------------------------------------------------------
 
-  def createFunction(
+  override def createFunction(
       db: String,
       funcDefinition: Function,
       ignoreIfExists: Boolean): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def dropFunction(db: String, funcName: String): Unit = synchronized {
+  override def dropFunction(db: String, funcName: String): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
   /**
    * Alter an existing function and optionally override its name.
    */
-  def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit = synchronized {
+  override def alterFunction(
+      db: String,
+      funcName: String,
+      funcDefinition: Function): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def getFunction(db: String, funcName: String): Function = synchronized {
+  override def getFunction(db: String, funcName: String): Function = synchronized {
     throw new UnsupportedOperationException
   }
 
-  def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
+  override def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
     throw new UnsupportedOperationException
   }
 
