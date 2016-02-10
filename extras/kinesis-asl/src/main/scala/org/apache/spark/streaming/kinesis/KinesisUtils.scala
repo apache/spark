@@ -73,7 +73,7 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, None)
+        cleanedHandler, new AWSCredentialPool())
     }
   }
 
@@ -123,12 +123,12 @@ object KinesisUtils {
     awsSecretKey: String): ReceiverInputDStream[T] = {
     // scalastyle:on
     val cleanedHandler = ssc.sc.clean(messageHandler)
-    val kinesisCredentials = SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)
-    val credentials = new CredentialPool(kinesisCredentials, kinesisCredentials);
+    val awsCredentials = Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey))
+    val credentialPool = new AWSCredentialPool(awsCredentials, awsCredentials, awsCredentials);
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, Some(credentials))
+        cleanedHandler, credentialPool)
     }
   }
 
@@ -172,7 +172,7 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, None)
+        defaultMessageHandler, new AWSCredentialPool())
     }
   }
 
@@ -216,12 +216,12 @@ object KinesisUtils {
     storageLevel: StorageLevel,
     awsAccessKeyId: String,
     awsSecretKey: String): ReceiverInputDStream[Array[Byte]] = {
-    val kinesisCredentials = SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)
-    val credentials = new CredentialPool(kinesisCredentials, kinesisCredentials);
+    val awsCredentials = Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey))
+    val credentialPool = new AWSCredentialPool(awsCredentials, awsCredentials, awsCredentials);
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, Some(credentials))
+        defaultMessageHandler, credentialPool)
     }
   }
 
@@ -265,7 +265,7 @@ object KinesisUtils {
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl,
         getRegionByEndpoint(endpointUrl), initialPositionInStream, ssc.sc.appName,
-        checkpointInterval, storageLevel, defaultMessageHandler, None)
+        checkpointInterval, storageLevel, defaultMessageHandler, new AWSCredentialPool())
     }
   }
 
@@ -493,11 +493,12 @@ object KinesisUtils {
     initialPositionInStream: InitialPositionInStream,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
-    kinesisCredentials: SerializableAWSCredentials,
-    dynamoDbCredentials: SerializableAWSCredentials): JavaReceiverInputDStream[Array[Byte]] = {
+    kinesisCredentials: Option[SerializableAWSCredentials],
+    dynamoDbCredentials: Option[SerializableAWSCredentials],
+    cloudWatchCredentials: Option[SerializableAWSCredentials]): JavaReceiverInputDStream[Array[Byte]] = {
     createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel,
-      defaultMessageHandler(_), kinesisCredentials, dynamoDbCredentials)
+      defaultMessageHandler(_), kinesisCredentials, dynamoDbCredentials, cloudWatchCredentials)
   }
 
   /**
@@ -542,15 +543,16 @@ object KinesisUtils {
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T,
-    kinesisCredentials: SerializableAWSCredentials,
-    dynamoDbCredentials: SerializableAWSCredentials): ReceiverInputDStream[T] = {
+    kinesisCredentials: Option[SerializableAWSCredentials],
+    dynamoDbCredentials: Option[SerializableAWSCredentials],
+    cloudWatchCredentials: Option[SerializableAWSCredentials]): ReceiverInputDStream[T] = {
     // scalastyle:on
     val cleanedHandler = ssc.sc.clean(messageHandler)
-    val credentialPool = new CredentialPool(kinesisCredentials, dynamoDbCredentials)
+    val credentialPool = new AWSCredentialPool(kinesisCredentials, dynamoDbCredentials, cloudWatchCredentials)
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
         initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, Some(credentialPool))
+        cleanedHandler, credentialPool)
     }
   }
 
