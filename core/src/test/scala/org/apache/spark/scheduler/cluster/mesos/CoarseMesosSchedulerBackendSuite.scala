@@ -22,7 +22,7 @@ import java.util.Collections
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
-import org.apache.mesos.Protos.Value.Scalar
+import org.apache.mesos.Protos.Value.{Range => MesosRange, Ranges, Scalar}
 import org.mockito.Matchers
 import org.mockito.Matchers._
 import org.mockito.Mockito._
@@ -37,7 +37,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with MockitoSugar
     with BeforeAndAfter {
 
-  private def createOffer(offerId: String, slaveId: String, mem: Int, cpu: Int): Offer = {
+  private def createOffer(offerId: String, slaveId: String, mem: Int, cpu: Int,
+                          ports: (Long, Long)): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -47,6 +48,11 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       .setName("cpus")
       .setType(Value.Type.SCALAR)
       .setScalar(Scalar.newBuilder().setValue(cpu))
+    builder.addResourcesBuilder()
+    .setName("ports")
+    .setType(Value.Type.RANGES)
+    .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
+      .setBegin(ports._1).setEnd(ports._2).build()))
     builder.setId(OfferID.newBuilder()
       .setValue(offerId).build())
       .setFrameworkId(FrameworkID.newBuilder()
@@ -100,9 +106,10 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     val backend = createSchedulerBackend(taskScheduler, driver)
     val minMem = backend.calculateTotalMemory(sc)
     val minCpu = 4
+    val offeredPorts = (31100L, 31200L)
 
     val mesosOffers = new java.util.ArrayList[Offer]
-    mesosOffers.add(createOffer("o1", "s1", minMem, minCpu))
+    mesosOffers.add(createOffer("o1", "s1", minMem, minCpu, offeredPorts))
 
     val taskID0 = TaskID.newBuilder().setValue("0").build()
 
@@ -118,7 +125,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     verify(driver, times(1)).killTask(taskID0)
 
     val mesosOffers2 = new java.util.ArrayList[Offer]
-    mesosOffers2.add(createOffer("o2", "s2", minMem, minCpu))
+    mesosOffers2.add(createOffer("o2", "s2", minMem, minCpu, offeredPorts))
     backend.resourceOffers(driver, mesosOffers2)
 
     verify(driver, times(1))
@@ -148,12 +155,14 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     val backend = createSchedulerBackend(taskScheduler, driver)
     val minMem = backend.calculateTotalMemory(sc) + 1024
     val minCpu = 4
+    val offeredPorts1 = (31100L, 31200L)
+    val offeredPorts2 = (41100L, 41200L)
 
     val mesosOffers = new java.util.ArrayList[Offer]
-    val offer1 = createOffer("o1", "s1", minMem, minCpu)
+    val offer1 = createOffer("o1", "s1", minMem, minCpu, offeredPorts2)
     mesosOffers.add(offer1)
 
-    val offer2 = createOffer("o2", "s1", minMem, 1);
+    val offer2 = createOffer("o2", "s1", minMem, 1, offeredPorts2)
 
     backend.resourceOffers(driver, mesosOffers)
 

@@ -188,6 +188,11 @@ private[spark] class CoarseMesosSchedulerBackend(
         .setValue(value)
         .build())
     }
+
+    environment.addVariables(Environment.Variable.newBuilder()
+      .setName("AVAILABLE_PORTS")
+      .setValue(getRangeResource(offer.getResourcesList, "ports").mkString(" ")))
+
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
@@ -275,8 +280,11 @@ private[spark] class CoarseMesosSchedulerBackend(
         val slaveId = offer.getSlaveId.getValue
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
+        val ports = getRangeResource(offer.getResourcesList, "ports")
         val id = offer.getId.getValue
-        if (meetsConstraints) {
+        val meetsPortRequirements = checkPorts(sc, ports)
+
+        if (meetsConstraints && meetsPortRequirements) {
           if (taskIdToSlaveId.size < executorLimit &&
               totalCoresAcquired < maxCores &&
               mem >= calculateTotalMemory(sc) &&
@@ -291,10 +299,13 @@ private[spark] class CoarseMesosSchedulerBackend(
             slaveIdsWithExecutors += slaveId
             coresByTaskId(taskId) = cpusToUse
             // Gather cpu resources from the available resources and use them in the task.
-            val (remainingResources, cpuResourcesToUse) =
+            val (remainingCpuResources, cpuResourcesToUse) =
               partitionResources(offer.getResourcesList, "cpus", cpusToUse)
-            val (_, memResourcesToUse) =
-              partitionResources(remainingResources.asJava, "mem", calculateTotalMemory(sc))
+            val (remainingMemResources, memResourcesToUse) =
+              partitionResources(remainingCpuResources.asJava, "mem", calculateTotalMemory(sc))
+            val (remainingPortResources, portResourcesToUse) = remainingMemResources
+              .partition { r => ! ( r.getType == Value.Type.RANGES &  r.getName == "ports" ) }
+
             val taskBuilder = MesosTaskInfo.newBuilder()
               .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
               .setSlaveId(offer.getSlaveId)
@@ -302,6 +313,7 @@ private[spark] class CoarseMesosSchedulerBackend(
               .setName("Task " + taskId)
               .addAllResources(cpuResourcesToUse.asJava)
               .addAllResources(memResourcesToUse.asJava)
+              .addAllResources(portResourcesToUse.asJava)
 
             sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
               MesosSchedulerBackendUtil
@@ -309,21 +321,25 @@ private[spark] class CoarseMesosSchedulerBackend(
             }
 
             // Accept the offer and launch the task
-            logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+            logDebug(s"Accepting offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus"
+              + s" ports: ${ports.mkString(",")}")
+
             slaveIdToHost(offer.getSlaveId.getValue) = offer.getHostname
             d.launchTasks(
               Collections.singleton(offer.getId),
               Collections.singleton(taskBuilder.build()), filters)
           } else {
             // Decline the offer
-            logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus")
+            logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus"
+              + s" ports: ${ports.mkString(",")}")
             d.declineOffer(offer.getId)
           }
         } else {
           // This offer does not meet constraints. We don't need to see it again.
           // Decline the offer for a long period of time.
           logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem cpu: $cpus"
-              + s" for $rejectOfferDurationForUnmetConstraints seconds")
+              + s" ports: ${ports.mkString(",")}"
+              + " for $rejectOfferDurationForUnmetConstraints seconds")
           d.declineOffer(offer.getId, Filters.newBuilder()
             .setRefuseSeconds(rejectOfferDurationForUnmetConstraints).build())
         }

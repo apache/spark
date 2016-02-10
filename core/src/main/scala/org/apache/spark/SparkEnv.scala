@@ -245,6 +245,7 @@ object SparkEnv extends Logging {
       conf.set("spark.driver.port", rpcEnv.address.port.toString)
     } else if (rpcEnv.address != null) {
       conf.set("spark.executor.port", rpcEnv.address.port.toString)
+      logInfo(s"Starting executor with port: ${rpcEnv.address.port.toString}")
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
