@@ -140,15 +140,15 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  /**
-   * Signal that the scheduler has registered with Mesos.
-   */
-  protected def getResource(res: JList[Resource], name: String): Double = {
+  def getResource(res: JList[Resource], name: String): Double = {
     // A resource can have multiple values in the offer since it can either be from
     // a specific role or wildcard.
     res.asScala.filter(_.getName == name).map(_.getScalar.getValue).sum
   }
 
+  /**
+    * Signal that the scheduler has registered with Mesos.
+    */
   protected def markRegistered(): Unit = {
     registerLatch.countDown()
   }
@@ -337,7 +337,7 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
    * @return memory requirement as (0.1 * <memoryOverhead>) or MEMORY_OVERHEAD_MINIMUM
    *         (whichever is larger)
    */
-  def calculateTotalMemory(sc: SparkContext): Int = {
+  def executorMemory(sc: SparkContext): Int = {
     sc.conf.getInt("spark.mesos.executor.memoryOverhead",
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
