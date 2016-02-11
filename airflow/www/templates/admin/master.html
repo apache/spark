@@ -20,6 +20,7 @@
     }).click(function(){
         alert('{{ hostname }}');
     });
+    $('span').tooltip();
 </script>
 {% endblock %}
 
@@ -60,7 +61,9 @@
         <!-- clock and logout -->
         <ul class="nav navbar-nav navbar-right">
             <li><a id="clock"></a></li>
-            <li><a href="{{ url_for('airflow.logout') }}">Logout</a></li>
+            {% if current_user.is_authenticated %}
+              <li><a href="{{ url_for('airflow.logout') }}"><span data-toggle="tooltip" data-placement="left" title="Logout" class="glyphicon glyphicon-off"></span></a></li>
+            {% endif %}
         </ul>
           <ul class="nav navbar-nav navbar-right">
               <li><a id="clock"></a></li>
