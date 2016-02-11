@@ -2059,13 +2059,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select course, sum(earnings) as sum, grouping__id from courseSales " +
         "group by course, earnings grouping sets((), (course), (course, earnings)) " +
         "order by course, sum"),
-      Row(null, 113000.0, 0) ::
-        Row("Java", 20000.0, 3) ::
-        Row("Java", 30000.0, 3) ::
+      Row(null, 113000.0, 3) ::
+        Row("Java", 20000.0, 0) ::
+        Row("Java", 30000.0, 0) ::
         Row("Java", 50000.0, 1) ::
-        Row("dotNET", 5000.0, 3) ::
-        Row("dotNET", 10000.0, 3) ::
-        Row("dotNET", 48000.0, 3) ::
+        Row("dotNET", 5000.0, 0) ::
+        Row("dotNET", 10000.0, 0) ::
+        Row("dotNET", 48000.0, 0) ::
         Row("dotNET", 63000.0, 1) :: Nil
     )
   }
