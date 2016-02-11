@@ -597,8 +597,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    *
    * Note that DistributedFileSystem is a `@LimitedPrivate` class, which for all practical reasons
    * makes it more public than not.
-   * HADOOP-12614 proposes adding a public version of this probe, one which other filesystems could
-   * implement.
    */
   private[history] def isFsInSafeMode(): Boolean = fs match {
     case dfs: DistributedFileSystem =>
