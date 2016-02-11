@@ -69,7 +69,7 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             </a>
           </div>
       </div>
-    UIUtils.basicSparkPage(content, "History Server")
+    UIUtils.basicSparkPage(content, "History Server", true)
   }
 
   private def makePageLink(showIncomplete: Boolean): String = {
