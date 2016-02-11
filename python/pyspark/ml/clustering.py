@@ -113,10 +113,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     def setK(self, value):
         """
         Sets the value of :py:attr:`k`.
-
-        >>> algo = KMeans().setK(10)
-        >>> algo.getK()
-        10
         """
         self._paramMap[self.k] = value
         return self
@@ -132,13 +128,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     def setInitMode(self, value):
         """
         Sets the value of :py:attr:`initMode`.
-
-        >>> algo = KMeans()
-        >>> algo.getInitMode()
-        'k-means||'
-        >>> algo = algo.setInitMode("random")
-        >>> algo.getInitMode()
-        'random'
         """
         self._paramMap[self.initMode] = value
         return self
@@ -154,10 +143,6 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     def setInitSteps(self, value):
         """
         Sets the value of :py:attr:`initSteps`.
-
-        >>> algo = KMeans().setInitSteps(10)
-        >>> algo.getInitSteps()
-        10
         """
         self._paramMap[self.initSteps] = value
         return self
