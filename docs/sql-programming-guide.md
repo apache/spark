@@ -2389,7 +2389,7 @@ let user control table caching explicitly:
     CACHE TABLE logs_last_month;
     UNCACHE TABLE logs_last_month;
 
-**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don’t need to trigger cache materialization manually anymore.
+**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don't need to trigger cache materialization manually anymore.
 
 Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
 

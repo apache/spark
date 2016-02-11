@@ -956,7 +956,7 @@ class LinearRegressionSuite
        V1  -3.7271     2.9032  -1.284   0.3279
        V2   3.0100     0.6022   4.998   0.0378 *
        ---
-       Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+       Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
        (Dispersion parameter for gaussian family taken to be 17.4376)
 
