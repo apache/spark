@@ -25,6 +25,20 @@ package org.apache.spark.sql.catalyst.expressions.codegen
  */
 object CodeFormatter {
   def format(code: String): String = new CodeFormatter().addLines(code).result()
+  def stripExtraNewLines(input: String): String = {
+    val code = new StringBuilder
+    var lastLine: String = "dummy"
+    input.split('\n').foreach { l =>
+      val line = l.trim()
+      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{"))
+      if (!skip) {
+        code.append(line)
+        code.append("\n")
+      }
+      lastLine = line
+    }
+    code.result()
+  }
 }
 
 private class CodeFormatter {
