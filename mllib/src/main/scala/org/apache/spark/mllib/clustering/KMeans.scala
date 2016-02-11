@@ -119,8 +119,17 @@ class KMeans private (
   @Since("0.8.0")
   @deprecated("Support for runs is deprecated. This param will have no effect in 2.0.0.", "1.6.0")
   def setRuns(runs: Int): this.type = {
+    internalSetRuns(runs)
+  }
+
+  // Internal version of setRuns for Python API, this should be removed at the same time as setRuns
+  // this is done to avoid deprecation warnings in our build.
+  private[mllib] def internalSetRuns(runs: Int): this.type = {
     if (runs <= 0) {
       throw new IllegalArgumentException("Number of runs must be positive")
+    }
+    if (runs != 1) {
+      logWarning("Setting number of runs is deprecated and will have no effect in 2.0.0")
     }
     this.runs = runs
     this
@@ -502,7 +511,7 @@ object KMeans {
       seed: Long): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
-      .setRuns(runs)
+      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .setSeed(seed)
       .run(data)
@@ -528,7 +537,7 @@ object KMeans {
       initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
-      .setRuns(runs)
+      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .run(data)
   }

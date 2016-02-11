@@ -38,6 +38,7 @@ trait CodegenSupport extends SparkPlan {
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
     case _: TungstenAggregate => "agg"
+    case _: BroadcastHashJoin => "bhj"
     case _ => nodeName.toLowerCase
   }
 
@@ -365,11 +366,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
   def apply(plan: SparkPlan): SparkPlan = {
     if (sqlContext.conf.wholeStageEnabled) {
       plan.transform {
-        case plan: CodegenSupport if supportCodegen(plan) &&
-          // Whole stage codegen is only useful when there are at least two levels of operators that
-          // support it (save at least one projection/iterator).
-          (Utils.isTesting || plan.children.exists(supportCodegen)) =>
-
+        case plan: CodegenSupport if supportCodegen(plan) =>
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
             // The build side can't be compiled together

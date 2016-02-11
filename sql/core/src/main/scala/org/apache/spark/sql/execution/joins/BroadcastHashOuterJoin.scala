@@ -76,7 +76,7 @@ case class BroadcastHashOuterJoin(
 
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    future {
+    Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
@@ -116,12 +116,7 @@ case class BroadcastHashOuterJoin(
       val joinedRow = new JoinedRow()
       val hashTable = broadcastRelation.value
       val keyGenerator = streamedKeyGenerator
-
-      hashTable match {
-        case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
-        case _ =>
-      }
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashTable.getMemorySize)
 
       val resultProj = resultProjection
       joinType match {
