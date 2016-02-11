@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.stat
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
@@ -28,6 +29,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object StatFunctions extends Logging {
+
+  import QuantileSummaries.Stats
+
   /** Calculate the approximate quantile for the given column */
   def approxQuantile(
       df: DataFrame,
@@ -50,7 +54,7 @@ private[sql] object StatFunctions extends Logging {
         s"with dataType ${data.get.dataType} not supported.")
 
     val column = Column(Cast(Column(col).expr, DoubleType))
-    df.select(column).rdd.aggregate(QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))(
+    df.select(column).rdd.aggregate(new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))(
       seqOp = (summaries, row) => {
         summaries.insert(row.getDouble(0))
       },
@@ -66,16 +70,20 @@ private[sql] object StatFunctions extends Logging {
    * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
    * 
    */
-  case class QuantileSummaries(
-      compressThreshold: Int,
-      epsilon: Double) extends Serializable {
-    var sampled = new ArrayBuffer[(Double, Int, Int)]() // sampled examples
-    var count = 0L // count of observed examples
+  class QuantileSummaries(
+      val compressThreshold: Int,
+      val epsilon: Double,
+      val sampled: ArrayBuffer[Stats] = ArrayBuffer.empty,
+      private var count: Long = 0L) extends Serializable {
 
-    def getConstant(): Double = 2 * epsilon * count
+//
+//    val sampled = new ArrayBuffer[Stats]() // sampled examples
+//    var count = 0L // count of observed examples
+
+    private def getConstant(): Double = 2 * epsilon * count
 
     def insert(x: Double): this.type = {
-      var idx = sampled.indexWhere(_._1 > x)
+      var idx = sampled.indexWhere(_.value > x)
       if (idx == -1) {
         idx = sampled.size
       } 
@@ -84,7 +92,7 @@ private[sql] object StatFunctions extends Logging {
       } else {
         math.floor(getConstant()).toInt
       } 
-      val tuple = (x, 1, delta)
+      val tuple = Stats(x, 1, delta)
       sampled.insert(idx, tuple)
       count += 1
 
@@ -95,35 +103,78 @@ private[sql] object StatFunctions extends Logging {
     }
 
     def compress(): Unit = {
+      val compressed = compressImmut(sampled)
+      sampled.clear()
+      sampled.appendAll(compressed)
+      return
       var i = 0
       while (i < sampled.size - 1) {
         val sample1 = sampled(i)
         val sample2 = sampled(i + 1)
-        if (sample1._2 + sample2._2 + sample2._3 < math.floor(getConstant())) {
-          sampled.update(i + 1, (sample2._1, sample1._2 + sample2._2, sample2._3))
+        if (sample1.g + sample2.g + sample2.delta < math.floor(getConstant())) {
+          sampled.update(i + 1, Stats(sample2.value, sample1.g + sample2.g, sample2.delta))
           sampled.remove(i)
         }
         i += 1
       }
     }
 
+    def printBuffer(buff: Seq[Stats]): String = {
+      var rankMin = 0
+      buff.map { s =>
+        rankMin += s.g
+//        (s.value, rankMin, rankMin + rankMin + s.delta, s.g, s.delta)
+        s"${s.value}:$rankMin"
+      }.mkString(" ")
+    }
+
+    def compressImmut(currentSamples: IndexedSeq[Stats]): ArrayBuffer[Stats] = {
+      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+      val mergeThreshold = 2 * epsilon * count
+      // Start for the last element, which is always part of the set.
+      // The head contains the current new head, that may be merged with the current element.
+      var head = currentSamples.last
+      var i = currentSamples.size - 2
+      // Do not compress the last element
+      while (i >= 1) {
+        // The current sample:
+        val sample1 = currentSamples(i)
+        // Do we need to compress?
+        if (sample1.g + head.g + head.delta < mergeThreshold) {
+          // Do not insert yet, just merge the current element into the head.
+          head = head.copy(g = head.g + sample1.g)
+        } else {
+          // Prepend the current head, and keep the current sample as target for merging.
+          res.prepend(head)
+          head = sample1
+        }
+        i -= 1
+      }
+      res.prepend(head)
+      // If necessary, add the minimum element:
+      res.prepend(currentSamples.head)
+      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
+      res
+    }
+
     def merge(other: QuantileSummaries): QuantileSummaries = {
+      return mergeImmutable(other)
       if (other.count > 0 && count > 0) {
         other.sampled.foreach { sample =>
-          val idx = sampled.indexWhere(s => s._1 > sample._1)
+          val idx = sampled.indexWhere(s => s.value > sample.value)
           if (idx == 0) {
-            val new_sampled = (sampled(0)._1, sampled(0)._2, sampled(1)._3 / 2)
+            val new_sampled = Stats(sampled(0).value, sampled(0).g, sampled(1).delta / 2)
             sampled.update(0, new_sampled)
-            val new_sample = (sample._1, sample._2, 0)
+            val new_sample = Stats(sample.value, sample.g, 0)
             sampled.insert(0, new_sample)
           } else if (idx == -1) {
-            val new_sampled = (sampled(sampled.size - 1)._1, sampled(sampled.size - 1)._2,
-              (sampled(sampled.size - 2)._3 * 2 * epsilon).toInt)
+            val new_sampled = Stats(sampled(sampled.size - 1).value, sampled(sampled.size - 1).g,
+              (sampled(sampled.size - 2).delta * 2 * epsilon).toInt)
             sampled.update(sampled.size - 1, new_sampled)
-            val new_sample = (sample._1, sample._2, 0)
+            val new_sample = Stats(sample.value, sample.g, 0)
             sampled.insert(sampled.size, new_sample)
           } else {
-            val new_sample = (sample._1, sample._2, (sampled(idx - 1)._3 + sampled(idx)._3) / 2)
+            val new_sample = Stats(sample.value, sample.g, (sampled(idx - 1).delta + sampled(idx).delta) / 2)
             sampled.insert(idx, new_sample)
           }
         }
@@ -137,20 +188,67 @@ private[sql] object StatFunctions extends Logging {
       }
     }
 
+    def mergeImmutable(other: QuantileSummaries): QuantileSummaries = {
+      if (other.count == 0) {
+        this
+      } else if (count == 0) {
+        other
+      } else {
+        // We rely on the fact that they are ordered to efficiently interleave them.
+        val thisSampled = sampled.toList
+        val otherSampled = other.sampled.toList
+        val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+
+        @tailrec
+        def mergeCurrent(thisList: List[Stats], otherList: List[Stats]): Unit = (thisList, otherList) match {
+          case (Nil, l) =>
+            res.appendAll(l)
+          case (l, Nil) =>
+            res.appendAll(l)
+          case (h1 :: t1, h2 :: t2) if h1.value > h2.value =>
+            mergeCurrent(otherList, thisList)
+          case (h1 :: t1, l) =>
+            // We know that h1.value <= all values in l
+            // TODO(thunterdb) do we need to adjust g and delta?
+            res.append(h1)
+            mergeCurrent(t1, l)
+        }
+
+        mergeCurrent(thisSampled, otherSampled)
+        val comp = compressImmut(res)
+        new QuantileSummaries(other.compressThreshold, other.epsilon, comp, other.count + count)
+      }
+    }
+
     def query(quantile: Double): Double = {
-      val rank = (quantile * count).toInt
+      require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
+
+      if (quantile <= epsilon) {
+        return sampled.head.value
+      }
+
+      if (quantile >= 1 - epsilon) {
+        return sampled.last.value
+      }
+
+      // Target rank
+      val rank = math.ceil(quantile * count).toInt
+      val targetError = math.ceil(epsilon * count)
+      println(s"query: quantile=$quantile, rank=$rank, targetError=$targetError")
+      // Minimum rank at current sample
       var minRank = 0
       var i = 1
-      while (i < sampled.size) {
+      while (i < sampled.size - 1) {
         val curSample = sampled(i)
-        val prevSample = sampled(i - 1)
-        minRank += prevSample._2
-        if (minRank + curSample._2 + curSample._3 > rank + getConstant()) {
-          return prevSample._1
+        minRank += curSample.g
+        val maxRank = minRank + curSample.delta
+        println(s"bracket $i: minRank=$minRank maxRank=$maxRank")
+        if (maxRank - targetError <= rank && rank <= minRank + targetError) {
+          return curSample.value
         }
         i += 1
       }
-      return sampled.last._1
+      sampled.last.value
     }
   }
 
@@ -164,6 +262,14 @@ private[sql] object StatFunctions extends Logging {
      * The default value for epsilon.
      */
     val defaultEpsilon: Double = 0.01
+
+    /**
+     * Statisttics from the Greenwald-Khanna paper.
+     * @param value the sampled value
+     * @param g the minimum rank jump from the previous value's minimum rank
+     * @param delta the maximum span of the rank.
+     */
+    case class Stats(value: Double, g: Int, delta: Int)
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
