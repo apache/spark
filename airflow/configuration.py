@@ -75,6 +75,7 @@ defaults = {
         'dag_concurrency': 16,
         'max_active_runs_per_dag': 16,
         'executor': 'SequentialExecutor',
+        'dags_are_paused_at_creation': False,
     },
     'webserver': {
         'base_url': 'http://localhost:8080',
@@ -149,6 +150,9 @@ parallelism = 32
 
 # The number of task instances allowed to run concurrently by the scheduler
 dag_concurrency = 16
+
+# Are DAGs paused by default at creation
+dags_are_paused_at_creation = False
 
 # The maximum number of active DAG runs per DAG
 max_active_runs_per_dag = 16
@@ -309,6 +313,7 @@ unit_test_mode = True
 load_examples = True
 donot_pickle = False
 dag_concurrency = 16
+dags_are_paused_at_creation = False
 fernet_key = {FERNET_KEY}
 
 [webserver]

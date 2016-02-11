@@ -192,9 +192,9 @@ class DagBag(LoggingMixin):
 
         if safe_mode and os.path.isfile(filepath):
             # Skip file if no obvious references to airflow or DAG are found.
-            with open(filepath, 'r') as f:
+            with open(filepath, 'rb') as f:
                 content = f.read()
-                if not all([s in content for s in ('DAG', 'airflow')]):
+                if not all([s in content for s in (b'DAG', b'airflow')]):
                     return found_dags
 
         if (not only_if_updated or
@@ -797,7 +797,8 @@ class TaskInstance(Base):
         return count == len(task._downstream_list)
 
     def are_dependencies_met(
-            self, main_session=None, flag_upstream_failed=False):
+            self, main_session=None, flag_upstream_failed=False,
+            verbose=False):
         """
         Returns a boolean on whether the upstream tasks are in a SUCCESS state
         and considers depends_on_past and the previous run's state.
@@ -807,6 +808,11 @@ class TaskInstance(Base):
             whether the task instance is runnable. It was the shortest
             path to add the feature
         :type flag_upstream_failed: boolean
+        :param verbose: verbose provides more logging in the case where the
+            task instance is evaluated as a check right before being executed.
+            In the case of the scheduler evaluating the dependencies, this
+            logging would be way too verbose.
+        :type verbose: boolean
         """
         TI = TaskInstance
         TR = TriggerRule
@@ -826,12 +832,16 @@ class TaskInstance(Base):
                 TI.state == State.SUCCESS,
             ).first()
             if not previous_ti:
+                if verbose:
+                    logging.warning("depends_on_past not satisfied")
                 return False
 
             # Applying wait_for_downstream
             previous_ti.task = self.task
             if task.wait_for_downstream and not \
                     previous_ti.are_dependents_done(session):
+                if verbose:
+                    logging.warning("wait_for_downstream not satisfied")
                 return False
 
         # Checking that all upstream dependencies have succeeded
@@ -895,6 +905,8 @@ class TaskInstance(Base):
         if not main_session:
             session.commit()
             session.close()
+        if verbose:
+            logging.warning("Trigger rule `{}` not satisfied".format(tr))
         return False
 
     def __repr__(self):
@@ -966,7 +978,7 @@ class TaskInstance(Base):
                 " on {self.end_date}".format(**locals())
             )
         elif not ignore_dependencies and \
-                not self.are_dependencies_met(session):
+                not self.are_dependencies_met(session, verbose=True):
             logging.warning("Dependencies not met yet")
         elif self.state == State.UP_FOR_RETRY and \
                 not self.ready_for_retry():
@@ -978,10 +990,11 @@ class TaskInstance(Base):
         elif force or self.state in State.runnable():
             HR = "\n" + ("-" * 80) + "\n"  # Line break
             tot_tries = task.retries + 1
-            if self.try_number == 0:
-                msg = "First run"
-            else:
-                msg = "Attempt {self.try_number} out of {tot_tries}"
+            # For reporting purposes, we report based on 1-indexed,
+            # not 0-indexed lists (i.e. Attempt 1 instead of
+            # Attempt 0 for the first attempt)
+            msg = "Attempt {} out of {}".format(self.try_number+1,
+                                                tot_tries)
             self.try_number += 1
             msg = msg.format(**locals())
             logging.info(HR + msg + HR)
@@ -992,6 +1005,11 @@ class TaskInstance(Base):
                 # If a pool is set for this task, marking the task instance
                 # as QUEUED
                 self.state = State.QUEUED
+                # Since we are just getting enqueued, we need to undo
+                # the try_number increment above and update the message as well
+                self.try_number -= 1
+                msg = "Queuing attempt {} out of {}".format(self.try_number+1,
+                                                            tot_tries)
                 self.queued_dttm = datetime.now()
                 session.merge(self)
                 session.commit()
@@ -1660,6 +1678,9 @@ class BaseOperator(object):
         for k, v in list(self.__dict__.items()):
             if k not in ('user_defined_macros', 'params'):
                 setattr(result, k, copy.deepcopy(v, memo))
+        result.params = self.params
+        if hasattr(self, 'user_defined_macros'):
+            result.user_defined_macros = self.user_defined_macros
         return result
 
     def render_template_from_field(self, content, context, jinja_env):
@@ -1932,7 +1953,9 @@ class DagModel(Base):
     """
     dag_id = Column(String(ID_LEN), primary_key=True)
     # A DAG can be paused from the UI / DB
-    is_paused = Column(Boolean, default=False)
+    # Set this default value of is_paused based on a configuration value!
+    is_paused_at_creation = configuration.getboolean('core', 'dags_are_paused_at_creation')
+    is_paused = Column(Boolean, default=is_paused_at_creation)
     # Whether the DAG is a subdag
     is_subdag = Column(Boolean, default=False)
     # Whether that DAG was seen on the last DagBag load
@@ -2047,12 +2070,18 @@ class DAG(LoggingMixin):
 
         self.user_defined_macros = user_defined_macros
         self.default_args = default_args or {}
-        self.params = params
+        self.params = params or {}
+
+        # merging potentially conflicting default_args['params'] into params
+        if 'params' in self.default_args:
+            self.params.update(self.default_args['params'])
+            del self.default_args['params']
+
         utils.validate_key(dag_id)
         self.tasks = []
         self.dag_id = dag_id
         self.start_date = start_date
-        self.end_date = end_date or datetime.now()
+        self.end_date = end_date
         self.schedule_interval = schedule_interval
         if schedule_interval in utils.cron_presets:
             self._schedule_interval = utils.cron_presets.get(schedule_interval)
@@ -2176,6 +2205,16 @@ class DAG(LoggingMixin):
             TI.state == State.RUNNING,
         )
         return qry.scalar() >= self.concurrency
+
+    @property
+    @provide_session
+    def is_paused(self, session=None):
+        """
+        Returns a boolean as to whether this DAG is paused
+        """
+        qry = session.query(DagModel).filter(
+            DagModel.dag_id == self.dag_id)
+        return qry.value('is_paused')
 
     @property
     def latest_execution_date(self):

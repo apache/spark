@@ -16,15 +16,20 @@ class GoogleCloudBaseHook(BaseHook):
     The class also contains some miscellaneous helper functions.
     """
 
-    def __init__(self, scope, conn_id):
+    def __init__(self, scope, conn_id, delegate_to=None):
         """
         :param scope: The scope of the hook.
         :type scope: string
         :param conn_id: The connection ID to use when fetching connection info.
         :type conn_id: string
+        :param delegate_to: The account to impersonate, if any.
+            For this to work, the service account making the request must have domain-wide delegation enabled.
+        :type delegate_to: string
+
         """
         self.scope = scope
         self.conn_id = conn_id
+        self.delegate_to = delegate_to
 
     def _authorize(self):
         """
@@ -36,6 +41,10 @@ class GoogleCloudBaseHook(BaseHook):
         service_account = connection_extras.get('service_account', False)
         key_path = connection_extras.get('key_path', False)
 
+        kwargs = {}
+        if self.delegate_to:
+            kwargs['sub'] = self.delegate_to
+
         if not key_path or not service_account:
             logging.info('Getting connection using `gcloud auth` user, since no service_account/key_path are defined for hook.')
             credentials = GoogleCredentials.get_application_default()
@@ -45,10 +54,8 @@ class GoogleCloudBaseHook(BaseHook):
                 credentials = SignedJwtAssertionCredentials(
                     service_account,
                     key,
-                    scope=self.scope)
-                    # TODO Support domain delegation, which will allow us to set a sub-account to execute as. We can then
-                    # pass DAG owner emails into the connection_info, and use it here.
-                    # sub='some@email.com')
+                    scope=self.scope,
+                    **kwargs)
         else:
             raise AirflowException('Scope undefined, or either key_path/service_account config was missing.')
 
