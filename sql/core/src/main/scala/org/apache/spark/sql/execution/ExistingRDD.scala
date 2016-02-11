@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.{SQLConf, AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
@@ -100,8 +102,11 @@ private[sql] case class PhysicalRDD(
     override val nodeName: String,
     override val metadata: Map[String, String] = Map.empty,
     isUnsafeRow: Boolean = false,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0),
+    val batchedRdd: RDD[ColumnarBatch] = null)
   extends LeafNode {
+
+  override val canOutputColumnarBatch: Boolean = batchedRdd != null
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (isUnsafeRow) {
@@ -112,6 +117,11 @@ private[sql] case class PhysicalRDD(
         iter.map(proj)
       }
     }
+  }
+
+  override protected def doExecuteBatched(): RDD[ColumnarBatch] = {
+    assert(canOutputColumnarBatch)
+    batchedRdd
   }
 
   override def simpleString: String = {
@@ -143,13 +153,24 @@ private[sql] object PhysicalRDD {
         s"(${output.map(_.name).mkString(", ")})")
     }
 
+        // Determine if we should use the batched parquet scanner.
+    val conf = SQLContext.getActive().get
+    val batchedRDD = if (conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED) &&
+      relation.isInstanceOf[ParquetRelation]) {
+      relation.asInstanceOf[ParquetRelation].toBatchedScan()
+    } else {
+      null
+    }
+
     bucketSpec.map { spec =>
       val numBuckets = spec.numBuckets
       val bucketColumns = spec.bucketColumnNames.map(toAttribute)
       val partitioning = HashPartitioning(bucketColumns, numBuckets)
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning,
+        batchedRDD)
     }.getOrElse {
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows,
+        UnknownPartitioning(0), batchedRDD)
     }
   }
 }

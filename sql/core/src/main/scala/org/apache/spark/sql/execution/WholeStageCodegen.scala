@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -53,9 +54,25 @@ trait CodegenSupport extends SparkPlan {
   private var parent: CodegenSupport = null
 
   /**
-    * Returns the RDD of InternalRow which generates the input rows.
+    * Returns the SparkPlan that starts the pipeline.
     */
-  def upstream(): RDD[InternalRow]
+  def pipelineStart(): CodegenSupport
+
+  /**
+    * Starts a pipeline producing the leaf input RDD.
+    * Operators that can start pipelines need to implement this.
+    */
+  def startPipeline(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException()
+  }
+
+  /**
+   * Starts a pipeline producing the leaf input RDD.
+   * Operators that can start pipelines need to implement this.
+   */
+  def startPipelineBatched(): RDD[ColumnarBatch] = {
+    throw new UnsupportedOperationException()
+  }
 
   /**
     * Returns Java source code to process the rows from upstream.
@@ -148,6 +165,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+  override def canOutputColumnarBatch: Boolean = child.canOutputColumnarBatch
 
   override def doPrepare(): Unit = {
     child.prepare()
@@ -159,11 +177,27 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 
   override def supportCodegen: Boolean = false
 
-  override def upstream(): RDD[InternalRow] = {
+  override def pipelineStart(): CodegenSupport = {
+    this
+  }
+
+  override def startPipeline(): RDD[InternalRow] = {
     child.execute()
   }
 
+  override def startPipelineBatched(): RDD[ColumnarBatch] = {
+    child.executeBatched()
+  }
+
   override def doProduce(ctx: CodegenContext): String = {
+    if (child.canOutputColumnarBatch) {
+      doProduceInternalBatched(ctx)
+    } else {
+      doProduceInternal(ctx)
+    }
+  }
+
+  private[this] def doProduceInternal(ctx: CodegenContext): String = {
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
@@ -176,6 +210,30 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
        |   ${consume(ctx, columns).trim}
        |   if (shouldStop()) {
        |     return;
+       |   }
+       | }
+     """.stripMargin
+  }
+
+  private[this] def doProduceInternalBatched(ctx: CodegenContext): String = {
+    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val row = ctx.freshName("row")
+    val batch = ctx.freshName("batch")
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns = exprs.map(_.gen(ctx))
+    s"""
+       | while (inputBatches.hasNext()) {
+       |   org.apache.spark.sql.execution.vectorized.ColumnarBatch $batch =
+       |      (org.apache.spark.sql.execution.vectorized.ColumnarBatch) inputBatches.next();
+       |   int numRows = $batch.numRows();
+       |   for (int i = 0; i < numRows; i++) {
+       |     InternalRow $row = $batch.getRow(i);
+       |     ${columns.map(_.code).mkString("\n").trim}
+       |     ${consume(ctx, columns).trim}
+       |     if (shouldStop()) {
+       |       return;
+       |     }
        |   }
        | }
      """.stripMargin
@@ -232,7 +290,8 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     val ctx = new CodegenContext
     val code = plan.produce(ctx, this)
     val references = ctx.references.toArray
-    val source = s"""
+    val source =
+      s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
       }
@@ -259,19 +318,32 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     // println(s"${CodeFormatter.format(source)}")
     CodeGenerator.compile(source)
 
-    plan.upstream().mapPartitions { iter =>
+    val pipelineStart = plan.pipelineStart()
+    if (pipelineStart.canOutputColumnarBatch) {
+      pipelineStart.startPipelineBatched().mapPartitions { iter =>
+        val clazz = CodeGenerator.compile(source)
+        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+        buffer.setInputBatch(iter)
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = buffer.hasNext
+          override def next: InternalRow = buffer.next()
+        }
+      }
+    } else {
+      pipelineStart.startPipeline().mapPartitions { iter =>
+        val clazz = CodeGenerator.compile(source)
+        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+        buffer.setInput(iter)
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = buffer.hasNext
 
-      val clazz = CodeGenerator.compile(source)
-      val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-      buffer.setInput(iter)
-      new Iterator[InternalRow] {
-        override def hasNext: Boolean = buffer.hasNext
-        override def next: InternalRow = buffer.next()
+          override def next: InternalRow = buffer.next()
+        }
       }
     }
   }
 
-  override def upstream(): RDD[InternalRow] = {
+  override def pipelineStart(): CodegenSupport = {
     throw new UnsupportedOperationException
   }
 

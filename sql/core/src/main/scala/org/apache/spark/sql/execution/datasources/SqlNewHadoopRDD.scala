@@ -27,6 +27,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 
 import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.broadcast.Broadcast
@@ -49,33 +50,24 @@ private[spark] class SqlNewHadoopPartition(
 }
 
 /**
- * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
- * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
- * It is based on [[org.apache.spark.rdd.NewHadoopRDD]]. It has three additions.
- * 1. A shared broadcast Hadoop Configuration.
- * 2. An optional closure `initDriverSideJobFuncOpt` that set configurations at the driver side
- *    to the shared Hadoop Configuration.
- * 3. An optional closure `initLocalJobFuncOpt` that set configurations at both the driver side
- *    and the executor side to the shared Hadoop Configuration.
- *
- * Note: This is RDD is basically a cloned version of [[org.apache.spark.rdd.NewHadoopRDD]] with
- * changes based on [[org.apache.spark.rdd.HadoopRDD]].
+ * Base class for creating an RDD that reads from Hadoop.
+ * @tparam RET_TYPE: The type of the returned RDD
+ * @tparam INPUT_FORMAT_TYPE: The hadoop input format type.
  */
-private[spark] class SqlNewHadoopRDD[V: ClassTag](
+private[spark] abstract class SqlNewHadoopRDDBase[RET_TYPE: ClassTag, INPUT_FORMAT_TYPE: ClassTag](
     sqlContext: SQLContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
     @transient private val initDriverSideJobFuncOpt: Option[Job => Unit],
     initLocalJobFuncOpt: Option[Job => Unit],
-    inputFormatClass: Class[_ <: InputFormat[Void, V]],
-    valueClass: Class[V])
-    extends RDD[V](sqlContext.sparkContext, Nil) with Logging {
+    inputFormatClass: Class[_ <: InputFormat[Void, INPUT_FORMAT_TYPE]])
+  extends RDD[RET_TYPE](sqlContext.sparkContext, Nil) {
 
   protected def getJob(): Job = {
-    val conf = broadcastedConf.value.value
+    val conf: Configuration = broadcastedConf.value.value
     // "new Job" will make a copy of the conf. Then, it is
     // safe to mutate conf properties with initLocalJobFuncOpt
     // and initDriverSideJobFuncOpt.
-    val newJob = Job.getInstance(conf)
+    val newJob = new Job(conf)
     initLocalJobFuncOpt.map(f => f(newJob))
     newJob
   }
@@ -120,147 +112,6 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     result
   }
 
-  override def compute(
-    theSplit: SparkPartition,
-    context: TaskContext): Iterator[V] = {
-    val iter = new Iterator[V] {
-      val split = theSplit.asInstanceOf[SqlNewHadoopPartition]
-      logInfo("Input split: " + split.serializableHadoopSplit)
-      val conf = getConf(isDriverSide = false)
-
-      val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
-      val existingBytesRead = inputMetrics.bytesRead
-
-      // Sets the thread local variable for the file's name
-      split.serializableHadoopSplit.value match {
-        case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
-        case _ => SqlNewHadoopRDDState.unsetInputFileName()
-      }
-
-      // Find a function that will return the FileSystem bytes read by this thread. Do this before
-      // creating RecordReader, because RecordReader's constructor might read some bytes
-      val getBytesReadCallback: Option[() => Long] = split.serializableHadoopSplit.value match {
-        case _: FileSplit | _: CombineFileSplit =>
-              SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-        case _ => None
-      }
-
-      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
-      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
-      // task and in the same thread, in which case we need to avoid override values written by
-      // previous partitions (SPARK-13071).
-      def updateBytesRead(): Unit = {
-        getBytesReadCallback.foreach { getBytesRead =>
-          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
-        }
-      }
-
-      val format = inputFormatClass.newInstance
-      format match {
-        case configurable: Configurable =>
-          configurable.setConf(conf)
-        case _ =>
-      }
-      val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
-      val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-      private[this] var reader: RecordReader[Void, V] = null
-
-      /**
-        * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
-        * fails (for example, unsupported schema), try with the normal reader.
-        * TODO: plumb this through a different way?
-        */
-      if (enableUnsafeRowParquetReader &&
-        format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
-        val parquetReader: UnsafeRowParquetRecordReader = new UnsafeRowParquetRecordReader()
-        if (!parquetReader.tryInitialize(
-            split.serializableHadoopSplit.value, hadoopAttemptContext)) {
-          parquetReader.close()
-        } else {
-          reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
-          if (enableVectorizedParquetReader) parquetReader.resultBatch()
-        }
-      }
-
-      if (reader == null) {
-        reader = format.createRecordReader(
-          split.serializableHadoopSplit.value, hadoopAttemptContext)
-        reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-      }
-
-      // Register an on-task-completion callback to close the input stream.
-      context.addTaskCompletionListener(context => close())
-
-      private[this] var havePair = false
-      private[this] var finished = false
-
-      override def hasNext: Boolean = {
-        if (context.isInterrupted) {
-          throw new TaskKilledException
-        }
-        if (!finished && !havePair) {
-          finished = !reader.nextKeyValue
-          if (finished) {
-            // Close and release the reader here; close() will also be called when the task
-            // completes, but for tasks that read from many files, it helps to release the
-            // resources early.
-            close()
-          }
-          havePair = !finished
-        }
-        !finished
-      }
-
-      override def next(): V = {
-        if (!hasNext) {
-          throw new java.util.NoSuchElementException("End of stream")
-        }
-        havePair = false
-        if (!finished) {
-          inputMetrics.incRecordsReadInternal(1)
-        }
-        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
-          updateBytesRead()
-        }
-        reader.getCurrentValue
-      }
-
-      private def close() {
-        if (reader != null) {
-          SqlNewHadoopRDDState.unsetInputFileName()
-          // Close the reader and release it. Note: it's very important that we don't close the
-          // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
-          // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
-          // corruption issues when reading compressed input.
-          try {
-            reader.close()
-          } catch {
-            case e: Exception =>
-              if (!ShutdownHookManager.inShutdown()) {
-                logWarning("Exception in RecordReader.close()", e)
-              }
-          } finally {
-            reader = null
-          }
-          if (getBytesReadCallback.isDefined) {
-            updateBytesRead()
-          } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
-            split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
-            // If we can't get the bytes read from the FS stats, fall back to the split size,
-            // which may be inaccurate.
-            try {
-              inputMetrics.incBytesReadInternal(split.serializableHadoopSplit.value.getLength)
-            } catch {
-              case e: java.io.IOException =>
-                logWarning("Unable to get input size to set InputMetrics for task", e)
-            }
-          }
-        }
-      }
-    }
-    iter
-  }
-
   override def getPreferredLocations(hsplit: SparkPartition): Seq[String] = {
     val split = hsplit.asInstanceOf[SqlNewHadoopPartition].serializableHadoopSplit.value
     val locs = HadoopRDD.SPLIT_INFO_REFLECTIONS match {
@@ -292,9 +143,9 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
    * the given function rather than the index of the partition.
    */
   private[spark] class NewHadoopMapPartitionsWithSplitRDD[U: ClassTag, T: ClassTag](
-      prev: RDD[T],
-      f: (InputSplit, Iterator[T]) => Iterator[U],
-      preservesPartitioning: Boolean = false)
+    prev: RDD[T],
+    f: (InputSplit, Iterator[T]) => Iterator[U],
+    preservesPartitioning: Boolean = false)
     extends RDD[U](prev) {
 
     override val partitioner = if (preservesPartitioning) firstParent[T].partitioner else None
@@ -305,6 +156,235 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
       val partition = split.asInstanceOf[SqlNewHadoopPartition]
       val inputSplit = partition.serializableHadoopSplit.value
       f(inputSplit, firstParent[T].iterator(split, context))
+    }
+  }
+
+  abstract class HadoopIterator(theSplit: SparkPartition, context: TaskContext)
+    extends Iterator[RET_TYPE] {
+    val split = theSplit.asInstanceOf[SqlNewHadoopPartition]
+    logInfo("Input split: " + split.serializableHadoopSplit)
+    val conf = getConf(isDriverSide = false)
+
+    val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+    val existingBytesRead = inputMetrics.bytesRead
+
+    // Sets the thread local variable for the file's name
+    split.serializableHadoopSplit.value match {
+      case fs: FileSplit => SqlNewHadoopRDDState.setInputFileName(fs.getPath.toString)
+      case _ => SqlNewHadoopRDDState.unsetInputFileName()
+    }
+
+    // Find a function that will return the FileSystem bytes read by this thread. Do this before
+    // creating RecordReader, because RecordReader's constructor might read some bytes
+    val getBytesReadCallback: Option[() => Long] = split.serializableHadoopSplit.value match {
+      case _: FileSplit | _: CombineFileSplit =>
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+      case _ => None
+    }
+
+    // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+    // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+    // task and in the same thread, in which case we need to avoid override values written by
+    // previous partitions (SPARK-13071).
+    def updateBytesRead(): Unit = {
+      getBytesReadCallback.foreach { getBytesRead =>
+        inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
+      }
+    }
+
+    val format = inputFormatClass.newInstance
+    format match {
+      case configurable: Configurable =>
+        configurable.setConf(conf)
+      case _ =>
+    }
+    val attemptId = new TaskAttemptID(jobTrackerId, id, TaskType.MAP, split.index, 0)
+    val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+
+    protected[this] var reader: RecordReader[Void, INPUT_FORMAT_TYPE] = null
+
+    /**
+     * If the format is ParquetInputFormat, try to create the optimized RecordReader. If this
+     * fails (for example, unsupported schema), try with the normal reader.
+     * TODO: plumb this through a different way?
+     */
+    if (enableUnsafeRowParquetReader &&
+      format.getClass.getName == "org.apache.parquet.hadoop.ParquetInputFormat") {
+      val parquetReader: UnsafeRowParquetRecordReader = new UnsafeRowParquetRecordReader()
+      if (!parquetReader.tryInitialize(
+        split.serializableHadoopSplit.value, hadoopAttemptContext)) {
+        parquetReader.close()
+      } else {
+        reader = parquetReader.asInstanceOf[RecordReader[Void, INPUT_FORMAT_TYPE]]
+        if (enableVectorizedParquetReader) parquetReader.resultBatch()
+      }
+    }
+
+    if (reader == null) {
+      reader = format.createRecordReader(
+        split.serializableHadoopSplit.value, hadoopAttemptContext)
+      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
+    }
+
+    // Register an on-task-completion callback to close the input stream.
+    context.addTaskCompletionListener(context => close())
+
+    protected[this] var havePair = false
+    protected[this] var finished = false
+
+    protected def close() {
+      if (reader != null) {
+        SqlNewHadoopRDDState.unsetInputFileName()
+        // Close the reader and release it. Note: it's very important that we don't close the
+        // reader more than once, since that exposes us to MAPREDUCE-5918 when running against
+        // Hadoop 1.x and older Hadoop 2.x releases. That bug can lead to non-deterministic
+        // corruption issues when reading compressed input.
+        try {
+          reader.close()
+        } catch {
+          case e: Exception =>
+            if (!ShutdownHookManager.inShutdown()) {
+              logWarning("Exception in RecordReader.close()", e)
+            }
+        } finally {
+          reader = null
+        }
+        if (getBytesReadCallback.isDefined) {
+          updateBytesRead()
+        } else if (split.serializableHadoopSplit.value.isInstanceOf[FileSplit] ||
+          split.serializableHadoopSplit.value.isInstanceOf[CombineFileSplit]) {
+          // If we can't get the bytes read from the FS stats, fall back to the split size,
+          // which may be inaccurate.
+          try {
+            inputMetrics.incBytesReadInternal(split.serializableHadoopSplit.value.getLength)
+          } catch {
+            case e: java.io.IOException =>
+              logWarning("Unable to get input size to set InputMetrics for task", e)
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
+ * sources in HBase, or S3), using the new MapReduce API (`org.apache.hadoop.mapreduce`).
+ * It is based on [[org.apache.spark.rdd.NewHadoopRDD]]. It has three additions.
+ * 1. A shared broadcast Hadoop Configuration.
+ * 2. An optional closure `initDriverSideJobFuncOpt` that set configurations at the driver side
+ *    to the shared Hadoop Configuration.
+ * 3. An optional closure `initLocalJobFuncOpt` that set configurations at both the driver side
+ *    and the executor side to the shared Hadoop Configuration.
+ *
+ * Note: This is RDD is basically a cloned version of [[org.apache.spark.rdd.NewHadoopRDD]] with
+ * changes based on [[org.apache.spark.rdd.HadoopRDD]].
+ */
+private[spark] class SqlNewHadoopRDD[V: ClassTag](
+    sqlContext: SQLContext,
+    broadcastedConf: Broadcast[SerializableConfiguration],
+    @transient private val initDriverSideJobFuncOpt: Option[Job => Unit],
+    initLocalJobFuncOpt: Option[Job => Unit],
+    inputFormatClass: Class[_ <: InputFormat[Void, V]],
+    valueClass: Class[V])
+    extends SqlNewHadoopRDDBase[V, V](
+      sqlContext, broadcastedConf,
+      initDriverSideJobFuncOpt, initLocalJobFuncOpt, inputFormatClass) {
+
+  override def compute(
+    theSplit: SparkPartition,
+    context: TaskContext): Iterator[V] = {
+    new HadoopIterator(theSplit, context) {
+      override def hasNext: Boolean = {
+        if (context.isInterrupted) {
+          throw new TaskKilledException
+        }
+        if (!finished && !havePair) {
+          finished = !reader.nextKeyValue
+          if (finished) {
+            // Close and release the reader here; close() will also be called when the task
+            // completes, but for tasks that read from many files, it helps to release the
+            // resources early.
+            close()
+          }
+          havePair = !finished
+        }
+        !finished
+      }
+
+      override def next(): V = {
+        if (!hasNext) {
+          throw new java.util.NoSuchElementException("End of stream")
+        }
+        havePair = false
+        if (!finished) {
+          inputMetrics.incRecordsReadInternal(1)
+        }
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
+        }
+        reader.getCurrentValue
+      }
+    }
+  }
+}
+
+/**
+ * A reader that returns batches of rows. This is only usable for RecordReader's that support
+ * a batched interface.
+ * TODO: this needs to be restructured, perhaps with a revision of the data sources API.
+ */
+private[spark] class BatchedSqlNewHadoopRDD[V: ClassTag](
+  sqlContext: SQLContext,
+  broadcastedConf: Broadcast[SerializableConfiguration],
+  @transient private val initDriverSideJobFuncOpt: Option[Job => Unit],
+  initLocalJobFuncOpt: Option[Job => Unit],
+  inputFormatClass: Class[_ <: InputFormat[Void, V]])
+  extends SqlNewHadoopRDDBase[ColumnarBatch, V](
+    sqlContext, broadcastedConf,
+    initDriverSideJobFuncOpt, initLocalJobFuncOpt, inputFormatClass) {
+
+  override def compute(theSplit: SparkPartition, context: TaskContext): Iterator[ColumnarBatch] = {
+    new HadoopIterator(theSplit, context) {
+      require(reader.isInstanceOf[UnsafeRowParquetRecordReader])
+
+      val batchedReader = reader.asInstanceOf[UnsafeRowParquetRecordReader]
+      val batch = batchedReader.resultBatch()
+      var needToAdvanceBatch = true
+
+      private[this] def nextBatch(): Unit = {
+        if (needToAdvanceBatch) {
+          batchedReader.nextBatch()
+          needToAdvanceBatch = false
+        }
+      }
+
+      override def hasNext: Boolean = {
+        if (context.isInterrupted) throw new TaskKilledException
+        nextBatch()
+        if (batch.numRows() == 0) {
+          // Close and release the reader here; close() will also be called when the task
+          // completes, but for tasks that read from many files, it helps to release the
+          // resources early.
+          close()
+          false
+        } else {
+          true
+        }
+      }
+
+      override def next(): ColumnarBatch = {
+        if (!hasNext) throw new java.util.NoSuchElementException("End of stream")
+        nextBatch()
+        if (!finished) {
+          inputMetrics.incRecordsReadInternal(batch.numRows())
+        }
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
+        }
+        needToAdvanceBatch = true
+        batch
+      }
     }
   }
 }

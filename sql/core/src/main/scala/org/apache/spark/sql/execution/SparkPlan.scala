@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
+import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
@@ -98,6 +99,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
+   * Specifies if this operator is capable of producing ColumnarBatches.
+   */
+  def canOutputColumnarBatch: Boolean = false
+
+  /**
    * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
    * after adding query plan information to created RDDs for visualization.
    * Concrete implementations of SparkPlan should override doExecute instead.
@@ -106,6 +112,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       doExecute()
+    }
+  }
+
+  final def executeBatched(): RDD[ColumnarBatch] = {
+    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+      prepare()
+      doExecuteBatched()
     }
   }
 
@@ -134,6 +147,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Produces the result of the query as an RDD[InternalRow]
    */
   protected def doExecute(): RDD[InternalRow]
+
+  /**
+   * Overridden by operators that support batched execution.
+  */
+  protected def doExecuteBatched(): RDD[ColumnarBatch] = {
+    throw new UnsupportedOperationException()
+  }
 
   /**
    * Runs this query returning the result as an array.
