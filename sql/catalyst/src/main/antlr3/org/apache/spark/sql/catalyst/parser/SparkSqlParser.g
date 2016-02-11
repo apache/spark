@@ -2370,34 +2370,8 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
     u=setOperator LPAREN b=simpleSelectStatement RPAREN
     |
     u=setOperator b=simpleSelectStatement)
-   -> {$setOpSelectStatement.tree != null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_QUERY
-          ^(TOK_FROM
-            ^(TOK_SUBQUERY
-              ^($u {$setOpSelectStatement.tree} $b)
-              {adaptor.create(Identifier, generateUnionAlias())}
-             )
-          )
-          ^(TOK_INSERT
-             ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
-             ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
-          )
-       )
-   -> {$setOpSelectStatement.tree != null && $u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
+   -> {$setOpSelectStatement.tree != null}?
       ^($u {$setOpSelectStatement.tree} $b)
-   -> {$setOpSelectStatement.tree == null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_QUERY
-          ^(TOK_FROM
-            ^(TOK_SUBQUERY
-              ^($u {$t} $b)
-              {adaptor.create(Identifier, generateUnionAlias())}
-             )
-           )
-          ^(TOK_INSERT
-            ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
-            ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
-         )
-       )
    -> ^($u {$t} $b)
    )+
    o=orderByClause?
