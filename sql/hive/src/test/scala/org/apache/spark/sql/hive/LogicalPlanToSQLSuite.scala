@@ -92,12 +92,11 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT COUNT(value) FROM t1 GROUP BY key ORDER BY MAX(key)")
   }
 
-  // TODO Fix name collision introduced by ResolveAggregateFunction analysis rule
   // When there are multiple aggregate functions in ORDER BY clause, all of them are extracted into
   // Aggregate operator and aliased to the same name "aggOrder".  This is OK for normal query
   // execution since these aliases have different expression ID.  But this introduces name collision
   // when converting resolved plans back to SQL query strings as expression IDs are stripped.
-  ignore("aggregate function in order by clause with multiple order keys") {
+  test("aggregate function in order by clause with multiple order keys") {
     checkHiveQl("SELECT COUNT(value) FROM t1 GROUP BY key ORDER BY key, MAX(key)")
   }
 
