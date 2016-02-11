@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution
 
+import scala.collection.immutable.IndexedSeq
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Apply the all of the GroupExpressions to every input row, hence we will get
@@ -35,7 +39,10 @@ case class Expand(
     projections: Seq[Seq[Expression]],
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryNode {
+  extends UnaryNode with CodegenSupport {
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
   // as UNKNOWN partitioning
@@ -48,6 +55,8 @@ case class Expand(
     (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+    val numOutputRows = longMetric("numOutputRows")
+
     child.execute().mapPartitions { iter =>
       val groups = projections.map(projection).toArray
       new Iterator[InternalRow] {
@@ -71,9 +80,76 @@ case class Expand(
             idx = 0
           }
 
+          numOutputRows += 1
           result
         }
       }
     }
+  }
+
+  override def upstream(): RDD[InternalRow] = {
+    child.asInstanceOf[CodegenSupport].upstream()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val uniqExprs: IndexedSeq[Set[Expression]] = output.indices.map { i =>
+      projections.map(p => p(i)).toSet
+    }
+
+    ctx.currentVars = input
+    val resultVars = uniqExprs.zipWithIndex.map { case (exprs, i) =>
+      val expr = exprs.head
+      if (exprs.size == 1) {
+        // it's common to have same expression for some columns in all the projections, for example,
+        // GroupingSet will copy all the output from child as the first part of output.
+        // We should only generate the columns once.
+        BindReferences.bindReference(expr, child.output).gen(ctx)
+      } else {
+        val isNull = ctx.freshName("isNull")
+        val value = ctx.freshName("value")
+        val code =
+          s"""
+             |boolean $isNull = true;
+             |${ctx.javaType(expr.dataType)} $value = ${ctx.defaultValue(expr.dataType)};
+         """.stripMargin
+        ExprCode(code, isNull, value)
+      }
+    }
+
+    // In order to prevent code exploration, we can't call `consume()` many times, so we call
+    // that in a loop, and use swith/case to select the projections.
+    val projectCodes = projections.zipWithIndex.map { case (exprs, i) =>
+      val need = exprs.zipWithIndex.filter { case (e, j) =>
+        uniqExprs(j).size > 1
+      }
+      val updates = need.map { case (e, j) =>
+        val ev = BindReferences.bindReference(e, child.output).gen(ctx)
+        s"""
+           |${ev.code}
+           |${resultVars(j).isNull} = ${ev.isNull};
+           |${resultVars(j).value} = ${ev.value};
+         """.stripMargin
+      }
+      s"""
+         |case $i:
+         |  ${updates.mkString("\n").trim}
+         |  break;
+       """.stripMargin
+    }
+
+    val i = ctx.freshName("i")
+    s"""
+       |${resultVars.map(_.code).mkString("\n").trim}
+       |for (int $i = 0; $i < ${projections.length}; $i ++) {
+       |  switch ($i) {
+       |    ${projectCodes.mkString("\n").trim}
+       |  }
+       |  ${consume(ctx, resultVars)}
+       |}
+     """.stripMargin
   }
 }
