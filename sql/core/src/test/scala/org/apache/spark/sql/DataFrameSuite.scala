@@ -1305,4 +1305,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
   }
+
+  test("SPARK-12982: Add table name validation in temp table registration") {
+    val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
+    // invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("t~"))
+    // valid table name test as below
+    df.registerTempTable("table1")
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("table!#"))
+  }
 }
