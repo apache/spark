@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
+import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.{SQLConf, AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -132,14 +133,12 @@ private[sql] case class PhysicalRDD(
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
-  // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
-  // never requires UnsafeRow as input.
-  override def supportCodegen: Boolean = true
-
   override def upstream(): RDD[InternalRow] = {
     rdd
   }
 
+  // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
+  // never requires UnsafeRow as input.
   override protected def doProduce(ctx: CodegenContext): String = {
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
@@ -169,8 +168,13 @@ private[sql] object PhysicalRDD {
       rdd: RDD[InternalRow],
       relation: BaseRelation,
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
-    // All HadoopFsRelations output UnsafeRows
-    val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
+    val outputUnsafeRows = if (relation.isInstanceOf[ParquetRelation]) {
+      // The vectorized parquet reader does not produce unsafe rows.
+      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+    } else {
+      // All HadoopFsRelations output UnsafeRows
+      relation.isInstanceOf[HadoopFsRelation]
+    }
 
     val bucketSpec = relation match {
       case r: HadoopFsRelation => r.getBucketSpec
