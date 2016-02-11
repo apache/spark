@@ -151,7 +151,7 @@ object Pregel extends Logging {
       // count the iteration
       i += 1
     }
-
+    messages.unpersist(blocking = false)
     g
   } // end of apply
 

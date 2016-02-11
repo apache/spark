@@ -68,6 +68,10 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     return ((numFields + 63)/ 64) * 8;
   }
 
+  public static int calculateFixedPortionByteSize(int numFields) {
+    return 8 * numFields + calculateBitSetWidthInBytes(numFields);
+  }
+
   /**
    * Field types that can be updated in place in UnsafeRows (e.g. we support set() for these types)
    */
@@ -566,10 +570,6 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
   }
 
-  public int hashCode(int seed) {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, seed);
-  }
-
   @Override
   public boolean equals(Object other) {
     if (other instanceof UnsafeRow) {
@@ -600,10 +600,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   public String toString() {
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
+      if (i != 0) build.append(',');
       build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
-      build.append(',');
     }
-    build.deleteCharAt(build.length() - 1);
     build.append(']');
     return build.toString();
   }

@@ -30,9 +30,8 @@ import org.apache.spark.util.ClosureCleaner
  * `mapWithState` operation of a
  * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
  * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
- * Use the [[org.apache.spark.streaming.StateSpec StateSpec.apply()]] or
- * [[org.apache.spark.streaming.StateSpec StateSpec.create()]] to create instances of
- * this class.
+ * Use [[org.apache.spark.streaming.StateSpec.function() StateSpec.function]] factory methods
+ * to create instances of this class.
  *
  * Example in Scala:
  * {{{
@@ -222,7 +221,7 @@ object StateSpec {
       mappingFunction: JFunction3[KeyType, Optional[ValueType], State[StateType], MappedType]):
     StateSpec[KeyType, ValueType, StateType, MappedType] = {
     val wrappedFunc = (k: KeyType, v: Option[ValueType], s: State[StateType]) => {
-      mappingFunction.call(k, Optional.ofNullable(v.get), s)
+      mappingFunction.call(k, JavaUtils.optionToOptional(v), s)
     }
     StateSpec.function(wrappedFunc)
   }

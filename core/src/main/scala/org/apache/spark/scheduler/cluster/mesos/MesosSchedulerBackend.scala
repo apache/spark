@@ -125,7 +125,7 @@ private[spark] class MesosSchedulerBackend(
 
     val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri.isEmpty) {
-      val executorPath = new File(executorSparkHome, "/bin/spark-class").getCanonicalPath
+      val executorPath = new File(executorSparkHome, "/bin/spark-class").getPath
       command.setValue(s"$prefixEnv $executorPath $executorBackendName")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
@@ -138,7 +138,7 @@ private[spark] class MesosSchedulerBackend(
     val (resourcesAfterCpu, usedCpuResources) =
       partitionResources(availableResources, "cpus", mesosExecutorCores)
     val (resourcesAfterMem, usedMemResources) =
-      partitionResources(resourcesAfterCpu.asJava, "mem", calculateTotalMemory(sc))
+      partitionResources(resourcesAfterCpu.asJava, "mem", executorMemory(sc))
 
     builder.addAllResources(usedCpuResources.asJava)
     builder.addAllResources(usedMemResources.asJava)
@@ -250,7 +250,7 @@ private[spark] class MesosSchedulerBackend(
         // check offers for
         //  1. Memory requirements
         //  2. CPU requirements - need at least 1 for executor, 1 for task
-        val meetsMemoryRequirements = mem >= calculateTotalMemory(sc)
+        val meetsMemoryRequirements = mem >= executorMemory(sc)
         val meetsCPURequirements = cpus >= (mesosExecutorCores + scheduler.CPUS_PER_TASK)
         val meetsRequirements =
           (meetsMemoryRequirements && meetsCPURequirements) ||
@@ -375,6 +375,7 @@ private[spark] class MesosSchedulerBackend(
   override def error(d: SchedulerDriver, message: String) {
     inClassLoader() {
       logError("Mesos error: " + message)
+      markErr()
       scheduler.error(message)
     }
   }

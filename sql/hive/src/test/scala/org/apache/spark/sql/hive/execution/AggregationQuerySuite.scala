@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -190,6 +191,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     sqlContext.sql("DROP TABLE IF EXISTS agg2")
     sqlContext.sql("DROP TABLE IF EXISTS agg3")
     sqlContext.dropTempTable("emptyTable")
+  }
+
+  test("group by function") {
+    Seq((1, 2)).toDF("a", "b").registerTempTable("data")
+
+    checkAnswer(
+      sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
+      Row(1, Array(2)) :: Nil)
   }
 
   test("empty table") {
@@ -789,7 +798,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a = 3
         """.stripMargin),
-      Row(null) :: Nil)
+      Row(Double.NaN) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -798,13 +807,42 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(1, null) ::
       Row(2, null) ::
-      Row(3, null) ::
-      Row(4, null) ::
-      Row(5, null) ::
-      Row(6, null) :: Nil)
+      Row(3, Double.NaN) ::
+      Row(4, Double.NaN) ::
+      Row(5, Double.NaN) ::
+      Row(6, Double.NaN) :: Nil)
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
+  }
+
+  test("covariance: covar_pop and covar_samp") {
+    // non-trivial example. To reproduce in python, use:
+    // >>> import numpy as np
+    // >>> a = np.array(range(20))
+    // >>> b = np.array([x * x - 2 * x + 3.5 for x in range(20)])
+    // >>> np.cov(a, b, bias = 0)[0][1]
+    // 595.0
+    // >>> np.cov(a, b, bias = 1)[0][1]
+    // 565.25
+    val df = Seq.tabulate(20)(x => (1.0 * x, x * x - 2 * x + 3.5)).toDF("a", "b")
+    val cov_samp = df.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_samp - 595.0) < 1e-12)
+
+    val cov_pop = df.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_pop - 565.25) < 1e-12)
+
+    val df2 = Seq.tabulate(20)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
+    val cov_samp2 = df2.groupBy().agg(covar_samp("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_samp2 - 11564.0) < 1e-12)
+
+    val cov_pop2 = df2.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
+    assert(math.abs(cov_pop2 - 10985.799999999999) < 1e-12)
+
+    // one row test
+    val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 
   test("no aggregation function (SPARK-11486)") {
@@ -847,7 +885,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         RandomDataGenerator.forType(
           dataType = schemaForGenerator,
           nullable = true,
-          seed = Some(System.nanoTime()))
+          new Random(System.nanoTime()))
       val dataGenerator =
         maybeDataGenerator
           .getOrElse(fail(s"Failed to create data generator for schema $schemaForGenerator"))

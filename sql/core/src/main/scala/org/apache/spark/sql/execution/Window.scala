@@ -194,7 +194,12 @@ case class Window(
         val functions = functionSeq.toArray
 
         // Construct an aggregate processor if we need one.
-        def processor = AggregateProcessor(functions, ordinal, child.output, newMutableProjection)
+        def processor = AggregateProcessor(
+          functions,
+          ordinal,
+          child.output,
+          (expressions, schema) =>
+            newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
 
         // Create the factory
         val factory = key match {
@@ -206,7 +211,8 @@ case class Window(
                 ordinal,
                 functions,
                 child.output,
-                newMutableProjection,
+                (expressions, schema) =>
+                  newMutableProjection(expressions, schema, subexpressionEliminationEnabled),
                 offset)
 
           // Growing Frame.

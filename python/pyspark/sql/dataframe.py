@@ -403,10 +403,10 @@ class DataFrame(object):
         +---+-----+
         |age| name|
         +---+-----+
-        |  2|Alice|
-        |  2|Alice|
         |  5|  Bob|
         |  5|  Bob|
+        |  2|Alice|
+        |  2|Alice|
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -552,7 +552,7 @@ class DataFrame(object):
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
         >>> joined_df.select(col("df_as1.name"), col("df_as2.name"), col("df_as2.age")).collect()
-        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
+        [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
         """
         assert isinstance(alias, basestring), "alias should be a string"
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
@@ -573,14 +573,14 @@ class DataFrame(object):
             One of `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
 
         >>> df.join(df2, df.name == df2.name, 'outer').select(df.name, df2.height).collect()
-        [Row(name=None, height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+        [Row(name=None, height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
         >>> df.join(df2, 'name', 'outer').select('name', 'height').collect()
-        [Row(name=u'Tom', height=80), Row(name=u'Alice', height=None), Row(name=u'Bob', height=85)]
+        [Row(name=u'Tom', height=80), Row(name=u'Bob', height=85), Row(name=u'Alice', height=None)]
 
         >>> cond = [df.name == df3.name, df.age == df3.age]
         >>> df.join(df3, cond, 'outer').select(df.name, df3.age).collect()
-        [Row(name=u'Bob', age=5), Row(name=u'Alice', age=2)]
+        [Row(name=u'Alice', age=2), Row(name=u'Bob', age=5)]
 
         >>> df.join(df2, 'name').select(df.name, df2.height).collect()
         [Row(name=u'Bob', height=85)]
@@ -739,6 +739,9 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
             If n is 1, return a single Row.
@@ -880,9 +883,9 @@ class DataFrame(object):
 
         >>> df.groupBy().avg().collect()
         [Row(avg(age)=3.5)]
-        >>> df.groupBy('name').agg({'age': 'mean'}).collect()
+        >>> sorted(df.groupBy('name').agg({'age': 'mean'}).collect())
         [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
-        >>> df.groupBy(df.name).avg().collect()
+        >>> sorted(df.groupBy(df.name).avg().collect())
         [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> df.groupBy(['name', df.age]).count().collect()
         [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
@@ -901,11 +904,11 @@ class DataFrame(object):
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        |Alice|null|    1|
+        |Alice|   2|    1|
         |  Bob|   5|    1|
         |  Bob|null|    1|
         | null|null|    2|
-        |Alice|   2|    1|
+        |Alice|null|    1|
         +-----+----+-----+
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
@@ -923,12 +926,12 @@ class DataFrame(object):
         | name| age|count|
         +-----+----+-----+
         | null|   2|    1|
-        |Alice|null|    1|
-        |  Bob|   5|    1|
-        |  Bob|null|    1|
-        | null|   5|    1|
-        | null|null|    2|
         |Alice|   2|    1|
+        |  Bob|   5|    1|
+        | null|   5|    1|
+        |  Bob|null|    1|
+        | null|null|    2|
+        |Alice|null|    1|
         +-----+----+-----+
         """
         jgd = self._jdf.cube(self._jcols(*cols))
@@ -1329,6 +1332,9 @@ class DataFrame(object):
     @since(1.3)
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
+
+        Note that this method should only be used if the resulting Pandas's DataFrame is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         This is only available if Pandas is installed and available.
 

@@ -210,30 +210,42 @@ private[sql] object ParquetFilters {
   }
 
   /**
-   *  Return referenced columns in [[sources.Filter]].
+   * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
+   * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
+   * using such fields, otherwise Parquet library will throw exception. Here we filter out such
+   * fields.
+   */
+  private def getFieldMap(dataType: DataType): Array[(String, DataType)] = dataType match {
+    case StructType(fields) =>
+      fields.filter { f =>
+        !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
+          !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
+      }.map(f => f.name -> f.dataType) ++ fields.flatMap { f => getFieldMap(f.dataType) }
+    case _ => Array.empty[(String, DataType)]
+  }
+
+  /**
+   *  Returns referenced columns in [[sources.Filter]].
    */
   def referencedColumns(schema: StructType, predicate: sources.Filter): Array[String] = {
-    val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
-    val referencedColumns = ArrayBuffer.empty[String]
-    def getDataTypeOf(name: String): DataType = {
-      referencedColumns += name
-      dataTypeOf(name)
-    }
-    createParquetFilter(getDataTypeOf, predicate)
-    referencedColumns.distinct.toArray
+    val referencedCols = ArrayBuffer.empty[String]
+    createParquetFilter(schema, predicate, referencedCols)
+    referencedCols.distinct.toArray
   }
 
   /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = schema.map(f => f.name -> f.dataType).toMap
-    createParquetFilter(dataTypeOf, predicate)
+    createParquetFilter(schema, predicate)
   }
 
   private def createParquetFilter(
-      dataTypeOf: String => DataType,
-      predicate: sources.Filter): Option[FilterPredicate] = {
+      schema: StructType,
+      predicate: sources.Filter,
+      referencedCols: ArrayBuffer[String] = ArrayBuffer.empty[String]): Option[FilterPredicate] = {
+    val dataTypeOf = getFieldMap(schema).toMap
+
     relaxParquetValidTypeMap
 
     // NOTE:
@@ -252,32 +264,43 @@ private[sql] object ParquetFilters {
     // Probably I missed something and obviously this should be changed.
 
     predicate match {
-      case sources.IsNull(name) =>
+      case sources.IsNull(name) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
-      case sources.IsNotNull(name) =>
+      case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
 
-      case sources.EqualTo(name, value) =>
+      case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualTo(name, value)) =>
+      case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.EqualNullSafe(name, value) =>
+      case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualNullSafe(name, value)) =>
+      case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.LessThan(name, value) =>
+      case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeLt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.LessThanOrEqual(name, value) =>
+      case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
 
-      case sources.GreaterThan(name, value) =>
+      case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeGt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.GreaterThanOrEqual(name, value) =>
+      case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.In(name, valueSet) =>
+        referencedCols += name
         makeInSet.lift(dataTypeOf(name)).map(_(name, valueSet.toSet))
 
       case sources.And(lhs, rhs) =>
@@ -289,18 +312,18 @@ private[sql] object ParquetFilters {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          lhsFilter <- createParquetFilter(dataTypeOf, lhs)
-          rhsFilter <- createParquetFilter(dataTypeOf, rhs)
+          lhsFilter <- createParquetFilter(schema, lhs, referencedCols)
+          rhsFilter <- createParquetFilter(schema, rhs, referencedCols)
         } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createParquetFilter(dataTypeOf, lhs)
-          rhsFilter <- createParquetFilter(dataTypeOf, rhs)
+          lhsFilter <- createParquetFilter(schema, lhs, referencedCols)
+          rhsFilter <- createParquetFilter(schema, rhs, referencedCols)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createParquetFilter(dataTypeOf, pred).map(FilterApi.not)
+        createParquetFilter(schema, pred, referencedCols).map(FilterApi.not)
 
       case _ => None
     }
