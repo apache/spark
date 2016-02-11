@@ -102,22 +102,18 @@ rm "$PEP8_REPORT_PATH"
 if hash "$SPHINXBUILD" 2> /dev/null; then
   cd python/docs
   make clean
-  export SPHINXOPTS=""
-  make linkcheck &>> "$SPHINX_REPORT_PATH"  || lint_status=1
-  make clean
   # Treat warnings as errors so we stop correctly
-  export SPHINXOPTS="-a -W"
-  make html &>> "$SPHINX_REPORT_PATH" || lint_status=1
+  SPHINXOPTS="-a -W" make html &> "$SPHINX_REPORT_PATH" || lint_status=1
   if [ "$lint_status" -ne 0 ]; then
     echo "pydoc checks failed."
     cat "$SPHINX_REPORT_PATH"
     echo "re-running make html to print full warning list"
     make clean
-    export SPHINXOPTS="-a"
-    make html
+    SPHINXOPTS="-a" make html
   else
     echo "pydoc checks passed."
   fi
+  rm "$SPHINX_REPORT_PATH"
   cd ../..
 else
   echo >&2 "The $SPHINXBUILD command was not found. Skipping pydoc checks for now"
