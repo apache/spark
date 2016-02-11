@@ -70,6 +70,11 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
+          case g: Grouping =>
+            failAnalysis(s"grouping() can only be used with GroupingSets/Cube/Rollup")
+          case g: GroupingID =>
+            failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
+
           case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
