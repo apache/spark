@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object StatFunctions extends Logging {
   /** Calculate the approximate quantile for the given column */
-  private[sql] def approxQuantile(
+  def approxQuantile(
       df: DataFrame,
       col: String,
       quantile: Double,
@@ -65,7 +65,7 @@ private[sql] object StatFunctions extends Logging {
    * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
    * 
    */
-  private class QuantileSummaries(
+  case class QuantileSummaries(
       compress_threshold: Int = 1000,
       epsilon: Double = 0.05) extends Serializable {
     var sampled = new ArrayBuffer[(Double, Int, Int)]() // sampled examples
