@@ -68,6 +68,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   var removed: Boolean = false
 }
 
+
 /**
  * Component of the [[BlockManager]] which tracks metadata for blocks and manages block locking.
  *
@@ -121,10 +122,16 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Todo: document blocking / locking semantics.
+   * Lock a block for reading and return its metadata.
    *
-   * @param blockId
-   * @return
+   * A single task can lock a block multiple times for reading, in which case each lock will need
+   * to be released separately.
+   *
+   * @param blockId the block to lock.
+   * @param blocking if true (default), this call will block until the lock is acquired. If false,
+   *                 this call will return immediately if the lock acquisition fails.
+   * @return None if the block did not exist or was removed (in which case no lock is held), or
+   *         Some(BlockInfo) (in which case the block is locked for reading).
    */
   def getAndLockForReading(
       blockId: BlockId,
@@ -146,6 +153,19 @@ private[storage] class BlockInfoManager extends Logging {
     }
   }
 
+  /**
+   * Lock a block for writing and return its metadata.
+   *
+   * If this is called by a task which already holds the block's exclusive write lock, then this
+   * will return success but will not further increment any lock counts (so both write-lock
+   * acquisitions will be freed by the same [[releaseLock()]] or [[downgradeLock()]] call.
+   *
+   * @param blockId the block to lock.
+   * @param blocking if true (default), this call will block until the lock is acquired. If false,
+   *                 this call will return immediately if the lock acquisition fails.
+   * @return None if the block did not exist or was removed (in which case no lock is held), or
+   *         Some(BlockInfo) (in which case the block is locked for writing).
+   */
   def getAndLockForWriting(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
@@ -167,10 +187,16 @@ private[storage] class BlockInfoManager extends Logging {
     }
   }
 
+  /**
+   * Get a block's metadata without acquiring any locks.
+   */
   def get(blockId: BlockId): Option[BlockInfo] = synchronized {
     infos.get(blockId)
   }
 
+  /**
+   * Downgrades an exclusive write lock to a shared read lock.
+   */
   def downgradeLock(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId downgrading write lock for $blockId")
     // TODO: refactor this code so that log messages aren't confusing.
@@ -182,6 +208,9 @@ private[storage] class BlockInfoManager extends Logging {
     notifyAll()
   }
 
+  /**
+   * Release a lock on the given block.
+   */
   def releaseLock(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
     val info = get(blockId).getOrElse {
@@ -201,6 +230,13 @@ private[storage] class BlockInfoManager extends Logging {
     notifyAll()
   }
 
+  /**
+   * Atomically create metadata for a non-existent block.
+   *
+   * @param blockId the block id.
+   * @param newBlockInfo the block info for the new block.
+   * @return true if the block did not already exist, false otherwise.
+   */
   def putAndLockForWritingIfAbsent(
       blockId: BlockId,
       newBlockInfo: BlockInfo): Boolean = synchronized {
@@ -253,7 +289,9 @@ private[storage] class BlockInfoManager extends Logging {
     totalPinCountForTask
   }
 
-
+  /**
+   * Returns the number of blocks tracked.
+   */
   def size: Int = synchronized {
     infos.size
   }
@@ -262,7 +300,7 @@ private[storage] class BlockInfoManager extends Logging {
    * Return the number of map entries in this pin counter's internal data structures.
    * This is used in unit tests in order to detect memory leaks.
    */
-  private[storage] def  getNumberOfMapEntries: Long = synchronized {
+  private[storage] def getNumberOfMapEntries: Long = synchronized {
     size +
       readLocksByTask.size() +
       readLocksByTask.asMap().asScala.map(_._2.size()).sum +
@@ -270,7 +308,18 @@ private[storage] class BlockInfoManager extends Logging {
       writeLocksByTask.map(_._2.size).sum
   }
 
-  // This implicitly drops all locks.
+  /**
+   * Returns an iterator over a snapshot of all blocks' metadata. Note that the individual entries
+   * is this iterator are mutable and thus may reflect blocks that are deleted while the iterator
+   * is being traversed.
+   */
+  def entries: Iterator[(BlockId, BlockInfo)] = synchronized {
+    infos.iterator.toArray.toIterator
+  }
+
+  /**
+   * Removes the given block and automatically drops all locks on it.
+   */
   def remove(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to remove block $blockId")
     // TODO: Should probably have safety checks here
@@ -280,14 +329,13 @@ private[storage] class BlockInfoManager extends Logging {
     notifyAll()
   }
 
+  /**
+   * Delete all state. Called during shutdown.
+   */
   def clear(): Unit = synchronized {
     infos.clear()
     readLocksByTask.invalidateAll()
     writeLocksByTask.clear()
-  }
-
-  def entries: Iterator[(BlockId, BlockInfo)] = synchronized {
-    infos.iterator.toArray.toIterator
   }
 
 }
