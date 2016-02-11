@@ -162,7 +162,7 @@ final class ShuffleBlockFetcherIterator(
 
     // so we can look up the size of each blockID
     val sizeMap = req.blocks.map { case (blockId, size) => (blockId.toString, size) }.toMap
-    val remainingBlocks = new ArrayBuffer[String]() ++ sizeMap.keys
+    val remainingBlocks = new HashSet[String]() ++ sizeMap.keys
     val blockIds = req.blocks.map(_._1.toString)
 
     val address = req.address
