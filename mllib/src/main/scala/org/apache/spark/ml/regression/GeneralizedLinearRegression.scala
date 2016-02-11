@@ -69,9 +69,11 @@ private[regression] trait GeneralizedLinearRegressionParams extends PredictorPar
 
   @Since("2.0.0")
   override def validateParams(): Unit = {
-    require(GeneralizedLinearRegression.supportedFamilyLinkPairs.contains($(family) -> $(link)),
-      s"Generalized Linear Regression with ${$(family)} family does not support ${$(link)} " +
-        s"link function.")
+    if (isDefined(link)) {
+      require(GeneralizedLinearRegression.supportedFamilyLinkPairs.contains($(family) -> $(link)),
+        s"Generalized Linear Regression with ${$(family)} family does not support ${$(link)} " +
+          s"link function.")
+    }
   }
 }
 
