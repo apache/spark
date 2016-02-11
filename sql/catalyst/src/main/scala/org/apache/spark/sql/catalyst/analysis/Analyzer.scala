@@ -238,14 +238,39 @@ class Analyzer(
           }
         }.toMap
 
-        val aggregations: Seq[NamedExpression] = x.aggregations.map {
-          // If an expression is an aggregate (contains a AggregateExpression) then we dont change
-          // it so that the aggregation is computed on the unmodified value of its argument
-          // expressions.
-          case expr if expr.find(_.isInstanceOf[AggregateExpression]).nonEmpty => expr
-          // If not then its a grouping expression and we need to use the modified (with nulls from
-          // Expand) value of the expression.
-          case expr => expr.transformDown {
+        val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
+          // collect all the found AggregateExpression, so we can check an expression is part of
+          // any AggregateExpression or not.
+          val aggsBuffer = ArrayBuffer[Expression]()
+          // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
+          def isPartOfAggregation(e: Expression): Boolean = {
+            aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+          }
+          expr.transformDown {
+            // AggregateExpression should be computed on the unmodified value of its argument
+            // expressions, so we should not replace any references to grouping expression
+            // inside it.
+            case e: AggregateExpression =>
+              aggsBuffer += e
+              e
+            case e if isPartOfAggregation(e) => e
+            case e: GroupingID =>
+              if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
+                gid
+              } else {
+                throw new AnalysisException(
+                  s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
+                    s"grouping columns (${x.groupByExprs.mkString(",")})")
+              }
+            case Grouping(col: Expression) =>
+              val idx = x.groupByExprs.indexOf(col)
+              if (idx >= 0) {
+                Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
+                  Literal(1)), ByteType)
+              } else {
+                throw new AnalysisException(s"Column of grouping ($col) can't be found " +
+                  s"in grouping columns ${x.groupByExprs.mkString(",")}")
+              }
             case e =>
               groupByAliases.find(_.child.semanticEquals(e)).map(attributeMap(_)).getOrElse(e)
           }.asInstanceOf[NamedExpression]
@@ -819,8 +844,11 @@ class Analyzer(
         }
     }
 
+    private def isAggregateExpression(e: Expression): Boolean = {
+      e.isInstanceOf[AggregateExpression] || e.isInstanceOf[Grouping] || e.isInstanceOf[GroupingID]
+    }
     def containsAggregate(condition: Expression): Boolean = {
-      condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+      condition.find(isAggregateExpression).isDefined
     }
   }
 
@@ -1002,7 +1030,7 @@ class Analyzer(
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
-          case wf : WindowFunction =>
+          case wf: WindowFunction =>
             val newChildren = wf.children.map(extractExpr)
             wf.withNewChildren(newChildren)
 

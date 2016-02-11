@@ -288,6 +288,50 @@ def first(col, ignorenulls=False):
     return Column(jc)
 
 
+@since(2.0)
+def grouping(col):
+    """
+    Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+
+    >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
+    +-----+--------------+--------+
+    | name|grouping(name)|sum(age)|
+    +-----+--------------+--------+
+    | null|             1|       7|
+    |Alice|             0|       2|
+    |  Bob|             0|       5|
+    +-----+--------------+--------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.grouping(_to_java_column(col))
+    return Column(jc)
+
+
+@since(2.0)
+def grouping_id(*cols):
+    """
+    Aggregate function: returns the level of grouping, equals to
+
+       (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+
+    Note: the list of columns should match with grouping columns exactly, or empty (means all the
+    grouping columns).
+
+    >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
+    +-----+------------+--------+
+    | name|groupingid()|sum(age)|
+    +-----+------------+--------+
+    | null|           1|       7|
+    |Alice|           0|       2|
+    |  Bob|           0|       5|
+    +-----+------------+--------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 @since(1.6)
 def input_file_name():
     """Creates a string column for the file name of the current Spark task.
