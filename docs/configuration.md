@@ -587,13 +587,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.closure.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Serializer class to use for closures. Currently only the Java serializer is supported.
-  </td>
-</tr>
-<tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>lz4</td>
   <td>
@@ -825,13 +818,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.cores</code></td>
-  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
-    The number of cores to use on each executor. For YARN and standalone mode only.
+    1 in YARN mode, all the available cores on the worker in
+    standalone and Mesos coarse-grained modes.
+  </td>
+  <td>
+    The number of cores to use on each executor.
 
-    In standalone mode, setting this parameter allows an application to run multiple executors on
-    the same worker, provided that there are enough cores on that worker. Otherwise, only one
-    executor per application will run on each worker.
+    In standalone and Mesos coarse-grained modes, setting this
+    parameter allows an application to run multiple executors on the
+    same worker, provided that there are enough cores on that
+    worker. Otherwise, only one executor per application will run on
+    each worker.
   </td>
 </tr>
 <tr>
@@ -1169,8 +1167,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to use dynamic resource allocation, which scales the number of executors registered
-    with this application up and down based on the workload. Note that this is currently only
-    available on YARN mode. For more detail, see the description
+    with this application up and down based on the workload. 
+    For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.

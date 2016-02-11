@@ -117,7 +117,9 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
     }
   }
 
-  override final def toString: String = s"${parent}__$name"
+  private[this] val stringRepresentation = s"${parent}__$name"
+
+  override final def toString: String = stringRepresentation
 
   override final def hashCode: Int = toString.##
 
