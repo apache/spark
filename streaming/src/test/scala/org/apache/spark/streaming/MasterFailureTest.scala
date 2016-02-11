@@ -242,6 +242,8 @@ object MasterFailureTest extends Logging {
         }
       } catch {
         case e: Exception => logError("Error running streaming context", e)
+      } finally {
+        ssc.stop()
       }
       if (killingThread.isAlive) {
         killingThread.interrupt()
@@ -250,7 +252,6 @@ object MasterFailureTest extends Logging {
         // to null after the next test creates the new SparkContext and fail the test.
         killingThread.join()
       }
-      ssc.stop()
 
       logInfo("Has been killed = " + killed)
       logInfo("Is last output generated = " + isLastOutputGenerated)
