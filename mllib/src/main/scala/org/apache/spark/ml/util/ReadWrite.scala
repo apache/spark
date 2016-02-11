@@ -19,10 +19,10 @@ package org.apache.spark.ml.util
 
 import java.io.IOException
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.json4s._
-import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
+import org.json4s.JsonDSL._
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{Experimental, Since}
@@ -75,13 +75,14 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
     val hadoopConf = sc.hadoopConfiguration
-    val fs = FileSystem.get(hadoopConf)
-    val p = new Path(path)
-    if (fs.exists(p)) {
+    val outputPath = new Path(path)
+    val fs = outputPath.getFileSystem(hadoopConf)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    if (fs.exists(qualifiedOutputPath)) {
       if (shouldOverwrite) {
         logInfo(s"Path $path already exists. It will be overwritten.")
         // TODO: Revert back to the original content if save is not successful.
-        fs.delete(p, true)
+        fs.delete(qualifiedOutputPath, true)
       } else {
         throw new IOException(
           s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
