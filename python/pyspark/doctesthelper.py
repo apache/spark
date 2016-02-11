@@ -31,7 +31,7 @@ except ImportError:
     xmlrunner = None
 
 
-def run_doctests(file_name, globs={}, optionflags=None):
+def run_doctests(file_name, globs={}, optionflags=0):
     t = doctest.DocFileSuite(file_name, module_relative=False,
                              globs=globs, optionflags=optionflags)
     if xmlrunner:
