@@ -92,7 +92,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        metrics += qe.executedPlan.longMetric("numInputRows").value.value
+        metrics += qe.executedPlan.longMetric("numOutputRows").value.value
       }
     }
     sqlContext.listenerManager.register(listener)
@@ -105,9 +105,9 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     }
 
     assert(metrics.length == 3)
-    assert(metrics(0) == 1)
-    assert(metrics(1) == 1)
-    assert(metrics(2) == 2)
+    assert(metrics(0) === 1)
+    assert(metrics(1) === 1)
+    assert(metrics(2) === 2)
 
     sqlContext.listenerManager.unregister(listener)
   }

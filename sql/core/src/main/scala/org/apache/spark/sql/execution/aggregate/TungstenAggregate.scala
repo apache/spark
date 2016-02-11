@@ -47,7 +47,6 @@ case class TungstenAggregate(
   require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
 
   override private[sql] lazy val metrics = Map(
-    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
@@ -77,7 +76,6 @@ case class TungstenAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
@@ -102,7 +100,6 @@ case class TungstenAggregate(
             child.output,
             iter,
             testFallbackStartsAt,
-            numInputRows,
             numOutputRows,
             dataSize,
             spillSize)

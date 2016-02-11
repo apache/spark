@@ -40,8 +40,6 @@ case class SortMergeOuterJoin(
     right: SparkPlan) extends BinaryNode {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = {
@@ -96,8 +94,6 @@ case class SortMergeOuterJoin(
     UnsafeProjection.create(rightKeys, right.output)
 
   override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
@@ -119,9 +115,7 @@ case class SortMergeOuterJoin(
             bufferedKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
             streamedIter = RowIterator.fromScala(leftIter),
-            numLeftRows,
-            bufferedIter = RowIterator.fromScala(rightIter),
-            numRightRows
+            bufferedIter = RowIterator.fromScala(rightIter)
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
@@ -133,9 +127,7 @@ case class SortMergeOuterJoin(
             bufferedKeyGenerator = createLeftKeyGenerator(),
             keyOrdering,
             streamedIter = RowIterator.fromScala(rightIter),
-            numRightRows,
-            bufferedIter = RowIterator.fromScala(leftIter),
-            numLeftRows
+            bufferedIter = RowIterator.fromScala(leftIter)
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
@@ -149,9 +141,7 @@ case class SortMergeOuterJoin(
             rightKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
             leftIter = RowIterator.fromScala(leftIter),
-            numLeftRows,
             rightIter = RowIterator.fromScala(rightIter),
-            numRightRows,
             boundCondition,
             leftNullRow,
             rightNullRow)
@@ -289,9 +279,7 @@ private class SortMergeFullOuterJoinScanner(
     rightKeyGenerator: Projection,
     keyOrdering: Ordering[InternalRow],
     leftIter: RowIterator,
-    numLeftRows: LongSQLMetric,
     rightIter: RowIterator,
-    numRightRows: LongSQLMetric,
     boundCondition: InternalRow => Boolean,
     leftNullRow: InternalRow,
     rightNullRow: InternalRow)  {
@@ -321,7 +309,6 @@ private class SortMergeFullOuterJoinScanner(
     if (leftIter.advanceNext()) {
       leftRow = leftIter.getRow
       leftRowKey = leftKeyGenerator(leftRow)
-      numLeftRows += 1
       true
     } else {
       leftRow = null
@@ -338,7 +325,6 @@ private class SortMergeFullOuterJoinScanner(
     if (rightIter.advanceNext()) {
       rightRow = rightIter.getRow
       rightRowKey = rightKeyGenerator(rightRow)
-      numRightRows += 1
       true
     } else {
       rightRow = null

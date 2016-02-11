@@ -36,8 +36,6 @@ case class BroadcastNestedLoopJoin(
   // TODO: Override requiredChildDistribution.
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   /** BuildRight means the right relation <=> the broadcast relation. */
@@ -73,15 +71,10 @@ case class BroadcastNestedLoopJoin(
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val (numStreamedRows, numBuildRows) = buildSide match {
-      case BuildRight => (longMetric("numLeftRows"), longMetric("numRightRows"))
-      case BuildLeft => (longMetric("numRightRows"), longMetric("numLeftRows"))
-    }
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastedRelation =
       sparkContext.broadcast(broadcast.execute().map { row =>
-        numBuildRows += 1
         row.copy()
       }.collect().toIndexedSeq)
 
@@ -98,7 +91,6 @@ case class BroadcastNestedLoopJoin(
       streamedIter.foreach { streamedRow =>
         var i = 0
         var streamRowMatched = false
-        numStreamedRows += 1
 
         while (i < broadcastedRelation.value.size) {
           val broadcastedRow = broadcastedRelation.value(i)
