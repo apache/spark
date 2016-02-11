@@ -45,6 +45,8 @@ import org.apache.spark.util._
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with ResetSystemProperties {
 
+  import BlockManagerSuite._
+
   var conf: SparkConf = null
   var store: BlockManager = null
   var store2: BlockManager = null
@@ -170,17 +172,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a3 = new Array[Byte](4000)
 
     // Putting a1, a2  and a3 in memory and telling master only about a1 and a2
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.putSingleAndReleaseLock("a1", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a2", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a3", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // Checking whether blocks are in memory
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    store.releaseLock("a1")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    store.releaseLock("a2")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    store.releaseLock("a3")
+    assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was not in store")
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
@@ -190,8 +189,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Drop a1 and a2 from memory; this should be reported back to the master
     store.dropFromMemory("a1", () => null: Either[Array[Any], ByteBuffer])
     store.dropFromMemory("a2", () => null: Either[Array[Any], ByteBuffer])
-    assert(store.getSingle("a1") === None, "a1 not removed from store")
-    assert(store.getSingle("a2") === None, "a2 not removed from store")
+    assert(store.getSingleAndReleaseLock("a1") === None, "a1 not removed from store")
+    assert(store.getSingleAndReleaseLock("a2") === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
     assert(master.getLocations("a2").size === 0, "master did not remove a2")
   }
@@ -206,7 +205,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_2)
+    store.putSingleAndReleaseLock("a1", a1, StorageLevel.MEMORY_ONLY_2)
     store2.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_2)
     assert(master.getLocations("a1").size === 2, "master did not report 2 locations for a1")
     assert(master.getLocations("a2").size === 2, "master did not report 2 locations for a2")
@@ -219,20 +218,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a3 = new Array[Byte](4000)
 
     // Putting a1, a2 and a3 in memory and telling master only about a1 and a2
-    store.putSingle("a1-to-remove", a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a2-to-remove", a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("a3-to-remove", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.putSingleAndReleaseLock("a1-to-remove", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a2-to-remove", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a3-to-remove", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // Checking whether blocks are in memory and memory size
     val memStatus = master.getMemoryStatus.head._2
     assert(memStatus._1 == 20000L, "total memory " + memStatus._1 + " should equal 20000")
     assert(memStatus._2 <= 12000L, "remaining memory " + memStatus._2 + " should <= 12000")
-    assert(store.getSingle("a1-to-remove").isDefined, "a1 was not in store")
-    store.releaseLock("a1-to-remove")
-    assert(store.getSingle("a2-to-remove").isDefined, "a2 was not in store")
-    store.releaseLock("a2-to-remove")
-    assert(store.getSingle("a3-to-remove").isDefined, "a3 was not in store")
-    store.releaseLock("a3-to-remove")
+    assert(store.getSingleAndReleaseLock("a1-to-remove").isDefined, "a1 was not in store")
+    assert(store.getSingleAndReleaseLock("a2-to-remove").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a3-to-remove").isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
     assert(master.getLocations("a1-to-remove").size > 0, "master was not told about a1")
@@ -269,30 +265,30 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
     // Putting a1, a2 and a3 in memory.
-    store.putSingle(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
     master.removeRdd(0, blocking = false)
 
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle(rdd(0, 0)) should be (None)
+      store.getSingleAndReleaseLock(rdd(0, 0)) should be (None)
       master.getLocations(rdd(0, 0)) should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle(rdd(0, 1)) should be (None)
+      store.getSingleAndReleaseLock(rdd(0, 1)) should be (None)
       master.getLocations(rdd(0, 1)) should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("nonrddblock") should not be (None)
+      store.getSingleAndReleaseLock("nonrddblock") should not be (None)
       master.getLocations("nonrddblock") should have size (1)
     }
 
-    store.putSingle(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
     master.removeRdd(0, blocking = true)
-    store.getSingle(rdd(0, 0)) should be (None)
+    store.getSingleAndReleaseLock(rdd(0, 0)) should be (None)
     master.getLocations(rdd(0, 0)) should have size 0
-    store.getSingle(rdd(0, 1)) should be (None)
+    store.getSingleAndReleaseLock(rdd(0, 1)) should be (None)
     master.getLocations(rdd(0, 1)) should have size 0
   }
 
@@ -312,10 +308,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // insert broadcast blocks in both the stores
     Seq(driverStore, executorStore).foreach { case s =>
-      s.putSingle(broadcast0BlockId, a1, StorageLevel.DISK_ONLY)
-      s.putSingle(broadcast1BlockId, a2, StorageLevel.DISK_ONLY)
-      s.putSingle(broadcast2BlockId, a3, StorageLevel.DISK_ONLY)
-      s.putSingle(broadcast2BlockId2, a4, StorageLevel.DISK_ONLY)
+      s.putSingleAndReleaseLock(broadcast0BlockId, a1, StorageLevel.DISK_ONLY)
+      s.putSingleAndReleaseLock(broadcast1BlockId, a2, StorageLevel.DISK_ONLY)
+      s.putSingleAndReleaseLock(broadcast2BlockId, a3, StorageLevel.DISK_ONLY)
+      s.putSingleAndReleaseLock(broadcast2BlockId2, a4, StorageLevel.DISK_ONLY)
     }
 
     // verify whether the blocks exist in both the stores
@@ -370,9 +366,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
 
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a1", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was not in store")
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
@@ -388,13 +384,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
 
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a1", a1, StorageLevel.MEMORY_ONLY)
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock("a2", a2, StorageLevel.MEMORY_ONLY)
     store.waitForAsyncReregister()
 
     assert(master.getLocations("a1").size > 0, "a1 was not reregistered with master")
@@ -411,12 +407,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       master.removeExecutor(store.blockManagerId.executorId)
       val t1 = new Thread {
         override def run() {
-          store.putIterator("a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+          store.putIteratorAndReleaseLock(
+            "a2", a2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
         }
       }
       val t2 = new Thread {
         override def run() {
-          store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+          store.putSingleAndReleaseLock("a1", a1, StorageLevel.MEMORY_ONLY)
         }
       }
       val t3 = new Thread {
@@ -444,20 +441,23 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val list2 = List(new Array[Byte](500), new Array[Byte](1000), new Array[Byte](1500))
     val list1SizeEstimate = SizeEstimator.estimate(list1.iterator.toArray)
     val list2SizeEstimate = SizeEstimator.estimate(list2.iterator.toArray)
-    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.putIterator("list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.putIterator("list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
-    val list1Get = store.get("list1")
+    store.putIteratorAndReleaseLock(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
+    val list1Get = store.getAndReleaseLock("list1")
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
     assert(list1Get.get.bytes === list1SizeEstimate)
     assert(list1Get.get.readMethod === DataReadMethod.Memory)
-    val list2MemoryGet = store.get("list2memory")
+    val list2MemoryGet = store.getAndReleaseLock("list2memory")
     assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
     assert(list2MemoryGet.get.data.size === 3)
     assert(list2MemoryGet.get.bytes === list2SizeEstimate)
     assert(list2MemoryGet.get.readMethod === DataReadMethod.Memory)
-    val list2DiskGet = store.get("list2disk")
+    val list2DiskGet = store.getAndReleaseLock("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
@@ -486,8 +486,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store2 = makeBlockManager(8000, "executor2")
     store3 = makeBlockManager(8000, "executor3")
     val list1 = List(new Array[Byte](4000))
-    store2.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store3.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store2.putIteratorAndReleaseLock(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store3.putIteratorAndReleaseLock(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.getRemoteBytes("list1").isDefined, "list1Get expected to be fetched")
     store2.stop()
     store2 = null
@@ -513,21 +515,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a1 = new Array[Byte](4000)
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
-    store.putSingle("a1", a1, storageLevel)
-    store.putSingle("a2", a2, storageLevel)
-    store.putSingle("a3", a3, storageLevel)
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    store.releaseLock("a2")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    store.releaseLock("a3")
-    assert(store.getSingle("a1") === None, "a1 was in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    store.releaseLock("a2")
+    store.putSingleAndReleaseLock("a1", a1, storageLevel)
+    store.putSingleAndReleaseLock("a2", a2, storageLevel)
+    store.putSingleAndReleaseLock("a3", a3, storageLevel)
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was not in store")
+    assert(store.getSingleAndReleaseLock("a1") === None, "a1 was in store")
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
-    store.putSingle("a1", a1, storageLevel)
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    assert(store.getSingle("a3") === None, "a3 was in store")
+    store.putSingleAndReleaseLock("a1", a1, storageLevel)
+    assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was not in store")
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a3") === None, "a3 was in store")
   }
 
   test("in-memory LRU for partitions of same RDD") {
@@ -535,34 +534,34 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a1 = new Array[Byte](4000)
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
-    store.putSingle(rdd(0, 1), a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(0, 2), a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(0, 3), a3, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 1), a1, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 2), a2, StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 3), a3, StorageLevel.MEMORY_ONLY)
     // Even though we accessed rdd_0_3 last, it should not have replaced partitions 1 and 2
     // from the same RDD
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
-    assert(store.getSingle(rdd(0, 1)).isDefined, "rdd_0_1 was not in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 1)).isDefined, "rdd_0_1 was not in store")
     // Check that rdd_0_3 doesn't replace them even after further accesses
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 3)) === None, "rdd_0_3 was in store")
   }
 
   test("in-memory LRU for partitions of multiple RDDs") {
     store = makeBlockManager(12000)
-    store.putSingle(rdd(0, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(0, 2), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(1, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 2), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(1, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // At this point rdd_1_1 should've replaced rdd_0_1
     assert(store.memoryStore.contains(rdd(1, 1)), "rdd_1_1 was not in store")
     assert(!store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was in store")
     assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     // Do a get() on rdd_0_2 so that it is the most recently used item
-    assert(store.getSingle(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
+    assert(store.getSingleAndReleaseLock(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
     // Put in more partitions from RDD 0; they should replace rdd_1_1
-    store.putSingle(rdd(0, 3), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(0, 4), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 3), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 4), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // Now rdd_1_1 should be dropped to add rdd_0_3, but then rdd_0_2 should *not* be dropped
     // when we try to add rdd_0_4.
     assert(!store.memoryStore.contains(rdd(1, 1)), "rdd_1_1 was in store")
@@ -577,28 +576,28 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
-    store.putSingle("a1", a1, StorageLevel.DISK_ONLY)
-    store.putSingle("a2", a2, StorageLevel.DISK_ONLY)
-    store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
-    assert(store.getSingle("a2").isDefined, "a2 was in store")
-    assert(store.getSingle("a3").isDefined, "a3 was in store")
-    assert(store.getSingle("a1").isDefined, "a1 was in store")
+    store.putSingleAndReleaseLock("a1", a1, StorageLevel.DISK_ONLY)
+    store.putSingleAndReleaseLock("a2", a2, StorageLevel.DISK_ONLY)
+    store.putSingleAndReleaseLock("a3", a3, StorageLevel.DISK_ONLY)
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was in store")
+    assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was in store")
+    assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was in store")
   }
 
   test("disk and memory storage") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getSingle)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getSingleAndReleaseLock)
   }
 
   test("disk and memory storage with getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getLocalBytes)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getLocalBytesAndReleaseLock)
   }
 
   test("disk and memory storage with serialization") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getSingle)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getSingleAndReleaseLock)
   }
 
   test("disk and memory storage with serialization and getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getLocalBytes)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getLocalBytesAndReleaseLock)
   }
 
   def testDiskAndMemoryStorage(
@@ -608,16 +607,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a1 = new Array[Byte](4000)
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
-    store.putSingle("a1", a1, storageLevel)
-    store.putSingle("a2", a2, storageLevel)
-    store.putSingle("a3", a3, storageLevel)
+    store.putSingleAndReleaseLock("a1", a1, storageLevel)
+    store.putSingleAndReleaseLock("a2", a2, storageLevel)
+    store.putSingleAndReleaseLock("a3", a3, storageLevel)
     assert(accessMethod(store)("a2").isDefined, "a2 was not in store")
-    store.releaseLock("a2")
     assert(accessMethod(store)("a3").isDefined, "a3 was not in store")
-    store.releaseLock("a3")
     assert(store.memoryStore.getValues("a1").isEmpty, "a1 was in memory store")
     assert(accessMethod(store)("a1").isDefined, "a1 was not in store")
-    store.releaseLock("a1")
     assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
   }
 
@@ -628,25 +624,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val a3 = new Array[Byte](4000)
     val a4 = new Array[Byte](4000)
     // First store a1 and a2, both in memory, and a3, on disk only
-    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
-    store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
-    store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
+    store.putSingleAndReleaseLock("a1", a1, StorageLevel.MEMORY_ONLY_SER)
+    store.putSingleAndReleaseLock("a2", a2, StorageLevel.MEMORY_ONLY_SER)
+    store.putSingleAndReleaseLock("a3", a3, StorageLevel.DISK_ONLY)
     // At this point LRU should not kick in because a3 is only on disk
-    assert(store.getSingle("a1").isDefined, "a1 was not in store")
-    store.releaseLock("a1")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    store.releaseLock("a2")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    store.releaseLock("a3")
+    assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was not in store")
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was not in store")
     // Now let's add in a4, which uses both disk and memory; a1 should drop out
-    store.putSingle("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
-    assert(store.getSingle("a1") == None, "a1 was in store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    store.releaseLock("a2")
-    assert(store.getSingle("a3").isDefined, "a3 was not in store")
-    store.releaseLock("a3")
-    assert(store.getSingle("a4").isDefined, "a4 was not in store")
-    store.releaseLock("a4")
+    store.putSingleAndReleaseLock("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
+    assert(store.getSingleAndReleaseLock("a1") == None, "a1 was in store")
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was not in store")
+    assert(store.getSingleAndReleaseLock("a4").isDefined, "a4 was not in store")
   }
 
   test("in-memory LRU with streams") {
@@ -654,33 +644,27 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list2 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list3 = List(new Array[Byte](2000), new Array[Byte](2000))
-    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.putIterator("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.putIterator("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    store.releaseLock("list2")
-    store.releaseLock("list2")
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    store.releaseLock("list3")
-    store.releaseLock("list3")
-    assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    store.releaseLock("list2")
-    store.releaseLock("list2")
+    store.putIteratorAndReleaseLock(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
+    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
+    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.getAndReleaseLock("list1") === None, "list1 was in store")
+    assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
+    assert(store.getAndReleaseLock("list2").get.data.size === 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
-    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.data.size === 2)
-    store.releaseLock("list1")
-    store.releaseLock("list1")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    store.releaseLock("list2")
-    store.releaseLock("list2")
-    assert(store.get("list3") === None, "list1 was in store")
+    store.putIteratorAndReleaseLock(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(store.getAndReleaseLock("list1").isDefined, "list1 was not in store")
+    assert(store.getAndReleaseLock("list1").get.data.size === 2)
+    assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
+    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.getAndReleaseLock("list3") === None, "list1 was in store")
   }
 
   test("LRU with mixed storage levels and streams") {
@@ -690,52 +674,38 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val list3 = List(new Array[Byte](2000), new Array[Byte](2000))
     val list4 = List(new Array[Byte](2000), new Array[Byte](2000))
     // First store list1 and list2, both in memory, and list3, on disk only
-    store.putIterator("list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
-    store.putIterator("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
-    store.putIterator("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list1", list1.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
     val listForSizeEstimate = new ArrayBuffer[Any]
     listForSizeEstimate ++= list1.iterator
     val listSize = SizeEstimator.estimate(listForSizeEstimate)
     // At this point LRU should not kick in because list3 is only on disk
-    assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.data.size === 2)
-    store.releaseLock("list1")
-    store.releaseLock("list1")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    store.releaseLock("list2")
-    store.releaseLock("list2")
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    store.releaseLock("list3")
-    store.releaseLock("list3")
-    assert(store.get("list1").isDefined, "list1 was not in store")
-    assert(store.get("list1").get.data.size === 2)
-    store.releaseLock("list1")
-    store.releaseLock("list1")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    store.releaseLock("list2")
-    store.releaseLock("list2")
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    store.releaseLock("list3")
-    store.releaseLock("list3")
+    assert(store.getAndReleaseLock("list1").isDefined, "list1 was not in store")
+    assert(store.getAndReleaseLock("list1").get.data.size === 2)
+    assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
+    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
+    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.getAndReleaseLock("list1").isDefined, "list1 was not in store")
+    assert(store.getAndReleaseLock("list1").get.data.size === 2)
+    assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
+    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
+    assert(store.getAndReleaseLock("list3").get.data.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
-    store.putIterator("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
-    assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2").isDefined, "list2 was not in store")
-    assert(store.get("list2").get.data.size === 2)
-    store.releaseLock("list2")
-    store.releaseLock("list2")
-    assert(store.get("list3").isDefined, "list3 was not in store")
-    assert(store.get("list3").get.data.size === 2)
-    store.releaseLock("list3")
-    store.releaseLock("list3")
-    assert(store.get("list4").isDefined, "list4 was not in store")
-    assert(store.get("list4").get.data.size === 2)
-    store.releaseLock("list4")
-    store.releaseLock("list4")
+    store.putIteratorAndReleaseLock(
+      "list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
+    assert(store.getAndReleaseLock("list1") === None, "list1 was in store")
+    assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
+    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
+    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.getAndReleaseLock("list4").isDefined, "list4 was not in store")
+    assert(store.getAndReleaseLock("list4").get.data.size === 2)
   }
 
   test("negative byte values in ByteBufferInputStream") {
@@ -752,18 +722,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("overly large block") {
     store = makeBlockManager(5000)
-    store.putSingle("a1", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
-    assert(store.getSingle("a1") === None, "a1 was in store")
-    store.putSingle("a2", new Array[Byte](10000), StorageLevel.MEMORY_AND_DISK)
+    store.putSingleAndReleaseLock("a1", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
+    assert(store.getSingleAndReleaseLock("a1") === None, "a1 was in store")
+    store.putSingleAndReleaseLock("a2", new Array[Byte](10000), StorageLevel.MEMORY_AND_DISK)
     assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
-    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
   }
 
   test("block compression") {
     try {
       conf.set("spark.shuffle.compress", "true")
       store = makeBlockManager(20000, "exec1")
-      store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      store.putSingleAndReleaseLock(
+        ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) <= 100,
         "shuffle_0_0_0 was not compressed")
       store.stop()
@@ -771,7 +742,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
       conf.set("spark.shuffle.compress", "false")
       store = makeBlockManager(20000, "exec2")
-      store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
+      store.putSingleAndReleaseLock(
+        ShuffleBlockId(0, 0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) >= 10000,
         "shuffle_0_0_0 was compressed")
       store.stop()
@@ -779,7 +751,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
       conf.set("spark.broadcast.compress", "true")
       store = makeBlockManager(20000, "exec3")
-      store.putSingle(BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
+      store.putSingleAndReleaseLock(
+        BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(BroadcastBlockId(0)) <= 1000,
         "broadcast_0 was not compressed")
       store.stop()
@@ -787,28 +760,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
       conf.set("spark.broadcast.compress", "false")
       store = makeBlockManager(20000, "exec4")
-      store.putSingle(BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
+      store.putSingleAndReleaseLock(
+        BroadcastBlockId(0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(BroadcastBlockId(0)) >= 10000, "broadcast_0 was compressed")
       store.stop()
       store = null
 
       conf.set("spark.rdd.compress", "true")
       store = makeBlockManager(20000, "exec5")
-      store.putSingle(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
+      store.putSingleAndReleaseLock(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) <= 1000, "rdd_0_0 was not compressed")
       store.stop()
       store = null
 
       conf.set("spark.rdd.compress", "false")
       store = makeBlockManager(20000, "exec6")
-      store.putSingle(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
+      store.putSingleAndReleaseLock(rdd(0, 0), new Array[Byte](10000), StorageLevel.MEMORY_ONLY_SER)
       assert(store.memoryStore.getSize(rdd(0, 0)) >= 10000, "rdd_0_0 was compressed")
       store.stop()
       store = null
 
       // Check that any other block types are also kept uncompressed
       store = makeBlockManager(20000, "exec7")
-      store.putSingle("other_block", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
+      store.putSingleAndReleaseLock("other_block", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
       assert(store.memoryStore.getSize("other_block") >= 10000, "other_block was compressed")
       store.stop()
       store = null
@@ -836,12 +810,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     class UnserializableClass
     val a1 = new UnserializableClass
     intercept[java.io.NotSerializableException] {
-      store.putSingle("a1", a1, StorageLevel.DISK_ONLY)
+      store.putSingleAndReleaseLock("a1", a1, StorageLevel.DISK_ONLY)
     }
 
     // Make sure get a1 doesn't hang and returns None.
     failAfter(1 second) {
-      assert(store.getSingle("a1").isEmpty, "a1 should not be in store")
+      assert(store.getSingleAndReleaseLock("a1").isEmpty, "a1 should not be in store")
     }
   }
 
@@ -907,7 +881,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // 1 updated block (i.e. list1)
     val updatedBlocks1 = getUpdatedBlocks {
-      store.putIterator("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIteratorAndReleaseLock(
+        "list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     assert(updatedBlocks1.size === 1)
     assert(updatedBlocks1.head._1 === TestBlockId("list1"))
@@ -915,7 +890,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // 1 updated block (i.e. list2)
     val updatedBlocks2 = getUpdatedBlocks {
-      store.putIterator("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+      store.putIteratorAndReleaseLock(
+        "list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
     }
     assert(updatedBlocks2.size === 1)
     assert(updatedBlocks2.head._1 === TestBlockId("list2"))
@@ -923,7 +899,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // 2 updated blocks - list1 is kicked out of memory while list3 is added
     val updatedBlocks3 = getUpdatedBlocks {
-      store.putIterator("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIteratorAndReleaseLock(
+        "list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     assert(updatedBlocks3.size === 2)
     updatedBlocks3.foreach { case (id, status) =>
@@ -937,7 +914,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // 2 updated blocks - list2 is kicked out of memory (but put on disk) while list4 is added
     val updatedBlocks4 = getUpdatedBlocks {
-      store.putIterator("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIteratorAndReleaseLock(
+        "list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     assert(updatedBlocks4.size === 2)
     updatedBlocks4.foreach { case (id, status) =>
@@ -952,7 +930,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // No updated blocks - list5 is too big to fit in store and nothing is kicked out
     val updatedBlocks5 = getUpdatedBlocks {
-      store.putIterator("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIteratorAndReleaseLock(
+        "list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     assert(updatedBlocks5.size === 0)
 
@@ -976,9 +955,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val list = List.fill(2)(new Array[Byte](2000))
 
     // Tell master. By LRU, only list2 and list3 remains.
-    store.putIterator("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    store.putIterator("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.putIterator("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
     assert(store.master.getLocations("list1").size === 0)
@@ -992,9 +974,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.master.getBlockStatus("list3", askSlaves = true).size === 1)
 
     // This time don't tell master and see what happens. By LRU, only list5 and list6 remains.
-    store.putIterator("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
-    store.putIterator("list5", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
-    store.putIterator("list6", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.putIteratorAndReleaseLock(
+      "list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
+    store.putIteratorAndReleaseLock(
+      "list5", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.putIteratorAndReleaseLock(
+      "list6", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // getLocations should return nothing because the master is not informed
     // getBlockStatus without asking slaves should have the same result
@@ -1015,9 +1000,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val list = List.fill(2)(new Array[Byte](100))
 
     // insert some blocks
-    store.putIterator("list1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.putIterator("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.putIterator("list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "list3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
 
     // getLocations and getBlockStatus should yield the same locations
     assert(store.master.getMatchingBlockIds(_.toString.contains("list"), askSlaves = false).size
@@ -1026,9 +1014,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       === 1)
 
     // insert some more blocks
-    store.putIterator("newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
-    store.putIterator("newlist2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
-    store.putIterator("newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.putIteratorAndReleaseLock(
+      "newlist1", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    store.putIteratorAndReleaseLock(
+      "newlist2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    store.putIteratorAndReleaseLock(
+      "newlist3", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
 
     // getLocations and getBlockStatus should yield the same locations
     assert(store.master.getMatchingBlockIds(_.toString.contains("newlist"), askSlaves = false).size
@@ -1038,7 +1029,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val blockIds = Seq(RDDBlockId(1, 0), RDDBlockId(1, 1), RDDBlockId(2, 0))
     blockIds.foreach { blockId =>
-      store.putIterator(blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      store.putIteratorAndReleaseLock(
+        blockId, list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     }
     val matchedBlockIds = store.master.getMatchingBlockIds(_ match {
       case RDDBlockId(1, _) => true
@@ -1049,13 +1041,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {
     store = makeBlockManager(12000)
-    store.putSingle(rdd(0, 0), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
-    store.putSingle(rdd(1, 0), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 0), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(1, 0), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // Access rdd_1_0 to ensure it's not least recently used.
-    assert(store.getSingle(rdd(1, 0)).isDefined, "rdd_1_0 was not in store")
-    store.releaseLock(rdd(1, 0))
+    assert(store.getSingleAndReleaseLock(rdd(1, 0)).isDefined, "rdd_1_0 was not in store")
     // According to the same-RDD rule, rdd_1_0 should be replaced here.
-    store.putSingle(rdd(0, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
+    store.putSingleAndReleaseLock(rdd(0, 1), new Array[Byte](4000), StorageLevel.MEMORY_ONLY)
     // rdd_1_0 should have been replaced, even it's not least recently used.
     assert(store.memoryStore.contains(rdd(0, 0)), "rdd_0_0 was not in store")
     assert(store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was not in store")
@@ -1134,8 +1125,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     memoryStore.releasePendingUnrollMemoryForThisTask()
 
     // Unroll with not enough space. This should succeed after kicking out someBlock1.
-    store.putIterator("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY)
-    store.putIterator("someBlock2", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    store.putIteratorAndReleaseLock("someBlock1", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    store.putIteratorAndReleaseLock("someBlock2", smallList.iterator, StorageLevel.MEMORY_ONLY)
     unrollResult = memoryStore.unrollSafely("unroll", smallList.iterator)
     verifyUnroll(smallList.iterator, unrollResult, shouldBeArray = true)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
@@ -1146,7 +1137,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Unroll huge block with not enough space. Even after ensuring free space of 12000 * 0.4 =
     // 4800 bytes, there is still not enough room to unroll this block. This returns an iterator.
     // In the mean time, however, we kicked out someBlock2 before giving up.
-    store.putIterator("someBlock3", smallList.iterator, StorageLevel.MEMORY_ONLY)
+    store.putIteratorAndReleaseLock("someBlock3", smallList.iterator, StorageLevel.MEMORY_ONLY)
     unrollResult = memoryStore.unrollSafely("unroll", bigList.iterator)
     verifyUnroll(bigList.iterator, unrollResult, shouldBeArray = false)
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
@@ -1178,8 +1169,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // would not know how to drop them from memory later.
     memoryStore.remove("b1")
     memoryStore.remove("b2")
-    store.putIterator("b1", smallIterator, memOnly)
-    store.putIterator("b2", smallIterator, memOnly)
+    store.putIteratorAndReleaseLock("b1", smallIterator, memOnly)
+    store.putIteratorAndReleaseLock("b2", smallIterator, memOnly)
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     val result3 = memoryStore.putIterator("b3", smallIterator, memOnly, returnValues = true)
@@ -1190,7 +1181,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.contains("b3"))
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
     memoryStore.remove("b3")
-    store.putIterator("b3", smallIterator, memOnly)
+    store.putIteratorAndReleaseLock("b3", smallIterator, memOnly)
 
     // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
     val result4 = memoryStore.putIterator("b4", bigIterator, memOnly, returnValues = true)
@@ -1217,8 +1208,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
-    store.putIterator("b1", smallIterator, memAndDisk)
-    store.putIterator("b2", smallIterator, memAndDisk)
+    store.putIteratorAndReleaseLock("b1", smallIterator, memAndDisk)
+    store.putIteratorAndReleaseLock("b2", smallIterator, memAndDisk)
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
@@ -1231,7 +1222,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(!diskStore.contains("b2"))
     assert(!diskStore.contains("b3"))
     memoryStore.remove("b3")
-    store.putIterator("b3", smallIterator, StorageLevel.MEMORY_ONLY)
+    store.putIteratorAndReleaseLock("b3", smallIterator, StorageLevel.MEMORY_ONLY)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Unroll huge block with not enough space. This should fail and drop the new block to disk
@@ -1312,28 +1303,86 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(result.data === Right(bytes))
   }
 
-  test("blocks with non-zero pin counts cannot be evicted from the MemoryStore") {
+  test("read-locked blocks cannot be evicted from the MemoryStore") {
     store = makeBlockManager(12000)
     val arr = new Array[Byte](4000)
     // First store a1 and a2, both in memory, and a3, on disk only
-    store.putSingle("a1", arr, StorageLevel.MEMORY_ONLY_SER)
-    store.putSingle("a2", arr, StorageLevel.MEMORY_ONLY_SER)
+    store.putSingleAndReleaseLock("a1", arr, StorageLevel.MEMORY_ONLY_SER)
+    store.putSingleAndReleaseLock("a2", arr, StorageLevel.MEMORY_ONLY_SER)
     assert(store.getSingle("a1").isDefined, "a1 was not in store")
     assert(store.getSingle("a2").isDefined, "a2 was not in store")
-    // This put should fail because both a1 and a2 have non-zero pin counts:
-    store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
+    // This put should fail because both a1 and a2 should be read-locked:
+    store.putSingleAndReleaseLock("a3", arr, StorageLevel.MEMORY_ONLY_SER)
     assert(store.getSingle("a3").isEmpty, "a3 was in store")
     assert(store.getSingle("a1").isDefined, "a1 was not in store")
     assert(store.getSingle("a2").isDefined, "a2 was not in store")
     // Release both pins of block a2:
     store.releaseLock("a2")
     store.releaseLock("a2")
-    // TODO(josh): assert(store.getPinCount("a2") === 0)
     // Block a1 is the least-recently accessed, so an LRU eviction policy would evict it before
     // block a2. However, a1 is still pinned so this put of a3 should evict a2 instead:
-    store.putSingle("a3", arr, StorageLevel.MEMORY_ONLY_SER)
+    store.putSingleAndReleaseLock("a3", arr, StorageLevel.MEMORY_ONLY_SER)
     assert(store.getSingle("a2").isEmpty, "a2 was in store")
     assert(store.getSingle("a1").isDefined, "a1 was not in store")
     assert(store.getSingle("a3").isDefined, "a3 was not in store")
   }
+}
+
+private object BlockManagerSuite {
+
+  private implicit class BlockManagerTestUtils(store: BlockManager) {
+
+    def putSingleAndReleaseLock(
+        block: BlockId,
+        value: Any,
+        storageLevel: StorageLevel,
+        tellMaster: Boolean): Unit = {
+      if (store.putSingle(block, value, storageLevel, tellMaster)) {
+        store.releaseLock(block)
+      }
+    }
+
+    def putSingleAndReleaseLock(block: BlockId, value: Any, storageLevel: StorageLevel): Unit = {
+      if (store.putSingle(block, value, storageLevel)) {
+        store.releaseLock(block)
+      }
+    }
+
+    def putIteratorAndReleaseLock(
+        blockId: BlockId,
+        values: Iterator[Any],
+        level: StorageLevel): Unit = {
+      if (store.putIterator(blockId, values, level)) {
+        store.releaseLock(blockId)
+      }
+    }
+
+    def putIteratorAndReleaseLock(
+        blockId: BlockId,
+        values: Iterator[Any],
+        level: StorageLevel,
+        tellMaster: Boolean): Unit = {
+      if (store.putIterator(blockId, values, level, tellMaster)) {
+        store.releaseLock(blockId)
+      }
+    }
+
+    private def wrapGet[T](f: BlockId => Option[T]): BlockId => Option[T] = (blockId: BlockId) => {
+      val result = f(blockId)
+      if (result.isDefined) {
+        store.releaseLock(blockId)
+      }
+      result
+    }
+
+    def hasLocalBlock(blockId: BlockId): Boolean = {
+      getLocalAndReleaseLock(blockId).isDefined
+    }
+
+    val getLocalAndReleaseLock: (BlockId) => Option[BlockResult] = wrapGet(store.getLocal)
+    val getAndReleaseLock: (BlockId) => Option[BlockResult] = wrapGet(store.get)
+    val getSingleAndReleaseLock: (BlockId) => Option[Any] = wrapGet(store.getSingle)
+    val getLocalBytesAndReleaseLock: (BlockId) => Option[ByteBuffer] = wrapGet(store.getLocalBytes)
+  }
+
 }

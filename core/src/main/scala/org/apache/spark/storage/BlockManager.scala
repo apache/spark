@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -406,16 +405,6 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Return true if local block manager contains the given block and false otherwise.
-   * Calling this method will _not_ implicitly pin the block, making this method useful
-   * when writing tests.
-   */
-  def hasLocalBlock(blockId: BlockId): Boolean = {
-    // TODO(josh): this needs to be reworked
-    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]].isDefined
-  }
-
-  /**
    * Get block from the local block manager as serialized bytes.
    */
   def getLocalBytes(blockId: BlockId): Option[ByteBuffer] = {
@@ -464,6 +453,7 @@ private[spark] class BlockManager(
           val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
             case Some(b) => b
             case None =>
+              releaseLock(blockId)
               throw new BlockException(
                 blockId, s"Block $blockId not found on disk, though it should be")
           }
@@ -516,6 +506,7 @@ private[spark] class BlockManager(
             }
           }
         } else {
+          releaseLock(blockId)
           None
         }
     }
@@ -617,7 +608,7 @@ private[spark] class BlockManager(
    * @return the total number of pins released.
    */
   def releaseAllLocksForTask(taskAttemptId: Long): Int = {
-    blockInfoManager.releaseAllPinsForTask(taskAttemptId)
+    blockInfoManager.releaseAllLocksForTask(taskAttemptId)
   }
 
   /**
@@ -798,6 +789,7 @@ private[spark] class BlockManager(
           // Now that the block is in either the memory, externalBlockStore, or disk store,
           // let other threads read it, and tell the master about it.
           blockWasSuccessfullyStored = true
+          putBlockInfo.size = size
           blockInfoManager.downgradeLock(blockId)
           if (tellMaster) {
             reportBlockStatus(blockId, putBlockInfo, putBlockStatus)

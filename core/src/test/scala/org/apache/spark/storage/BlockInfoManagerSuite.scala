@@ -213,7 +213,14 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
     assert(Await.result(getFuture, 1.seconds).isEmpty)
     assert(Await.result(writeFuture, 1.seconds).isEmpty)
-    assert(blockInfoManager.getNumberOfMapEntries === 0)
-    assert(blockInfoManager.size === 0)
+  }
+
+  test("releaseAllLocksForTask releases write locks") {
+    withTaskId(0) {
+      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+    }
+    assert(blockInfoManager.getNumberOfMapEntries === 3)
+    blockInfoManager.releaseAllLocksForTask(0)
+    assert(blockInfoManager.getNumberOfMapEntries === 1)
   }
 }

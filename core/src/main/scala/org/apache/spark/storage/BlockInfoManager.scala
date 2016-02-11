@@ -62,7 +62,7 @@ private[storage] class BlockInfoManager extends Logging {
   // ----------------------------------------------------------------------------------------------
 
   private def currentTaskAttemptId: TaskAttemptId = {
-    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1L)
+    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1024L)
   }
 
   /**
@@ -74,7 +74,7 @@ private[storage] class BlockInfoManager extends Logging {
   def getAndLockForReading(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
-    // TODO: eagerness
+    logTrace(s"Task $currentTaskAttemptId trying to acquire read lock for $blockId")
     infos.get(blockId).map { info =>
       while (info.writerTask != -1) {
         if (info.removed) return None
@@ -86,6 +86,7 @@ private[storage] class BlockInfoManager extends Logging {
         i.readerCount += 1
         readLocksByTask(currentTaskAttemptId).add(blockId)
       }
+      logTrace(s"Task $currentTaskAttemptId acquired read lock for $blockId")
       info
     }
   }
@@ -93,15 +94,20 @@ private[storage] class BlockInfoManager extends Logging {
   def getAndLockForWriting(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
+    logTrace(s"Task $currentTaskAttemptId trying to acquire write lock for $blockId")
     infos.get(blockId).map { info =>
-      while (info.writerTask != -1 || info.readerCount != 0) {
-        if (info.removed) return None
-        if (blocking) wait() else return None
+      if (info.writerTask != currentTaskAttemptId) {
+        while (info.writerTask != -1 || info.readerCount != 0) {
+          if (info.removed) return None
+          if (blocking) wait() else return None
+        }
       }
       val actualInfo = infos.get(blockId)
       actualInfo.foreach { i =>
         i.writerTask = currentTaskAttemptId
+        writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
       }
+      logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
       info
     }
   }
@@ -111,6 +117,8 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   def downgradeLock(blockId: BlockId): Unit = synchronized {
+    logTrace(s"Task $currentTaskAttemptId downgrading write lock for $blockId")
+    // TODO: refactor this code so that log messages aren't confusing.
     val info = get(blockId).get
     require(info.writerTask == currentTaskAttemptId,
       s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold")
@@ -120,15 +128,20 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   def releaseLock(blockId: BlockId): Unit = synchronized {
-    val info = get(blockId).get
+    logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
+    val info = get(blockId).getOrElse {
+      throw new IllegalStateException(s"Block $blockId not found")
+    }
     if (info.writerTask != -1) {
       info.writerTask = -1
+      writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
     } else {
-      assert(info.readerCount > 0)
+      assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
       info.readerCount -= 1
       val countsForTask = readLocksByTask.get(currentTaskAttemptId)
       val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
-      assert(newPinCountForTask >= 0)
+      assert(newPinCountForTask >= 0,
+        s"Task $currentTaskAttemptId release lock on block $blockId more times than it acquired it")
     }
     notifyAll()
   }
@@ -136,9 +149,11 @@ private[storage] class BlockInfoManager extends Logging {
   def putAndLockForWritingIfAbsent(
       blockId: BlockId,
       newBlockInfo: BlockInfo): Boolean = synchronized {
+    logTrace(s"Task $currentTaskAttemptId trying to put $blockId")
     val actualInfo = infos.getOrElseUpdate(blockId, newBlockInfo)
     if (actualInfo eq newBlockInfo) {
       actualInfo.writerTask = currentTaskAttemptId
+      writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
       true
     } else {
       false
@@ -152,11 +167,11 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * @return the number of pins released
    */
-  def releaseAllPinsForTask(taskAttemptId: TaskAttemptId): Int = {
+  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Int = {
     synchronized {
       writeLocksByTask.remove(taskAttemptId).foreach { locks =>
-        for (lock <- locks) {
-          infos.get(lock).foreach { info =>
+        for (blockId <- locks) {
+          infos.get(blockId).foreach { info =>
             assert(info.writerTask == taskAttemptId)
             info.writerTask = -1
           }
@@ -192,7 +207,7 @@ private[storage] class BlockInfoManager extends Logging {
    * Return the number of map entries in this pin counter's internal data structures.
    * This is used in unit tests in order to detect memory leaks.
    */
-  private[storage] def getNumberOfMapEntries: Long = synchronized {
+  private[storage] def  getNumberOfMapEntries: Long = synchronized {
     size +
       readLocksByTask.size() +
       readLocksByTask.asMap().asScala.map(_._2.size()).sum +
@@ -202,6 +217,7 @@ private[storage] class BlockInfoManager extends Logging {
 
   // This implicitly drops all locks.
   def remove(blockId: BlockId): Unit = synchronized {
+    logTrace(s"Task $currentTaskAttemptId trying to remove block $blockId")
     // TODO: Should probably have safety checks here
     infos.remove(blockId).foreach { info =>
       info.removed = true
