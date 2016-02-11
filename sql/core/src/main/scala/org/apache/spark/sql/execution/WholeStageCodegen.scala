@@ -260,7 +260,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
 
     // try to compile, helpful for debug
     val cleanedSource = CodeFormatter.stripExtraNewLines(source)
-    println(s"${CodeFormatter.format(cleanedSource)}")
+    // println(s"${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
 
     plan.upstream().mapPartitions { iter =>
