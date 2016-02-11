@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io._
-import javax.annotation.concurrent.{GuardedBy, ThreadSafe}
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.HashMap
 import scala.io.Codec
@@ -32,11 +32,12 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
- * A very simple source that reads text files from the given directory as they appear.
+ * A very simple source that reads text files from the given directory as they appear. This class is
+ * thread-safe and can be called in multiple threads from different
+ * [[org.apache.spark.sql.ContinuousQuery ContinuousQuery]].
  *
  * TODO Clean up the metadata files periodically
  */
-@ThreadSafe
 class FileStreamSource(
     sqlContext: SQLContext,
     metadataPath: String,
