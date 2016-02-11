@@ -722,6 +722,18 @@ statement
     | (KW_SET)=> KW_SET -> ^(TOK_SETCONFIG)
 	;
 
+// Rule for expression parsing
+singleNamedExpression
+    :
+    namedExpression EOF
+    ;
+
+// Rule for table name parsing
+singleTableName
+    :
+    tableName EOF
+    ;
+
 explainStatement
 @init { pushMsg("explain statement", state); }
 @after { popMsg(state); }
