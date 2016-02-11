@@ -483,6 +483,7 @@ object KinesisUtils {
    *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
    * @param kinesisCredentials  SerializbleAWSCredentials for the kinesis stream (if null, will use DefaultAWSCredentialsProviderChain)
    * @param dynamoDbCredentials SerializbleAWSCredentials for the DynamoDB  table (if null, will use DefaultAWSCredentialsProviderChain)
+   * @param cloudWatchCredentials SerializbleAWSCredentials for the CloudWatch (if null, will use DefaultAWSCredentialsProviderChain)
    */
   def createStream(
     jssc: JavaStreamingContext,
@@ -531,6 +532,8 @@ object KinesisUtils {
    *                       Kinesis `Record`, which contains both message data, and metadata.
    * @param kinesisCredentials  SerializableAWSCredentials for the Kinesis stream (if null, will use DefaultAWSCredentialsProviderChain)
    * @param dynamoDbCredentials SerializableAWSCredentials for the Dynamo DB stream (if null, will use DefaultAWSCredentialsProviderChain)
+   * @param cloudWatchCredentials SerializbleAWSCredentials for the CloudWatch (if null, will use DefaultAWSCredentialsProviderChain)
+   * 
    */
   // scalastyle:off
   def createStream[T: ClassTag](

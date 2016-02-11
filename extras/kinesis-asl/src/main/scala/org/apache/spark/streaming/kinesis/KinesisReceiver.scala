@@ -121,8 +121,7 @@ case class AWSCredentialPool(
  *                            See the Kinesis Spark Streaming documentation for more
  *                            details on the different types of checkpoints.
  * @param storageLevel Storage level to use for storing the received objects
- * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
- *                             the credentials
+ * @param awsCredentialPool CredentialPool which contains the optional SerializableAWSCredentials for Kinesis, DynamoDb and CloudWatch.
  */
 private[kinesis] class KinesisReceiver[T](
     val streamName: String,
