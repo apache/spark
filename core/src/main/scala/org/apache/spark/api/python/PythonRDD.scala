@@ -28,7 +28,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
 import scala.language.postfixOps
-import scala.ref
 import scala.util.control.NonFatal
 
 import com.google.common.base.Charsets.UTF_8
@@ -893,11 +892,11 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   val queue = new ReferenceQueue[File]()
   val phantomReferences = new ListBuffer[FilePhantomReference]()
   val threadName = "WeakReference"
-/**
+
+  /**
  * Read data from disks, then copy it to `out`
  */
-
- private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val in = new FileInputStream(new File(path))
     try {
       Utils.copyStream(in, out)
@@ -909,7 +908,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   /**
    * Write data into disk, using randomly generated name.
    */
- private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
     val file = File.createTempFile("broadcast", "", dir)
     phantomReferences += new FilePhantomReference(file, queue)
@@ -921,6 +920,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
        in.close();
     }
   }
+
   /** Create a seperate daemon thread
    *  to remove phantomreferences from queue and invoke cleanup
    */
