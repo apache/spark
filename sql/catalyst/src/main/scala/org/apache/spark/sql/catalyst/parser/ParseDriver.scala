@@ -35,12 +35,12 @@ object ParseDriver extends Logging {
 
   /** Create an Expression ASTNode from a SQL command. */
   def parseExpression(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
-    parser.namedExpression().getTree
+    parser.singleNamedExpression().getTree
   }
 
   /** Create an TableIdentifier ASTNode from a SQL command. */
   def parseTableName(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
-    parser.tableName().getTree
+    parser.singleTableName().getTree
   }
 
   private def parse(
