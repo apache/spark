@@ -774,6 +774,16 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Cancel all jobs that have been scheduled or are running. */
   def cancelAllJobs(): Unit = sc.cancelAllJobs()
+
+  /**
+   * Returns an Java map of JavaRDDs that have marked themselves as persistent via cache() call.
+   * Note that this does not necessarily mean the caching or computation was successful.
+   */
+  def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
+    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))
+      .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
+  }
+
 }
 
 object JavaSparkContext {
