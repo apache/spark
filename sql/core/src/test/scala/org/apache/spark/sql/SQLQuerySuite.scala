@@ -2040,7 +2040,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("grouping sets") {
+  test("grouping sets when aggregate functions containing groupBy columns") {
     checkAnswer(
       sql("select course, sum(earnings) as sum from courseSales group by course, earnings " +
         "grouping sets((), (course), (course, earnings)) " +
