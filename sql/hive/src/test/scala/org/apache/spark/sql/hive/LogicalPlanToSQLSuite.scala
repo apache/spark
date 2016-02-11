@@ -104,6 +104,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT id FROM t0 UNION ALL SELECT CAST(id AS INT) AS id FROM t0")
   }
 
+  test("self join") {
+    checkHiveQl("SELECT x.key FROM t1 x JOIN t1 y ON x.key = y.key")
+  }
+
+  test("self join with group by") {
+    checkHiveQl("SELECT x.key, COUNT(*) FROM t1 x JOIN t1 y ON x.key = y.key group by x.key")
+  }
+
   test("three-child union") {
     checkHiveQl("SELECT id FROM t0 UNION ALL SELECT id FROM t0 UNION ALL SELECT id FROM t0")
   }
