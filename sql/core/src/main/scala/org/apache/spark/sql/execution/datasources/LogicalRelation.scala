@@ -76,7 +76,11 @@ case class LogicalRelation(
   /** Used to lookup original attribute capitalization */
   val attributeMap: AttributeMap[AttributeReference] = AttributeMap(output.map(o => (o, o)))
 
-  def newInstance(): this.type = LogicalRelation(relation).asInstanceOf[this.type]
+  def newInstance(): this.type =
+    LogicalRelation(
+      relation,
+      expectedOutputAttributes,
+      metastoreTableIdentifier).asInstanceOf[this.type]
 
   override def simpleString: String = s"Relation[${output.mkString(",")}] $relation"
 }

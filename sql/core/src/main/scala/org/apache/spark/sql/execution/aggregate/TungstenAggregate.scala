@@ -47,7 +47,6 @@ case class TungstenAggregate(
   require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
 
   override private[sql] lazy val metrics = Map(
-    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
@@ -77,7 +76,6 @@ case class TungstenAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
@@ -102,7 +100,6 @@ case class TungstenAggregate(
             child.output,
             iter,
             testFallbackStartsAt,
-            numInputRows,
             numOutputRows,
             dataSize,
             spillSize)
@@ -501,6 +498,11 @@ case class TungstenAggregate(
       }
     }
 
+    // generate hash code for key
+    val hashExpr = Murmur3Hash(groupingExpressions, 42)
+    ctx.currentVars = input
+    val hashEval = BindReferences.bindReference(hashExpr, child.output).gen(ctx)
+
     val inputAttr = bufferAttributes ++ child.output
     ctx.currentVars = new Array[ExprCode](bufferAttributes.length) ++ input
     ctx.INPUT_ROW = buffer
@@ -526,10 +528,11 @@ case class TungstenAggregate(
     s"""
      // generate grouping key
      ${keyCode.code.trim}
+     ${hashEval.code.trim}
      UnsafeRow $buffer = null;
      if ($checkFallback) {
        // try to get the buffer from hash map
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
+       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
      }
      if ($buffer == null) {
        if ($sorterTerm == null) {
@@ -540,7 +543,7 @@ case class TungstenAggregate(
        $resetCoulter
        // the hash map had be spilled, it should have enough memory now,
        // try  to allocate buffer again.
-       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key);
+       $buffer = $hashMapTerm.getAggregationBufferFromUnsafeRow($key, ${hashEval.value});
        if ($buffer == null) {
          // failed to allocate the first page
          throw new OutOfMemoryError("No enough memory for aggregation");
