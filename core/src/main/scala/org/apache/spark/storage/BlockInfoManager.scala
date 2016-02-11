@@ -29,28 +29,78 @@ import com.google.common.collect.ConcurrentHashMultiset
 import org.apache.spark.{Logging, TaskContext}
 
 
-private[storage] class BlockInfo(
-    val level: StorageLevel,
-    val tellMaster: Boolean) {
+/**
+ * Tracks metadata for an individual block.
+ *
+ * @param level the block's storage level. This is the requested persistence level, not the
+ *              effective storage level of the block (i.e. if this is MEMORY_AND_DISK, then this
+ *              does not imply that the block is actually resident in memory).
+ * @param tellMaster whether state changes for this block should be reported to the master. This
+ *                   is true for most blocks, but is false for broadcast blocks.
+ */
+private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+
+  /**
+   * The size of the block (in bytes)
+   */
   var size: Long = 0
+
+  /**
+   * The number of times that this block has been locked for reading.
+   */
   var readerCount: Int = 0
+
+  /**
+   * The task attempt id of the task which currently holds the write lock for this block, or -1
+   * if this block is not locked for writing.
+   */
   var writerTask: Long = -1
+
+  // Invariants:
+  //     (writerTask != -1) implies (readerCount == 0)
+  //     (readerCount != 0) implies (writerTask == -1)
+
+  /**
+   * True if this block has been removed from the BlockManager and false otherwise.
+   * This field is used to communicate block deletion to blocked readers / writers (see its usage
+   * in [[BlockInfoManager]]).
+   */
   var removed: Boolean = false
 }
 
-
+/**
+ * Component of the [[BlockManager]] which tracks metadata for blocks and manages block locking.
+ *
+ * The locking interface exposed by this class is readers-writers lock. Every lock acquisition is
+ * automatically associated with a running task and locks are automatically released upon task
+ * completion or failure.
+ *
+ * This class is thread-safe.
+ */
 private[storage] class BlockInfoManager extends Logging {
 
   private type TaskAttemptId = Long
 
+  /**
+   * Used to look up metadata for individual blocks. Entries are added to this map via an atomic
+   * set-if-not-exists operation ([[putAndLockForWritingIfAbsent()]]) and are removed
+   * by [[remove()]].
+   */
   @GuardedBy("this")
   private[this] val infos = new mutable.HashMap[BlockId, BlockInfo]
 
+  /**
+   * Tracks the set of blocks that each task has locked for writing.
+   */
   @GuardedBy("this")
   private[this] val writeLocksByTask =
     new mutable.HashMap[TaskAttemptId, mutable.Set[BlockId]]
       with mutable.MultiMap[TaskAttemptId, BlockId]
 
+  /**
+   * Tracks the set of blocks that each task has locked for reading, along with the number of times
+   * that a block has been locked (since our read locks are re-entrant). This is thread-safe.
+   */
   private[this] val readLocksByTask: LoadingCache[lang.Long, ConcurrentHashMultiset[BlockId]] = {
     // We need to explicitly box as java.lang.Long to avoid a type mismatch error:
     val loader = new CacheLoader[java.lang.Long, ConcurrentHashMultiset[BlockId]] {
@@ -61,6 +111,11 @@ private[storage] class BlockInfoManager extends Logging {
 
   // ----------------------------------------------------------------------------------------------
 
+  /**
+   * Returns the current tasks's task attempt id (which uniquely identifies the task), or -1024
+   * if called outside of a task (-1024 was chosen because it's different than the -1 which is used
+   * in [[BlockInfo.writerTask]] to denote the absence of a write lock).
+   */
   private def currentTaskAttemptId: TaskAttemptId = {
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1024L)
   }
