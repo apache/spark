@@ -433,7 +433,7 @@ object Catalyst {
       }
 
       // Generate the parser.
-      antlr.process
+      antlr.process()
       val errorState = org.antlr.tool.ErrorManager.getErrorState
       if (errorState.errors > 0) {
         sys.error("ANTLR: Caught %d build errors.".format(errorState.errors))
