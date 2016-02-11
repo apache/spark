@@ -93,7 +93,7 @@ private object QuantileDiscretizerSuite extends SparkFunSuite {
 
     val df = sc.parallelize(data.map(Tuple1.apply)).toDF("input")
     val discretizer = new QuantileDiscretizer().setInputCol("input").setOutputCol("result")
-      .setNumBuckets(numBucket)
+      .setNumBuckets(numBucket).setSeed(1)
     val result = discretizer.fit(df).transform(df)
 
     val transformedFeatures = result.select("result").collect()
