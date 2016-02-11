@@ -43,7 +43,9 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-    * Create a term for LongSQLMetricValue with `name`.
+    * Creates a metric using the specified name.
+    *
+    * @return name of the variable representing the metric
     */
   def metricTerm(ctx: CodegenContext, name: String): String = {
     val metric = ctx.addReferenceObj(name, longMetric(name))
