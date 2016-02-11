@@ -27,7 +27,7 @@ private[ml] trait HasInitialModel[T <: Model[T]] extends Params {
    * @group param
    */
   final val initialModel: Param[T] =
-    new Param[T](this, "initial model", "initial model to warm start")
+    new Param[T](this, "initialModel", "initial model to warm start")
 
   /** @group getParam */
   final def getInitialModel: T = $(initialModel)

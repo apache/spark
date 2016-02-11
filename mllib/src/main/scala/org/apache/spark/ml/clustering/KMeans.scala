@@ -154,17 +154,23 @@ object KMeansModel extends MLReadable[KMeansModel] {
     private case class Data(clusterCenters: Array[Vector])
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata = if (instance.isSet(instance.initialModel)) {
+      if (instance.isSet(instance.initialModel)) {
         val initialModelPath = new Path(path, "initial-model").toString
-        instance.getInitialModel.save(initialModelPath)
-        instance.clear(instance.initialModel)
-        "hasInitialModel" -> true
-      } else {
-        "hasInitialModel" -> false
-      }
+        val initialModel = instance.getInitialModel
+        initialModel.save(initialModelPath)
 
-      // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+        // Remove the initialModel temporarily
+        instance.clear(instance.initialModel)
+
+        // Save metadata and Params
+        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> true))
+
+        // Set the initialModel back to avoid making side effect on instance
+        instance.set(instance.initialModel, initialModel)
+      } else {
+        // Save metadata and Params
+        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> false))
+      }
 
       // Save model data: cluster centers
       val data = Data(instance.clusterCenters)
@@ -325,17 +331,23 @@ object KMeans extends MLReadable[KMeans] {
     import org.json4s.JsonDSL._
 
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata = if (instance.isSet(instance.initialModel)) {
+      if (instance.isSet(instance.initialModel)) {
         val initialModelPath = new Path(path, "initial-model").toString
-        instance.getInitialModel.save(initialModelPath)
-        instance.clear(instance.initialModel)
-        "hasInitialModel" -> true
-      } else {
-        "hasInitialModel" -> false
-      }
+        val initialModel = instance.getInitialModel
+        initialModel.save(initialModelPath)
 
-      // Save metadata and Params
-      DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
+        // Remove the initialModel temporarily
+        instance.clear(instance.initialModel)
+
+        // Save metadata and Params
+        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> true))
+
+        // Set the initialModel back to avoid making side effect on instance
+        instance.set(instance.initialModel, initialModel)
+      } else {
+        // Save metadata and Params
+        DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> false))
+      }
     }
   }
 

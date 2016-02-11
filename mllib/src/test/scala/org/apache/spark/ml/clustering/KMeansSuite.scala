@@ -113,25 +113,11 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   }
 
   test("Initialize using given cluster centers") {
-    val predictionColName = "kmeans_prediction"
     val kmeans = new KMeans()
       .setK(k)
-      .setPredictionCol(predictionColName)
       .setSeed(1)
       .setInitialModel(initialModel)
     val model = kmeans.fit(dataset)
-
-    assert(model.clusterCenters.length === k)
-
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-
-    val clusters = transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
-    assert(clusters.size === k)
-    assert(clusters === Set(0, 1, 2, 3, 4))
 
     // Converged initial model should lead to only a single iteration.
     val convergedModel = kmeans.setInitialModel(model).fit(dataset).clusterCenters
@@ -165,6 +151,6 @@ object KMeansSuite {
     "k" -> 3,
     "maxIter" -> 2,
     "tol" -> 0.01,
-    "initialModel" -> generateKMeansModel(5, 3)
+    "initialModel" -> generateKMeansModel(3, 3)
   )
 }
