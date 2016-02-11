@@ -656,6 +656,8 @@ object TreeNode {
       case t if t <:< definitions.DoubleTpe =>
         value.asInstanceOf[JDouble].num: java.lang.Double
 
+      case t if t <:< localTypeOf[java.lang.Boolean] =>
+        value.asInstanceOf[JBool].value: java.lang.Boolean
       case t if t <:< localTypeOf[BigInt] => value.asInstanceOf[JInt].num
       case t if t <:< localTypeOf[java.lang.String] => value.asInstanceOf[JString].s
       case t if t <:< localTypeOf[UUID] => UUID.fromString(value.asInstanceOf[JString].s)

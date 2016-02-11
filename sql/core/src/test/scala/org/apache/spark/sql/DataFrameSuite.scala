@@ -998,12 +998,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+  test("Alias uses internally generated names 'aggOrder' and 'havingCondition'") {
     val df = Seq(1 -> 2).toDF("i", "j")
-    val query = df.groupBy('i)
-      .agg(max('j).as("aggOrdering"))
+    val query1 = df.groupBy('i)
+      .agg(max('j).as("aggOrder"))
       .orderBy(sum('j))
-    checkAnswer(query, Row(1, 2))
+    checkAnswer(query1, Row(1, 2))
+
+    // In the plan, there are two attributes having the same name 'havingCondition'
+    // One is a user-provided alias name; another is an internally generated one.
+    val query2 = df.groupBy('i)
+      .agg(max('j).as("havingCondition"))
+      .where(sum('j) > 0)
+      .orderBy('havingCondition.asc)
+    checkAnswer(query2, Row(1, 2))
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
