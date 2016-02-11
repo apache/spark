@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage.
  * @param maxBytesInFlight max size (in bytes) of remote blocks to fetch at any given point.
- * @param maxReqsInFlight max number of remote blocks to fetch at any given point.
+ * @param maxReqsInFlight max number of remote requests to fetch blocks at any given point.
  */
 private[spark]
 final class ShuffleBlockFetcherIterator(
@@ -162,7 +162,7 @@ final class ShuffleBlockFetcherIterator(
 
     // so we can look up the size of each blockID
     val sizeMap = req.blocks.map { case (blockId, size) => (blockId.toString, size) }.toMap
-    val remainingBlocks = new HashSet[String]() ++ sizeMap.keys
+    val remainingBlocks = new HashSet[String]() ++= sizeMap.keys
     val blockIds = req.blocks.map(_._1.toString)
 
     val address = req.address
@@ -179,7 +179,7 @@ final class ShuffleBlockFetcherIterator(
               remainingBlocks -= blockId
               results.put(new SuccessFetchResult(BlockId(blockId), address, sizeMap(blockId), buf,
                 remainingBlocks.isEmpty))
-              logDebug("remainingBlocks" + remainingBlocks)
+              logDebug("remainingBlocks: " + remainingBlocks)
             }
           }
           logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
