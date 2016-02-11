@@ -33,10 +33,11 @@ private[sql] object StatFunctions extends Logging {
       df: DataFrame,
       col: String,
       quantile: Double,
-      epsilon: Double = 0.05): Double = {
+      epsilon: Double = QuantileSummaries.defaultEpsilon): Double = {
+    // TODO: allow the extrema, they are stored in the statistics
     require(quantile > 0.0 && quantile < 1.0, "Quantile must be in the range of (0.0, 1.0).")
-    val summeries = collectQuantileSummaries(df, col, epsilon)
-    summeries.query(quantile) 
+    val summaries = collectQuantileSummaries(df, col, epsilon)
+    summaries.query(quantile)
   }
 
   private def collectQuantileSummaries(
@@ -49,12 +50,12 @@ private[sql] object StatFunctions extends Logging {
         s"with dataType ${data.get.dataType} not supported.")
 
     val column = Column(Cast(Column(col).expr, DoubleType))
-    df.select(column).rdd.aggregate(new QuantileSummaries(epsilon = epsilon))(
-      seqOp = (summeries, row) => {
-        summeries.insert(row.getDouble(0))
+    df.select(column).rdd.aggregate(QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))(
+      seqOp = (summaries, row) => {
+        summaries.insert(row.getDouble(0))
       },
-      combOp = (baseSummeries, other) => {
-        baseSummeries.merge(other)
+      combOp = (baseSummaries, other) => {
+        baseSummaries.merge(other)
     })
   }
 
@@ -66,8 +67,8 @@ private[sql] object StatFunctions extends Logging {
    * 
    */
   case class QuantileSummaries(
-      compress_threshold: Int = 1000,
-      epsilon: Double = 0.05) extends Serializable {
+      compressThreshold: Int,
+      epsilon: Double) extends Serializable {
     var sampled = new ArrayBuffer[(Double, Int, Int)]() // sampled examples
     var count = 0L // count of observed examples
 
@@ -87,7 +88,7 @@ private[sql] object StatFunctions extends Logging {
       sampled.insert(idx, tuple)
       count += 1
 
-      if (sampled.size > compress_threshold) {
+      if (sampled.size > compressThreshold) {
         compress()
       }
       this
@@ -151,6 +152,18 @@ private[sql] object StatFunctions extends Logging {
       }
       return sampled.last._1
     }
+  }
+
+  object QuantileSummaries {
+    /**
+     * The default value for the compression threshold.
+     */
+    val defaultCompressThreshold: Int = 1000
+
+    /**
+     * The default value for epsilon.
+     */
+    val defaultEpsilon: Double = 0.01
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */
