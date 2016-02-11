@@ -946,62 +946,32 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def containsAttr(plan: LogicalPlan, attr: Attribute): Boolean =
-    plan.outputSet.exists(_.semanticEquals(attr))
+  private def buildNewJoin(filter: Filter, join: Join): Join = {
 
-  private def hasNullFilteringPredicate(predicate: Expression, plan: LogicalPlan): Boolean = {
-    predicate match {
-      case EqualTo(ar: AttributeReference, _) if containsAttr(plan, ar) => true
-      case EqualTo(_, ar: AttributeReference) if containsAttr(plan, ar) => true
-      case EqualNullSafe(ar: AttributeReference, l)
-        if !l.nullable && containsAttr(plan, ar) => true
-      case EqualNullSafe(l, ar: AttributeReference)
-        if !l.nullable && containsAttr(plan, ar) => true
-      case GreaterThan(ar: AttributeReference, _) if containsAttr(plan, ar) => true
-      case GreaterThan(_, ar: AttributeReference) if containsAttr(plan, ar) => true
-      case GreaterThanOrEqual(ar: AttributeReference, _) if containsAttr(plan, ar) => true
-      case GreaterThanOrEqual(_, ar: AttributeReference) if containsAttr(plan, ar) => true
-      case LessThan(ar: AttributeReference, _) if containsAttr(plan, ar) => true
-      case LessThan(_, ar: AttributeReference) if containsAttr(plan, ar) => true
-      case LessThanOrEqual(ar: AttributeReference, _) if containsAttr(plan, ar) => true
-      case LessThanOrEqual(_, ar: AttributeReference) if containsAttr(plan, ar) => true
-      case In(ar: AttributeReference, _) if containsAttr(plan, ar) => true
-      case IsNotNull(ar: AttributeReference) if containsAttr(plan, ar) => true
-      case And(l, r) => hasNullFilteringPredicate(l, plan) || hasNullFilteringPredicate(r, plan)
-      case Or(l, r) => hasNullFilteringPredicate(l, plan) && hasNullFilteringPredicate(r, plan)
-      case Not(e) => !hasNullFilteringPredicate(e, plan)
-      case _ => false
-    }
-  }
+    val leftHasNonNullPredicate = filter.constraints.filter(_.isInstanceOf[IsNotNull])
+      .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
+    val rightHasNonNullPredicate = filter.constraints.filter(_.isInstanceOf[IsNotNull])
+      .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
 
-  private def buildNewJoin(
-      otherCondition: Expression,
-      left: LogicalPlan,
-      right: LogicalPlan,
-      joinType: JoinType,
-      condition: Option[Expression]): Join = {
-    val leftHasNonNullPredicate = hasNullFilteringPredicate(otherCondition, left)
-    val rightHasNonNullPredicate = hasNullFilteringPredicate(otherCondition, right)
-
-    joinType match {
+    join.joinType match {
       case RightOuter if leftHasNonNullPredicate =>
-        Join(left, right, Inner, condition)
+        Join(join.left, join.right, Inner, join.condition)
       case LeftOuter if rightHasNonNullPredicate =>
-        Join(left, right, Inner, condition)
+        Join(join.left, join.right, Inner, join.condition)
       case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
-        Join(left, right, Inner, condition)
+        Join(join.left, join.right, Inner, join.condition)
       case FullOuter if leftHasNonNullPredicate =>
-        Join(left, right, LeftOuter, condition)
+        Join(join.left, join.right, LeftOuter, join.condition)
       case FullOuter if rightHasNonNullPredicate =>
-        Join(left, right, RightOuter, condition)
-      case _ => Join(left, right, joinType, condition)
+        Join(join.left, join.right, RightOuter, join.condition)
+      case _ =>
+        join
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Only three outer join types are eligible: RightOuter|LeftOuter|FullOuter
-    case f @ Filter(filterCond, j @ Join(left, right, RightOuter|LeftOuter|FullOuter, joinCond)) =>
-      Filter(filterCond, buildNewJoin(filterCond, left, right, j.joinType, joinCond))
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
+      Filter(condition, buildNewJoin(f, j))
   }
 }
 

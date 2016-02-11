@@ -56,6 +56,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
         Set(IsNotNull(l), IsNotNull(r))
       case LessThanOrEqual(l, r) =>
         Set(IsNotNull(l), IsNotNull(r))
+      case EqualNullSafe(l, r) if !r.nullable || !l.nullable =>
+        Set(IsNotNull(l), IsNotNull(r))
       case _ =>
         Set.empty[Expression]
     }.foldLeft(Set.empty[Expression])(_ union _.toSet)
