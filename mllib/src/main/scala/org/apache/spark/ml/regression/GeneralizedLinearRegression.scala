@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import breeze.stats.distributions.{Gaussian => GD}
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
@@ -164,10 +164,19 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
     val familyLink = $(family) match {
-      case "gaussian" => Gaussian($(link))
-      case "binomial" => Binomial($(link))
-      case "poisson" => Poisson($(link))
-      case "gamma" => Gamma($(link))
+      case "gaussian" => if (isDefined(link)) Gaussian($(link)) else Gaussian("identity")
+      case "binomial" => if (isDefined(link)) Binomial($(link)) else Binomial("logit")
+      case "poisson" => if (isDefined(link)) Poisson($(link)) else Poisson("log")
+      case "gamma" => if (isDefined(link)) Gamma($(link)) else Gamma("inverse")
+    }
+
+    val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
+      case Row(features: Vector) => features.size
+    }.first()
+    if (numFeatures > 4096) {
+      val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
+        s" <= 4096. Found $numFeatures in the input dataset."
+      throw new SparkException(msg)
     }
 
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
@@ -252,10 +261,10 @@ class GeneralizedLinearRegressionModel private[ml] (
   with GeneralizedLinearRegressionParams {
 
   private lazy val familyLink = $(family) match {
-    case "gaussian" => Gaussian($(link))
-    case "binomial" => Binomial($(link))
-    case "poisson" => Poisson($(link))
-    case "gamma" => Gamma($(link))
+    case "gaussian" => if (isDefined(link)) Gaussian($(link)) else Gaussian("identity")
+    case "binomial" => if (isDefined(link)) Binomial($(link)) else Binomial("logit")
+    case "poisson" => if (isDefined(link)) Poisson($(link)) else Poisson("log")
+    case "gamma" => if (isDefined(link)) Gamma($(link)) else Gamma("inverse")
   }
 
   override protected def predict(features: Vector): Double = {
@@ -279,7 +288,7 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
   /** Initialize the starting value for mu. */
   def initialize(y: Double, weight: Double): Double
 
-  /** The variance of mu to its mean. */
+  /** The variance of the endogenous variable's mean, given the value mu. */
   def variance(mu: Double): Double
 
   /** Weights for IRLS steps. */
@@ -375,7 +384,7 @@ private[ml] object Poisson {
  * The default link for the Gamma family is the inverse link.
  * @param link a link function instance
  */
-private[ml] class Gamma(link: Link = Log) extends Family(link) {
+private[ml] class Gamma(link: Link = Inverse) extends Family(link) {
 
   override def initialize(y: Double, weight: Double): Double = y
 
@@ -401,7 +410,7 @@ private[ml] trait Link extends Serializable {
   /** The link function. */
   def link(mu: Double): Double
 
-  /** The derivative function. */
+  /** Derivative of the link function. */
   def deriv(mu: Double): Double
 
   /** The inverse link function. */
