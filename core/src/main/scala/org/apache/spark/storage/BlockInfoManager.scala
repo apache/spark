@@ -142,12 +142,8 @@ private[storage] class BlockInfoManager extends Logging {
         if (info.removed) return None
         if (blocking) wait() else return None
       }
-      // TODO: try to remember why you need actualInfo / the extra get() here.
-      val actualInfo = infos.get(blockId)
-      actualInfo.foreach { i =>
-        i.readerCount += 1
-        readLocksByTask(currentTaskAttemptId).add(blockId)
-      }
+      info.readerCount += 1
+      readLocksByTask(currentTaskAttemptId).add(blockId)
       logTrace(s"Task $currentTaskAttemptId acquired read lock for $blockId")
       info
     }
@@ -177,11 +173,8 @@ private[storage] class BlockInfoManager extends Logging {
           if (blocking) wait() else return None
         }
       }
-      val actualInfo = infos.get(blockId)
-      actualInfo.foreach { i =>
-        i.writerTask = currentTaskAttemptId
-        writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
-      }
+      info.writerTask = currentTaskAttemptId
+      writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
       logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
       info
     }
@@ -199,7 +192,6 @@ private[storage] class BlockInfoManager extends Logging {
    */
   def downgradeLock(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId downgrading write lock for $blockId")
-    // TODO: refactor this code so that log messages aren't confusing.
     val info = get(blockId).get
     require(info.writerTask == currentTaskAttemptId,
       s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold")
