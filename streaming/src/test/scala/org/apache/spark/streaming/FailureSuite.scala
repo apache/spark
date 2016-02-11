@@ -21,7 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.util.Utils
 
 /**
@@ -43,6 +43,9 @@ class FailureSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       Utils.deleteRecursively(directory)
     }
     StreamingContext.getActive().foreach { _.stop() }
+
+    // Stop SparkContext if active
+    SparkContext.getOrCreate(new SparkConf().setMaster("local").setAppName("bla")).stop()
   }
 
   test("multiple failures with map") {
