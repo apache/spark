@@ -949,7 +949,7 @@ createTableStatement
          tablePropertiesPrefixed?
          )
       |
-         tableProvider
+         (tableProvider) => tableProvider
          tableOpts?
          (KW_AS selectStatementWithCTE)?
       -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
