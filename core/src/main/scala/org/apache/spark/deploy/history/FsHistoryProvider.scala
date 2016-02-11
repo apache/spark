@@ -549,10 +549,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // and when we read the file here.  That is OK -- it may result in an unnecessary refresh
     // when there is no update, but will not result in missing an update.  We *must* prevent
     // an error the other way -- if we report a size bigger (ie later) than the file that is
-    // actually read, we may never refresh the app
-    // we expect FileStatus to return the file size when it was initially created, but the api
-    // is not explicit about this so lets be extra-safe.
-    val eventLogLength = eventLog.getLen()
+    // actually read, we may never refresh the app.  FileStatus is guaranteed to be static
+    // after it's created, so we get a file size that is no bigger than what is actually read.
     val logInput = EventLoggingListener.openEventLog(logPath, fs)
     try {
       val appListener = new ApplicationEventListener
@@ -573,7 +571,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           eventLog.getModificationTime(),
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          eventLogLength
+          eventLog.getLen()
         )
         fileToAppInfo(logPath) = attemptInfo
         Some(attemptInfo)
