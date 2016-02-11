@@ -21,7 +21,6 @@ import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -43,7 +42,6 @@ import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.util._
-import org.apache.spark.util.collection.PinCounter
 
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
@@ -78,7 +76,7 @@ private[spark] class BlockManager(
 
   val diskBlockManager = new DiskBlockManager(this, conf)
 
-  private val blockInfo = new ConcurrentHashMap[BlockId, BlockInfo]
+  private[storage] val blockInfoManager = new BlockInfoManager
 
   private val futureExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
@@ -157,8 +155,6 @@ private[spark] class BlockManager(
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
-  private val pinCounts = new PinCounter[BlockId]
-
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
    * the appId may not be known at BlockManager instantiation time (in particular for the driver,
@@ -226,8 +222,8 @@ private[spark] class BlockManager(
    * will be made then.
    */
   private def reportAllBlocks(): Unit = {
-    logInfo(s"Reporting ${blockInfo.size} blocks to the master.")
-    for ((blockId, info) <- blockInfo.asScala) {
+    logInfo(s"Reporting ${blockInfoManager.size} blocks to the master.")
+    for ((blockId, info) <- blockInfoManager.entries) {
       val status = getCurrentBlockStatus(blockId, info)
       if (!tryToReportBlockStatus(blockId, info, status)) {
         logError(s"Failed to report $blockId to master; giving up.")
@@ -308,7 +304,7 @@ private[spark] class BlockManager(
    * NOTE: This is mainly for testing, and it doesn't fetch information from external block store.
    */
   def getStatus(blockId: BlockId): Option[BlockStatus] = {
-    blockInfo.asScala.get(blockId).map { info =>
+    blockInfoManager.get(blockId).map { info =>
       val memSize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
       val diskSize = if (diskStore.contains(blockId)) diskStore.getSize(blockId) else 0L
       BlockStatus(info.level, memSize = memSize, diskSize = diskSize)
@@ -321,7 +317,7 @@ private[spark] class BlockManager(
    * may not know of).
    */
   def getMatchingBlockIds(filter: BlockId => Boolean): Seq[BlockId] = {
-    (blockInfo.asScala.keys ++ diskBlockManager.getAllBlocks()).filter(filter).toSeq
+    (blockInfoManager.entries.map(_._1) ++ diskBlockManager.getAllBlocks()).filter(filter).toSeq
   }
 
   /**
@@ -406,11 +402,7 @@ private[spark] class BlockManager(
    */
   def getLocal(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
-    val res = doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
-    if (res.isDefined) {
-      pinCounts.pin(blockId)
-    }
-    res
+    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -419,6 +411,7 @@ private[spark] class BlockManager(
    * when writing tests.
    */
   def hasLocalBlock(blockId: BlockId): Boolean = {
+    // TODO(josh): this needs to be reworked
     doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]].isDefined
   }
 
@@ -429,7 +422,7 @@ private[spark] class BlockManager(
     logDebug(s"Getting local block $blockId as bytes")
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
-    val res = if (blockId.isShuffle) {
+    if (blockId.isShuffle) {
       val shuffleBlockResolver = shuffleManager.shuffleBlockResolver
       // TODO: This should gracefully handle case where local block is not available. Currently
       // downstream code will throw an exception.
@@ -438,33 +431,14 @@ private[spark] class BlockManager(
     } else {
       doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
     }
-    if (res.isDefined) {
-      pinCounts.pin(blockId)
-    }
-    res
   }
 
   private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
-    val info = blockInfo.get(blockId)
-    if (info != null) {
-      info.synchronized {
-        // Double check to make sure the block is still there. There is a small chance that the
-        // block has been removed by removeBlock (which also synchronizes on the blockInfo object).
-        // Note that this only checks metadata tracking. If user intentionally deleted the block
-        // on disk or from off heap storage without using removeBlock, this conditional check will
-        // still pass but eventually we will get an exception because we can't find the block.
-        if (blockInfo.asScala.get(blockId).isEmpty) {
-          logWarning(s"Block $blockId had been removed")
-          return None
-        }
-
-        // If another thread is writing the block, wait for it to become ready.
-        if (!info.waitForReady()) {
-          // If we get here, the block write failed.
-          logWarning(s"Block $blockId was marked as failure.")
-          return None
-        }
-
+    blockInfoManager.getAndLockForReading(blockId) match {
+      case None =>
+        logDebug(s"Block $blockId was not found")
+        None
+      case Some(info) =>
         val level = info.level
         logDebug(s"Level for block $blockId is $level")
 
@@ -541,12 +515,10 @@ private[spark] class BlockManager(
               }
             }
           }
+        } else {
+          None
         }
-      }
-    } else {
-      logDebug(s"Block $blockId not registered locally")
     }
-    None
   }
 
   /**
@@ -554,11 +526,7 @@ private[spark] class BlockManager(
    */
   def getRemote(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
-    val res = doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
-    if (res.isDefined) {
-      pinCounts.pin(blockId)
-    }
-    res
+    doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
   }
 
   /**
@@ -566,11 +534,7 @@ private[spark] class BlockManager(
    */
   def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
     logDebug(s"Getting remote block $blockId as bytes")
-    val res = doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
-    if (res.isDefined) {
-      pinCounts.pin(blockId)
-    }
-    res
+    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
   }
 
   /**
@@ -641,22 +605,19 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release one pin of the given block.
+   * Release a lock on the given block.
    */
-  def unpin(blockId: BlockId): Unit = {
-    pinCounts.unpin(blockId)
+  def releaseLock(blockId: BlockId): Unit = {
+    blockInfoManager.releaseLock(blockId)
   }
 
   /**
    * Release all pins for the given task.
+   *
    * @return the total number of pins released.
    */
-  def releaseAllPinsForTask(taskAttemptId: Long): Int = {
-    pinCounts.releaseAllPinsForTask(taskAttemptId)
-  }
-
-  private[storage] def getPinCount(blockId: BlockId): Int = {
-    pinCounts.getPinCount(blockId)
+  def releaseAllLocksForTask(taskAttemptId: Long): Int = {
+    blockInfoManager.releaseAllPinsForTask(taskAttemptId)
   }
 
   /**
@@ -750,19 +711,13 @@ private[spark] class BlockManager(
      * to be dropped right after it got put into memory. Note, however, that other threads will
      * not be able to get() this block until we call markReady on its BlockInfo. */
     val putBlockInfo = {
-      val tinfo = new BlockInfo(level, tellMaster)
-      // Do atomically !
-      val oldBlockOpt = Option(blockInfo.putIfAbsent(blockId, tinfo))
-      if (oldBlockOpt.isDefined) {
-        if (oldBlockOpt.get.waitForReady()) {
-          logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-          return false
-        }
-        // TODO: So the block info exists - but previous attempt to load it (?) failed.
-        // What do we do now ? Retry on it ?
-        oldBlockOpt.get
+      // TODO(josh): if an existing put is in progress, do we block to see if it's done / succeeds?
+      val newInfo = new BlockInfo(level, tellMaster)
+      if (blockInfoManager.putAndLockForWritingIfAbsent(blockId, newInfo)) {
+        newInfo
       } else {
-        tinfo
+        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
+        return false
       }
     }
 
@@ -797,7 +752,7 @@ private[spark] class BlockManager(
       case _ => null
     }
 
-    var marked = false
+    var blockWasSuccessfullyStored = false
 
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
@@ -842,8 +797,8 @@ private[spark] class BlockManager(
         if (putBlockStatus.storageLevel != StorageLevel.NONE) {
           // Now that the block is in either the memory, externalBlockStore, or disk store,
           // let other threads read it, and tell the master about it.
-          marked = true
-          putBlockInfo.markReady(size)
+          blockWasSuccessfullyStored = true
+          blockInfoManager.downgradeLock(blockId)
           if (tellMaster) {
             reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
           }
@@ -854,11 +809,10 @@ private[spark] class BlockManager(
       } finally {
         // If we failed in putting the block to memory/disk, notify other possible readers
         // that it has failed, and then remove it from the block info map.
-        if (!marked) {
+        if (!blockWasSuccessfullyStored) {
           // Note that the remove must happen before markFailure otherwise another thread
           // could've inserted a new BlockInfo before we remove it.
-          blockInfo.remove(blockId)
-          putBlockInfo.markFailure()
+          blockInfoManager.remove(blockId)
           logWarning(s"Putting block $blockId failed")
         }
       }
@@ -899,7 +853,7 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
-    marked
+    blockWasSuccessfullyStored
   }
 
   /**
@@ -1042,21 +996,10 @@ private[spark] class BlockManager(
       data: () => Either[Array[Any], ByteBuffer]): Unit = {
 
     logInfo(s"Dropping block $blockId from memory")
-    val info = blockInfo.get(blockId)
-
-    // If the block has not already been dropped
-    if (info != null) {
-      info.synchronized {
-        // required ? As of now, this will be invoked only for blocks which are ready
-        // But in case this changes in future, adding for consistency sake.
-        if (!info.waitForReady()) {
-          // If we get here, the block write failed.
-          logWarning(s"Block $blockId was marked as failure. Nothing to drop")
-          return
-        } else if (blockInfo.asScala.get(blockId).isEmpty) {
-          logWarning(s"Block $blockId was already dropped.")
-          return
-        }
+    blockInfoManager.getAndLockForWriting(blockId) match {
+      case None =>
+        logDebug(s"Block $blockId has already been dropped")
+      case Some(info) =>
         var blockIsUpdated = false
         val level = info.level
 
@@ -1088,14 +1031,15 @@ private[spark] class BlockManager(
         }
         if (!level.useDisk) {
           // The block is completely gone from this node; forget it so we can put() it again later.
-          blockInfo.remove(blockId)
+          blockInfoManager.remove(blockId)
+        } else {
+          blockInfoManager.releaseLock(blockId)
         }
         if (blockIsUpdated) {
           Option(TaskContext.get()).foreach { c =>
             c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
           }
         }
-      }
     }
   }
 
@@ -1107,7 +1051,7 @@ private[spark] class BlockManager(
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
     logInfo(s"Removing RDD $rddId")
-    val blocksToRemove = blockInfo.asScala.keys.flatMap(_.asRDDId).filter(_.rddId == rddId)
+    val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
   }
@@ -1117,7 +1061,7 @@ private[spark] class BlockManager(
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
     logDebug(s"Removing broadcast $broadcastId")
-    val blocksToRemove = blockInfo.asScala.keys.collect {
+    val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster) }
@@ -1129,9 +1073,11 @@ private[spark] class BlockManager(
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
     logDebug(s"Removing block $blockId")
-    val info = blockInfo.get(blockId)
-    if (info != null) {
-      info.synchronized {
+    blockInfoManager.getAndLockForWriting(blockId) match {
+      case None =>
+        // The block has already been removed; do nothing.
+        logWarning(s"Asked to remove block $blockId, which does not exist")
+      case Some(info) =>
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
         val removedFromMemory = memoryStore.remove(blockId)
         val removedFromDisk = diskStore.remove(blockId)
@@ -1139,15 +1085,11 @@ private[spark] class BlockManager(
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
             "the disk, memory, or external block store")
         }
-        blockInfo.remove(blockId)
+        blockInfoManager.remove(blockId)
         if (tellMaster && info.tellMaster) {
           val status = getCurrentBlockStatus(blockId, info)
           reportBlockStatus(blockId, info, status)
         }
-      }
-    } else {
-      // The block has already been removed; do nothing.
-      logWarning(s"Asked to remove block $blockId, which does not exist")
     }
   }
 
@@ -1222,7 +1164,7 @@ private[spark] class BlockManager(
     }
     diskBlockManager.stop()
     rpcEnv.stop(slaveEndpoint)
-    blockInfo.clear()
+    blockInfoManager.clear()
     memoryStore.clear()
     diskStore.clear()
     futureExecutionContext.shutdownNow()

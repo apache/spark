@@ -140,7 +140,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       // On the driver broadcast variables may be loaded when computing rdd.partitions(), which
       // takes place outside of the context of a task, so we need to use an option here:
       Option(TaskContext.get()).foreach { taskContext =>
-        taskContext.addTaskCompletionListener(_ => SparkEnv.get.blockManager.unpin(pieceId))
+        taskContext.addTaskCompletionListener(_ => SparkEnv.get.blockManager.releaseLock(pieceId))
       }
     }
     blocks
@@ -175,7 +175,8 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
           // On the driver broadcast variables may be loaded when computing rdd.partitions(), which
           // takes place outside of the context of a task, so we need to use an option here:
           Option(TaskContext.get()).foreach { taskContext =>
-            taskContext.addTaskCompletionListener(_ => SparkEnv.get.blockManager.unpin(broadcastId))
+            taskContext.addTaskCompletionListener(_ =>
+              SparkEnv.get.blockManager.releaseLock(broadcastId))
           }
           x.asInstanceOf[T]
 

@@ -49,7 +49,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
         val iter = CompletionIterator[T, Iterator[T]](
           blockResult.data.asInstanceOf[Iterator[T]],
-          blockManager.unpin(key))
+          blockManager.releaseLock(key))
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsRead(1)
@@ -61,7 +61,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         // If another thread already holds the lock, wait for it to finish return its results
         val storedValues = acquireLockForPartition[T](key)
         if (storedValues.isDefined) {
-          val iter = CompletionIterator[T, Iterator[T]](storedValues.get, blockManager.unpin(key))
+          val iter =
+            CompletionIterator[T, Iterator[T]](storedValues.get, blockManager.releaseLock(key))
           return new InterruptibleIterator[T](context, iter)
         }
 
@@ -143,7 +144,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         case Some(v) =>
           CompletionIterator[T, Iterator[T]](
             v.data.asInstanceOf[Iterator[T]],
-            blockManager.unpin(key))
+            blockManager.releaseLock(key))
         case None =>
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")

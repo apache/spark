@@ -218,7 +218,7 @@ private[spark] class Executor(
           threwException = false
           res
         } finally {
-          val releasedPins = env.blockManager.releaseAllPinsForTask(taskId)
+          val releasedPins = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0) {

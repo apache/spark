@@ -230,11 +230,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     //   - In the code below, we synchronize on `entries` before checking the pin count.
     //   - In order for a
     val entry = entries.synchronized {
-      val pinCount = blockManager.getPinCount(blockId)
-      if (pinCount != 0) {
-        throw new IllegalStateException(
-          s"Cannot free block $blockId since it is still pinned $pinCount times")
-      }
       entries.remove(blockId)
     }
     if (entry != null) {
@@ -435,8 +430,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
       def blockIsEvictable(blockId: BlockId): Boolean = {
-        blockManager.getPinCount(blockId) == 0 &&
-          (rddToAdd.isEmpty || rddToAdd != getRddId(blockId))
+        rddToAdd.isEmpty || rddToAdd != getRddId(blockId)
       }
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
@@ -447,8 +441,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           val pair = iterator.next()
           val blockId = pair.getKey
           if (blockIsEvictable(blockId)) {
-            selectedBlocks += blockId
-            freedMemory += pair.getValue.size
+            if (blockManager.blockInfoManager.getAndLockForWriting(blockId, false).isDefined) {
+              selectedBlocks += blockId
+              freedMemory += pair.getValue.size
+            }
           }
         }
       }
