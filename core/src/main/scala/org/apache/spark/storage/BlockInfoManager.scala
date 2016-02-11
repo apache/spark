@@ -35,6 +35,7 @@ private[storage] class BlockInfo(
   var size: Long = 0
   var readerCount: Int = 0
   var writerTask: Long = -1
+  var removed: Boolean = false
 }
 
 
@@ -76,6 +77,7 @@ private[storage] class BlockInfoManager extends Logging {
     // TODO: eagerness
     infos.get(blockId).map { info =>
       while (info.writerTask != -1) {
+        if (info.removed) return None
         if (blocking) wait() else return None
       }
       // TODO: try to remember why you need actualInfo / the extra get() here.
@@ -93,6 +95,7 @@ private[storage] class BlockInfoManager extends Logging {
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
     infos.get(blockId).map { info =>
       while (info.writerTask != -1 || info.readerCount != 0) {
+        if (info.removed) return None
         if (blocking) wait() else return None
       }
       val actualInfo = infos.get(blockId)
@@ -200,9 +203,10 @@ private[storage] class BlockInfoManager extends Logging {
   // This implicitly drops all locks.
   def remove(blockId: BlockId): Unit = synchronized {
     // TODO: Should probably have safety checks here
-    infos.remove(blockId)
-    // May also want to mark the blockInfo as removed so that gets() don't keep references to it?
-    // This should also implicitly release locks? No.
+    infos.remove(blockId).foreach { info =>
+      info.removed = true
+    }
+    notifyAll()
   }
 
   def clear(): Unit = synchronized {

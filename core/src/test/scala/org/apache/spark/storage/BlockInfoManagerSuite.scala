@@ -192,4 +192,28 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(Await.result(write1Future, 1.seconds).isDefined)
     assert(Await.result(write2Future, 1.seconds).isDefined)
   }
+
+  test("removing a block causes blocked callers to receive None") {
+    withTaskId(0) {
+      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+    }
+    val getFuture = Future {
+      withTaskId(1) {
+        blockInfoManager.getAndLockForReading("block")
+      }
+    }
+    val writeFuture = Future {
+      withTaskId(2) {
+        blockInfoManager.getAndLockForWriting("block")
+      }
+    }
+    Thread.sleep(300)  // Hack to try to ensure that both future tasks are waiting
+    withTaskId(0) {
+      blockInfoManager.remove("block")
+    }
+    assert(Await.result(getFuture, 1.seconds).isEmpty)
+    assert(Await.result(writeFuture, 1.seconds).isEmpty)
+    assert(blockInfoManager.getNumberOfMapEntries === 0)
+    assert(blockInfoManager.size === 0)
+  }
 }
