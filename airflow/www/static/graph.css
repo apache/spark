@@ -43,3 +43,11 @@ div#svg_container {
     right: 15px;
     position: relative;
 }
+
+#loading {
+    margin: auto;
+    display: none;
+    position: relative;
+    width: 100px;
+    top: -550px;
+}
