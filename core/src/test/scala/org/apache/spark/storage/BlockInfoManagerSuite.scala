@@ -90,8 +90,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     withTaskId(1) {
       assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
       blockInfoManager.releaseLock("block")
-      assert(blockInfoManager.getAndLockForReading("block", blocking = false).isDefined)
-      assert(blockInfoManager.getAndLockForReading("block", blocking = false).isDefined)
+      assert(blockInfoManager.getAndLockForReading("block").isDefined)
+      assert(blockInfoManager.getAndLockForReading("block").isDefined)
       assert(blockInfoManager.get("block").get.readerCount === 2)
       assert(blockInfoManager.get("block").get.writerTask === -1)
       blockInfoManager.releaseLock("block")
@@ -126,6 +126,18 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(blockInfoManager.getAndLockForWriting("block", blocking = false).isEmpty)
       assert(blockInfoManager.get("block").get.writerTask === 1)
     }
+  }
+
+  test("downgrade lock") {
+    withTaskId(0) {
+      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      blockInfoManager.downgradeLock("block")
+    }
+    withTaskId(1) {
+      assert(blockInfoManager.getAndLockForReading("block").isDefined)
+    }
+    assert(blockInfoManager.get("block").get.readerCount === 2)
+    assert(blockInfoManager.get("block").get.writerTask === -1)
   }
 
   test("write lock will block readers") {

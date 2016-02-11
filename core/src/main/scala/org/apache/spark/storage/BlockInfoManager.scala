@@ -108,7 +108,12 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   def downgradeLock(blockId: BlockId): Unit = synchronized {
-
+    val info = get(blockId).get
+    require(info.writerTask == currentTaskAttemptId,
+      s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold")
+    releaseLock(blockId)
+    getAndLockForReading(blockId, blocking = false)
+    notifyAll()
   }
 
   def releaseLock(blockId: BlockId): Unit = synchronized {
@@ -205,7 +210,6 @@ private[storage] class BlockInfoManager extends Logging {
     readLocksByTask.invalidateAll()
     writeLocksByTask.clear()
   }
-
 
   def entries: Iterator[(BlockId, BlockInfo)] = synchronized {
     infos.iterator.toArray.toIterator
