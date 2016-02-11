@@ -47,13 +47,11 @@ import org.apache.spark.util.Clock
  *
  * Creating multiple instances will break this routing.
  * @param operations implementation of record access operations
- * @param refreshInterval interval between refreshes in milliseconds.
  * @param retainedApplications number of retained applications
  * @param clock time source
  */
 private[history] class ApplicationCache(
     val operations: ApplicationCacheOperations,
-    val refreshInterval: Long,
     val retainedApplications: Int,
     val clock: Clock) extends Logging {
 
@@ -185,22 +183,20 @@ private[history] class ApplicationCache(
       entry = appCache.get(cacheKey)
     } else if (!entry.completed) {
       val now = clock.getTimeMillis()
-      if (now - entry.probeTime > refreshInterval) {
-        log.debug(s"Probing at time $now for updated application $cacheKey -> $entry")
-        metrics.updateProbeCount.inc()
-        updated = time(metrics.updateProbeTimer) {
-          entry.updateProbe()
-        }
-        if (updated) {
-          logDebug(s"refreshing $cacheKey")
-          metrics.updateTriggeredCount.inc()
-          appCache.refresh(cacheKey)
-          // and repeat the lookup
-          entry = appCache.get(cacheKey)
-        } else {
-          // update the probe timestamp to the current time
-          entry.probeTime = now
-        }
+      log.debug(s"Probing at time $now for updated application $cacheKey -> $entry")
+      metrics.updateProbeCount.inc()
+      updated = time(metrics.updateProbeTimer) {
+        entry.updateProbe()
+      }
+      if (updated) {
+        logDebug(s"refreshing $cacheKey")
+        metrics.updateTriggeredCount.inc()
+        appCache.refresh(cacheKey)
+        // and repeat the lookup
+        entry = appCache.get(cacheKey)
+      } else {
+        // update the probe timestamp to the current time
+        entry.probeTime = now
       }
     }
     (entry, updated)
@@ -338,7 +334,7 @@ private[history] class ApplicationCache(
    * @return a string value, primarily for testing and diagnostics
    */
   override def toString: String = {
-    val sb = new StringBuilder(s"ApplicationCache(refreshInterval=$refreshInterval," +
+    val sb = new StringBuilder(s"ApplicationCache(" +
           s" retainedApplications= $retainedApplications)")
     sb.append(s"; time= ${clock.getTimeMillis()}")
     sb.append(s"; entry count= ${appCache.size()}\n")

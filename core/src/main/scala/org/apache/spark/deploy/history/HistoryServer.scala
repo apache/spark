@@ -54,13 +54,8 @@ class HistoryServer(
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  // configuration interval is in seconds; internally in milliseconds
-  private val incompleteApplicationRefreshInterval =
-    conf.getTimeAsMs("spark.history.cache.window", "60s")
-
   // application
-  private val appCache = new ApplicationCache(this,
-      incompleteApplicationRefreshInterval, retainedApplications, new SystemClock())
+  private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
 
   // and its metrics, for testing as well as monitoring
   val cacheMetrics = appCache.metrics

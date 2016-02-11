@@ -112,8 +112,7 @@ The history server can be configured as follows:
       updated logs in the log directory. A shorter interval detects new applications faster,
       at the expense of more server load re-reading updated applications.
       As soon as an update has completed, listings of the completed and incomplete applications
-      will reflect the changes. For performance reasons, the UIs of web applications are
-      only updated at a slower interval, that defined in <code>spark.history.cache.window</code> 
+      will reflect the changes.
     </td>
   </tr>
   <tr>
@@ -122,14 +121,6 @@ The history server can be configured as follows:
     <td>
       The number of application UIs to retain. If this cap is exceeded, then the oldest
       applications will be removed.
-    </td>
-  </tr>
-  <tr>
-    <td>spark.history.cache.window</td>
-    <td>60s</td>
-    <td>
-      Minimum time between checks for updates to incomplete web applications whose web
-      views have been loaded into the history server.
     </td>
   </tr>
   <tr>
@@ -210,9 +201,8 @@ multiple attempts after failures, the failed attempts will be displayed, as well
 incomplete attempt or the final successful attempt.
 
 2. Incomplete applications are only updated intermittently. The time between updates is defined
-by both the interval between checks for changed files (`spark.history.fs.update.interval`)
-and the window between checks for updated loaded applications (`spark.history.cache.window`).
-On larger clusters the update interval and the cache window may be set to large values.
+by the interval between checks for changed files (`spark.history.fs.update.interval`).
+On larger clusters the update interval may be set to large values.
 The way to view a running application is actually to view its own web UI.
 
 3. Applications which exited without registering themselves as completed will be listed
