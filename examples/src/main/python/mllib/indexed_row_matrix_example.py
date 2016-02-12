@@ -24,7 +24,7 @@ from pyspark.mllib.linalg.distributed import IndexedRow, IndexedRowMatrix
 
 if __name__ == "__main__":
 
-    sc = SparkContext(appName="IndexedRowMatrixExample") # SparkContext
+    sc = SparkContext(appName="IndexedRowMatrixExample")  # SparkContext
 
     # $example on$
     # Create an RDD of indexed rows.

@@ -25,7 +25,7 @@ from pyspark.mllib.linalg.distributed import BlockMatrix
 
 if __name__ == "__main__":
 
-    sc = SparkContext(appName="BlockMatrixExample") # SparkContext
+    sc = SparkContext(appName="BlockMatrixExample")  # SparkContext
 
     # $example on$
     # Create an RDD of sub-matrix blocks.
@@ -36,8 +36,8 @@ if __name__ == "__main__":
     mat = BlockMatrix(blocks, 3, 2)
 
     # Get its size.
-    m = mat.numRows() # 6
-    n = mat.numCols() # 2
+    m = mat.numRows()  # 6
+    n = mat.numCols()  # 2
 
     # Get the blocks as an RDD of sub-matrix blocks.
     blocksRDD = mat.blocks

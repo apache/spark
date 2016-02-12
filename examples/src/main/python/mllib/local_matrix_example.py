@@ -18,7 +18,8 @@
 from __future__ import print_function
 
 # $example on$
-import org.apache.spark.mllib.linalg.{Matrix, Matrices}
+import org.apache.spark.mllib.linalg.Matrices
+import org.apache.spark.mllib.linalg.Matrix
 # $example off$
 
 if __name__ == "__main__":

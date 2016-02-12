@@ -24,7 +24,7 @@ from pyspark.mllib.linalg.distributed import RowMatrix
 
 if __name__ == "__main__":
 
-    sc = SparkContext(appName="RowMatrixExample") # SparkContext
+    sc = SparkContext(appName="RowMatrixExample")  # SparkContext
 
     # $example on$
     # Create an RDD of vectors.
