@@ -230,15 +230,17 @@ for a running application, at `http://localhost:4040/api/v1`.
   </tr>
   <tr>
      <td></td>
-     <td><code>?status=[completed|running]</code> list only applications in the state</td>
+     <td><code>?status=[completed|running]</code> list only applications in the chosen state</td>
   </tr>
   <tr>
      <td></td>
-     <td><code>?minDate=[date]</code> earliest date to list. e.g <code>?minDate=2015-02-10</code></td>
+     <td><code>?minDate=[date]</code> earliest date/time to list. Examples:
+     <br><code>?minDate=2015-02-10</code>
+     <br><code>?minDate=2015-02-03T16:42:40.000GMT</code></td>
   </tr>
   <tr>
      <td></td>
-     <td><code>?maxDate=[date]</code> latest date to list. e.g <code>?maxDate=2015-02-03T16:42:40.000GMT</code></td>
+     <td><code>?maxDate=[date]</code> latest date/time to list; uses same format as <code>minDate</code></td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/jobs</code></td>
@@ -275,7 +277,7 @@ for a running application, at `http://localhost:4040/api/v1`.
   <tr>
      <td></td>
      <td><code>?quantiles</code> summarize the metrics with the given quantiles.
-     e.g. <code>?quantiles=0.01,0.5,0.99</code></td>
+     Example: <br><code>?quantiles=0.01,0.5,0.99</code></td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskList</code></td>
@@ -284,7 +286,7 @@ for a running application, at `http://localhost:4040/api/v1`.
   <tr>
      <td></td>
      <td><code>?offset=[offset]&amp;length=[len]</code> list only tasks in the range.
-      e.g. <code>?offset=10&amp;length=50</code></td>
+      Example: <br> <code>?offset=10&amp;length=50</code></td>
   </tr>
   <tr>
      <td></td>
