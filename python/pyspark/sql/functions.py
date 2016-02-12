@@ -252,11 +252,11 @@ def corr(col1, col2):
     """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
     and ``col2``.
 
-    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
-    >>> b = range(20)
-    >>> df = sqlContext.createDataFrame(zip(a, b))
-    >>> df.agg(corr(df._1, df._2))
-    DataFrame[corr(_1,_2): double]
+    >>> a = range(20)
+    >>> b = [2 * x for x in range(20)]
+    >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
+    >>> df.agg(corr("a", "b")).collect()
+    [Row(corr(a,b,0,0)=1.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
@@ -267,11 +267,11 @@ def covar_pop(col1, col2):
     """Returns a new :class:`Column` for the population covariance of ``col1``
     and ``col2``.
 
-    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
-    >>> b = range(20)
+    >>> a = [1] * 10
+    >>> b = [1] * 10
     >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_pop("a", "b"))
-    DataFrame[covar_pop(a,b): double]
+    >>> df.agg(covar_pop("a", "b")).collect()
+    [Row(covpopulation(a,b,0,0)=0.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
@@ -282,11 +282,11 @@ def covar_samp(col1, col2):
     """Returns a new :class:`Column` for the sample covariance of ``col1``
     and ``col2``.
 
-    >>> a = [x * x - 2 * x + 3.5 for x in range(20)]
-    >>> b = range(20)
+    >>> a = [1] * 10
+    >>> b = [1] * 10
     >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_samp("a", "b"))
-    DataFrame[covar_samp(a,b): double]
+    >>> df.agg(covar_samp("a", "b")).collect()
+    [Row(covsample(a,b,0,0)=0.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
