@@ -240,13 +240,13 @@ class ALS(object):
         """
         Train a matrix factorization model given an RDD of ratings given by
         users to some products, in the form of (userID, productID, rating)
-        pairs. We approximate the ratings matrix as the product of two lower-
-        rank matrices of a given rank (number of features). To solve for these
-        features, we run a given number of iterations of ALS. This is done
-        using a level of parallelism given by `blocks`.
+        pairs. We approximate the ratings matrix as the product of two
+        lower-rank matrices of a given rank (number of features). To solve
+        for these features, we run a given number of iterations of ALS. This
+        is done using a level of parallelism given by `blocks`.
 
         :param ratings:
-          RDD of (userID, productID, rating) pairs.
+          RDD of `Rating` or (userID, productID, rating) tuple.
         :param rank:
           Rank of the feature matrices computed (number of features).
         :param iterations:
@@ -277,15 +277,16 @@ class ALS(object):
     def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
                       nonnegative=False, seed=None):
         """
-        Train a matrix factorization model given an RDD of 'implicit preferences'
-        given by users to some products, in the form of (userID, productID,
-        preference) pairs. We approximate the ratings matrix as the product of
-        two lower-rank matrices of a given rank (number of features).To solve
-        for these features, we run a given number of iterations of ALS. This is
-        done using a level of parallelism given by `blocks`.
+        Train a matrix factorization model given an RDD of 'implicit
+        preferences' given by users to some products, in the form of
+        (userID, productID, preference) pairs. We approximate the ratings
+        matrix as the product of two lower-rank matrices of a given rank
+        (number of features). To solve for these features, we run a given
+        number of iterations of ALS. This is done using a level of
+        parallelism given by `blocks`.
 
         :param ratings:
-          RDD of (userID, productID, rating) pairs.
+          RDD of `Rating` or (userID, productID, rating) tuple.
         :param rank:
           Rank of the feature matrices computed (number of features).
         :param iterations:
