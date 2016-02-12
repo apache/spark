@@ -1183,7 +1183,7 @@ These levels are set by passing a
 [Java](api/java/index.html?org/apache/spark/storage/StorageLevel.html),
 [Python](api/python/pyspark.html#pyspark.StorageLevel))
 to `persist()`. The `cache()` method is a shorthand for using the default storage level,
-which is `StorageLevel.MEMORY_ONLY` (store deserialized objects in memory). The full set of
+which is `StorageLevel.MEMORY_AND_DISK` (store deserialized objects in memory, and on disk if they do not fit in memory). The full set of
 storage levels is:
 
 <table class="table">
@@ -1233,8 +1233,8 @@ storage levels is:
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library, 
-so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`, 
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library,
+so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`,
 `MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, `DISK_ONLY_2` and `OFF_HEAP`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
@@ -1244,7 +1244,7 @@ Spark also automatically persists some intermediate data in shuffle operations (
 Spark's storage levels are meant to provide different trade-offs between memory usage and CPU
 efficiency. We recommend going through the following process to select one:
 
-* If your RDDs fit comfortably with the default storage level (`MEMORY_ONLY`), leave them that way.
+* If your RDDs fit comfortably with the default storage level (`MEMORY_AND_DISK`), leave them that way.
   This is the most CPU-efficient option, allowing operations on the RDDs to run as fast as possible.
 
 * If not, try using `MEMORY_ONLY_SER` and [selecting a fast serialization library](tuning.html) to
