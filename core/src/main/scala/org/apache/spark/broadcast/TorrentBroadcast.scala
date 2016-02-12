@@ -90,22 +90,22 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   /**
    * Divide the object into multiple blocks and put those blocks in the block manager.
+   *
    * @param value the object to divide
    * @return number of blocks this broadcast variable is divided into
    */
   private def writeBlocks(value: T): Int = {
     // Store a copy of the broadcast variable in the driver so that tasks run on the driver
     // do not create a duplicate copy of the broadcast variable's value.
-    SparkEnv.get.blockManager.putSingle(broadcastId, value, StorageLevel.MEMORY_AND_DISK,
-      tellMaster = false)
+    val blockManager = SparkEnv.get.blockManager
+    blockManager.putSingle(broadcastId, value, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+    blockManager.releaseLock(broadcastId)
     val blocks =
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     blocks.zipWithIndex.foreach { case (block, i) =>
-      SparkEnv.get.blockManager.putBytes(
-        BroadcastBlockId(id, "piece" + i),
-        block,
-        StorageLevel.MEMORY_AND_DISK_SER,
-        tellMaster = true)
+      val pieceId = BroadcastBlockId(id, "piece" + i)
+      blockManager.putBytes(pieceId, block, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
+      blockManager.releaseLock(pieceId)
     }
     blocks.length
   }
@@ -127,20 +127,22 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       def getRemote: Option[ByteBuffer] = bm.getRemoteBytes(pieceId).map { block =>
         // If we found the block from remote executors/driver's BlockManager, put the block
         // in this executor's BlockManager.
-        SparkEnv.get.blockManager.putBytes(
-          pieceId,
-          block,
-          StorageLevel.MEMORY_AND_DISK_SER,
-          tellMaster = true)
+        bm.putBytes(pieceId, block, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
         block
       }
       val block: ByteBuffer = getLocal.orElse(getRemote).getOrElse(
         throw new SparkException(s"Failed to get $pieceId of $broadcastId"))
       blocks(pid) = block
-      // On the driver broadcast variables may be loaded when computing rdd.partitions(), which
-      // takes place outside of the context of a task, so we need to use an option here:
-      Option(TaskContext.get()).foreach { taskContext =>
-        taskContext.addTaskCompletionListener(_ => SparkEnv.get.blockManager.releaseLock(pieceId))
+      Option(TaskContext.get()) match {
+        case Some(taskContext) =>
+          taskContext.addTaskCompletionListener(_ => bm.releaseLock(pieceId))
+        case None =>
+          // This should only happen on the driver, where broadcast variables may be accessed
+          // outside of running tasks (e.g. when computing rdd.partitions()). In order to allow
+          // broadcast variables to be garbage collected we need to free the reference here, which
+          // is slightly unsafe but is technically okay because broadcast variables aren't stored
+          // off-heap.
+          bm.releaseLock(pieceId)
       }
     }
     blocks
@@ -170,13 +172,19 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
     TorrentBroadcast.synchronized {
       setConf(SparkEnv.get.conf)
-      SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
+      val blockManager = SparkEnv.get.blockManager
+      blockManager.getLocal(broadcastId).map(_.data.next()) match {
         case Some(x) =>
-          // On the driver broadcast variables may be loaded when computing rdd.partitions(), which
-          // takes place outside of the context of a task, so we need to use an option here:
-          Option(TaskContext.get()).foreach { taskContext =>
-            taskContext.addTaskCompletionListener(_ =>
-              SparkEnv.get.blockManager.releaseLock(broadcastId))
+          Option(TaskContext.get()) match {
+            case Some(taskContext) =>
+              taskContext.addTaskCompletionListener(_ => blockManager.releaseLock(broadcastId))
+            case None =>
+              // This should only happen on the driver, where broadcast variables may be accessed
+              // outside of running tasks (e.g. when computing rdd.partitions()). In order to allow
+              // broadcast variables to be garbage collected we need to free the reference here
+              // which is slightly unsafe but is technically okay because broadcast variables aren't
+              // stored off-heap.
+              blockManager.releaseLock(broadcastId)
           }
           x.asInstanceOf[T]
 
@@ -190,8 +198,13 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
             blocks, SparkEnv.get.serializer, compressionCodec)
           // Store the merged copy in BlockManager so other tasks on this executor don't
           // need to re-fetch it.
-          SparkEnv.get.blockManager.putSingle(
-            broadcastId, obj, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+          blockManager.putSingle(broadcastId, obj, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
+          Option(TaskContext.get()) match {
+            case Some(taskContext) =>
+              taskContext.addTaskCompletionListener(_ => blockManager.releaseLock(broadcastId))
+            case None =>
+              blockManager.releaseLock(broadcastId)
+          }
           obj
       }
     }

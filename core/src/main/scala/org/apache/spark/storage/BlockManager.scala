@@ -284,7 +284,7 @@ private[spark] class BlockManager(
         .asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
-        new NioManagedBuffer(buffer)
+        new BlockManagerManagedBuffer(this, blockId, buffer)
       } else {
         throw new BlockNotFoundException(blockId.toString)
       }
@@ -593,6 +593,13 @@ private[spark] class BlockManager(
       return remote
     }
     None
+  }
+
+  /**
+   * Downgrades an exclusive write lock to a shared read lock.
+   */
+  def downgradeLock(blockId: BlockId): Unit = {
+    blockInfoManager.downgradeLock(blockId)
   }
 
   /**

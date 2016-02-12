@@ -15,27 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network
+package org.apache.spark.storage
 
-import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.storage.{BlockId, StorageLevel}
+import java.nio.ByteBuffer
 
-private[spark]
-trait BlockDataManager {
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 
-  /**
-   * Interface to get local block data. Throws an exception if the block cannot be found or
-   * cannot be read successfully.
-   */
-  def getBlockData(blockId: BlockId): ManagedBuffer
 
-  /**
-   * Put the block locally, using the given storage level.
-   */
-  def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit
+private[storage] class BlockManagerManagedBuffer(
+    blockManager: BlockManager,
+    blockId: BlockId,
+    buf: ByteBuffer) extends NioManagedBuffer(buf) {
 
-  /**
-   * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
-   */
-  def releaseLock(blockId: BlockId): Unit
+  override def retain(): ManagedBuffer = {
+    println("RETAIN")
+    super.retain()
+    val locked = blockManager.blockInfoManager.getAndLockForReading(blockId, blocking = false)
+    assert(locked.isDefined)
+    this
+  }
+
+  override def release(): ManagedBuffer = {
+    println("RELEASE")
+    blockManager.releaseLock(blockId)
+    super.release()
+  }
 }

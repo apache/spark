@@ -26,6 +26,8 @@ import io.netty.channel.FileRegion;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCountUtil;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
+
 /**
  * A wrapper message that holds two separate pieces (a header and a body).
  *
@@ -34,16 +36,18 @@ import io.netty.util.ReferenceCountUtil;
 class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
 
   private final ByteBuf header;
+  private final ManagedBuffer managedBuffer;
   private final int headerLength;
   private final Object body;
   private final long bodyLength;
   private long totalBytesTransferred;
 
-  MessageWithHeader(ByteBuf header, Object body, long bodyLength) {
+  MessageWithHeader(ByteBuf header, ManagedBuffer managedBuffer, Object body, long bodyLength) {
     Preconditions.checkArgument(body instanceof ByteBuf || body instanceof FileRegion,
       "Body must be a ByteBuf or a FileRegion.");
     this.header = header;
     this.headerLength = header.readableBytes();
+    this.managedBuffer = managedBuffer;
     this.body = body;
     this.bodyLength = bodyLength;
   }
@@ -99,6 +103,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   protected void deallocate() {
     header.release();
     ReferenceCountUtil.release(body);
+    managedBuffer.release();
   }
 
   private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {

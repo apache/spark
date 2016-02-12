@@ -19,6 +19,7 @@ package org.apache.spark.network.protocol;
 
 import com.google.common.base.Objects;
 
+import io.netty.util.AbstractReferenceCounted;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**

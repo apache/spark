@@ -54,6 +54,7 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
         body = in.body().convertToNetty();
         isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
+        in.body().release();
         if (in instanceof AbstractResponseMessage) {
           AbstractResponseMessage resp = (AbstractResponseMessage) in;
           // Re-encode this message as a failure response.
@@ -81,7 +82,7 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     assert header.writableBytes() == 0;
 
     if (body != null && bodyLength > 0) {
-      out.add(new MessageWithHeader(header, body, bodyLength));
+      out.add(new MessageWithHeader(header, in.body(), body, bodyLength));
     } else {
       out.add(header);
     }
