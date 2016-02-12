@@ -79,7 +79,7 @@ class Word2Vec extends Serializable with Logging {
   private var maxSentenceLength = 1000
 
   /**
-   * Sets the maximum length of each sentence in the input data.
+   * Sets the maximum length (in words) of each sentence in the input data.
    * Any sentence longer than this threshold will be divided into chunks of
    * up to `maxSentenceLength` size (default: 1000)
    */
@@ -285,7 +285,7 @@ class Word2Vec extends Serializable with Logging {
 
   /**
    * Computes the vector representation of each word in vocabulary.
-   * @param dataset a RDD of sentences,
+   * @param dataset an RDD of sentences,
    *                each sentence is expressed as an iterable collection of words
    * @return a Word2VecModel
    */
@@ -557,8 +557,8 @@ class Word2VecModel private[spark] (
       .take(num + 1)
       .tail
     if (vecNorm != 0.0f) {
-      topResults = topResults.map { case (word, cosVec) =>
-        (word, cosVec / vecNorm)
+      topResults = topResults.map { case (word, cosVal) =>
+        (word, cosVal / vecNorm)
       }
     }
     topResults.toArray
