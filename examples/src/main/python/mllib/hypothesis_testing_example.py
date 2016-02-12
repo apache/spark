@@ -29,23 +29,23 @@ from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="HypothesisTestingExample") # SparkContext
+    sc = SparkContext(appName="HypothesisTestingExample")  # SparkContext
     sqlContext = SQLContext(sc)
 
     # $example on$
-    vec = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25) # a vector composed of the frequencies of events
+    vec = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25)  # a vector composed of the frequencies of events
 
-    # compute the goodness of fit. If a second vector to test against is not supplied as a parameter,
-    # the test runs against a uniform distribution.
+    # compute the goodness of fit. If a second vector to test against
+    # is not supplied as a parameter, the test runs against a uniform distribution.
     goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-    print(goodnessOfFitTestResult) # summary of the test including the p-value, degrees of freedom,
+    print(goodnessOfFitTestResult)  # summary of the test including the p-value, degrees of freedom,
     # test statistic, the method used, and the null hypothesis.
 
-    mat = Matrices.dense(3, 2, [1.0, 3.0, 5.0, 2.0, 4.0, 6.0]) # a contingency matrix
+    mat = Matrices.dense(3, 2, [1.0, 3.0, 5.0, 2.0, 4.0, 6.0])  # a contingency matrix
 
     # conduct Pearson's independence test on the input contingency matrix
     independenceTestResult = Statistics.chiSqTest(mat)
-    print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom...
+    print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom
 
     p1 = LabeledPoint(1.0, [1.0, 0.0, 3.0])
     p2 = LabeledPoint(1.0, [1.0, 2.0, 0.0])

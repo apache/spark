@@ -26,20 +26,20 @@ from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="SummaryStatisticsExample") # SparkContext
+    sc = SparkContext(appName="SummaryStatisticsExample")  # SparkContext
     sqlContext = SQLContext(sc)
 
     # $example on$
     v1 = np.array([1.0, 2.0, 3.0])
     v2 = np.array([10.0, 20.0, 30.0])
     v3 = np.array([100.0, 200.0, 300.0])
-    mat = sc.parallelize([v1, v2, v3]) # an RDD of Vectors
+    mat = sc.parallelize([v1, v2, v3])  # an RDD of Vectors
 
     # Compute column summary statistics.
     summary = Statistics.colStats(mat)
-    print(summary.mean()) # a dense vector containing the mean value for each column
-    print(summary.variance()) # column-wise variance
-    print(summary.numNonzeros()) # number of nonzeros in each column
+    print(summary.mean())  # a dense vector containing the mean value for each column
+    print(summary.variance())  # column-wise variance
+    print(summary.numNonzeros())  # number of nonzeros in each column
     # $example off$
 
     sc.stop()

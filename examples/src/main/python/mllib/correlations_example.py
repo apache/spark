@@ -27,11 +27,11 @@ from pyspark.mllib.stat import Statistics
 
 if __name__ == "__main__":
     # $example on$
-    sc = SparkContext(appName="CorrelationsExample") # SparkContext
+    sc = SparkContext(appName="CorrelationsExample")  # SparkContext
 
     seriesX = sc.parallelize([1.0, 2.0, 3.0, 3.0, 5.0])  # a series
-    seriesY = sc.parallelize(
-        [11.0, 22.0, 33.0, 33.0, 555.0])  # must have the same number of partitions and cardinality as seriesX
+    # seriesY must have the same number of partitions and cardinality as seriesX
+    seriesY = sc.parallelize([11.0, 22.0, 33.0, 33.0, 555.0])
 
     # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
     # method is not specified, Pearson's method will be used by default.

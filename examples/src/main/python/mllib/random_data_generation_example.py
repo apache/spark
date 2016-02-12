@@ -26,7 +26,7 @@ from pyspark.mllib.random import RandomRDDs
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="RandomDataGenerationExample") # SparkContext
+    sc = SparkContext(appName="RandomDataGenerationExample")  # SparkContext
     sqlContext = SQLContext(sc)
 
     # $example on$

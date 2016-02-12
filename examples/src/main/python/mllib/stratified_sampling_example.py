@@ -26,15 +26,17 @@ from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="StratifiedSamplingExample") # SparkContext
+    sc = SparkContext(appName="StratifiedSamplingExample")  # SparkContext
     sqlContext = SQLContext(sc)
 
     # $example on$
+    # an RDD of any key value pairs
+    data = sc.parallelize([(1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f')])
 
-    data = sc.parallelize([(1, 'a'), (1, 'b'), (2, 'c'), (2, 'd'), (2, 'e'), (3, 'f')]) # an RDD of any key value pairs
-    fractions = {1:0.1, 2:0.6, 3:0.3} # specify the exact fraction desired from each key as a dictionary
+    # specify the exact fraction desired from each key as a dictionary
+    fractions = {1: 0.1, 2: 0.6, 3: 0.3}
 
-    approxSample = data.sampleByKey(False, fractions);
+    approxSample = data.sampleByKey(False, fractions)
 
     # $example off$
 
