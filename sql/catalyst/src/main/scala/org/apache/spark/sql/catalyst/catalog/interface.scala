@@ -197,7 +197,7 @@ case class CatalogTable(
 }
 
 
-class CatalogTableType private(name: String)
+case class CatalogTableType private(name: String)
 object CatalogTableType {
   val EXTERNAL_TABLE = new CatalogTableType("EXTERNAL_TABLE")
   val MANAGED_TABLE = new CatalogTableType("MANAGED_TABLE")

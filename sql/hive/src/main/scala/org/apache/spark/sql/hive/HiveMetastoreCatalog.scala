@@ -748,7 +748,7 @@ private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
     alias: Option[String])
-    (val table: CatalogTable, client: HiveClient)
+    (val table: CatalogTable, @transient private val client: HiveClient)
     (@transient private val sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
 
