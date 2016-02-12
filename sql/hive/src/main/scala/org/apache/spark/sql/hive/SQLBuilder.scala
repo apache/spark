@@ -45,23 +45,23 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       val generatedSQL = toSQL(canonicalizedPlan)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
-            |
-            |# Original logical plan:
-            |${logicalPlan.treeString}
-            |# Canonicalized logical plan:
-            |${canonicalizedPlan.treeString}
-            |# Generated SQL:
-            |$generatedSQL
+           |
+           |# Original logical plan:
+           |${logicalPlan.treeString}
+           |# Canonicalized logical plan:
+           |${canonicalizedPlan.treeString}
+           |# Generated SQL:
+           |$generatedSQL
          """.stripMargin)
       generatedSQL
     } catch { case NonFatal(e) =>
       logDebug(
         s"""Failed to build SQL query string from given logical plan:
-            |
+           |
            |# Original logical plan:
-            |${logicalPlan.treeString}
-            |# Canonicalized logical plan:
-            |${canonicalizedPlan.treeString}
+           |${logicalPlan.treeString}
+           |# Canonicalized logical plan:
+           |${canonicalizedPlan.treeString}
          """.stripMargin)
       throw e
     }
@@ -140,7 +140,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       ""
 
     case _ =>
-      throw new UnsupportedOperationException("")
+      throw new UnsupportedOperationException(s"unsupported plan $node")
   }
 
   /**
