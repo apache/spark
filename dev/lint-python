@@ -24,6 +24,8 @@ PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py ./dev/r
 PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
+SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
+SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 
 cd "$SPARK_ROOT_DIR"
 
@@ -95,6 +97,28 @@ else
 fi
 
 rm "$PEP8_REPORT_PATH"
+
+# Check that the documentation builds acceptably, skip check if sphinx is not installed.
+if hash "$SPHINXBUILD" 2> /dev/null; then
+  cd python/docs
+  make clean
+  # Treat warnings as errors so we stop correctly
+  SPHINXOPTS="-a -W" make html &> "$SPHINX_REPORT_PATH" || lint_status=1
+  if [ "$lint_status" -ne 0 ]; then
+    echo "pydoc checks failed."
+    cat "$SPHINX_REPORT_PATH"
+    echo "re-running make html to print full warning list"
+    make clean
+    SPHINXOPTS="-a" make html
+  else
+    echo "pydoc checks passed."
+  fi
+  rm "$SPHINX_REPORT_PATH"
+  cd ../..
+else
+  echo >&2 "The $SPHINXBUILD command was not found. Skipping pydoc checks for now"
+fi
+
 
 # for to_be_checked in "$PATHS_TO_CHECK"
 # do
