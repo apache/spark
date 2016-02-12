@@ -138,9 +138,9 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
       val error_1 = 2 * 1000 * epsilon
       val error_2 = 2 * 2000 * epsilon
-        
-      assert(math.abs(result1 - expected_1) < error_1)  
-      assert(math.abs(result2 - expected_2) < error_2)  
+
+      assert(math.abs(result1 - expected_1) < error_1)
+      assert(math.abs(result2 - expected_2) < error_2)
     }
   }
 
