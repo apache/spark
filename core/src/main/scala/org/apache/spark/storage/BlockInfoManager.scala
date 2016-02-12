@@ -138,7 +138,7 @@ private[storage] class BlockInfoManager extends Logging {
   def getAndLockForReading(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
-    println(s"Task $currentTaskAttemptId trying to acquire read lock for $blockId")
+    logTrace(s"Task $currentTaskAttemptId trying to acquire read lock for $blockId")
     infos.get(blockId).map { info =>
       while (info.writerTask != -1) {
         if (info.removed) return None
@@ -146,7 +146,7 @@ private[storage] class BlockInfoManager extends Logging {
       }
       info.readerCount += 1
       readLocksByTask(currentTaskAttemptId).add(blockId)
-      println(s"Task $currentTaskAttemptId acquired read lock for $blockId")
+      logTrace(s"Task $currentTaskAttemptId acquired read lock for $blockId")
       info
     }
   }
@@ -167,7 +167,7 @@ private[storage] class BlockInfoManager extends Logging {
   def getAndLockForWriting(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
-    println(s"Task $currentTaskAttemptId trying to acquire write lock for $blockId")
+    logTrace(s"Task $currentTaskAttemptId trying to acquire write lock for $blockId")
     infos.get(blockId).map { info =>
       if (info.writerTask != currentTaskAttemptId) {
         while (info.writerTask != -1 || info.readerCount != 0) {
@@ -177,7 +177,7 @@ private[storage] class BlockInfoManager extends Logging {
       }
       info.writerTask = currentTaskAttemptId
       writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
-      println(s"Task $currentTaskAttemptId acquired write lock for $blockId")
+      logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
       info
     }
   }
@@ -193,7 +193,7 @@ private[storage] class BlockInfoManager extends Logging {
    * Downgrades an exclusive write lock to a shared read lock.
    */
   def downgradeLock(blockId: BlockId): Unit = synchronized {
-    println(s"Task $currentTaskAttemptId downgrading write lock for $blockId")
+    logTrace(s"Task $currentTaskAttemptId downgrading write lock for $blockId")
     val info = get(blockId).get
     require(info.writerTask == currentTaskAttemptId,
       s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold")
@@ -206,7 +206,7 @@ private[storage] class BlockInfoManager extends Logging {
    * Release a lock on the given block.
    */
   def releaseLock(blockId: BlockId): Unit = synchronized {
-    println(s"Task $currentTaskAttemptId releasing lock for $blockId")
+    logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
     val info = get(blockId).getOrElse {
       throw new IllegalStateException(s"Block $blockId not found")
     }
@@ -234,7 +234,7 @@ private[storage] class BlockInfoManager extends Logging {
   def putAndLockForWritingIfAbsent(
       blockId: BlockId,
       newBlockInfo: BlockInfo): Boolean = synchronized {
-    println(s"Task $currentTaskAttemptId trying to put $blockId")
+    logTrace(s"Task $currentTaskAttemptId trying to put $blockId")
     val actualInfo = infos.getOrElseUpdate(blockId, newBlockInfo)
     if (actualInfo eq newBlockInfo) {
       actualInfo.writerTask = currentTaskAttemptId
@@ -315,7 +315,7 @@ private[storage] class BlockInfoManager extends Logging {
    * Removes the given block and automatically drops all locks on it.
    */
   def remove(blockId: BlockId): Unit = synchronized {
-    println(s"Task $currentTaskAttemptId trying to remove block $blockId")
+    logTrace(s"Task $currentTaskAttemptId trying to remove block $blockId")
     // TODO: Should probably have safety checks here
     infos.remove(blockId).foreach { info =>
       info.removed = true
