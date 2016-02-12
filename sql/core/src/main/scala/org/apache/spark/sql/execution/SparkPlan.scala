@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -139,10 +139,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
       children.foreach(_.prepare())
 
+      val timeout: Duration = {
+        val timeoutValue = sqlContext.conf.broadcastTimeout
+        if (timeoutValue < 0) {
+          Duration.Inf
+        } else {
+          timeoutValue.seconds
+        }
+      }
+
       // fill in the result of subqueries
       queryResults.foreach {
         case (e, futureResult) =>
-          val rows = Await.result(futureResult, Duration.Inf)
+          val rows = Await.result(futureResult, timeout)
           if (rows.length > 1) {
             sys.error(s"Scalar subquery should return at most one row, but got ${rows.length}: " +
               s"${e.query.treeString}")
