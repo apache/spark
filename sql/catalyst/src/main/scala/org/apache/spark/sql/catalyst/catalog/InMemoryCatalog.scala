@@ -291,15 +291,10 @@ class InMemoryCatalog extends Catalog {
   // Functions
   // --------------------------------------------------------------------------
 
-  override def createFunction(
-      db: String,
-      func: CatalogFunction,
-      ignoreIfExists: Boolean): Unit = synchronized {
+  override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     assertDbExists(db)
     if (existsFunction(db, func.name)) {
-      if (!ignoreIfExists) {
-        throw new AnalysisException(s"Function $func already exists in $db database")
-      }
+      throw new AnalysisException(s"Function $func already exists in $db database")
     } else {
       catalog(db).functions.put(func.name, func)
     }
@@ -310,15 +305,15 @@ class InMemoryCatalog extends Catalog {
     catalog(db).functions.remove(funcName)
   }
 
-  override def alterFunction(
-      db: String,
-      funcName: String,
-      funcDefinition: CatalogFunction): Unit = synchronized {
-    assertFunctionExists(db, funcName)
-    if (funcName != funcDefinition.name) {
-      // Also a rename; remove the old one and add the new one back
-      catalog(db).functions.remove(funcName)
-    }
+  override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
+    assertFunctionExists(db, oldName)
+    val newFunc = getFunction(db, oldName).copy(name = newName)
+    catalog(db).functions.remove(oldName)
+    catalog(db).functions.put(newName, newFunc)
+  }
+
+  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = synchronized {
+    assertFunctionExists(db, funcDefinition.name)
     catalog(db).functions.put(funcDefinition.name, funcDefinition)
   }
 

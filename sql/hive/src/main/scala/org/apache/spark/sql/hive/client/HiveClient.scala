@@ -211,6 +211,29 @@ private[hive] trait HiveClient {
       holdDDLTime: Boolean,
       listBucketingEnabled: Boolean): Unit
 
+  /** Create a function in an existing database. */
+  def createFunction(db: String, func: CatalogFunction): Unit
+
+  /** Drop an existing function an the database. */
+  def dropFunction(db: String, name: String): Unit
+
+  /** Rename an existing function in the database. */
+  def renameFunction(db: String, oldName: String, newName: String): Unit
+
+  /** Alter an existing function in the database. */
+  def alterFunction(db: String, func: CatalogFunction): Unit
+
+  /** Return an existing function in the database, assuming it exists. */
+  final def getFunction(db: String, name: String): CatalogFunction = {
+    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException)
+  }
+
+  /** Return an existing function in the database, or None if it doesn't exist. */
+  def getFunctionOption(db: String, name: String): Option[CatalogFunction]
+
+  /** Return the names of all functions that match the given pattern in the database. */
+  def listFunctions(db: String, pattern: String): Seq[String]
+
   /** Add a jar into class loader */
   def addJar(path: String): Unit
 

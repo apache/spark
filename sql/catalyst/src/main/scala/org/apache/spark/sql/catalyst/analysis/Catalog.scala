@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
  */
 abstract class NoSuchItemException extends Exception
 
+class NoSuchFunctionException extends NoSuchItemException
 class NoSuchPartitionException extends NoSuchItemException
 class NoSuchTableException extends NoSuchItemException
 class NoSuchDatabaseException extends NoSuchItemException

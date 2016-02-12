@@ -25,7 +25,8 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase,
+  FieldSchema, Function => HiveFunction, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
@@ -35,7 +36,6 @@ import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -328,16 +328,24 @@ private[hive] class HiveClientImpl(
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
+  private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
+    new HiveFunction(f.name, db, f.className, null, null, -1, null, List.empty[ResourceUri].asJava)
+  }
+
+  private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
+    new CatalogFunction(hf.getFunctionName, hf.getClassName)
+  }
+
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
     new FieldSchema(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment.orNull)
   }
 
-  private def fromHiveColumn(f: FieldSchema): CatalogColumn = {
+  private def fromHiveColumn(hc: FieldSchema): CatalogColumn = {
     new CatalogColumn(
-      name = f.getName,
-      dataType = HiveMetastoreTypes.toDataType(f.getType),
+      name = hc.getName,
+      dataType = HiveMetastoreTypes.toDataType(hc.getType),
       nullable = true,
-      comment = Option(f.getComment))
+      comment = Option(hc.getComment))
   }
 
   private def toHiveTable(table: CatalogTable): HiveTable = {
@@ -603,6 +611,34 @@ private[hive] class HiveClientImpl(
       numDP,
       holdDDLTime,
       listBucketingEnabled)
+  }
+
+  override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
+    client.createFunction(toHiveFunction(func, db))
+  }
+
+  override def dropFunction(db: String, name: String): Unit = withHiveState {
+    client.dropFunction(db, name)
+  }
+
+  override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
+    val catalogFunc = getFunction(db, oldName).copy(name = newName)
+    val hiveFunc = toHiveFunction(catalogFunc, db)
+    client.alterFunction(db, oldName, hiveFunc)
+  }
+
+  override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
+    client.alterFunction(db, func.name, toHiveFunction(func, db))
+  }
+
+  override def getFunctionOption(
+      db: String,
+      name: String): Option[CatalogFunction] = withHiveState {
+    Option(client.getFunction(db, name)).map(fromHiveFunction)
+  }
+
+  override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
+    client.getFunctions(db, pattern).asScala
   }
 
   def addJar(path: String): Unit = {

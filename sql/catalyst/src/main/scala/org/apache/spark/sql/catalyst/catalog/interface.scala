@@ -111,14 +111,13 @@ abstract class Catalog {
   // Functions
   // --------------------------------------------------------------------------
 
-  def createFunction(db: String, funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit
+  def createFunction(db: String, funcDefinition: CatalogFunction): Unit
 
   def dropFunction(db: String, funcName: String): Unit
 
-  /**
-   * Alter an existing function and optionally override its name.
-   */
-  def alterFunction(db: String, funcName: String, funcDefinition: CatalogFunction): Unit
+  def renameFunction(db: String, oldName: String, newName: String): Unit
+
+  def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
 
   def getFunction(db: String, funcName: String): CatalogFunction
 

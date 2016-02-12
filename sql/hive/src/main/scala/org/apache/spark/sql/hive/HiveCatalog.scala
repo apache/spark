@@ -173,31 +173,28 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
 
   override def createFunction(
       db: String,
-      funcDefinition: CatalogFunction,
-      ignoreIfExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
-  }
-
-  override def dropFunction(db: String, funcName: String): Unit = synchronized {
-    throw new UnsupportedOperationException
-  }
-
-  /**
-   * Alter an existing function and optionally override its name.
-   */
-  override def alterFunction(
-      db: String,
-      funcName: String,
       funcDefinition: CatalogFunction): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.createFunction(db, funcDefinition)
+  }
+
+  override def dropFunction(db: String, name: String): Unit = synchronized {
+    client.dropFunction(db, name)
+  }
+
+  override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
+    client.renameFunction(db, oldName, newName)
+  }
+
+  override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = synchronized {
+    client.alterFunction(db, funcDefinition)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
-    throw new UnsupportedOperationException
+    client.getFunction(db, funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
-    throw new UnsupportedOperationException
+    client.listFunctions(db, pattern)
   }
 
 }

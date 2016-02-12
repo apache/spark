@@ -53,7 +53,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
     catalog.createTable("db2", newTable("tbl1"), ignoreIfExists = false)
     catalog.createTable("db2", newTable("tbl2"), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
-    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
+    catalog.createFunction("db2", newFunc("func1"))
     catalog
   }
 
@@ -401,23 +401,22 @@ abstract class CatalogTestCases extends SparkFunSuite {
   test("basic create and list functions") {
     val catalog = newEmptyCatalog()
     catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-    catalog.createFunction("mydb", newFunc("myfunc"), ignoreIfExists = false)
+    catalog.createFunction("mydb", newFunc("myfunc"))
     assert(catalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
   }
 
   test("create function when database does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.createFunction("does_not_exist", newFunc(), ignoreIfExists = false)
+      catalog.createFunction("does_not_exist", newFunc())
     }
   }
 
   test("create function that already exists") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
+      catalog.createFunction("db2", newFunc("func1"))
     }
-    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = true)
   }
 
   test("drop function") {
@@ -456,31 +455,43 @@ abstract class CatalogTestCases extends SparkFunSuite {
     }
   }
 
+  test("rename function") {
+    val catalog = newBasicCatalog()
+    val newName = "funcky"
+    assert(catalog.getFunction("db2", "func1").className == funcClass)
+    catalog.renameFunction("db2", "func1", newName)
+    intercept[AnalysisException] { catalog.getFunction("db2", "func1") }
+    assert(catalog.getFunction("db2", newName).name == newName)
+    assert(catalog.getFunction("db2", newName).className == funcClass)
+    intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
+  }
+
+  test("rename function when database does not exist") {
+    val catalog = newBasicCatalog()
+    intercept[AnalysisException] {
+      catalog.renameFunction("does_not_exist", "func1", "func5")
+    }
+  }
+
   test("alter function") {
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1").className == funcClass)
-    // alter func but keep name
-    catalog.alterFunction("db2", "func1", newFunc("func1").copy(className = "muhaha"))
+    catalog.alterFunction("db2", newFunc("func1").copy(className = "muhaha"))
     assert(catalog.getFunction("db2", "func1").className == "muhaha")
-    // alter func and change name
-    catalog.alterFunction("db2", "func1", newFunc("funcky"))
-    intercept[AnalysisException] {
-      catalog.getFunction("db2", "func1")
-    }
-    assert(catalog.getFunction("db2", "funcky").className == funcClass)
+    intercept[AnalysisException] { catalog.alterFunction("db2", newFunc("funcky")) }
   }
 
   test("alter function when database does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterFunction("does_not_exist", "func1", newFunc())
+      catalog.alterFunction("does_not_exist", newFunc())
     }
   }
 
   test("list functions") {
     val catalog = newBasicCatalog()
-    catalog.createFunction("db2", newFunc("func2"), ignoreIfExists = false)
-    catalog.createFunction("db2", newFunc("not_me"), ignoreIfExists = false)
+    catalog.createFunction("db2", newFunc("func2"))
+    catalog.createFunction("db2", newFunc("not_me"))
     assert(catalog.listFunctions("db2", "*").toSet == Set("func1", "func2", "not_me"))
     assert(catalog.listFunctions("db2", "func*").toSet == Set("func1", "func2"))
   }
