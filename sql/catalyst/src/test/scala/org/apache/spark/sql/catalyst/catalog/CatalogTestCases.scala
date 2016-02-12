@@ -154,13 +154,13 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("alter database") {
     val catalog = newBasicCatalog()
-    catalog.alterDatabase("db1", CatalogDatabase("db1", "new description", "lll", Map.empty))
+    catalog.alterDatabase(CatalogDatabase("db1", "new description", "lll", Map.empty))
     assert(catalog.getDatabase("db1").description == "new description")
   }
 
   test("alter database should throw exception when the database does not exist") {
     intercept[AnalysisException] {
-      newBasicCatalog().alterDatabase("no_db", CatalogDatabase("no_db", "ddd", "lll", Map.empty))
+      newBasicCatalog().alterDatabase(CatalogDatabase("no_db", "ddd", "lll", Map.empty))
     }
   }
 

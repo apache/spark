@@ -125,10 +125,9 @@ class InMemoryCatalog extends Catalog {
     }
   }
 
-  override def alterDatabase(db: String, dbDefinition: CatalogDatabase): Unit = synchronized {
-    assertDbExists(db)
-    assert(db == dbDefinition.name)
-    catalog(db).db = dbDefinition
+  override def alterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
+    assertDbExists(dbDefinition.name)
+    catalog(dbDefinition.name).db = dbDefinition
   }
 
   override def getDatabase(db: String): CatalogDatabase = synchronized {

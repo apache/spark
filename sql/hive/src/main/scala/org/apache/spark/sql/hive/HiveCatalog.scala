@@ -54,11 +54,8 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
     client.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 
-  /**
-   * Alter an existing database. This operation does not support renaming.
-   */
-  override def alterDatabase(db: String, dbDefinition: CatalogDatabase): Unit = synchronized {
-    client.alterDatabase(db, dbDefinition)
+  override def alterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
+    client.alterDatabase(dbDefinition)
   }
 
   override def getDatabase(db: String): CatalogDatabase = synchronized {

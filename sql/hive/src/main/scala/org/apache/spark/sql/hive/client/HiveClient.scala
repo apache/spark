@@ -111,9 +111,9 @@ private[hive] trait HiveClient {
   def dropDatabase(name: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
   /**
-   * Alter an existing database. This operation does not support renaming.
+   * Alter an existing database.
    */
-  def alterDatabase(name: String, database: CatalogDatabase): Unit
+  def alterDatabase(database: CatalogDatabase): Unit
 
   /**
    * Create one or many partitions in the given table.
