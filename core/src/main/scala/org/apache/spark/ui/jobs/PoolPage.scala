@@ -31,8 +31,11 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val poolName = request.getParameter("poolname")
-      require(poolName != null && poolName.nonEmpty, "Missing poolname parameter")
+      val poolName = Option(request.getParameter("poolname")).map { poolname =>
+        UIUtils.decodeURLParameter(poolname)
+      }.getOrElse {
+        throw new IllegalArgumentException(s"Missing poolname parameter")
+      }
 
       val poolToActiveStages = listener.poolToActiveStages
       val activeStages = poolToActiveStages.get(poolName) match {
@@ -44,7 +47,9 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
         killEnabled = parent.killEnabled)
 
       // For now, pool information is only accessible in live UIs
-      val pools = sc.map(_.getPoolForName(poolName).get).toSeq
+      val pools = sc.map(_.getPoolForName(poolName).getOrElse {
+        throw new IllegalArgumentException(s"Unknown poolname: $poolName")
+      }).toSeq
       val poolTable = new PoolTable(pools, parent)
 
       val content =

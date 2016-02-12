@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{ScalaReflection, SqlParser}
+import org.apache.spark.sql.catalyst.{CatalystQl, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -306,23 +306,141 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply): _*)
+    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
 
   /**
-   * Aggregate function: returns the first value in a group.
+   * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.0.0
    */
-  def first(e: Column): Column = withAggregateFunction { new First(e.expr) }
+  def covar_pop(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovPopulation(column1.expr, column2.expr)
+  }
 
   /**
-   * Aggregate function: returns the first value of a column in a group.
+   * Aggregate function: returns the population covariance for two columns.
    *
    * @group agg_funcs
-   * @since 1.3.0
+   * @since 2.0.0
    */
+  def covar_pop(columnName1: String, columnName2: String): Column = {
+    covar_pop(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_samp(column1: Column, column2: Column): Column = withAggregateFunction {
+    CovSample(column1.expr, column2.expr)
+  }
+
+  /**
+   * Aggregate function: returns the sample covariance for two columns.
+   *
+   * @group agg_funcs
+   * @since 2.0.0
+   */
+  def covar_samp(columnName1: String, columnName2: String): Column = {
+    covar_samp(Column(columnName1), Column(columnName2))
+  }
+
+  /**
+    * Aggregate function: returns the first value in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def first(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
+    new First(e.expr, Literal(ignoreNulls))
+  }
+
+  /**
+    * Aggregate function: returns the first value of a column in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def first(columnName: String, ignoreNulls: Boolean): Column = {
+    first(Column(columnName), ignoreNulls)
+  }
+
+  /**
+    * Aggregate function: returns the first value in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def first(e: Column): Column = first(e, ignoreNulls = false)
+
+  /**
+    * Aggregate function: returns the first value of a column in a group.
+    *
+    * The function by default returns the first values it sees. It will return the first non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
   def first(columnName: String): Column = first(Column(columnName))
+
+
+  /**
+    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping(e: Column): Column = Column(Grouping(e.expr))
+
+  /**
+    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping(columnName: String): Column = grouping(Column(columnName))
+
+  /**
+    * Aggregate function: returns the level of grouping, equals to
+    *
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+    *
+    * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+    * grouping columns).
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping_id(cols: Column*): Column = Column(GroupingID(cols.map(_.expr)))
+
+  /**
+    * Aggregate function: returns the level of grouping, equals to
+    *
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+    *
+    * Note: the list of columns should match with grouping columns exactly.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping_id(colName: String, colNames: String*): Column = {
+    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+  }
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.
@@ -341,20 +459,52 @@ object functions extends LegacyFunctions {
   def kurtosis(columnName: String): Column = kurtosis(Column(columnName))
 
   /**
-   * Aggregate function: returns the last value in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def last(e: Column): Column = withAggregateFunction { new Last(e.expr) }
+    * Aggregate function: returns the last value in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def last(e: Column, ignoreNulls: Boolean): Column = withAggregateFunction {
+    new Last(e.expr, Literal(ignoreNulls))
+  }
 
   /**
-   * Aggregate function: returns the last value of the column in a group.
-   *
-   * @group agg_funcs
-   * @since 1.3.0
-   */
-  def last(columnName: String): Column = last(Column(columnName))
+    * Aggregate function: returns the last value of the column in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def last(columnName: String, ignoreNulls: Boolean): Column = {
+    last(Column(columnName), ignoreNulls)
+  }
+
+  /**
+    * Aggregate function: returns the last value in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def last(e: Column): Column = last(e, ignoreNulls = false)
+
+  /**
+    * Aggregate function: returns the last value of the column in a group.
+    *
+    * The function by default returns the last values it sees. It will return the last non-null
+    * value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    *
+    * @group agg_funcs
+    * @since 1.3.0
+    */
+  def last(columnName: String): Column = last(Column(columnName), ignoreNulls = false)
 
   /**
    * Aggregate function: returns the maximum value of the expression in a group.
@@ -768,7 +918,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def array(colName: String, colNames: String*): Column = {
-    array((colName +: colNames).map(col): _*)
+    array((colName +: colNames).map(col) : _*)
   }
 
   /**
@@ -977,7 +1127,7 @@ object functions extends LegacyFunctions {
    */
   @scala.annotation.varargs
   def struct(colName: String, colNames: String*): Column = {
-    struct((colName +: colNames).map(col): _*)
+    struct((colName +: colNames).map(col) : _*)
   }
 
   /**
@@ -1002,7 +1152,7 @@ object functions extends LegacyFunctions {
    * @since 1.4.0
    */
   def when(condition: Column, value: Any): Column = withExpr {
-    CaseWhen(Seq(condition.expr, lit(value).expr))
+    CaseWhen(Seq((condition.expr, lit(value).expr)))
   }
 
   /**
@@ -1023,7 +1173,10 @@ object functions extends LegacyFunctions {
    *
    * @group normal_funcs
    */
-  def expr(expr: String): Column = Column(SqlParser.parseExpression(expr))
+  def expr(expr: String): Column = {
+    val parser = SQLContext.getActive().map(_.sqlParser).getOrElse(new CatalystQl())
+    Column(parser.parseExpression(expr))
+  }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Math Functions

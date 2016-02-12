@@ -320,7 +320,9 @@ private[hive] trait HiveInspectors {
       case hvoi: HiveCharObjectInspector =>
         UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
-        UTF8String.fromString(x.getPrimitiveWritableObject(data).toString)
+        // Text is in UTF-8 already. No need to convert again via fromString
+        val wObj = x.getPrimitiveWritableObject(data)
+        UTF8String.fromBytes(wObj.getBytes, 0, wObj.getLength)
       case x: StringObjectInspector =>
         UTF8String.fromString(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
@@ -657,8 +659,8 @@ private[hive] trait HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        java.util.Arrays.asList(fields.map(f => f.name): _*),
-        java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)): _*))
+        java.util.Arrays.asList(fields.map(f => f.name) : _*),
+        java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) : _*))
   }
 
   /**
@@ -905,8 +907,8 @@ private[hive] trait HiveInspectors {
         getListTypeInfo(elemType.toTypeInfo)
       case StructType(fields) =>
         getStructTypeInfo(
-          java.util.Arrays.asList(fields.map(_.name): _*),
-          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo): _*))
+          java.util.Arrays.asList(fields.map(_.name) : _*),
+          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) : _*))
       case MapType(keyType, valueType, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo

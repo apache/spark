@@ -294,7 +294,7 @@ public class Java8APISuite implements Serializable {
           sizeS += 1;
           s.next();
         }
-        return Arrays.asList(sizeI, sizeS);
+        return Arrays.asList(sizeI, sizeS).iterator();
       };
     JavaRDD<Integer> sizes = rdd1.zipPartitions(rdd2, sizesFn);
     Assert.assertEquals("[3, 2, 3, 2]", sizes.collect().toString());

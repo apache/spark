@@ -92,20 +92,22 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        metrics += qe.executedPlan.longMetric("numInputRows").value.value
+        metrics += qe.executedPlan.longMetric("numOutputRows").value.value
       }
     }
     sqlContext.listenerManager.register(listener)
 
-    val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
-    df.collect()
-    df.collect()
-    Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
+    withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
+      val df = Seq(1 -> "a").toDF("i", "j").groupBy("i").count()
+      df.collect()
+      df.collect()
+      Seq(1 -> "a", 2 -> "a").toDF("i", "j").groupBy("i").count().collect()
+    }
 
     assert(metrics.length == 3)
-    assert(metrics(0) == 1)
-    assert(metrics(1) == 1)
-    assert(metrics(2) == 2)
+    assert(metrics(0) === 1)
+    assert(metrics(1) === 1)
+    assert(metrics(2) === 2)
 
     sqlContext.listenerManager.unregister(listener)
   }
@@ -140,7 +142,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
         .filter(_._2.name == InternalAccumulator.PEAK_EXECUTION_MEMORY)
 
       assert(peakMemoryAccumulator.size == 1)
-      peakMemoryAccumulator.head._2.value.toLong
+      peakMemoryAccumulator.head._2.value.get.asInstanceOf[Long]
     }
 
     assert(sparkListener.getCompletedStageInfos.length == 2)

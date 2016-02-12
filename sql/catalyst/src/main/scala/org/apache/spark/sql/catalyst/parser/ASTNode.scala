@@ -27,10 +27,10 @@ case class ASTNode(
     children: List[ASTNode],
     stream: TokenRewriteStream) extends TreeNode[ASTNode] {
   /** Cache the number of children. */
-  val numChildren = children.size
+  val numChildren: Int = children.size
 
   /** tuple used in pattern matching. */
-  val pattern = Some((token.getText, children))
+  val pattern: Some[(String, List[ASTNode])] = Some((token.getText, children))
 
   /** Line in which the ASTNode starts. */
   lazy val line: Int = {
@@ -55,10 +55,16 @@ case class ASTNode(
   }
 
   /** Origin of the ASTNode. */
-  override val origin = Origin(Some(line), Some(positionInLine))
+  override val origin: Origin = Origin(Some(line), Some(positionInLine))
 
   /** Source text. */
-  lazy val source = stream.toString(startIndex, stopIndex)
+  lazy val source: String = stream.toOriginalString(startIndex, stopIndex)
+
+  /** Get the source text that remains after this token. */
+  lazy val remainder: String = {
+    stream.fill()
+    stream.toOriginalString(stopIndex + 1, stream.size() - 1).trim()
+  }
 
   def text: String = token.getText
 

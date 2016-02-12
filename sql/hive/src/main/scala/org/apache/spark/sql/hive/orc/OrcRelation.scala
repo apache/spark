@@ -103,7 +103,7 @@ private[orc] class OrcOutputWriter(
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
     val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
-    val bucketString = bucketId.map(id => f"-$id%05d").getOrElse("")
+    val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
     val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
 
     new OrcOutputFormat().getRecordWriter(
@@ -156,7 +156,7 @@ private[sql] class OrcRelation(
     maybeDataSchema: Option[StructType],
     maybePartitionSpec: Option[PartitionSpec],
     override val userDefinedPartitionColumns: Option[StructType],
-    override val bucketSpec: Option[BucketSpec],
+    override val maybeBucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
   extends HadoopFsRelation(maybePartitionSpec, parameters)

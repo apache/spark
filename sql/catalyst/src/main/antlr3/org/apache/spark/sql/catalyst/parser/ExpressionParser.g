@@ -122,21 +122,13 @@ constant
     | BigintLiteral
     | SmallintLiteral
     | TinyintLiteral
-    | DecimalLiteral
-    | charSetStringLiteral
+    | DoubleLiteral
     | booleanValue
     ;
 
 stringLiteralSequence
     :
     StringLiteral StringLiteral+ -> ^(TOK_STRINGLITERALSEQUENCE StringLiteral StringLiteral+)
-    ;
-
-charSetStringLiteral
-@init { gParent.pushMsg("character string literal", state); }
-@after { gParent.popMsg(state); }
-    :
-    csName=CharSetName csLiteral=CharSetLiteral -> ^(TOK_CHARSETLITERAL $csName $csLiteral)
     ;
 
 dateLiteral
@@ -163,22 +155,38 @@ timestampLiteral
 
 intervalLiteral
     :
-    KW_INTERVAL StringLiteral qualifiers=intervalQualifiers ->
-    {
-      adaptor.create($qualifiers.tree.token.getType(), $StringLiteral.text)
-    }
+    (KW_INTERVAL intervalConstant KW_YEAR KW_TO KW_MONTH) => KW_INTERVAL intervalConstant KW_YEAR KW_TO KW_MONTH
+      -> ^(TOK_INTERVAL_YEAR_MONTH_LITERAL intervalConstant)
+    | (KW_INTERVAL intervalConstant KW_DAY KW_TO KW_SECOND) => KW_INTERVAL intervalConstant KW_DAY KW_TO KW_SECOND
+      -> ^(TOK_INTERVAL_DAY_TIME_LITERAL intervalConstant)
+    | KW_INTERVAL
+      ((intervalConstant KW_YEAR)=> year=intervalConstant KW_YEAR)?
+      ((intervalConstant KW_MONTH)=> month=intervalConstant KW_MONTH)?
+      ((intervalConstant KW_WEEK)=> week=intervalConstant KW_WEEK)?
+      ((intervalConstant KW_DAY)=> day=intervalConstant KW_DAY)?
+      ((intervalConstant KW_HOUR)=> hour=intervalConstant KW_HOUR)?
+      ((intervalConstant KW_MINUTE)=> minute=intervalConstant KW_MINUTE)?
+      ((intervalConstant KW_SECOND)=> second=intervalConstant KW_SECOND)?
+      ((intervalConstant KW_MILLISECOND)=> millisecond=intervalConstant KW_MILLISECOND)?
+      ((intervalConstant KW_MICROSECOND)=> microsecond=intervalConstant KW_MICROSECOND)?
+      -> ^(TOK_INTERVAL
+          ^(TOK_INTERVAL_YEAR_LITERAL $year?)
+          ^(TOK_INTERVAL_MONTH_LITERAL $month?)
+          ^(TOK_INTERVAL_WEEK_LITERAL $week?)
+          ^(TOK_INTERVAL_DAY_LITERAL $day?)
+          ^(TOK_INTERVAL_HOUR_LITERAL $hour?)
+          ^(TOK_INTERVAL_MINUTE_LITERAL $minute?)
+          ^(TOK_INTERVAL_SECOND_LITERAL $second?)
+          ^(TOK_INTERVAL_MILLISECOND_LITERAL $millisecond?)
+          ^(TOK_INTERVAL_MICROSECOND_LITERAL $microsecond?))
     ;
 
-intervalQualifiers
+intervalConstant
     :
-    KW_YEAR KW_TO KW_MONTH -> TOK_INTERVAL_YEAR_MONTH_LITERAL
-    | KW_DAY KW_TO KW_SECOND -> TOK_INTERVAL_DAY_TIME_LITERAL
-    | KW_YEAR -> TOK_INTERVAL_YEAR_LITERAL
-    | KW_MONTH -> TOK_INTERVAL_MONTH_LITERAL
-    | KW_DAY -> TOK_INTERVAL_DAY_LITERAL
-    | KW_HOUR -> TOK_INTERVAL_HOUR_LITERAL
-    | KW_MINUTE -> TOK_INTERVAL_MINUTE_LITERAL
-    | KW_SECOND -> TOK_INTERVAL_SECOND_LITERAL
+    sign=(MINUS|PLUS)? value=Number -> {
+      adaptor.create(Number, ($sign != null ? $sign.getText() : "") + $value.getText())
+    }
+    | StringLiteral
     ;
 
 expression
@@ -221,7 +229,8 @@ nullCondition
 
 precedenceUnaryPrefixExpression
     :
-    (precedenceUnaryOperator^)* precedenceFieldExpression
+    (precedenceUnaryOperator+)=> precedenceUnaryOperator^ precedenceUnaryPrefixExpression
+    | precedenceFieldExpression
     ;
 
 precedenceUnarySuffixExpression
@@ -486,6 +495,16 @@ descFuncNames
     | functionIdentifier
     ;
 
+//We are allowed to use From and To in CreateTableUsing command's options (actually seems we can use any string as the option key). But we can't simply add them into nonReserved because by doing that we mess other existing rules. So we create a looseIdentifier and looseNonReserved here.
+looseIdentifier
+    :
+    Identifier
+    | looseNonReserved -> Identifier[$looseNonReserved.text]
+    // If it decides to support SQL11 reserved keywords, i.e., useSQL11ReservedKeywordsForIdentifier()=false,
+    // the sql11keywords in existing q tests will NOT be added back.
+    | {useSQL11ReservedKeywordsForIdentifier()}? sql11ReservedKeywordsUsedAsIdentifier -> Identifier[$sql11ReservedKeywordsUsedAsIdentifier.text]
+    ;
+
 identifier
     :
     Identifier
@@ -498,10 +517,8 @@ identifier
 functionIdentifier
 @init { gParent.pushMsg("function identifier", state); }
 @after { gParent.popMsg(state); }
-    : db=identifier DOT fn=identifier
-    -> Identifier[$db.text + "." + $fn.text]
-    |
-    identifier
+    :
+    identifier (DOT identifier)? -> identifier+
     ;
 
 principalIdentifier
@@ -509,6 +526,10 @@ principalIdentifier
 @after { gParent.popMsg(state); }
     : identifier
     | QuotedIdentifier
+    ;
+
+looseNonReserved
+    : nonReserved | KW_FROM | KW_TO
     ;
 
 //The new version of nonReserved + sql11ReservedKeywordsUsedAsIdentifier = old version of nonReserved
@@ -546,6 +567,8 @@ nonReserved
     | KW_SNAPSHOT
     | KW_AUTOCOMMIT
     | KW_ANTI
+    | KW_WEEK | KW_MILLISECOND | KW_MICROSECOND
+    | KW_CLEAR | KW_LAZY | KW_CACHE | KW_UNCACHE | KW_DFS
 ;
 
 //The following SQL2011 reserved keywords are used as cast function name only, but not as identifiers.

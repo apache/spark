@@ -153,7 +153,10 @@ can find the results of the driver from the Mesos Web UI.
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
-If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`).
+If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
+
+The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
+For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy].
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
 to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
@@ -202,7 +205,7 @@ where each application gets more or fewer machines as it ramps up and down, but 
 additional overhead in launching each task. This mode may be inappropriate for low-latency
 requirements like interactive queries or serving web requests.
 
-To run in coarse-grained mode, set the `spark.mesos.coarse` property to false in your
+To run in fine-grained mode, set the `spark.mesos.coarse` property to false in your
 [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
@@ -243,18 +246,15 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Dynamic Resource Allocation with Mesos
 
-Mesos supports dynamic allocation only with coarse grain mode, which can resize the number of executors based on statistics
-of the application. While dynamic allocation supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
-since it is already designed to run one executor per slave with the configured amount of resources. However, after scaling down the number of executors the coarse grain scheduler
-can scale back up to the same amount of executors when Spark signals more executors are needed.
+Mesos supports dynamic allocation only with coarse-grain mode, which can resize the number of
+executors based on statistics of the application. For general information,
+see [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocation).
 
-Users that like to utilize this feature should launch the Mesos Shuffle Service that
-provides shuffle data cleanup functionality on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
-termination. To launch/stop the Mesos Shuffle Service please use the provided sbin/start-mesos-shuffle-service.sh and sbin/stop-mesos-shuffle-service.sh
-scripts accordingly.
+The External Shuffle Service to use is the Mesos Shuffle Service. It provides shuffle data cleanup functionality
+on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
+termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all slave nodes, with `spark.shuffle.service.enabled` set to `true`.
 
-The Shuffle Service is expected to be running on each slave node that will run Spark executors. One way to easily achieve this with Mesos
-is to launch the Shuffle Service with Marathon with a unique host constraint.
+This can also be achieved through Marathon, using a unique host constraint, and the following command: `bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
 
 # Configuration
 
@@ -266,22 +266,22 @@ See the [configuration page](configuration.html) for information on Spark config
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.mesos.coarse</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
-    If set to <code>true</code>, runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
-    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
-    for the whole duration of the Spark job.
+    If set to <code>true</code>, runs over Mesos clusters in "coarse-grained" sharing mode, where Spark acquires one long-lived Mesos task on each machine.
+    If set to <code>false</code>, runs over Mesos cluster in "fine-grained" sharing mode, where one Mesos task is created per Spark task.
+    Detailed information in <a href="running-on-mesos.html#mesos-run-modes">'Mesos Run Modes'</a>.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.extra.cores</code></td>
   <td><code>0</code></td>
   <td>
-    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
-    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
-    Note that total amount of cores the executor will request in total will not exceed the <code>spark.cores.max</code> setting.
+    Set the extra number of cores for an executor to advertise. This
+    does not result in more cores allocated.  It instead means that an
+    executor will "pretend" it has more cores, so that the driver will
+    send it more tasks.  Use this to increase parallelism.  This
+    setting is only used for Mesos coarse-grained mode.
   </td>
 </tr>
 <tr>

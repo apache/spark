@@ -57,8 +57,7 @@ case class Aggregator[K, V, C] (
     Option(context).foreach { c =>
       c.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
       c.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
-      c.internalMetricsToAccumulators(
-        InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+      c.taskMetrics().incPeakExecutionMemory(map.peakMemoryUsedBytes)
     }
   }
 }

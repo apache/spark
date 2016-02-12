@@ -182,6 +182,8 @@ object FunctionRegistry {
     expression[Average]("avg"),
     expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CovPopulation]("covar_pop"),
+    expression[CovSample]("covar_samp"),
     expression[First]("first"),
     expression[First]("first_value"),
     expression[Last]("last"),
@@ -289,6 +291,8 @@ object FunctionRegistry {
     // grouping sets
     expression[Cube]("cube"),
     expression[Rollup]("rollup"),
+    expression[Grouping]("grouping"),
+    expression[GroupingID]("grouping_id"),
 
     // window functions
     expression[Lead]("lead"),
@@ -323,13 +327,13 @@ object FunctionRegistry {
       } else {
         // Otherwise, find an ctor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
-        val f = Try(tag.runtimeClass.getDeclaredConstructor(params: _*)) match {
+        val f = Try(tag.runtimeClass.getDeclaredConstructor(params : _*)) match {
           case Success(e) =>
             e
           case Failure(e) =>
             throw new AnalysisException(s"Invalid number of arguments for function $name")
         }
-        Try(f.newInstance(expressions: _*).asInstanceOf[Expression]) match {
+        Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
           case Failure(e) => throw new AnalysisException(e.getMessage)
         }

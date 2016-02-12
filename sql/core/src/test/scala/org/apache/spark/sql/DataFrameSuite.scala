@@ -25,7 +25,7 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
@@ -96,6 +96,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData,
       testData.collect().toSeq)
+  }
+
+  test("union all") {
+    val unionDF = testData.unionAll(testData).unionAll(testData)
+      .unionAll(testData).unionAll(testData)
+
+    // Before optimizer, Union should be combined.
+    assert(unionDF.queryExecution.analyzed.collect {
+      case j: Union if j.children.size == 5 => j }.size === 1)
+
+    checkAnswer(
+      unionDF.agg(avg('key), max('key), min('key), sum('key)),
+      Row(50.5, 100, 1, 25250) :: Nil
+    )
   }
 
   test("empty data frame") {
@@ -335,6 +349,48 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(3, "c") ::
       Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+
+    // check null equality
+    checkAnswer(
+      nullInts.intersect(nullInts),
+      Row(1) ::
+      Row(2) ::
+      Row(3) ::
+      Row(null) :: Nil)
+
+    // check if values are de-duplicated
+    checkAnswer(
+      allNulls.intersect(allNulls),
+      Row(null) :: Nil)
+
+    // check if values are de-duplicated
+    val df = Seq(("id1", 1), ("id1", 1), ("id", 1), ("id1", 2)).toDF("id", "value")
+    checkAnswer(
+      df.intersect(df),
+      Row("id1", 1) ::
+      Row("id", 1) ::
+      Row("id1", 2) :: Nil)
+  }
+
+  test("intersect - nullability") {
+    val nonNullableInts = Seq(Tuple1(1), Tuple1(3)).toDF()
+    assert(nonNullableInts.schema.forall(_.nullable == false))
+
+    val df1 = nonNullableInts.intersect(nullInts)
+    checkAnswer(df1, Row(1) :: Row(3) :: Nil)
+    assert(df1.schema.forall(_.nullable == false))
+
+    val df2 = nullInts.intersect(nonNullableInts)
+    checkAnswer(df2, Row(1) :: Row(3) :: Nil)
+    assert(df2.schema.forall(_.nullable == false))
+
+    val df3 = nullInts.intersect(nullInts)
+    checkAnswer(df3, Row(1) :: Row(2) :: Row(3) :: Row(null) :: Nil)
+    assert(df3.schema.forall(_.nullable == true))
+
+    val df4 = nonNullableInts.intersect(nonNullableInts)
+    checkAnswer(df4, Row(1) :: Row(3) :: Nil)
+    assert(df4.schema.forall(_.nullable == false))
   }
 
   test("udf") {
@@ -898,6 +954,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(expected === actual)
   }
 
+  test("Sorting columns are not in Filter and Project") {
+    checkAnswer(
+      upperCaseData.filter('N > 1).select('N).filter('N < 6).orderBy('L.asc),
+      Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
+  }
+
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {
     val df = sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"b": 1}}""" :: Nil))
@@ -936,12 +998,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+  test("Alias uses internally generated names 'aggOrder' and 'havingCondition'") {
     val df = Seq(1 -> 2).toDF("i", "j")
-    val query = df.groupBy('i)
-      .agg(max('j).as("aggOrdering"))
+    val query1 = df.groupBy('i)
+      .agg(max('j).as("aggOrder"))
       .orderBy(sum('j))
-    checkAnswer(query, Row(1, 2))
+    checkAnswer(query1, Row(1, 2))
+
+    // In the plan, there are two attributes having the same name 'havingCondition'
+    // One is a user-provided alias name; another is an internally generated one.
+    val query2 = df.groupBy('i)
+      .agg(max('j).as("havingCondition"))
+      .where(sum('j) > 0)
+      .orderBy('havingCondition.asc)
+    checkAnswer(query2, Row(1, 2))
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
@@ -1007,6 +1077,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-10743: keep the name of expression if possible when do cast") {
     val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
     assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+    assert(df.select($"src.i".cast(StringType).cast(IntegerType)).columns.head === "i")
   }
 
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
@@ -1083,17 +1154,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
     df4.rdd.foreachPartition { p =>
-      var previousValue: Int = -1
-      var allSequential: Boolean = true
-      p.foreach { r =>
-        val v: Int = r.getInt(1)
-        if (previousValue != -1) {
-          if (previousValue < v) throw new SparkException("Partition is not ordered.")
-          if (v + 1 != previousValue) allSequential = false
+      // Skip empty partition
+      if (p.hasNext) {
+        var previousValue: Int = -1
+        var allSequential: Boolean = true
+        p.foreach { r =>
+          val v: Int = r.getInt(1)
+          if (previousValue != -1) {
+            if (previousValue < v) throw new SparkException("Partition is not ordered.")
+            if (v + 1 != previousValue) allSequential = false
+          }
+          previousValue = v
         }
-        previousValue = v
+        if (allSequential) throw new SparkException("Partition should not be globally ordered")
       }
-      if (allSequential) throw new SparkException("Partition should not be globally ordered")
     }
 
     // Distribute and order by with multiple order bys
@@ -1224,5 +1298,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.select(df("*")), Row("a", "b"))
     checkAnswer(df.withColumn("col.a", lit("c")), Row("c", "b"))
     checkAnswer(df.withColumn("col.c", lit("c")), Row("a", "b", "c"))
+  }
+
+  test("SPARK-12841: cast in filter") {
+    checkAnswer(
+      Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
+      Row(1, "a"))
+  }
+
+  test("SPARK-12982: Add table name validation in temp table registration") {
+    val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
+    // invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("t~"))
+    // valid table name test as below
+    df.registerTempTable("table1")
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("table!#"))
   }
 }

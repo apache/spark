@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.DecimalType
@@ -98,6 +99,49 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(cube0.where("date IS NULL").count > 0)
   }
 
+  test("grouping and grouping_id") {
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping("course"), grouping("year"), grouping_id("course", "year")),
+      Row("Java", 2012, 0, 0, 0) ::
+        Row("Java", 2013, 0, 0, 0) ::
+        Row("Java", null, 0, 1, 1) ::
+        Row("dotNET", 2012, 0, 0, 0) ::
+        Row("dotNET", 2013, 0, 0, 0) ::
+        Row("dotNET", null, 0, 1, 1) ::
+        Row(null, 2012, 1, 0, 2) ::
+        Row(null, 2013, 1, 0, 2) ::
+        Row(null, null, 1, 1, 3) :: Nil
+    )
+
+    intercept[AnalysisException] {
+      courseSales.groupBy().agg(grouping("course")).explain()
+    }
+    intercept[AnalysisException] {
+      courseSales.groupBy().agg(grouping_id("course")).explain()
+    }
+  }
+
+  test("grouping/grouping_id inside window function") {
+
+    val w = Window.orderBy(sum("earnings"))
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(sum("earnings"),
+          grouping_id("course", "year"),
+          rank().over(Window.partitionBy(grouping_id("course", "year")).orderBy(sum("earnings")))),
+      Row("Java", 2012, 20000.0, 0, 2) ::
+        Row("Java", 2013, 30000.0, 0, 3) ::
+        Row("Java", null, 50000.0, 1, 1) ::
+        Row("dotNET", 2012, 15000.0, 0, 1) ::
+        Row("dotNET", 2013, 48000.0, 0, 4) ::
+        Row("dotNET", null, 63000.0, 1, 2) ::
+        Row(null, 2012, 35000.0, 2, 1) ::
+        Row(null, 2013, 78000.0, 2, 2) ::
+        Row(null, null, 113000.0, 3, 1) :: Nil
+    )
+  }
+
   test("rollup overlapping columns") {
     checkAnswer(
       testData2.rollup($"a" + $"b" as "foo", $"b" as "bar").agg(sum($"a" - $"b") as "foo"),
@@ -150,6 +194,13 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.agg(sum('b)),
       Row(9)
+    )
+  }
+
+  test("agg without groups and functions") {
+    checkAnswer(
+      testData2.agg(lit(1)),
+      Row(1)
     )
   }
 

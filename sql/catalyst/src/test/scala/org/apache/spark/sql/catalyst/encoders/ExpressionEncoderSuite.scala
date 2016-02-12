@@ -19,12 +19,9 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
-import java.util.concurrent.ConcurrentMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
-
-import com.google.common.collect.MapMaker
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
@@ -78,9 +75,9 @@ class JavaSerializable(val value: Int) extends Serializable {
 }
 
 class ExpressionEncoderSuite extends SparkFunSuite {
-  OuterScopes.outerScopes.put(getClass.getName, this)
+  OuterScopes.addOuterScope(this)
 
-  implicit def encoder[T: TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
+  implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 
   // test flat encoders
   encodeDecodeTest(false, "primitive boolean")
@@ -145,7 +142,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     encoderFor(Encoders.javaSerialization[JavaSerializable]))
 
   // test product encoders
-  private def productTest[T <: Product: ExpressionEncoder](input: T): Unit = {
+  private def productTest[T <: Product : ExpressionEncoder](input: T): Unit = {
     encodeDecodeTest(input, input.getClass.getSimpleName)
   }
 
@@ -286,7 +283,7 @@ class ExpressionEncoderSuite extends SparkFunSuite {
     }
   }
 
-  private def encodeDecodeTest[T: ExpressionEncoder](
+  private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
     test(s"encode/decode for $testName: $input") {

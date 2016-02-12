@@ -92,17 +92,28 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT COUNT(value) FROM t1 GROUP BY key ORDER BY MAX(key)")
   }
 
-  // TODO Fix name collision introduced by ResolveAggregateFunction analysis rule
   // When there are multiple aggregate functions in ORDER BY clause, all of them are extracted into
   // Aggregate operator and aliased to the same name "aggOrder".  This is OK for normal query
   // execution since these aliases have different expression ID.  But this introduces name collision
   // when converting resolved plans back to SQL query strings as expression IDs are stripped.
-  ignore("aggregate function in order by clause with multiple order keys") {
+  test("aggregate function in order by clause with multiple order keys") {
     checkHiveQl("SELECT COUNT(value) FROM t1 GROUP BY key ORDER BY key, MAX(key)")
   }
 
   test("type widening in union") {
     checkHiveQl("SELECT id FROM t0 UNION ALL SELECT CAST(id AS INT) AS id FROM t0")
+  }
+
+  test("self join") {
+    checkHiveQl("SELECT x.key FROM t1 x JOIN t1 y ON x.key = y.key")
+  }
+
+  test("self join with group by") {
+    checkHiveQl("SELECT x.key, COUNT(*) FROM t1 x JOIN t1 y ON x.key = y.key group by x.key")
+  }
+
+  test("three-child union") {
+    checkHiveQl("SELECT id FROM t0 UNION ALL SELECT id FROM t0 UNION ALL SELECT id FROM t0")
   }
 
   test("case") {
@@ -143,7 +154,17 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   // TODO Enable this
   // Query plans transformed by DistinctAggregationRewriter are not recognized yet
-  ignore("distinct and non-distinct aggregation") {
+  ignore("multi-distinct columns") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM t2 GROUP BY a")
+  }
+
+  test("persisted data source relations") {
+    Seq("orc", "json", "parquet").foreach { format =>
+      val tableName = s"${format}_t0"
+      withTable(tableName) {
+        sqlContext.range(10).write.format(format).saveAsTable(tableName)
+        checkHiveQl(s"SELECT id FROM $tableName")
+      }
+    }
   }
 }

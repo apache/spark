@@ -38,8 +38,6 @@ case class LeftSemiJoinBNL(
   // TODO: Override requiredChildDistribution.
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputPartitioning: Partitioning = streamed.outputPartitioning
@@ -56,13 +54,10 @@ case class LeftSemiJoinBNL(
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastedRelation =
       sparkContext.broadcast(broadcast.execute().map { row =>
-        numRightRows += 1
         row.copy()
       }.collect().toIndexedSeq)
 
@@ -70,7 +65,6 @@ case class LeftSemiJoinBNL(
       val joinedRow = new JoinedRow
 
       streamedIter.filter(streamedRow => {
-        numLeftRows += 1
         var i = 0
         var matched = false
 

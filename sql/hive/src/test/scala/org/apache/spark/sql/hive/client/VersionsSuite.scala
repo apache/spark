@@ -30,7 +30,7 @@ import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**
- * A simple set of tests that call the methods of a hive ClientInterface, loading different version
+ * A simple set of tests that call the methods of a [[HiveClient]], loading different version
  * of hive from maven central.  These tests are simple in that they are mostly just testing to make
  * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
@@ -101,7 +101,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   private val versions = Seq("12", "13", "14", "1.0.0", "1.1.0", "1.2.0")
 
-  private var client: ClientInterface = null
+  private var client: HiveClient = null
 
   versions.foreach { version =>
     test(s"$version: create client") {
