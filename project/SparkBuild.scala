@@ -433,9 +433,12 @@ object Catalyst {
       }
 
       // Generate the parser.
-      antlr.process
-      if (antlr.getNumErrors > 0) {
-        log.error("ANTLR: Caught %d build errors.".format(antlr.getNumErrors))
+      antlr.process()
+      val errorState = org.antlr.tool.ErrorManager.getErrorState
+      if (errorState.errors > 0) {
+        sys.error("ANTLR: Caught %d build errors.".format(errorState.errors))
+      } else if (errorState.warnings > 0) {
+        sys.error("ANTLR: Caught %d build warnings.".format(errorState.warnings))
       }
 
       // Return all generated java files.
