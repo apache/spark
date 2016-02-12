@@ -63,7 +63,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     rang/filter/sum:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
     rang/filter/sum codegen=false          14332 / 16646         36.0          27.8       1.0X
-    rang/filter/sum codegen=true              845 /  940        620.0           1.6      17.0X
+    rang/filter/sum codegen=true              897 / 1022        584.6           1.7      16.4X
     */
   }
 

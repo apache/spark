@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.random.PoissonSampler
 
@@ -78,6 +78,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
     val expr = ExpressionCanonicalizer.execute(
       BindReferences.bindReference(condition, child.output))
     ctx.currentVars = input
@@ -90,6 +91,7 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
     s"""
        | ${eval.code}
        | if ($nullCheck ${eval.value}) {
+       |   $numOutput.add(1);
        |   ${consume(ctx, ctx.currentVars)}
        | }
      """.stripMargin
@@ -159,6 +161,8 @@ case class Range(
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
     val initTerm = ctx.freshName("initRange")
     ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
     val partitionEnd = ctx.freshName("partitionEnd")
@@ -204,6 +208,8 @@ case class Range(
         |   } else {
         |     $partitionEnd = end.longValue();
         |   }
+        |
+        |   $numOutput.add(($partitionEnd - $number) / ${step}L);
         | }
        """.stripMargin)
 
