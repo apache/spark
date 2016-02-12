@@ -81,8 +81,6 @@ _functions = {
 
     'max': 'Aggregate function: returns the maximum value of the expression in a group.',
     'min': 'Aggregate function: returns the minimum value of the expression in a group.',
-    'first': 'Aggregate function: returns the first value in a group.',
-    'last': 'Aggregate function: returns the last value in a group.',
     'count': 'Aggregate function: returns the number of items in a group.',
     'sum': 'Aggregate function: returns the sum of all values in the expression.',
     'avg': 'Aggregate function: returns the average of the values in a group.',
@@ -278,6 +276,62 @@ def countDistinct(col, *cols):
     return Column(jc)
 
 
+@since(1.3)
+def first(col, ignorenulls=False):
+    """Aggregate function: returns the first value in a group.
+
+    The function by default returns the first values it sees. It will return the first non-null
+    value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.first(_to_java_column(col), ignorenulls)
+    return Column(jc)
+
+
+@since(2.0)
+def grouping(col):
+    """
+    Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+
+    >>> df.cube("name").agg(grouping("name"), sum("age")).orderBy("name").show()
+    +-----+--------------+--------+
+    | name|grouping(name)|sum(age)|
+    +-----+--------------+--------+
+    | null|             1|       7|
+    |Alice|             0|       2|
+    |  Bob|             0|       5|
+    +-----+--------------+--------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.grouping(_to_java_column(col))
+    return Column(jc)
+
+
+@since(2.0)
+def grouping_id(*cols):
+    """
+    Aggregate function: returns the level of grouping, equals to
+
+       (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+
+    Note: the list of columns should match with grouping columns exactly, or empty (means all the
+    grouping columns).
+
+    >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
+    +-----+------------+--------+
+    | name|groupingid()|sum(age)|
+    +-----+------------+--------+
+    | null|           1|       7|
+    |Alice|           0|       2|
+    |  Bob|           0|       5|
+    +-----+------------+--------+
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
+    return Column(jc)
+
+
 @since(1.6)
 def input_file_name():
     """Creates a string column for the file name of the current Spark task.
@@ -308,6 +362,18 @@ def isnull(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.isnull(_to_java_column(col)))
+
+
+@since(1.3)
+def last(col, ignorenulls=False):
+    """Aggregate function: returns the last value in a group.
+
+    The function by default returns the last values it sees. It will return the last non-null
+    value it sees when ignoreNulls is set to true. If all values are null, then null is returned.
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.last(_to_java_column(col), ignorenulls)
+    return Column(jc)
 
 
 @since(1.6)

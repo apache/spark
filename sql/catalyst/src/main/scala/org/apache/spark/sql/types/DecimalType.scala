@@ -148,6 +148,28 @@ object DecimalType extends AbstractDataType {
     }
   }
 
+  /**
+   * Returns if dt is a DecimalType that fits inside a long
+   */
+  def is64BitDecimalType(dt: DataType): Boolean = {
+    dt match {
+      case t: DecimalType =>
+        t.precision <= Decimal.MAX_LONG_DIGITS
+      case _ => false
+    }
+  }
+
+  /**
+   * Returns if dt is a DecimalType that doesn't fit inside a long
+   */
+  def isByteArrayDecimalType(dt: DataType): Boolean = {
+    dt match {
+      case t: DecimalType =>
+        t.precision > Decimal.MAX_LONG_DIGITS
+      case _ => false
+    }
+  }
+
   def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
 
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]

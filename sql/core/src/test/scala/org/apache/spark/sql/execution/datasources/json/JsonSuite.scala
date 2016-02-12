@@ -771,6 +771,34 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Loading a JSON dataset floatAsBigDecimal returns schema with float types as BigDecimal") {
+    val jsonDF = sqlContext.read.option("floatAsBigDecimal", "true").json(primitiveFieldAndType)
+
+    val expectedSchema = StructType(
+      StructField("bigInteger", DecimalType(20, 0), true) ::
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DecimalType(17, -292), true) ::
+        StructField("integer", LongType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+
+    jsonDF.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql("select * from jsonTable"),
+      Row(BigDecimal("92233720368547758070"),
+        true,
+        BigDecimal("1.7976931348623157E308"),
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+    )
+  }
+
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()

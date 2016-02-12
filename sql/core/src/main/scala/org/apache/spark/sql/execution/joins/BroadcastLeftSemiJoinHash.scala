@@ -36,41 +36,31 @@ case class BroadcastLeftSemiJoinHash(
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     val input = right.execute().map { row =>
-      numRightRows += 1
       row.copy()
     }.collect()
 
     if (condition.isEmpty) {
-      val hashSet = buildKeyHashSet(input.toIterator, SQLMetrics.nullLongMetric)
+      val hashSet = buildKeyHashSet(input.toIterator)
       val broadcastedRelation = sparkContext.broadcast(hashSet)
 
       left.execute().mapPartitionsInternal { streamIter =>
-        hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
+        hashSemiJoin(streamIter, broadcastedRelation.value, numOutputRows)
       }
     } else {
       val hashRelation =
-        HashedRelation(input.toIterator, SQLMetrics.nullLongMetric, rightKeyGenerator, input.size)
+        HashedRelation(input.toIterator, rightKeyGenerator, input.size)
       val broadcastedRelation = sparkContext.broadcast(hashRelation)
 
       left.execute().mapPartitionsInternal { streamIter =>
         val hashedRelation = broadcastedRelation.value
-        hashedRelation match {
-          case unsafe: UnsafeHashedRelation =>
-            TaskContext.get().internalMetricsToAccumulators(
-              InternalAccumulator.PEAK_EXECUTION_MEMORY).add(unsafe.getUnsafeSize)
-          case _ =>
-        }
-        hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
+        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
+        hashSemiJoin(streamIter, hashedRelation, numOutputRows)
       }
     }
   }

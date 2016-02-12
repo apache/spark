@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.ProjectCollapsing
+import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -142,7 +142,15 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       Some(s"`$database`.`$table`")
 
     case Subquery(alias, child) =>
-      toSQL(child).map(childSQL => s"($childSQL) AS $alias")
+      toSQL(child).map( childSQL =>
+        child match {
+          // Parentheses is not used for persisted data source relations
+          // e.g., select x.c1 from (t1) as x inner join (t1) as y on x.c1 = y.c1
+          case Subquery(_, _: LogicalRelation | _: MetastoreRelation) =>
+            s"$childSQL AS $alias"
+          case _ =>
+            s"($childSQL) AS $alias"
+        })
 
     case Join(left, right, joinType, condition) =>
       for {
@@ -188,7 +196,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // The `WidenSetOperationTypes` analysis rule may introduce extra `Project`s over
         // `Aggregate`s to perform type casting.  This rule merges these `Project`s into
         // `Aggregate`s.
-        ProjectCollapsing,
+        CollapseProject,
 
         // Used to handle other auxiliary `Project`s added by analyzer (e.g.
         // `ResolveAggregateFunctions` rule)
