@@ -15,6 +15,7 @@ Python and R. To get started you can run the following commands
     $ sudo gem install jekyll
     $ sudo gem install jekyll-redirect-from
     $ sudo pip install Pygments
+    $ sudo gem install pygments.rb
     $ sudo pip install sphinx
     $ Rscript -e 'install.packages(c("knitr", "devtools"), repos="http://cran.stat.ucla.edu/")'
 
