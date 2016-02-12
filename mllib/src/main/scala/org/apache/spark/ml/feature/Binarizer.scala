@@ -25,10 +25,10 @@ import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
-import org.apache.spark.mllib.linalg._
 
 /**
  * :: Experimental ::
@@ -65,7 +65,7 @@ final class Binarizer(override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
-    val outputSchema = transformSchema(dataset.schema)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val schema = dataset.schema
     val inputType = schema($(inputCol)).dataType
     val td = $(threshold)
@@ -76,16 +76,13 @@ final class Binarizer(override val uid: String)
       val values = ArrayBuilder.make[Double]
 
       data.foreachActive { (index, value) =>
-        indices += index
-        values += (if (value > td) 1.0 else 0.0)
+        if (value > td) {
+          indices += index
+          values +=  1.0
+        }
       }
 
-      data match {
-        case dv: DenseVector =>
-          Vectors.dense(values.result())
-        case sv: SparseVector =>
-          Vectors.sparse(data.size, indices.result(), values.result()).compressed
-      }
+      Vectors.sparse(data.size, indices.result(), values.result()).compressed
     }
 
     val metadata = outputSchema($(outputCol)).metadata
