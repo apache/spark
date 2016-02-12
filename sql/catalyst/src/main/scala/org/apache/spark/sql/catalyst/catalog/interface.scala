@@ -172,7 +172,7 @@ case class CatalogTablePartition(spec: Catalog.TablePartitionSpec, storage: Cata
 case class CatalogTable(
     specifiedDatabase: Option[String],
     name: String,
-    tableType: String,
+    tableType: CatalogTableType,
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
     partitionColumns: Seq[CatalogColumn] = Seq.empty,
@@ -184,14 +184,26 @@ case class CatalogTable(
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None) {
 
-  require(tableType == "EXTERNAL_TABLE" || tableType == "INDEX_TABLE" ||
-    tableType == "MANAGED_TABLE" || tableType == "VIRTUAL_VIEW")
+  require(
+    tableType == CatalogTableType.EXTERNAL_TABLE ||
+    tableType == CatalogTableType.INDEX_TABLE ||
+    tableType == CatalogTableType.MANAGED_TABLE ||
+    tableType == CatalogTableType.VIRTUAL_VIEW)
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = specifiedDatabase.getOrElse(sys.error("database not resolved"))
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = s"$database.$name"
+}
+
+
+class CatalogTableType private(name: String)
+object CatalogTableType {
+  val EXTERNAL_TABLE = new CatalogTableType("EXTERNAL_TABLE")
+  val MANAGED_TABLE = new CatalogTableType("MANAGED_TABLE")
+  val INDEX_TABLE = new CatalogTableType("INDEX_TABLE")
+  val VIRTUAL_VIEW = new CatalogTableType("VIRTUAL_VIEW")
 }
 
 

@@ -279,10 +279,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     val tableType = if (isExternal) {
       tableProperties.put("EXTERNAL", "TRUE")
-      TableType.ExternalTable
+      CatalogTableType.EXTERNAL_TABLE
     } else {
       tableProperties.put("EXTERNAL", "FALSE")
-      TableType.ManagedTable
+      CatalogTableType.MANAGED_TABLE
     }
 
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
@@ -293,7 +293,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       CatalogTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        tableType = tableType.toString,
+        tableType = tableType,
         schema = Nil,
         storage = CatalogStorageFormat(
           locationUri = None,
@@ -315,7 +315,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       CatalogTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
-        tableType = tableType.toString,
+        tableType = tableType,
         schema = relation.schema.map { f => CatalogColumn(f.name, f.dataType) },
         storage = CatalogStorageFormat(
           locationUri = Some(relation.paths.head),
@@ -422,7 +422,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
       alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
-    } else if (table.tableType == TableType.VirtualView) {
+    } else if (table.tableType == CatalogTableType.VIRTUAL_VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
         // because hive use things like `_c0` to build the expanded text

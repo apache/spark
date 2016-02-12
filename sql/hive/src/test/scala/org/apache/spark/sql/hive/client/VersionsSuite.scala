@@ -126,7 +126,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         CatalogTable(
           specifiedDatabase = Option("default"),
           name = "src",
-          tableType = TableType.ManagedTable.toString,
+          tableType = CatalogTableType.MANAGED_TABLE,
           schema = Seq(CatalogColumn("key", IntegerType)),
           storage = CatalogStorageFormat(
             locationUri = None,

@@ -66,7 +66,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
     CatalogTable(
       specifiedDatabase = Some("db"),
       name = name,
-      tableType = "EXTERNAL_TABLE",
+      tableType = CatalogTableType.EXTERNAL_TABLE,
       storage = CatalogStorageFormat(
         locationUri = Some("just works"),
         inputFormat = Some("this part will change"),

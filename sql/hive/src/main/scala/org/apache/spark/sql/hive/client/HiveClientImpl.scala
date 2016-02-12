@@ -295,12 +295,11 @@ private[hive] class HiveClientImpl(
       CatalogTable(
         specifiedDatabase = Option(h.getDbName),
         name = h.getTableName,
-        // TODO(andrew): make this prettier
         tableType = h.getTableType match {
-          case HiveTableType.MANAGED_TABLE => TableType.ManagedTable.toString
-          case HiveTableType.EXTERNAL_TABLE => TableType.ExternalTable.toString
-          case HiveTableType.VIRTUAL_VIEW => TableType.VirtualView.toString
-          case HiveTableType.INDEX_TABLE => TableType.IndexTable.toString
+          case HiveTableType.EXTERNAL_TABLE => CatalogTableType.EXTERNAL_TABLE
+          case HiveTableType.MANAGED_TABLE => CatalogTableType.MANAGED_TABLE
+          case HiveTableType.INDEX_TABLE => CatalogTableType.INDEX_TABLE
+          case HiveTableType.VIRTUAL_VIEW => CatalogTableType.VIRTUAL_VIEW
         },
         schema = h.getCols.asScala.map(fromHiveColumn),
         partitionColumns = h.getPartCols.asScala.map(fromHiveColumn),
@@ -342,12 +341,11 @@ private[hive] class HiveClientImpl(
 
   private def toQlTable(table: CatalogTable): HiveTable = {
     val qlTable = new HiveTable(table.database, table.name)
-    // TODO(andrew): clean this up
     qlTable.setTableType(table.tableType match {
-      case "MANAGED_TABLE" => HiveTableType.MANAGED_TABLE
-      case "EXTERNAL_TABLE" => HiveTableType.EXTERNAL_TABLE
-      case "VIRTUAL_TABLE" => HiveTableType.VIRTUAL_VIEW
-      case "INDEX_TABLE" => HiveTableType.INDEX_TABLE
+      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE
+      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
+      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
     })
     qlTable.setFields(table.schema.map(toHiveColumn).asJava)
     qlTable.setPartCols(table.partitionColumns.map(toHiveColumn).asJava)

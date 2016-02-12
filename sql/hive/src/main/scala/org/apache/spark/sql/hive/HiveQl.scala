@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.ParseUtils._
@@ -205,7 +205,7 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     val tableDesc = CatalogTable(
       specifiedDatabase = dbName,
       name = viewName,
-      tableType = TableType.VirtualView.toString,
+      tableType = CatalogTableType.VIRTUAL_VIEW,
       schema = schema,
       storage = CatalogStorageFormat(
         locationUri = None,
@@ -377,9 +377,9 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
           name = tblName,
           tableType =
             if (externalTable.isDefined) {
-              TableType.ExternalTable.toString
+              CatalogTableType.EXTERNAL_TABLE
             } else {
-              TableType.ManagedTable.toString
+              CatalogTableType.MANAGED_TABLE
             },
           schema = Seq.empty[CatalogColumn],
           storage = CatalogStorageFormat(

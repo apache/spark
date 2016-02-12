@@ -25,16 +25,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, Cat
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
-// TODO(andrew): don't do enums. They're gross.
-private[hive] object TableType extends Enumeration {
-  type TableType = Value
-  val ExternalTable = Value("EXTERNAL_TABLE")
-  val IndexTable = Value("INDEX_TABLE")
-  val ManagedTable = Value("MANAGED_TABLE")
-  val VirtualView = Value("VIRTUAL_VIEW")
-}
-
-
 /**
  * An externally visible interface to the Hive client.  This interface is shared across both the
  * internal and external classloaders for a given version of Hive and thus must expose only

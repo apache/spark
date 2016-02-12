@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{QueryTest, Row, SaveMode, SQLConf}
-import org.apache.spark.sql.hive.client.TableType.{ExternalTable, ManagedTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
@@ -88,7 +88,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(hiveTable.storage.serde === Some(serde))
 
         assert(hiveTable.partitionColumns.isEmpty)
-        assert(hiveTable.tableType === ManagedTable.toString)
+        assert(hiveTable.tableType === CatalogTableType.MANAGED_TABLE)
 
         val columns = hiveTable.schema
         assert(columns.map(_.name) === Seq("d1", "d2"))
@@ -119,7 +119,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.outputFormat === Some(outputFormat))
           assert(hiveTable.storage.serde === Some(serde))
 
-          assert(hiveTable.tableType === ExternalTable.toString)
+          assert(hiveTable.tableType === CatalogTableType.EXTERNAL_TABLE)
           assert(hiveTable.storage.locationUri ===
             Some(path.toURI.toString.stripSuffix(File.separator)))
 
@@ -151,7 +151,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(hiveTable.storage.serde === Some(serde))
 
           assert(hiveTable.partitionColumns.isEmpty)
-          assert(hiveTable.tableType === ExternalTable.toString)
+          assert(hiveTable.tableType === CatalogTableType.EXTERNAL_TABLE)
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))

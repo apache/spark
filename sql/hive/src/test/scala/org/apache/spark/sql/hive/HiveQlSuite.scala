@@ -22,11 +22,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.catalyst.plans.logical.Generate
-import org.apache.spark.sql.hive.client.TableType.{ExternalTable, ManagedTable}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -58,7 +57,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists)
     assert(desc.specifiedDatabase == Some("mydb"))
     assert(desc.name == "page_view")
-    assert(desc.tableType == ExternalTable.toString)
+    assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
       CatalogColumn("viewtime", IntegerType) ::
@@ -104,7 +103,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists)
     assert(desc.specifiedDatabase == Some("mydb"))
     assert(desc.name == "page_view")
-    assert(desc.tableType == ExternalTable.toString)
+    assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
       CatalogColumn("viewtime", IntegerType) ::
@@ -131,7 +130,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists == false)
     assert(desc.specifiedDatabase == None)
     assert(desc.name == "page_view")
-    assert(desc.tableType == ManagedTable.toString)
+    assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
@@ -166,7 +165,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists == false)
     assert(desc.specifiedDatabase == None)
     assert(desc.name == "ctas2")
-    assert(desc.tableType == ManagedTable.toString)
+    assert(desc.tableType == CatalogTableType.MANAGED_TABLE)
     assert(desc.storage.locationUri == None)
     assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
