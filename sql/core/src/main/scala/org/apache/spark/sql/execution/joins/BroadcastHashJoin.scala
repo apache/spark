@@ -163,6 +163,7 @@ case class BroadcastHashJoin(
       case BuildRight => input ++ buildColumns
     }
 
+    val numOutput = metricTerm(ctx, "numOutputRows")
     val outputCode = if (condition.isDefined) {
       // filter the output via condition
       ctx.currentVars = resultVars
@@ -170,11 +171,15 @@ case class BroadcastHashJoin(
       s"""
          | ${ev.code}
          | if (!${ev.isNull} && ${ev.value}) {
+         |   $numOutput.add(1);
          |   ${consume(ctx, resultVars)}
          | }
        """.stripMargin
     } else {
-      consume(ctx, resultVars)
+      s"""
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
+       """.stripMargin
     }
 
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
