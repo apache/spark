@@ -124,6 +124,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
+  // This method is factored out for testability
   protected def getShuffleClient(): MesosExternalShuffleClient = {
     new MesosExternalShuffleClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
@@ -518,10 +519,11 @@ private[spark] class CoarseMesosSchedulerBackend(
    * Called when a slave is lost or a Mesos task finished. Updates local view on
    * what tasks are running. It also notifies the driver that an executor was removed.
    */
-  private def executorTerminated(d: SchedulerDriver,
-                                 slaveId: String,
-                                 taskId: String,
-                                 reason: String): Unit = {
+  private def executorTerminated(
+      d: SchedulerDriver,
+      slaveId: String,
+      taskId: String,
+      reason: String): Unit = {
     stateLock.synchronized {
       removeExecutor(taskId, SlaveLost(reason))
       slaves(slaveId).taskIDs.remove(taskId)
