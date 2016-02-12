@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.util.random.RandomSampler
 
 /**
  * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this
@@ -79,6 +80,15 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case p: Limit =>
       s"${toSQL(p.child)} LIMIT ${p.limitExpr.sql}"
+
+    // TABLESAMPLE is part of tableSource clause in the parser,
+    // and thus we must handle it with subquery.
+    case Sample(lb, ub, withReplacement, _, child @ Subquery(alias, grandChild))
+      if !withReplacement && lb <= (ub + RandomSampler.roundingEpsilon) =>
+      val fraction = math.min(100, math.max(0, (ub - lb) * 100))
+      val aliasName = if (grandChild.isInstanceOf[Subquery]) alias else ""
+      val plan = if (grandChild.isInstanceOf[Subquery]) grandChild else child
+      s"${toSQL(plan)} TABLESAMPLE($fraction PERCENT) $aliasName"
 
     case p: Filter =>
       val whereOrHaving = p.child match {
@@ -203,7 +213,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           wrapChildWithSubquery(plan)
 
         case plan @ Project(_,
-          _: Subquery | _: Filter | _: Join | _: MetastoreRelation | OneRowRelation | _: Limit
+          _: Subquery
+            | _: Filter
+            | _: Join
+            | _: MetastoreRelation
+            | OneRowRelation
+            | _: Limit
+            | _: Sample
         ) => plan
 
         case plan: Project =>
