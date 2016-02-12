@@ -606,7 +606,7 @@ class Analyzer(
           // all the missing attributes should be grouping expressions
           // TODO: push down AggregateExpression
           missingAttrs.foreach { attr =>
-            if (!a.groupingExpressions.contains(attr)) {
+            if (!a.groupingExpressions.exists(_.semanticEquals(attr))) {
               throw new AnalysisException(s"Can't add $attr to ${a.simpleString}")
             }
           }
