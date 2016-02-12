@@ -96,37 +96,45 @@ case class Expand(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val uniqExprs: IndexedSeq[Set[Expression]] = output.indices.map { i =>
+    // Some columns have the same expression in all the projections, so collect the unique
+    // expressions.
+    val columnUniqueExpressions: IndexedSeq[Set[Expression]] = output.indices.map { i =>
       projections.map(p => p(i)).toSet
     }
 
+    // Create the variables for output
     ctx.currentVars = input
-    val resultVars = uniqExprs.zipWithIndex.map { case (exprs, i) =>
-      val expr = exprs.head
+    val resultVars = columnUniqueExpressions.zipWithIndex.map { case (exprs, i) =>
+      val firstExpr = exprs.head
       if (exprs.size == 1) {
-        // it's common to have same expression for some columns in all the projections, for example,
-        // GroupingSet will copy all the output from child as the first part of output.
-        // We should only generate the columns once.
-        BindReferences.bindReference(expr, child.output).gen(ctx)
+        // The value of this column will not change, use the variables directly.
+        BindReferences.bindReference(firstExpr, child.output).gen(ctx)
       } else {
+        // The value of this column will change, so create new variables for them, because they
+        // could be constants in some expressions.
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
-        val code =
-          s"""
-             |boolean $isNull = true;
-             |${ctx.javaType(expr.dataType)} $value = ${ctx.defaultValue(expr.dataType)};
+        val code = s"""
+           |boolean $isNull = true;
+           |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
          """.stripMargin
         ExprCode(code, isNull, value)
       }
     }
 
-    // In order to prevent code exploration, we can't call `consume()` many times, so we call
-    // that in a loop, and use swith/case to select the projections.
-    val projectCodes = projections.zipWithIndex.map { case (exprs, i) =>
-      val need = exprs.zipWithIndex.filter { case (e, j) =>
-        uniqExprs(j).size > 1
+    // The source code returned by `consume()` could be huge, we can't call `consume()` for each of
+    // the projections, otherwise the generated code will have lots of duplicated codes. Instead,
+    // we should generate a loop for all the projections, use switch/case to select a projection
+    // based on the loop index, then only call `consume()` once.
+    //
+    // These output variables will be created before the loop, their values will be updated in
+    // switch/case inside the loop.
+    val cases = projections.zipWithIndex.map { case (exprs, i) =>
+      val changes: Seq[(Expression, Int)] = exprs.zipWithIndex.filter { case (e, j) =>
+        // the column with single unique expression does not need to be updated inside the loop.
+        columnUniqueExpressions(j).size > 1
       }
-      val updates = need.map { case (e, j) =>
+      val updates = changes.map { case (e, j) =>
         val ev = BindReferences.bindReference(e, child.output).gen(ctx)
         s"""
            |${ev.code}
@@ -141,13 +149,15 @@ case class Expand(
        """.stripMargin
     }
 
+    val numOutput = metricTerm(ctx, "numOutputRows")
     val i = ctx.freshName("i")
     s"""
        |${resultVars.map(_.code).mkString("\n").trim}
        |for (int $i = 0; $i < ${projections.length}; $i ++) {
        |  switch ($i) {
-       |    ${projectCodes.mkString("\n").trim}
+       |    ${cases.mkString("\n").trim}
        |  }
+       |  $numOutput.add(1);
        |  ${consume(ctx, resultVars)}
        |}
      """.stripMargin
