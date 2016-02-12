@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.io.ObjectInputStream
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
@@ -148,10 +151,15 @@ class LazilyGenerateOrdering(val ordering: Seq[SortOrder]) extends Ordering[Inte
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
   @transient
-  lazy val generatedOrdering = GenerateOrdering.generate(ordering)
+  private[this] var generatedOrdering = GenerateOrdering.generate(ordering)
 
   def compare(a: InternalRow, b: InternalRow): Int = {
     generatedOrdering.compare(a, b)
+  }
+
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    in.defaultReadObject()
+    generatedOrdering = GenerateOrdering.generate(ordering)
   }
 }
 
