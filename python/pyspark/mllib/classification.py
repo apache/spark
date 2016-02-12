@@ -294,11 +294,11 @@ class LogisticRegressionWithSGD(object):
           (default: 0.01)
         :param regType:
           The type of regularizer used for training our model.
-          :Allowed values:
+          Allowed values:
+
             - "l1" for using L1 regularization
-            - "l2" for using L2 regularization
+            - "l2" for using L2 regularization (default)
             - None for no regularization
-          (default: "l2")
         :param intercept:
           Boolean parameter which indicates the use or not of the
           augmented representation for training data (i.e., whether bias
@@ -344,11 +344,11 @@ class LogisticRegressionWithLBFGS(object):
           (default: 0.01)
         :param regType:
           The type of regularizer used for training our model.
-          :Allowed values:
+          Allowed values:
+
             - "l1" for using L1 regularization
-            - "l2" for using L2 regularization
+            - "l2" for using L2 regularization (default)
             - None for no regularization
-          (default: "l2")
         :param intercept:
           Boolean parameter which indicates the use or not of the
           augmented representation for training data (i.e., whether bias
@@ -524,11 +524,11 @@ class SVMWithSGD(object):
           (default: None)
         :param regType:
           The type of regularizer used for training our model.
-          :Allowed values:
+          Allowed values:
+
             - "l1" for using L1 regularization
-            - "l2" for using L2 regularization
+            - "l2" for using L2 regularization (default)
             - None for no regularization
-          (default: "l2")
         :param intercept:
           Boolean parameter which indicates the use or not of the
           augmented representation for training data (i.e. whether bias
