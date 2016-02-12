@@ -2105,6 +2105,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
   }
 
+  test("uncorrelated scalar subquery") {
+    assertResult(Array(Row(1))) {
+      sql("select (select 1 as b) as b").collect()
+    }
+
+    assertResult(Array(Row(1))) {
+      sql("with t2 as (select 1 as b, 2 as c) " +
+        "select a from (select 1 as a union all select 2 as a) t " +
+        "where a = (select max(b) from t2) ").collect()
+    }
+  }
+
   test("SPARK-13056: Null in map value causes NPE") {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {

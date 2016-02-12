@@ -201,4 +201,12 @@ class CatalystQlSuite extends PlanTest {
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
   }
+
+  test("subquery") {
+    parser.parsePlan("select (select max(b) from s) ss from t")
+    parser.parsePlan("select * from t where a = (select b from s)")
+    parser.parsePlan("select * from t where a > (select b from s)")
+    parser.parsePlan("select * from t group by g having a = (select b from s)")
+    parser.parsePlan("select * from t group by g having a > (select b from s)")
+  }
 }
