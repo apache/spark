@@ -38,11 +38,25 @@ You can start the history server by executing:
 
     ./sbin/start-history-server.sh
 
-When using the file-system provider class (see spark.history.provider below), the base logging
-directory must be supplied in the <code>spark.history.fs.logDirectory</code> configuration option,
-and should contain sub-directories that each represents an application's event logs. This creates a
-web interface at `http://<server-url>:18080` by default. The history server can be configured as
-follows:
+This creates a web interface at `http://<server-url>:18080` by default, listing incomplete
+and completed applications and attempts, and allowing them to be viewed
+
+When using the file-system provider class (see `spark.history.provider` below), the base logging
+directory must be supplied in the `spark.history.fs.logDirectory` configuration option,
+and should contain sub-directories that each represents an application's event logs.
+ 
+The spark jobs themselves must be configured to log events, and to log them to the same shared,
+writeable directory. For example, if the server was configured with a log directory of
+`hdfs://namenode/shared/spark-logs`, then the client-side options would be:
+
+```
+spark.eventLog.enabled true
+spark.eventLog.dir hdfs://namenode/shared/spark-logs
+```
+ 
+The history server can be configured as follows:
+
+### Environment Variables
 
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
@@ -69,11 +83,13 @@ follows:
   </tr>
 </table>
 
+### Spark configuration options
+
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td>spark.history.provider</td>
-    <td>org.apache.spark.deploy.history.FsHistoryProvider</td>
+    <td><code>org.apache.spark.deploy.history.FsHistoryProvider</code></td>
     <td>Name of the class implementing the application history backend. Currently there is only
     one implementation, provided by Spark, which looks for application logs stored in the
     file system.</td>
@@ -82,15 +98,21 @@ follows:
     <td>spark.history.fs.logDirectory</td>
     <td>file:/tmp/spark-events</td>
     <td>
-     Directory that contains application event logs to be loaded by the history server
+    For the filesystem history provider, the URL to the directory containing application event
+    logs to load. This can be a local <code>file://</code> path,
+    an HDFS path <code>hdfs://namenode/shared/spark-logs</code>
+    or that of an alternative filesystem supported by the Hadoop APIs.
     </td>
   </tr>
   <tr>
     <td>spark.history.fs.update.interval</td>
     <td>10s</td>
     <td>
-      The period at which information displayed by this history server is updated.
-      Each update checks for any changes made to the event logs in persisted storage.
+      The period at which the the filesystem history provider checks for new or
+      updated logs in the log directory. A shorter interval detects new applications faster,
+      at the expense of more server load re-reading updated applications.
+      As soon as an update has completed, listings of the completed and incomplete applications
+      will reflect the changes.
     </td>
   </tr>
   <tr>
@@ -112,7 +134,7 @@ follows:
     <td>spark.history.kerberos.enabled</td>
     <td>false</td>
     <td>
-      Indicates whether the history server should use kerberos to login. This is useful
+      Indicates whether the history server should use kerberos to login. This is required
       if the history server is accessing HDFS files on a secure Hadoop cluster. If this is 
       true, it uses the configs <code>spark.history.kerberos.principal</code> and
       <code>spark.history.kerberos.keytab</code>. 
@@ -156,15 +178,15 @@ follows:
     <td>spark.history.fs.cleaner.interval</td>
     <td>1d</td>
     <td>
-      How often the job history cleaner checks for files to delete.
-      Files are only deleted if they are older than spark.history.fs.cleaner.maxAge.
+      How often the filesystem job history cleaner checks for files to delete.
+      Files are only deleted if they are older than <code>spark.history.fs.cleaner.maxAge</code>
     </td>
   </tr>
   <tr>
     <td>spark.history.fs.cleaner.maxAge</td>
     <td>7d</td>
     <td>
-      Job history files older than this will be deleted when the history cleaner runs.
+      Job history files older than this will be deleted when the filesystem history cleaner runs.
     </td>
   </tr>
 </table>
@@ -172,7 +194,25 @@ follows:
 Note that in all of these UIs, the tables are sortable by clicking their headers,
 making it easy to identify slow tasks, data skew, etc.
 
-Note that the history server only displays completed Spark jobs. One way to signal the completion of a Spark job is to stop the Spark Context explicitly (`sc.stop()`), or in Python using the `with SparkContext() as sc:` to handle the Spark Context setup and tear down, and still show the job history on the UI.
+Note
+
+1. The history server displays both completed and incomplete Spark jobs. If an application makes
+multiple attempts after failures, the failed attempts will be displayed, as well as any ongoing
+incomplete attempt or the final successful attempt.
+
+2. Incomplete applications are only updated intermittently. The time between updates is defined
+by the interval between checks for changed files (`spark.history.fs.update.interval`).
+On larger clusters the update interval may be set to large values.
+The way to view a running application is actually to view its own web UI.
+
+3. Applications which exited without registering themselves as completed will be listed
+as incomplete —even though they are no longer running. This can happen if an application
+crashes.
+
+2. One way to signal the completion of a Spark job is to stop the Spark Context
+explicitly (`sc.stop()`), or in Python using the `with SparkContext() as sc:` construct
+to handle the Spark Context setup and tear down.
+
 
 ## REST API
 
@@ -249,7 +289,7 @@ These endpoints have been strongly versioned to make it easier to develop applic
 * New endpoints may be added
 * New fields may be added to existing endpoints
 * New versions of the api may be added in the future at a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
-* Api versions may be dropped, but only after at least one minor release of co-existing with a new api version
+* Api versions may be dropped, but only after at least one minor release of co-existing with a new api version.
 
 Note that even when examining the UI of a running applications, the `applications/[app-id]` portion is
 still required, though there is only one application available.  Eg. to see the list of jobs for the
