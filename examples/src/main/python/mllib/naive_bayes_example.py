@@ -24,7 +24,6 @@ Usage:
 
 from __future__ import print_function
 
-from os import path
 import shutil
 
 from pyspark import SparkContext
@@ -45,12 +44,8 @@ if __name__ == "__main__":
 
     sc = SparkContext(appName="PythonNaiveBayesExample")
 
-    WORK_DIR = './'
-
     # $example on$
-    data = sc.textFile(path.join(WORK_DIR,
-                                 'data/mllib/sample_naive_bayes_data.txt')
-                       ).map(parseLine)
+    data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
 
     # Split data aproximately into training (60%) and test (40%)
     training, test = data.randomSplit([0.6, 0.4], seed=0)
@@ -61,17 +56,15 @@ if __name__ == "__main__":
     # Make prediction and test accuracy.
     predictionAndLabel = test.map(lambda p: (model.predict(p.features), p.label))
     accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
-    print('\n\tmodel accuracy %.4f\n' % accuracy)
+    print('model accuracy {}'.format(accuracy))
 
     # Save and load model
-    output_dir = '/tmp/myNaiveBayesModel'
+    output_dir = 'target/tmp/myNaiveBayesModel'
     shutil.rmtree(output_dir, ignore_errors=True)
     model.save(sc, output_dir)
-    print('\n\tSaved to path %s\n' % output_dir)
     sameModel = NaiveBayesModel.load(sc, output_dir)
-    print('\n\tLoaded from path %s\n' % output_dir)
     predictionAndLabel = test.map(lambda p: (sameModel.predict(p.features), p.label))
     accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
-    print('\n\tsameModel accuracy %.4f\n' % accuracy)
+    print('sameModel accuracy {}'.format(accuracy))
 
     # $example off$
