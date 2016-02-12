@@ -1811,4 +1811,16 @@ public class JavaAPISuite implements Serializable {
         conf.get("spark.kryo.classesToRegister"));
   }
 
+  @Test
+  public void testGetPersistentRDDs() {
+    java.util.Map<Integer, JavaRDD<?>> cachedRddsMap = sc.getPersistentRDDs();
+    Assert.assertTrue(cachedRddsMap.isEmpty());
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b")).setName("RDD1").cache();
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("c", "d")).setName("RDD2").cache();
+    cachedRddsMap = sc.getPersistentRDDs();
+    Assert.assertEquals(2, cachedRddsMap.size());
+    Assert.assertEquals("RDD1", cachedRddsMap.get(0).name());
+    Assert.assertEquals("RDD2", cachedRddsMap.get(1).name());
+  }
+
 }

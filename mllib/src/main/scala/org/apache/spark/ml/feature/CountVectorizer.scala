@@ -210,6 +210,7 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
   override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sqlContext.sparkContext.broadcast(dict))
