@@ -28,7 +28,6 @@ private[storage] class BlockManagerManagedBuffer(
     buf: ByteBuffer) extends NioManagedBuffer(buf) {
 
   override def retain(): ManagedBuffer = {
-    println("RETAIN")
     super.retain()
     val locked = blockManager.blockInfoManager.getAndLockForReading(blockId, blocking = false)
     assert(locked.isDefined)
@@ -36,7 +35,6 @@ private[storage] class BlockManagerManagedBuffer(
   }
 
   override def release(): ManagedBuffer = {
-    println("RELEASE")
     blockManager.releaseLock(blockId)
     super.release()
   }
