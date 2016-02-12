@@ -335,7 +335,9 @@ class CommandBuilderUtils {
   }
 
   /**
-   * Get the major version of the java.version string supplied.
+   * Get the major version of the java version string supplied. This method
+   * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
+   * version strings such as 1.7.0_79
    */
   static int javaMajorVersion(String javaVersion) {
     String[] version = javaVersion.split("[+.\\-]+");
