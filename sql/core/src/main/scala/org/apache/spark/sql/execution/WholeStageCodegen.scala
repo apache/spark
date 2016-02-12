@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, LongSQLMetricValue, SQLMetric}
 
 /**
   * An interface for those physical operators that support codegen.
@@ -40,6 +40,19 @@ trait CodegenSupport extends SparkPlan {
     case _: TungstenAggregate => "agg"
     case _: BroadcastHashJoin => "bhj"
     case _ => nodeName.toLowerCase
+  }
+
+  /**
+    * Creates a metric using the specified name.
+    *
+    * @return name of the variable representing the metric
+    */
+  def metricTerm(ctx: CodegenContext, name: String): String = {
+    val metric = ctx.addReferenceObj(name, longMetric(name))
+    val value = ctx.freshName("metricValue")
+    val cls = classOf[LongSQLMetricValue].getName
+    ctx.addMutableState(cls, value, s"$value = ($cls) $metric.localValue();")
+    value
   }
 
   /**
@@ -314,6 +327,10 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
          """.stripMargin
       }
     }
+  }
+
+  private[sql] override def resetMetrics(): Unit = {
+    plan.foreach(_.resetMetrics())
   }
 
   override def generateTreeString(
