@@ -94,16 +94,19 @@ class LogisticRegressionModel(LinearClassificationModel):
     Classification model trained using Multinomial/Binary Logistic
     Regression.
 
-    :param weights: Weights computed for every feature.
-    :param intercept: Intercept computed for this model. (Only used
-            in Binary Logistic Regression. In Multinomial Logistic
-            Regression, the intercepts will not be a single value,
-            so the intercepts will be part of the weights.)
-    :param numFeatures: the dimension of the features.
-    :param numClasses: the number of possible outcomes for k classes
-            classification problem in Multinomial Logistic Regression.
-            By default, it is binary logistic regression so numClasses
-            will be set to 2.
+    :param weights:
+      Weights computed for every feature.
+    :param intercept:
+      Intercept computed for this model. (Only used in Binary Logistic
+      Regression. In Multinomial Logistic Regression, the intercepts will
+      not bea single value, so the intercepts will be part of the
+      weights.)
+    :param numFeatures:
+      The dimension of the features.
+    :param numClasses:
+      The number of possible outcomes for k classes classification problem
+      in Multinomial Logistic Regression. By default, it is binary
+      logistic regression so numClasses will be set to 2.
 
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 1.0]),
@@ -189,8 +192,8 @@ class LogisticRegressionModel(LinearClassificationModel):
     @since('1.4.0')
     def numClasses(self):
         """
-        Number of possible outcomes for k classes classification problem in Multinomial
-        Logistic Regression.
+        Number of possible outcomes for k classes classification problem
+        in Multinomial Logistic Regression.
         """
         return self._numClasses
 
@@ -272,37 +275,42 @@ class LogisticRegressionWithSGD(object):
         """
         Train a logistic regression model on the given data.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.01).
-        :param regType:           The type of regularizer used for
-                                  training our model.
+        :param data:
+          The training data, an RDD of LabeledPoint.
+        :param iterations:
+          The number of iterations.
+          (default: 100)
+        :param step:
+          The step parameter used in SGD.
+          (default: 1.0)
+        :param miniBatchFraction:
+          Fraction of data to be used for each SGD iteration.
+          (default: 1.0)
+        :param initialWeights:
+          The initial weights.
+          (default: None)
+        :param regParam:
+          The regularizer parameter.
+          (default: 0.01)
+        :param regType:
+          The type of regularizer used for training our model.
+          Allowed values:
 
-                                  :Allowed values:
-                                     - "l1" for using L1 regularization
-                                     - "l2" for using L2 regularization
-                                     - None for no regularization
-
-                                     (default: "l2")
-
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
-        :param convergenceTol:    A condition which decides iteration termination.
-                                  (default: 0.001)
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization (default)
+            - None for no regularization
+        :param intercept:
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e., whether bias
+          features are activated or not).
+          (default: False)
+        :param validateData:
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
+          (default: True)
+        :param convergenceTol:
+          A condition which decides iteration termination.
+          (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
@@ -323,38 +331,43 @@ class LogisticRegressionWithLBFGS(object):
         """
         Train a logistic regression model on the given data.
 
-        :param data:           The training data, an RDD of
-                               LabeledPoint.
-        :param iterations:     The number of iterations
-                               (default: 100).
-        :param initialWeights: The initial weights (default: None).
-        :param regParam:       The regularizer parameter
-                               (default: 0.01).
-        :param regType:        The type of regularizer used for
-                               training our model.
+        :param data:
+          The training data, an RDD of LabeledPoint.
+        :param iterations:
+          The number of iterations.
+          (default: 100)
+        :param initialWeights:
+          The initial weights.
+          (default: None)
+        :param regParam:
+          The regularizer parameter.
+          (default: 0.01)
+        :param regType:
+          The type of regularizer used for training our model.
+          Allowed values:
 
-                               :Allowed values:
-                                 - "l1" for using L1 regularization
-                                 - "l2" for using L2 regularization
-                                 - None for no regularization
-
-                                 (default: "l2")
-
-        :param intercept:      Boolean parameter which indicates the
-                               use or not of the augmented representation
-                               for training data (i.e. whether bias
-                               features are activated or not,
-                               default: False).
-        :param corrections:    The number of corrections used in the
-                               LBFGS update (default: 10).
-        :param tolerance:      The convergence tolerance of iterations
-                               for L-BFGS (default: 1e-4).
-        :param validateData:   Boolean parameter which indicates if the
-                               algorithm should validate data before
-                               training. (default: True)
-        :param numClasses:     The number of classes (i.e., outcomes) a
-                               label can take in Multinomial Logistic
-                               Regression (default: 2).
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization (default)
+            - None for no regularization
+        :param intercept:
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e., whether bias
+          features are activated or not).
+          (default: False)
+        :param corrections:
+          The number of corrections used in the LBFGS update.
+          (default: 10)
+        :param tolerance:
+          The convergence tolerance of iterations for L-BFGS.
+          (default: 1e-4)
+        :param validateData:
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
+          (default: True)
+        :param numClasses:
+          The number of classes (i.e., outcomes) a label can take in
+          Multinomial Logistic Regression.
+          (default: 2)
 
         >>> data = [
         ...     LabeledPoint(0.0, [0.0, 1.0]),
@@ -387,8 +400,10 @@ class SVMModel(LinearClassificationModel):
     """
     Model for Support Vector Machines (SVMs).
 
-    :param weights: Weights computed for every feature.
-    :param intercept: Intercept computed for this model.
+    :param weights:
+      Weights computed for every feature.
+    :param intercept:
+      Intercept computed for this model.
 
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -490,37 +505,42 @@ class SVMWithSGD(object):
         """
         Train a support vector machine on the given data.
 
-        :param data:              The training data, an RDD of
-                                  LabeledPoint.
-        :param iterations:        The number of iterations
-                                  (default: 100).
-        :param step:              The step parameter used in SGD
-                                  (default: 1.0).
-        :param regParam:          The regularizer parameter
-                                  (default: 0.01).
-        :param miniBatchFraction: Fraction of data to be used for each
-                                  SGD iteration (default: 1.0).
-        :param initialWeights:    The initial weights (default: None).
-        :param regType:           The type of regularizer used for
-                                  training our model.
+        :param data:
+          The training data, an RDD of LabeledPoint.
+        :param iterations:
+          The number of iterations.
+          (default: 100)
+        :param step:
+          The step parameter used in SGD.
+          (default: 1.0)
+        :param regParam:
+          The regularizer parameter.
+          (default: 0.01)
+        :param miniBatchFraction:
+          Fraction of data to be used for each SGD iteration.
+          (default: 1.0)
+        :param initialWeights:
+          The initial weights.
+          (default: None)
+        :param regType:
+          The type of regularizer used for training our model.
+          Allowed values:
 
-                                  :Allowed values:
-                                     - "l1" for using L1 regularization
-                                     - "l2" for using L2 regularization
-                                     - None for no regularization
-
-                                     (default: "l2")
-
-        :param intercept:         Boolean parameter which indicates the
-                                  use or not of the augmented representation
-                                  for training data (i.e. whether bias
-                                  features are activated or not,
-                                  default: False).
-        :param validateData:      Boolean parameter which indicates if
-                                  the algorithm should validate data
-                                  before training. (default: True)
-        :param convergenceTol:    A condition which decides iteration termination.
-                                  (default: 0.001)
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization (default)
+            - None for no regularization
+        :param intercept:
+          Boolean parameter which indicates the use or not of the
+          augmented representation for training data (i.e. whether bias
+          features are activated or not).
+          (default: False)
+        :param validateData:
+          Boolean parameter which indicates if the algorithm should
+          validate data before training.
+          (default: True)
+        :param convergenceTol:
+          A condition which decides iteration termination.
+          (default: 0.001)
         """
         def train(rdd, i):
             return callMLlibFunc("trainSVMModelWithSGD", rdd, int(iterations), float(step),
@@ -536,11 +556,13 @@ class NaiveBayesModel(Saveable, Loader):
     """
     Model for Naive Bayes classifiers.
 
-    :param labels: list of labels.
-    :param pi: log of class priors, whose dimension is C,
-            number of labels.
-    :param theta: log of class conditional probabilities, whose
-            dimension is C-by-D, where D is number of features.
+    :param labels:
+      List of labels.
+    :param pi:
+      Log of class priors, whose dimension is C, number of labels.
+    :param theta:
+      Log of class conditional probabilities, whose dimension is C-by-D,
+      where D is number of features.
 
     >>> data = [
     ...     LabeledPoint(0.0, [0.0, 0.0]),
@@ -639,8 +661,11 @@ class NaiveBayes(object):
         it can also be used as Bernoulli NB (U{http://tinyurl.com/p7c96j6}).
         The input feature values must be nonnegative.
 
-        :param data: RDD of LabeledPoint.
-        :param lambda_: The smoothing parameter (default: 1.0).
+        :param data:
+          RDD of LabeledPoint.
+        :param lambda_:
+          The smoothing parameter.
+          (default: 1.0)
         """
         first = data.first()
         if not isinstance(first, LabeledPoint):
@@ -652,9 +677,9 @@ class NaiveBayes(object):
 @inherit_doc
 class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Train or predict a logistic regression model on streaming data. Training uses
-    Stochastic Gradient Descent to update the model based on each new batch of
-    incoming data from a DStream.
+    Train or predict a logistic regression model on streaming data.
+    Training uses Stochastic Gradient Descent to update the model based on
+    each new batch of incoming data from a DStream.
 
     Each batch of data is assumed to be an RDD of LabeledPoints.
     The number of data points per batch can vary, but the number
