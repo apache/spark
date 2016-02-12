@@ -20,7 +20,7 @@ package org.apache.spark.ml.api.r
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
-import org.apache.spark.ml.clustering.KMeans
+import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
@@ -58,12 +58,12 @@ private[r] object SparkRWrappers {
       maxIter: Double,
       k: Double,
       columns: Array[String]): PipelineModel = {
-    val assembler = new VectorAssembler().setInputCols(columns).setOutputCol("temp-features")
+    val assembler = new VectorAssembler().setInputCols(columns)
     val kMeans = new KMeans()
       .setInitMode(initMode)
       .setMaxIter(maxIter.toInt)
       .setK(k.toInt)
-      .setFeaturesCol("temp-features")
+      .setFeaturesCol(assembler.getOutputCol)
     val pipeline = new Pipeline().setStages(Array(assembler, kMeans))
     pipeline.fit(df)
   }
@@ -89,6 +89,8 @@ private[r] object SparkRWrappers {
           m.coefficients.toArray
         }
       }
+      case m: KMeansModel =>
+        m.clusterCenters.flatMap(_.toArray)
     }
   }
 
@@ -99,6 +101,12 @@ private[r] object SparkRWrappers {
       case m: LogisticRegressionModel =>
         throw new UnsupportedOperationException(
           "No deviance residuals available for LogisticRegressionModel")
+    }
+  }
+
+  def getKMeansModelSize(model: PipelineModel): Int = {
+    model.stages.last match {
+      case m: KMeansModel => m.getK
     }
   }
 
@@ -120,6 +128,10 @@ private[r] object SparkRWrappers {
         } else {
           attrs.attributes.get.map(_.name.get)
         }
+      case m: KMeansModel =>
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.summary.featuresCol))
+        attrs.attributes.get.map(_.name.get)
     }
   }
 
@@ -129,6 +141,8 @@ private[r] object SparkRWrappers {
         "LinearRegressionModel"
       case m: LogisticRegressionModel =>
         "LogisticRegressionModel"
+      case m: KMeansModel =>
+        "KMeansModel"
     }
   }
 }

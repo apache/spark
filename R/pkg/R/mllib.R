@@ -119,10 +119,17 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
               return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
-            } else {
+            } else if (modelName == "LogisticRegressionModel") {
               coefficients <- as.matrix(unlist(coefficients))
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
+              return(list(coefficients = coefficients))
+            } else if (modelName == "KMeansModel") {
+              k <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                               "getKMeansModelSize", object@model)
+              coefficients <- t(matrix(coefficients, ncol = k))
+              colnames(coefficients) <- unlist(features)
+              rownames(coefficients) <- 1:k
               return(list(coefficients = coefficients))
             }
           })
