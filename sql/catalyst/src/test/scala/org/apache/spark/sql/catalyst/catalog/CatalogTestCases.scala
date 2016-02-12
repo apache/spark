@@ -27,10 +27,10 @@ import org.apache.spark.sql.AnalysisException
  * Implementations of the [[Catalog]] interface can create test suites by extending this.
  */
 abstract class CatalogTestCases extends SparkFunSuite {
-  private val storageFormat = StorageFormat("usa", "$", "zzz", "serde", Map())
-  private val part1 = TablePartition(Map("a" -> "1"), storageFormat)
-  private val part2 = TablePartition(Map("b" -> "2"), storageFormat)
-  private val part3 = TablePartition(Map("c" -> "3"), storageFormat)
+  private val storageFormat = CatalogStorageFormat(None, Some("z"), Some("y"), Some("x"), Map())
+  private val part1 = CatalogTablePartition(Seq("1"), storageFormat)
+  private val part2 = CatalogTablePartition(Seq("2"), storageFormat)
+  private val part3 = CatalogTablePartition(Seq("3"), storageFormat)
   private val funcClass = "org.apache.spark.myFunc"
 
   protected def newEmptyCatalog(): Catalog
@@ -57,16 +57,26 @@ abstract class CatalogTestCases extends SparkFunSuite {
     catalog
   }
 
-  private def newFunc(): Function = Function("funcname", funcClass)
+  private def newFunc(): CatalogFunction = CatalogFunction("funcname", funcClass)
 
-  private def newDb(name: String = "default"): Database =
-    Database(name, name + " description", "uri", Map.empty)
+  private def newDb(name: String = "default"): CatalogDatabase =
+    CatalogDatabase(name, name + " description", "uri", Map.empty)
 
-  private def newTable(name: String): Table =
-    Table(name, "", Seq.empty, Seq.empty, Seq.empty, null, 0, Map.empty, "EXTERNAL_TABLE", 0, 0,
-      None, None)
+  private def newTable(name: String): CatalogTable =
+    CatalogTable(
+      specifiedDatabase = Some("db"),
+      name = name,
+      tableType = "EXTERNAL_TABLE",
+      storage = CatalogStorageFormat(
+        locationUri = Some("just works"),
+        inputFormat = Some("this part will change"),
+        outputFormat = Some("just one line"),
+        serde = Some("if I stopped the stream"),
+        serdeProperties = Map.empty
+      ),
+      schema = Seq.empty)
 
-  private def newFunc(name: String): Function = Function(name, funcClass)
+  private def newFunc(name: String): CatalogFunction = CatalogFunction(name, funcClass)
 
   // --------------------------------------------------------------------------
   // Databases
@@ -144,13 +154,13 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("alter database") {
     val catalog = newBasicCatalog()
-    catalog.alterDatabase("db1", Database("db1", "new description", "lll", Map.empty))
+    catalog.alterDatabase("db1", CatalogDatabase("db1", "new description", "lll", Map.empty))
     assert(catalog.getDatabase("db1").description == "new description")
   }
 
   test("alter database should throw exception when the database does not exist") {
     intercept[AnalysisException] {
-      newBasicCatalog().alterDatabase("no_db", Database("no_db", "ddd", "lll", Map.empty))
+      newBasicCatalog().alterDatabase("no_db", CatalogDatabase("no_db", "ddd", "lll", Map.empty))
     }
   }
 
@@ -336,8 +346,8 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("alter partitions") {
     val catalog = newBasicCatalog()
-    val partSameSpec = part1.copy(storage = storageFormat.copy(serde = "myserde"))
-    val partNewSpec = part1.copy(spec = Map("x" -> "10"))
+    val partSameSpec = part1.copy(storage = storageFormat.copy(serde = Some("myserde")))
+    val partNewSpec = part1.copy(spec = Seq("10"))
     // alter but keep spec the same
     catalog.alterPartition("db2", "tbl2", part1.spec, partSameSpec)
     assert(catalog.getPartition("db2", "tbl2", part1.spec) == partSameSpec)

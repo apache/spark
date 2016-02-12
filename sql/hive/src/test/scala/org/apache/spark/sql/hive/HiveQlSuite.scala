@@ -22,16 +22,17 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.catalyst.plans.logical.Generate
-import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 import org.apache.spark.sql.hive.client.TableType.{ExternalTable, ManagedTable}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   val parser = new HiveQl(SimpleParserConf())
 
-  private def extractTableDesc(sql: String): (HiveTable, Boolean) = {
+  private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
       case CreateTableAsSelect(desc, child, allowExisting) => (desc, allowExisting)
     }.head
@@ -54,28 +55,29 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |AS SELECT * FROM src""".stripMargin
 
     val (desc, exists) = extractTableDesc(s1)
-    assert(exists == true)
+    assert(exists)
     assert(desc.specifiedDatabase == Some("mydb"))
     assert(desc.name == "page_view")
-    assert(desc.tableType == ExternalTable)
-    assert(desc.location == Some("/user/external/page_view"))
+    assert(desc.tableType == ExternalTable.toString)
+    assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
-      HiveColumn("viewtime", "int", null) ::
-        HiveColumn("userid", "bigint", null) ::
-        HiveColumn("page_url", "string", null) ::
-        HiveColumn("referrer_url", "string", null) ::
-        HiveColumn("ip", "string", "IP Address of the User") ::
-        HiveColumn("country", "string", "country of origination") :: Nil)
+      CatalogColumn("viewtime", IntegerType) ::
+      CatalogColumn("userid", LongType) ::
+      CatalogColumn("page_url", StringType) ::
+      CatalogColumn("referrer_url", StringType) ::
+      CatalogColumn("ip", StringType, comment = Some("IP Address of the User")) ::
+      CatalogColumn("country", StringType, comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
     assert(desc.partitionColumns ==
-      HiveColumn("dt", "string", "date type") ::
-        HiveColumn("hour", "string", "hour of the day") :: Nil)
-    assert(desc.serdeProperties ==
+      CatalogColumn("dt", StringType, comment = Some("date type")) ::
+      CatalogColumn("hour", StringType, comment = Some("hour of the day")) :: Nil)
+    assert(desc.storage.serdeProperties ==
       Map((serdeConstants.SERIALIZATION_FORMAT, "\054"), (serdeConstants.FIELD_DELIM, "\054")))
-    assert(desc.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.serde == Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
+    assert(desc.storage.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(desc.storage.outputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(desc.storage.serde ==
+      Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
     assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
   }
 
@@ -99,27 +101,27 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |AS SELECT * FROM src""".stripMargin
 
     val (desc, exists) = extractTableDesc(s2)
-    assert(exists == true)
+    assert(exists)
     assert(desc.specifiedDatabase == Some("mydb"))
     assert(desc.name == "page_view")
-    assert(desc.tableType == ExternalTable)
-    assert(desc.location == Some("/user/external/page_view"))
+    assert(desc.tableType == ExternalTable.toString)
+    assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
-      HiveColumn("viewtime", "int", null) ::
-        HiveColumn("userid", "bigint", null) ::
-        HiveColumn("page_url", "string", null) ::
-        HiveColumn("referrer_url", "string", null) ::
-        HiveColumn("ip", "string", "IP Address of the User") ::
-        HiveColumn("country", "string", "country of origination") :: Nil)
+      CatalogColumn("viewtime", IntegerType) ::
+      CatalogColumn("userid", LongType) ::
+      CatalogColumn("page_url", StringType) ::
+      CatalogColumn("referrer_url", StringType) ::
+      CatalogColumn("ip", StringType, comment = Some("IP Address of the User")) ::
+      CatalogColumn("country", StringType, comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
     assert(desc.partitionColumns ==
-      HiveColumn("dt", "string", "date type") ::
-        HiveColumn("hour", "string", "hour of the day") :: Nil)
-    assert(desc.serdeProperties == Map())
-    assert(desc.inputFormat == Option("parquet.hive.DeprecatedParquetInputFormat"))
-    assert(desc.outputFormat == Option("parquet.hive.DeprecatedParquetOutputFormat"))
-    assert(desc.serde == Option("parquet.hive.serde.ParquetHiveSerDe"))
+      CatalogColumn("dt", StringType, comment = Some("date type")) ::
+      CatalogColumn("hour", StringType, comment = Some("hour of the day")) :: Nil)
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat == Option("parquet.hive.DeprecatedParquetInputFormat"))
+    assert(desc.storage.outputFormat == Option("parquet.hive.DeprecatedParquetOutputFormat"))
+    assert(desc.storage.serde == Option("parquet.hive.serde.ParquetHiveSerDe"))
     assert(desc.properties == Map(("p1", "v1"), ("p2", "v2")))
   }
 
@@ -129,14 +131,15 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists == false)
     assert(desc.specifiedDatabase == None)
     assert(desc.name == "page_view")
-    assert(desc.tableType == ManagedTable)
-    assert(desc.location == None)
-    assert(desc.schema == Seq.empty[HiveColumn])
+    assert(desc.tableType == ManagedTable.toString)
+    assert(desc.storage.locationUri == None)
+    assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.serdeProperties == Map())
-    assert(desc.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
-    assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
-    assert(desc.serde.isEmpty)
+    assert(desc.storage.serdeProperties == Map())
+    assert(desc.storage.inputFormat == Option("org.apache.hadoop.mapred.TextInputFormat"))
+    assert(desc.storage.outputFormat ==
+      Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
+    assert(desc.storage.serde.isEmpty)
     assert(desc.properties == Map())
   }
 
@@ -163,14 +166,14 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(exists == false)
     assert(desc.specifiedDatabase == None)
     assert(desc.name == "ctas2")
-    assert(desc.tableType == ManagedTable)
-    assert(desc.location == None)
-    assert(desc.schema == Seq.empty[HiveColumn])
+    assert(desc.tableType == ManagedTable.toString)
+    assert(desc.storage.locationUri == None)
+    assert(desc.schema == Seq.empty[CatalogColumn])
     assert(desc.viewText == None) // TODO will be SQLText
-    assert(desc.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
-    assert(desc.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(desc.outputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(desc.serde == Option("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+    assert(desc.storage.serdeProperties == Map(("serde_p1" -> "p1"), ("serde_p2" -> "p2")))
+    assert(desc.storage.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+    assert(desc.storage.outputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+    assert(desc.storage.serde == Option("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
   }
 

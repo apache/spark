@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveColumn, HiveTable, TableType}
+import org.apache.spark.sql.hive.client.HiveClient
 
 
 /**
@@ -29,32 +29,12 @@ import org.apache.spark.sql.hive.client.{HiveClient, HiveColumn, HiveTable, Tabl
 private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   import Catalog._
 
-  private def toHiveColumn(c: Column): HiveColumn = {
-    HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment)
-  }
-
-  private def toHiveTable(db: String, t: Table): HiveTable = {
-    HiveTable(
-      specifiedDatabase = Some(db),
-      name = t.name,
-      schema = t.schema.map(toHiveColumn),
-      partitionColumns = t.partitionColumns.map(toHiveColumn),
-      properties = t.properties,
-      serdeProperties = t.storage.serdeProperties,
-      tableType = TableType.withName(t.tableType),
-      location = Some(t.storage.locationUri),
-      inputFormat = Some(t.storage.inputFormat),
-      outputFormat = Some(t.storage.outputFormat),
-      serde = Some(t.storage.serde),
-      viewText = t.viewText)
-  }
-
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
 
   override def createDatabase(
-      dbDefinition: Database,
+      dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = synchronized {
     client.createDatabase(dbDefinition, ignoreIfExists)
   }
@@ -69,11 +49,11 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   /**
    * Alter an existing database. This operation does not support renaming.
    */
-  override def alterDatabase(db: String, dbDefinition: Database): Unit = synchronized {
+  override def alterDatabase(db: String, dbDefinition: CatalogDatabase): Unit = synchronized {
     client.alterDatabase(db, dbDefinition)
   }
 
-  override def getDatabase(db: String): Database = synchronized {
+  override def getDatabase(db: String): CatalogDatabase = synchronized {
     client.getDatabase(db)
   }
 
@@ -95,21 +75,20 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
 
   override def createTable(
       db: String,
-      tableDefinition: Table,
+      tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    client.createTable(toHiveTable(db, tableDefinition))
+    throw new UnsupportedOperationException
   }
 
   override def dropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    client.dropTable(db, table, ignoreIfNotExists)
+    throw new UnsupportedOperationException
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
-    val hiveTable = toHiveTable(db, getTable(db, oldName)).copy(name = newName)
-    client.alterTable(oldName, hiveTable)
+    throw new UnsupportedOperationException
   }
 
   /**
@@ -118,11 +97,11 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   override def alterTable(
       db: String,
       table: String,
-      tableDefinition: Table): Unit = synchronized {
-    client.alterTable(table, toHiveTable(db, tableDefinition))
+      tableDefinition: CatalogTable): Unit = synchronized {
+    throw new UnsupportedOperationException
   }
 
-  override def getTable(db: String, table: String): Table = synchronized {
+  override def getTable(db: String, table: String): CatalogTable = synchronized {
     throw new UnsupportedOperationException
   }
 
@@ -141,7 +120,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   override def createPartitions(
       db: String,
       table: String,
-      parts: Seq[TablePartition],
+      parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = synchronized {
     throw new UnsupportedOperationException
   }
@@ -149,7 +128,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   override def dropPartitions(
       db: String,
       table: String,
-      parts: Seq[PartitionSpec],
+      parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = synchronized {
     throw new UnsupportedOperationException
   }
@@ -160,19 +139,21 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   override def alterPartition(
       db: String,
       table: String,
-      spec: PartitionSpec,
-      newPart: TablePartition): Unit = synchronized {
+      spec: TablePartitionSpec,
+      newPart: CatalogTablePartition): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
   override def getPartition(
       db: String,
       table: String,
-      spec: PartitionSpec): TablePartition = synchronized {
+      spec: TablePartitionSpec): CatalogTablePartition = synchronized {
     throw new UnsupportedOperationException
   }
 
-  override def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
+  override def listPartitions(
+      db: String,
+      table: String): Seq[CatalogTablePartition] = synchronized {
     throw new UnsupportedOperationException
   }
 
@@ -182,7 +163,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
 
   override def createFunction(
       db: String,
-      funcDefinition: Function,
+      funcDefinition: CatalogFunction,
       ignoreIfExists: Boolean): Unit = synchronized {
     throw new UnsupportedOperationException
   }
@@ -197,11 +178,11 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   override def alterFunction(
       db: String,
       funcName: String,
-      funcDefinition: Function): Unit = synchronized {
+      funcDefinition: CatalogFunction): Unit = synchronized {
     throw new UnsupportedOperationException
   }
 
-  override def getFunction(db: String, funcName: String): Function = synchronized {
+  override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
     throw new UnsupportedOperationException
   }
 

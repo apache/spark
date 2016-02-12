@@ -25,9 +25,9 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.hive.client.HiveTable
 import org.apache.spark.sql.hive.client.TableType.ManagedTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
@@ -725,18 +725,23 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     val tableName = "spark6655"
     withTable(tableName) {
       val schema = StructType(StructField("int", IntegerType, true) :: Nil)
-      val hiveTable = HiveTable(
+      val hiveTable = CatalogTable(
         specifiedDatabase = Some("default"),
         name = tableName,
+        tableType = ManagedTable.toString,
         schema = Seq.empty,
-        partitionColumns = Seq.empty,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          serdeProperties = Map(
+            "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
+        ),
         properties = Map(
           "spark.sql.sources.provider" -> "json",
           "spark.sql.sources.schema" -> schema.json,
-          "EXTERNAL" -> "FALSE"),
-        tableType = ManagedTable,
-        serdeProperties = Map(
-          "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName))))
+          "EXTERNAL" -> "FALSE"))
 
       catalog.client.createTable(hiveTable)
 
@@ -917,7 +922,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
     // each column of the table is of native type StringType.
     assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
-      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == StringType))
+      .forall(_.dataType == StringType))
 
     catalog.createDataSourceTable(
       tableIdent = TableIdentifier("skip_hive_metadata"),
@@ -931,6 +936,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
     // the table has a column type as array of StringType.
     assert(catalog.client.getTable("default", "skip_hive_metadata").schema
-      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == ArrayType(StringType)))
+      .forall(_.dataType == ArrayType(StringType)))
   }
 }

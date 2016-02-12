@@ -30,13 +30,13 @@ import org.apache.spark.sql.AnalysisException
 class InMemoryCatalog extends Catalog {
   import Catalog._
 
-  private class TableDesc(var table: Table) {
-    val partitions = new mutable.HashMap[PartitionSpec, TablePartition]
+  private class TableDesc(var table: CatalogTable) {
+    val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
   }
 
-  private class DatabaseDesc(var db: Database) {
+  private class DatabaseDesc(var db: CatalogDatabase) {
     val tables = new mutable.HashMap[String, TableDesc]
-    val functions = new mutable.HashMap[String, Function]
+    val functions = new mutable.HashMap[String, CatalogFunction]
   }
 
   // Database name -> spec
@@ -57,7 +57,7 @@ class InMemoryCatalog extends Catalog {
     catalog(db).tables.contains(table)
   }
 
-  private def existsPartition(db: String, table: String, spec: PartitionSpec): Boolean = {
+  private def existsPartition(db: String, table: String, spec: TablePartitionSpec): Boolean = {
     assertTableExists(db, table)
     catalog(db).tables(table).partitions.contains(spec)
   }
@@ -80,7 +80,7 @@ class InMemoryCatalog extends Catalog {
     }
   }
 
-  private def assertPartitionExists(db: String, table: String, spec: PartitionSpec): Unit = {
+  private def assertPartitionExists(db: String, table: String, spec: TablePartitionSpec): Unit = {
     if (!existsPartition(db, table, spec)) {
       throw new AnalysisException(s"Partition does not exist in database $db table $table: $spec")
     }
@@ -91,7 +91,7 @@ class InMemoryCatalog extends Catalog {
   // --------------------------------------------------------------------------
 
   override def createDatabase(
-      dbDefinition: Database,
+      dbDefinition: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
       if (!ignoreIfExists) {
@@ -125,13 +125,13 @@ class InMemoryCatalog extends Catalog {
     }
   }
 
-  override def alterDatabase(db: String, dbDefinition: Database): Unit = synchronized {
+  override def alterDatabase(db: String, dbDefinition: CatalogDatabase): Unit = synchronized {
     assertDbExists(db)
     assert(db == dbDefinition.name)
     catalog(db).db = dbDefinition
   }
 
-  override def getDatabase(db: String): Database = synchronized {
+  override def getDatabase(db: String): CatalogDatabase = synchronized {
     assertDbExists(db)
     catalog(db).db
   }
@@ -154,7 +154,7 @@ class InMemoryCatalog extends Catalog {
 
   override def createTable(
       db: String,
-      tableDefinition: Table,
+      tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
     assertDbExists(db)
     if (existsTable(db, tableDefinition.name)) {
@@ -188,13 +188,16 @@ class InMemoryCatalog extends Catalog {
     catalog(db).tables.remove(oldName)
   }
 
-  override def alterTable(db: String, table: String, tableDefinition: Table): Unit = synchronized {
+  override def alterTable(
+      db: String,
+      table: String,
+      tableDefinition: CatalogTable): Unit = synchronized {
     assertTableExists(db, table)
     assert(table == tableDefinition.name)
     catalog(db).tables(table).table = tableDefinition
   }
 
-  override def getTable(db: String, table: String): Table = synchronized {
+  override def getTable(db: String, table: String): CatalogTable = synchronized {
     assertTableExists(db, table)
     catalog(db).tables(table).table
   }
@@ -216,7 +219,7 @@ class InMemoryCatalog extends Catalog {
   override def createPartitions(
       db: String,
       table: String,
-      parts: Seq[TablePartition],
+      parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = synchronized {
     assertTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
@@ -234,7 +237,7 @@ class InMemoryCatalog extends Catalog {
   override def dropPartitions(
       db: String,
       table: String,
-      partSpecs: Seq[PartitionSpec],
+      partSpecs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = synchronized {
     assertTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
@@ -252,8 +255,8 @@ class InMemoryCatalog extends Catalog {
   override def alterPartition(
       db: String,
       table: String,
-      spec: Map[String, String],
-      newPart: TablePartition): Unit = synchronized {
+      spec: TablePartitionSpec,
+      newPart: CatalogTablePartition): Unit = synchronized {
     assertPartitionExists(db, table, spec)
     val existingParts = catalog(db).tables(table).partitions
     if (spec != newPart.spec) {
@@ -266,12 +269,14 @@ class InMemoryCatalog extends Catalog {
   override def getPartition(
       db: String,
       table: String,
-      spec: Map[String, String]): TablePartition = synchronized {
+      spec: TablePartitionSpec): CatalogTablePartition = synchronized {
     assertPartitionExists(db, table, spec)
     catalog(db).tables(table).partitions(spec)
   }
 
-  override def listPartitions(db: String, table: String): Seq[TablePartition] = synchronized {
+  override def listPartitions(
+      db: String,
+      table: String): Seq[CatalogTablePartition] = synchronized {
     assertTableExists(db, table)
     catalog(db).tables(table).partitions.values.toSeq
   }
@@ -282,7 +287,7 @@ class InMemoryCatalog extends Catalog {
 
   override def createFunction(
       db: String,
-      func: Function,
+      func: CatalogFunction,
       ignoreIfExists: Boolean): Unit = synchronized {
     assertDbExists(db)
     if (existsFunction(db, func.name)) {
@@ -302,7 +307,7 @@ class InMemoryCatalog extends Catalog {
   override def alterFunction(
       db: String,
       funcName: String,
-      funcDefinition: Function): Unit = synchronized {
+      funcDefinition: CatalogFunction): Unit = synchronized {
     assertFunctionExists(db, funcName)
     if (funcName != funcDefinition.name) {
       // Also a rename; remove the old one and add the new one back
@@ -311,7 +316,7 @@ class InMemoryCatalog extends Catalog {
     catalog(db).functions.put(funcDefinition.name, funcDefinition)
   }
 
-  override def getFunction(db: String, funcName: String): Function = synchronized {
+  override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
     assertFunctionExists(db, funcName)
     catalog(db).functions(funcName)
   }

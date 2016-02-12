@@ -25,10 +25,10 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.{TableType => HTableType}
+import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
 import org.apache.hadoop.hive.ql.{metadata, Driver}
-import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
@@ -36,9 +36,10 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
-import org.apache.spark.sql.catalyst.catalog.Database
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -240,7 +241,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def createDatabase(
-      database: Database,
+      database: CatalogDatabase,
       ignoreIfExists: Boolean): Unit = withHiveState {
     client.createDatabase(
       new HiveDatabase(
@@ -261,7 +262,7 @@ private[hive] class HiveClientImpl(
   /**
    * Alter an existing database. This operation does not support renaming.
    */
-  override def alterDatabase(name: String, database: Database): Unit = withHiveState {
+  override def alterDatabase(name: String, database: CatalogDatabase): Unit = withHiveState {
     assert(name == database.name)
     client.alterDatabase(
       name,
@@ -272,9 +273,9 @@ private[hive] class HiveClientImpl(
         database.properties.asJava))
   }
 
-  override def getDatabaseOption(name: String): Option[Database] = withHiveState {
+  override def getDatabaseOption(name: String): Option[CatalogDatabase] = withHiveState {
     Option(client.getDatabase(name)).map { d =>
-      Database(
+      CatalogDatabase(
         name = d.getName,
         description = d.getDescription,
         locationUri = d.getLocationUri,
@@ -288,33 +289,36 @@ private[hive] class HiveClientImpl(
 
   override def getTableOption(
       dbName: String,
-      tableName: String): Option[HiveTable] = withHiveState {
-
+      tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
-
-    val hiveTable = Option(client.getTable(dbName, tableName, false))
-    val converted = hiveTable.map { h =>
-      HiveTable(
-        name = h.getTableName,
+    Option(client.getTable(dbName, tableName, false)).map { h =>
+      CatalogTable(
         specifiedDatabase = Option(h.getDbName),
-        schema = h.getCols.asScala.map(f => HiveColumn(f.getName, f.getType, f.getComment)),
-        partitionColumns = h.getPartCols.asScala.map(f =>
-          HiveColumn(f.getName, f.getType, f.getComment)),
-        properties = h.getParameters.asScala.toMap,
-        serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap,
+        name = h.getTableName,
+        // TODO(andrew): make this prettier
         tableType = h.getTableType match {
-          case HTableType.MANAGED_TABLE => TableType.ManagedTable
-          case HTableType.EXTERNAL_TABLE => TableType.ExternalTable
-          case HTableType.VIRTUAL_VIEW => TableType.VirtualView
-          case HTableType.INDEX_TABLE => TableType.IndexTable
+          case HiveTableType.MANAGED_TABLE => TableType.ManagedTable.toString
+          case HiveTableType.EXTERNAL_TABLE => TableType.ExternalTable.toString
+          case HiveTableType.VIRTUAL_VIEW => TableType.VirtualView.toString
+          case HiveTableType.INDEX_TABLE => TableType.IndexTable.toString
         },
-        location = shim.getDataLocation(h),
-        inputFormat = Option(h.getInputFormatClass).map(_.getName),
-        outputFormat = Option(h.getOutputFormatClass).map(_.getName),
-        serde = Option(h.getSerializationLib),
-        viewText = Option(h.getViewExpandedText)).withClient(this)
+        schema = h.getCols.asScala.map(fromHiveColumn),
+        partitionColumns = h.getPartCols.asScala.map(fromHiveColumn),
+        sortColumns = Seq(),
+        numBuckets = h.getNumBuckets,
+        createTime = h.getTTable.getCreateTime.toLong * 1000,
+        lastAccessTime = h.getLastAccessTime.toLong * 1000,
+        storage = CatalogStorageFormat(
+          locationUri = shim.getDataLocation(h),
+          inputFormat = Option(h.getInputFormatClass).map(_.getName),
+          outputFormat = Option(h.getOutputFormatClass).map(_.getName),
+          serde = Option(h.getSerializationLib),
+          serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
+        ),
+        properties = h.getParameters.asScala.toMap,
+        viewOriginalText = Option(h.getViewOriginalText),
+        viewText = Option(h.getViewExpandedText))
     }
-    converted
   }
 
   private def toInputFormat(name: String) =
@@ -324,62 +328,63 @@ private[hive] class HiveClientImpl(
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
-  private def toQlTable(table: HiveTable): metadata.Table = {
-    val qlTable = new metadata.Table(table.database, table.name)
+  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
+    new FieldSchema(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment.orNull)
+  }
 
-    qlTable.setFields(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
-    qlTable.setPartCols(
-      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
-    table.properties.foreach { case (k, v) => qlTable.setProperty(k, v) }
-    table.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
+  private def fromHiveColumn(f: FieldSchema): CatalogColumn = {
+    new CatalogColumn(
+      name = f.getName,
+      dataType = HiveMetastoreTypes.toDataType(f.getType),
+      nullable = true,
+      comment = Option(f.getComment))
+  }
 
-    // set owner
+  private def toQlTable(table: CatalogTable): HiveTable = {
+    val qlTable = new HiveTable(table.database, table.name)
+    // TODO(andrew): clean this up
+    qlTable.setTableType(table.tableType match {
+      case "MANAGED_TABLE" => HiveTableType.MANAGED_TABLE
+      case "EXTERNAL_TABLE" => HiveTableType.EXTERNAL_TABLE
+      case "VIRTUAL_TABLE" => HiveTableType.VIRTUAL_VIEW
+      case "INDEX_TABLE" => HiveTableType.INDEX_TABLE
+    })
+    qlTable.setFields(table.schema.map(toHiveColumn).asJava)
+    qlTable.setPartCols(table.partitionColumns.map(toHiveColumn).asJava)
+    // TODO: set sort columns here too
     qlTable.setOwner(conf.getUser)
-    // set create time
-    qlTable.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
-
-    table.location.foreach { loc => shim.setDataLocation(qlTable, loc) }
-    table.inputFormat.map(toInputFormat).foreach(qlTable.setInputFormatClass)
-    table.outputFormat.map(toOutputFormat).foreach(qlTable.setOutputFormatClass)
-    table.serde.foreach(qlTable.setSerializationLib)
-
+    qlTable.setNumBuckets(table.numBuckets)
+    qlTable.setCreateTime((table.createTime / 1000).toInt)
+    qlTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
+    table.storage.locationUri.foreach { loc => shim.setDataLocation(qlTable, loc) }
+    table.storage.inputFormat.map(toInputFormat).foreach(qlTable.setInputFormatClass)
+    table.storage.outputFormat.map(toOutputFormat).foreach(qlTable.setOutputFormatClass)
+    table.storage.serde.foreach(qlTable.setSerializationLib)
+    table.storage.serdeProperties.foreach { case (k, v) => qlTable.setSerdeParam(k, v) }
+    table.properties.foreach { case (k, v) => qlTable.setProperty(k, v) }
+    table.viewOriginalText.foreach { t => qlTable.setViewOriginalText(t) }
+    table.viewText.foreach { t => qlTable.setViewExpandedText(t) }
     qlTable
   }
 
-  private def toViewTable(view: HiveTable): metadata.Table = {
-    // TODO: this is duplicated with `toQlTable` except the table type stuff.
-    val tbl = new metadata.Table(view.database, view.name)
-    tbl.setTableType(HTableType.VIRTUAL_VIEW)
+  private def toViewTable(view: CatalogTable): HiveTable = {
+    val tbl = toQlTable(view)
+    tbl.setTableType(HiveTableType.VIRTUAL_VIEW)
     tbl.setSerializationLib(null)
     tbl.clearSerDeInfo()
-
-    // TODO: we will save the same SQL string to original and expanded text, which is different
-    // from Hive.
-    tbl.setViewOriginalText(view.viewText.get)
-    tbl.setViewExpandedText(view.viewText.get)
-
-    tbl.setFields(view.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)).asJava)
-    view.properties.foreach { case (k, v) => tbl.setProperty(k, v) }
-
-    // set owner
-    tbl.setOwner(conf.getUser)
-    // set create time
-    tbl.setCreateTime((System.currentTimeMillis() / 1000).asInstanceOf[Int])
-
     tbl
   }
 
-  override def createView(view: HiveTable): Unit = withHiveState {
+  override def createView(view: CatalogTable): Unit = withHiveState {
     client.createTable(toViewTable(view))
   }
 
-  override def alertView(view: HiveTable): Unit = withHiveState {
+  override def alertView(view: CatalogTable): Unit = withHiveState {
     client.alterTable(view.qualifiedName, toViewTable(view))
   }
 
-  override def createTable(table: HiveTable): Unit = withHiveState {
-    val qlTable = toQlTable(table)
-    client.createTable(qlTable)
+  override def createTable(table: CatalogTable): Unit = withHiveState {
+    client.createTable(toQlTable(table))
   }
 
   override def dropTable(
@@ -389,43 +394,42 @@ private[hive] class HiveClientImpl(
     client.dropTable(dbName, tableName, true, ignoreIfNotExists)
   }
 
-  override def alterTable(tableName: String, table: HiveTable): Unit = withHiveState {
+  override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
     val qlTable = toQlTable(table)
     val qualifiedTableName = s"${table.database}.$tableName"
     client.alterTable(qualifiedTableName, qlTable)
   }
 
-  private def toHivePartition(partition: metadata.Partition): HivePartition = {
+  private def toCatalogPartition(partition: HivePartition): CatalogTablePartition = {
     val apiPartition = partition.getTPartition
-    HivePartition(
-      values = Option(apiPartition.getValues).map(_.asScala).getOrElse(Seq.empty),
-      storage = HiveStorageDescriptor(
-        location = apiPartition.getSd.getLocation,
-        inputFormat = apiPartition.getSd.getInputFormat,
-        outputFormat = apiPartition.getSd.getOutputFormat,
-        serde = apiPartition.getSd.getSerdeInfo.getSerializationLib,
+    CatalogTablePartition(
+      spec = Option(apiPartition.getValues).map(_.asScala).getOrElse(Seq.empty),
+      storage = CatalogStorageFormat(
+        locationUri = Option(apiPartition.getSd.getLocation),
+        inputFormat = Option(apiPartition.getSd.getInputFormat),
+        outputFormat = Option(apiPartition.getSd.getOutputFormat),
+        serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
         serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
 
   override def getPartitionOption(
-      table: HiveTable,
-      partitionSpec: JMap[String, String]): Option[HivePartition] = withHiveState {
-
+      table: CatalogTable,
+      partitionSpec: JMap[String, String]): Option[CatalogTablePartition] = withHiveState {
     val qlTable = toQlTable(table)
     val qlPartition = client.getPartition(qlTable, partitionSpec, false)
-    Option(qlPartition).map(toHivePartition)
+    Option(qlPartition).map(toCatalogPartition)
   }
 
-  override def getAllPartitions(hTable: HiveTable): Seq[HivePartition] = withHiveState {
-    val qlTable = toQlTable(hTable)
-    shim.getAllPartitions(client, qlTable).map(toHivePartition)
+  override def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition] = withHiveState {
+    val qlTable = toQlTable(table)
+    shim.getAllPartitions(client, qlTable).map(toCatalogPartition)
   }
 
   override def getPartitionsByFilter(
-      hTable: HiveTable,
-      predicates: Seq[Expression]): Seq[HivePartition] = withHiveState {
-    val qlTable = toQlTable(hTable)
-    shim.getPartitionsByFilter(client, qlTable, predicates).map(toHivePartition)
+      table: CatalogTable,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition] = withHiveState {
+    val qlTable = toQlTable(table)
+    shim.getPartitionsByFilter(client, qlTable, predicates).map(toCatalogPartition)
   }
 
   override def listTables(dbName: String): Seq[String] = withHiveState {

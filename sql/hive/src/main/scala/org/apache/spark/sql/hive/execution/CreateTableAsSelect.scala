@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes, MetastoreRelation}
-import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
 
 /**
  * Create table and insert the query result into it.
@@ -33,7 +33,7 @@ import org.apache.spark.sql.hive.client.{HiveColumn, HiveTable}
  */
 private[hive]
 case class CreateTableAsSelect(
-    tableDesc: HiveTable,
+    tableDesc: CatalogTable,
     query: LogicalPlan,
     allowExisting: Boolean)
   extends RunnableCommand {
@@ -52,19 +52,19 @@ case class CreateTableAsSelect(
 
       val withFormat =
         tableDesc.copy(
-          inputFormat =
-            tableDesc.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
-          outputFormat =
-            tableDesc.outputFormat
-              .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
-          serde = tableDesc.serde.orElse(Some(classOf[LazySimpleSerDe].getName())))
+          storage = tableDesc.storage.copy(
+            inputFormat =
+              tableDesc.storage.inputFormat.orElse(Some(classOf[TextInputFormat].getName)),
+            outputFormat =
+              tableDesc.storage.outputFormat
+                .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
+            serde = tableDesc.storage.serde.orElse(Some(classOf[LazySimpleSerDe].getName()))))
 
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
-        tableDesc.copy(schema =
-        query.output.map(c =>
-          HiveColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), null)))
+        tableDesc.copy(
+          schema = query.output.map { c => CatalogColumn(c.name, c.dataType) })
       } else {
         withFormat
       }

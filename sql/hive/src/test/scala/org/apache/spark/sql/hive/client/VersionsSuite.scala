@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{Logging, SparkFunSuite}
-import org.apache.spark.sql.catalyst.catalog.Database
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -61,7 +61,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hadoopVersion = VersionInfo.getVersion,
       config = buildConf(),
       ivyPath = ivyPath).createClient()
-    val db = new Database("default", "desc", "loc", Map())
+    val db = new CatalogDatabase("default", "desc", "loc", Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
@@ -117,27 +117,25 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: createDatabase") {
-      val db = Database("default", "desc", "loc", Map())
+      val db = CatalogDatabase("default", "desc", "loc", Map())
       client.createDatabase(db, ignoreIfExists = true)
     }
 
     test(s"$version: createTable") {
       val table =
-        HiveTable(
+        CatalogTable(
           specifiedDatabase = Option("default"),
           name = "src",
-          schema = Seq(HiveColumn("key", "int", "")),
-          partitionColumns = Seq.empty,
-          properties = Map.empty,
-          serdeProperties = Map.empty,
-          tableType = TableType.ManagedTable,
-          location = None,
-          inputFormat =
-            Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
-          outputFormat =
-            Some(classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-          serde =
-            Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()))
+          tableType = TableType.ManagedTable.toString,
+          schema = Seq(CatalogColumn("key", IntegerType)),
+          storage = CatalogStorageFormat(
+            locationUri = None,
+            inputFormat = Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
+            outputFormat = Some(
+              classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+            serde = Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()),
+            serdeProperties = Map.empty
+          ))
 
       client.createTable(table)
     }

@@ -19,13 +19,13 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 import java.util.{Map => JMap}
-import javax.annotation.Nullable
 
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
-import org.apache.spark.sql.catalyst.catalog.Database
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
+// TODO(andrew): don't do enums. They're gross.
 private[hive] object TableType extends Enumeration {
   type TableType = Value
   val ExternalTable = Value("EXTERNAL_TABLE")
@@ -34,53 +34,6 @@ private[hive] object TableType extends Enumeration {
   val VirtualView = Value("VIRTUAL_VIEW")
 }
 
-// TODO: Use this for Tables and Partitions
-private[hive] case class HiveStorageDescriptor(
-    location: String,
-    inputFormat: String,
-    outputFormat: String,
-    serde: String,
-    serdeProperties: Map[String, String])
-
-private[hive] case class HivePartition(
-    values: Seq[String],
-    storage: HiveStorageDescriptor)
-
-private[hive] case class HiveColumn(name: String, @Nullable hiveType: String, comment: String)
-private[hive] case class HiveTable(
-    specifiedDatabase: Option[String],
-    name: String,
-    schema: Seq[HiveColumn],
-    partitionColumns: Seq[HiveColumn],
-    properties: Map[String, String],
-    serdeProperties: Map[String, String],
-    tableType: TableType.Value,
-    location: Option[String] = None,
-    inputFormat: Option[String] = None,
-    outputFormat: Option[String] = None,
-    serde: Option[String] = None,
-    viewText: Option[String] = None) {
-
-  @transient
-  private[client] var client: HiveClient = _
-
-  private[client] def withClient(ci: HiveClient): this.type = {
-    client = ci
-    this
-  }
-
-  def database: String = specifiedDatabase.getOrElse(sys.error("database not resolved"))
-
-  def isPartitioned: Boolean = partitionColumns.nonEmpty
-
-  def getAllPartitions: Seq[HivePartition] = client.getAllPartitions(this)
-
-  def getPartitions(predicates: Seq[Expression]): Seq[HivePartition] =
-    client.getPartitionsByFilter(this, predicates)
-
-  // Hive does not support backticks when passing names to the client.
-  def qualifiedName: String = s"$database.$name"
-}
 
 /**
  * An externally visible interface to the Hive client.  This interface is shared across both the
@@ -115,46 +68,46 @@ private[hive] trait HiveClient {
   def setCurrentDatabase(databaseName: String): Unit
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
-  final def getDatabase(name: String): Database = {
+  final def getDatabase(name: String): CatalogDatabase = {
     getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException)
   }
 
   /** Returns the metadata for a given database, or None if it doesn't exist. */
-  def getDatabaseOption(name: String): Option[Database]
+  def getDatabaseOption(name: String): Option[CatalogDatabase]
 
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
 
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
-  def getTable(dbName: String, tableName: String): HiveTable = {
+  def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException)
   }
 
   /** Returns the metadata for the specified table or None if it doens't exist. */
-  def getTableOption(dbName: String, tableName: String): Option[HiveTable]
+  def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
 
   /** Creates a view with the given metadata. */
-  def createView(view: HiveTable): Unit
+  def createView(view: CatalogTable): Unit
 
   /** Updates the given view with new metadata. */
-  def alertView(view: HiveTable): Unit
+  def alertView(view: CatalogTable): Unit
 
   /** Creates a table with the given metadata. */
-  def createTable(table: HiveTable): Unit
+  def createTable(table: CatalogTable): Unit
 
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
 
   /** Updates the given table with new metadata. */
-  final def alterTable(table: HiveTable): Unit = {
+  final def alterTable(table: CatalogTable): Unit = {
     alterTable(table.qualifiedName, table)
   }
 
   /** Updates the given table with new metadata, optionally renaming the table. */
-  def alterTable(tableName: String, table: HiveTable): Unit
+  def alterTable(tableName: String, table: CatalogTable): Unit
 
   /** Creates a new database with the given name. */
-  def createDatabase(database: Database, ignoreIfExists: Boolean): Unit
+  def createDatabase(database: CatalogDatabase, ignoreIfExists: Boolean): Unit
 
   /**
    * Drop the specified database, if it exists.
@@ -168,18 +121,20 @@ private[hive] trait HiveClient {
   /**
    * Alter an existing database. This operation does not support renaming.
    */
-  def alterDatabase(name: String, database: Database): Unit
+  def alterDatabase(name: String, database: CatalogDatabase): Unit
 
   /** Returns the specified paritition or None if it does not exist. */
   def getPartitionOption(
-      hTable: HiveTable,
-      partitionSpec: JMap[String, String]): Option[HivePartition]
+      hTable: CatalogTable,
+      partitionSpec: JMap[String, String]): Option[CatalogTablePartition]
 
   /** Returns all partitions for the given table. */
-  def getAllPartitions(hTable: HiveTable): Seq[HivePartition]
+  def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
-  def getPartitionsByFilter(hTable: HiveTable, predicates: Seq[Expression]): Seq[HivePartition]
+  def getPartitionsByFilter(
+      table: CatalogTable,
+      predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */
   def loadPartition(
