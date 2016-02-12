@@ -47,7 +47,6 @@ case class TungstenAggregate(
   require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
 
   override private[sql] lazy val metrics = Map(
-    "numInputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of input rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
@@ -77,7 +76,6 @@ case class TungstenAggregate(
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    val numInputRows = longMetric("numInputRows")
     val numOutputRows = longMetric("numOutputRows")
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
@@ -102,7 +100,6 @@ case class TungstenAggregate(
             child.output,
             iter,
             testFallbackStartsAt,
-            numInputRows,
             numOutputRows,
             dataSize,
             spillSize)
@@ -205,6 +202,7 @@ case class TungstenAggregate(
          | }
        """.stripMargin)
 
+    val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        | if (!$initAgg) {
        |   $initAgg = true;
@@ -213,6 +211,7 @@ case class TungstenAggregate(
        |   // output the result
        |   ${genResult.trim}
        |
+       |   $numOutput.add(1);
        |   ${consume(ctx, resultVars).trim}
        | }
      """.stripMargin
@@ -300,6 +299,7 @@ case class TungstenAggregate(
     val peakMemory = Math.max(mapMemory, sorterMemory)
     val metrics = TaskContext.get().taskMetrics()
     metrics.incPeakExecutionMemory(peakMemory)
+    // TODO: update data size and spill size
 
     if (sorter == null) {
       // not spilled
@@ -459,6 +459,7 @@ case class TungstenAggregate(
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
     val outputCode = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
+    val numOutput = metricTerm(ctx, "numOutputRows")
 
     s"""
      if (!$initAgg) {
@@ -468,6 +469,7 @@ case class TungstenAggregate(
 
      // output the result
      while ($iterTerm.next()) {
+       $numOutput.add(1);
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
        UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        $outputCode

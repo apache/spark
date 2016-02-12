@@ -206,6 +206,17 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * This name must be unique among all the currently active queries in the associated SQLContext.
+   *
+   * @since 2.0.0
+   */
+  def queryName(queryName: String): DataFrameWriter = {
+    this.extraOptions += ("queryName" -> queryName)
+    this
+  }
+
+  /**
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
@@ -230,7 +241,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       extraOptions.toMap,
       normalizedParCols.getOrElse(Nil))
 
-    new StreamExecution(df.sqlContext, df.logicalPlan, sink)
+    df.sqlContext.continuousQueryManager.startQuery(
+      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, sink)
   }
 
   /**

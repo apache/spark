@@ -41,12 +41,12 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     with MockitoSugar
     with BeforeAndAfter {
 
-  var sparkConf: SparkConf = _
-  var driver: SchedulerDriver = _
-  var taskScheduler: TaskSchedulerImpl = _
-  var backend: CoarseMesosSchedulerBackend = _
-  var externalShuffleClient: MesosExternalShuffleClient = _
-  var driverEndpoint: RpcEndpointRef = _
+  private var sparkConf: SparkConf = _
+  private var driver: SchedulerDriver = _
+  private var taskScheduler: TaskSchedulerImpl = _
+  private var backend: CoarseMesosSchedulerBackend = _
+  private var externalShuffleClient: MesosExternalShuffleClient = _
+  private var driverEndpoint: RpcEndpointRef = _
 
   test("mesos supports killing and limiting executors") {
     setBackend()
@@ -299,6 +299,11 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
       override protected def createDriverEndpointRef(
           properties: ArrayBuffer[(String, String)]): RpcEndpointRef = endpoint
+
+      // override to avoid race condition with the driver thread on `mesosDriver`
+      override def startScheduler(newDriver: SchedulerDriver): Unit = {
+        mesosDriver = newDriver
+      }
 
       markRegistered()
     }

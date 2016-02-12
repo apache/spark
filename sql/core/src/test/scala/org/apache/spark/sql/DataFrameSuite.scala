@@ -998,12 +998,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+  test("Alias uses internally generated names 'aggOrder' and 'havingCondition'") {
     val df = Seq(1 -> 2).toDF("i", "j")
-    val query = df.groupBy('i)
-      .agg(max('j).as("aggOrdering"))
+    val query1 = df.groupBy('i)
+      .agg(max('j).as("aggOrder"))
       .orderBy(sum('j))
-    checkAnswer(query, Row(1, 2))
+    checkAnswer(query1, Row(1, 2))
+
+    // In the plan, there are two attributes having the same name 'havingCondition'
+    // One is a user-provided alias name; another is an internally generated one.
+    val query2 = df.groupBy('i)
+      .agg(max('j).as("havingCondition"))
+      .where(sum('j) > 0)
+      .orderBy('havingCondition.asc)
+    checkAnswer(query2, Row(1, 2))
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
@@ -1296,5 +1304,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
+  }
+
+  test("SPARK-12982: Add table name validation in temp table registration") {
+    val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
+    // invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("t~"))
+    // valid table name test as below
+    df.registerTempTable("table1")
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("table!#"))
   }
 }

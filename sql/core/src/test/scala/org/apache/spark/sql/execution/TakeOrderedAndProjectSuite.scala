@@ -63,7 +63,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
         input =>
           GlobalLimit(limit,
             LocalLimit(limit,
-              Sort(sortOrder, global = true, input))),
+              Sort(sortOrder, true, input))),
         sortAnswers = false)
     }
   }
@@ -78,7 +78,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
           GlobalLimit(limit,
             LocalLimit(limit,
               Project(Seq(input.output.last),
-                Sort(sortOrder, global = true, input)))),
+                Sort(sortOrder, true, input)))),
         sortAnswers = false)
     }
   }
