@@ -248,18 +248,28 @@ class InMemoryCatalog extends Catalog {
     partSpecs.foreach(existingParts.remove)
   }
 
-  override def alterPartition(
+  override def renamePartitions(
       db: String,
       table: String,
-      spec: TablePartitionSpec,
-      newPart: CatalogTablePartition): Unit = synchronized {
-    assertPartitionExists(db, table, spec)
-    val existingParts = catalog(db).tables(table).partitions
-    if (spec != newPart.spec) {
-      // Also a change in specs; remove the old one and add the new one back
-      existingParts.remove(spec)
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
+    assert(specs.size == newSpecs.size, "number of old and new partition specs differ")
+    specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
+      val newPart = getPartition(db, table, oldSpec).copy(spec = newSpec)
+      val existingParts = catalog(db).tables(table).partitions
+      existingParts.remove(oldSpec)
+      existingParts.put(newSpec, newPart)
     }
-    existingParts.put(newPart.spec, newPart)
+  }
+
+  override def alterPartitions(
+      db: String,
+      table: String,
+      parts: Seq[CatalogTablePartition]): Unit = synchronized {
+    parts.foreach { p =>
+      assertPartitionExists(db, table, p.spec)
+      catalog(db).tables(table).partitions.put(p.spec, p)
+    }
   }
 
   override def getPartition(

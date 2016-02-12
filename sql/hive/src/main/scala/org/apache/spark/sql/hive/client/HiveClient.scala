@@ -18,10 +18,9 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
-import java.util.{Map => JMap}
 
-import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable, CatalogTablePartition}
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 
 
@@ -72,7 +71,7 @@ private[hive] trait HiveClient {
   def listDatabases(pattern: String): Seq[String]
 
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
-  def getTable(dbName: String, tableName: String): CatalogTable = {
+  final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException)
   }
 
@@ -116,10 +115,66 @@ private[hive] trait HiveClient {
    */
   def alterDatabase(name: String, database: CatalogDatabase): Unit
 
-  /** Returns the specified paritition or None if it does not exist. */
+  /**
+   * Create one or many partitions in the given table.
+   */
+  def createPartitions(
+      db: String,
+      table: String,
+      parts: Seq[CatalogTablePartition],
+      ignoreIfExists: Boolean): Unit
+
+  /**
+   * Drop one or many partitions in the given table.
+   */
+  def dropPartitions(
+      db: String,
+      table: String,
+      specs: Seq[Catalog.TablePartitionSpec],
+      ignoreIfNotExists: Boolean): Unit
+
+  /**
+   * Rename one or many existing table partitions, assuming they exist.
+   */
+  def renamePartitions(
+      db: String,
+      table: String,
+      specs: Seq[Catalog.TablePartitionSpec],
+      newSpecs: Seq[Catalog.TablePartitionSpec]): Unit
+
+  /**
+   * Alter one or many existing table partitions, assuming they exist.
+   */
+  def alterPartitions(
+      db: String,
+      table: String,
+      newParts: Seq[CatalogTablePartition]): Unit
+
+  /** Returns the specified partition, or throws [[NoSuchPartitionException]]. */
+  final def getPartition(
+      dbName: String,
+      tableName: String,
+      spec: Catalog.TablePartitionSpec): CatalogTablePartition = {
+    getPartitionOption(dbName, tableName, spec).getOrElse(throw new NoSuchPartitionException)
+  }
+
+  /** Returns the specified partition or None if it does not exist. */
+  final def getPartitionOption(
+      db: String,
+      table: String,
+      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition] = {
+    getPartitionOption(getTable(db, table), spec)
+  }
+
+  /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
-      hTable: CatalogTable,
-      partitionSpec: JMap[String, String]): Option[CatalogTablePartition]
+      table: CatalogTable,
+      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition]
+
+  /** Returns all partitions for the given table. */
+  final def getAllPartitions(db: String, table: String): Seq[CatalogTablePartition] = {
+    getAllPartitions(getTable(db, table))
+  }
 
   /** Returns all partitions for the given table. */
   def getAllPartitions(table: CatalogTable): Seq[CatalogTablePartition]

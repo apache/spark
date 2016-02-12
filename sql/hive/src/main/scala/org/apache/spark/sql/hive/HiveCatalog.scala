@@ -128,7 +128,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.createPartitions(db, table, parts, ignoreIfExists)
   }
 
   override def dropPartitions(
@@ -136,31 +136,35 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       table: String,
       parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
-  /**
-   * Alter an existing table partition and optionally override its spec.
-   */
-  override def alterPartition(
+  override def renamePartitions(
       db: String,
       table: String,
-      spec: TablePartitionSpec,
-      newPart: CatalogTablePartition): Unit = synchronized {
-    throw new UnsupportedOperationException
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
+    client.renamePartitions(db, table, specs, newSpecs)
+  }
+
+  override def alterPartitions(
+      db: String,
+      table: String,
+      newParts: Seq[CatalogTablePartition]): Unit = synchronized {
+    client.alterPartitions(db, table, newParts)
   }
 
   override def getPartition(
       db: String,
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = synchronized {
-    throw new UnsupportedOperationException
+    client.getPartition(db, table, spec)
   }
 
   override def listPartitions(
       db: String,
       table: String): Seq[CatalogTablePartition] = synchronized {
-    throw new UnsupportedOperationException
+    client.getAllPartitions(db, table)
   }
 
   // --------------------------------------------------------------------------

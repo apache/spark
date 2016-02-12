@@ -839,7 +839,7 @@ private[hive] case class MetastoreRelation(
       val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
       tPartition.setDbName(databaseName)
       tPartition.setTableName(tableName)
-      tPartition.setValues(p.spec.asJava)
+      tPartition.setValues(p.spec.values.toList.asJava)
 
       val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
       tPartition.setSd(sd)

@@ -88,13 +88,19 @@ abstract class Catalog {
       ignoreIfNotExists: Boolean): Unit
 
   /**
-   * Alter an existing table partition and optionally override its spec.
+   * Override the specs of one or many existing table partitions, assuming they exist.
+   * This assumes index i of `specs` corresponds to index i of `newSpecs`.
    */
-  def alterPartition(
+  def renamePartitions(
       db: String,
       table: String,
-      spec: TablePartitionSpec,
-      newPart: CatalogTablePartition): Unit
+      specs: Seq[TablePartitionSpec],
+      newSpecs: Seq[TablePartitionSpec]): Unit
+
+  def alterPartitions(
+      db: String,
+      table: String,
+      parts: Seq[CatalogTablePartition]): Unit
 
   def getPartition(db: String, table: String, spec: TablePartitionSpec): CatalogTablePartition
 
@@ -215,5 +221,8 @@ case class CatalogDatabase(
 
 
 object Catalog {
-  type TablePartitionSpec = Seq[String]
+  /**
+   * Specifications of a table partition indexed by column name.
+   */
+  type TablePartitionSpec = Map[String, String]
 }

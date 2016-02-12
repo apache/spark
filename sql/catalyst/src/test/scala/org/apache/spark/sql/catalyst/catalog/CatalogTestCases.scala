@@ -28,9 +28,9 @@ import org.apache.spark.sql.AnalysisException
  */
 abstract class CatalogTestCases extends SparkFunSuite {
   private val storageFormat = CatalogStorageFormat(None, Some("z"), Some("y"), Some("x"), Map())
-  private val part1 = CatalogTablePartition(Seq("1"), storageFormat)
-  private val part2 = CatalogTablePartition(Seq("2"), storageFormat)
-  private val part3 = CatalogTablePartition(Seq("3"), storageFormat)
+  private val part1 = CatalogTablePartition(Map("a" -> "1"), storageFormat)
+  private val part2 = CatalogTablePartition(Map("b" -> "2"), storageFormat)
+  private val part3 = CatalogTablePartition(Map("c" -> "3"), storageFormat)
   private val funcClass = "org.apache.spark.myFunc"
 
   protected def newEmptyCatalog(): Catalog
@@ -344,28 +344,53 @@ abstract class CatalogTestCases extends SparkFunSuite {
     }
   }
 
-  test("alter partitions") {
+  test("rename partitions") {
     val catalog = newBasicCatalog()
-    val partSameSpec = part1.copy(storage = storageFormat.copy(serde = Some("myserde")))
-    val partNewSpec = part1.copy(spec = Seq("10"))
-    // alter but keep spec the same
-    catalog.alterPartition("db2", "tbl2", part1.spec, partSameSpec)
-    assert(catalog.getPartition("db2", "tbl2", part1.spec) == partSameSpec)
-    // alter and change spec
-    catalog.alterPartition("db2", "tbl2", part1.spec, partNewSpec)
-    intercept[AnalysisException] {
-      catalog.getPartition("db2", "tbl2", part1.spec)
-    }
-    assert(catalog.getPartition("db2", "tbl2", partNewSpec.spec) == partNewSpec)
+    val newPart1 = part1.copy(spec = Map("x" -> "10"))
+    val newPart2 = part2.copy(spec = Map("y" -> "12"))
+    val newSpecs = Seq(newPart1.spec, newPart2.spec)
+    catalog.renamePartitions("db2", "tbl2", Seq(part1.spec, part2.spec), newSpecs)
+    assert(catalog.getPartition("db2", "tbl2", newPart1.spec) === newPart1)
+    assert(catalog.getPartition("db2", "tbl2", newPart2.spec) === newPart2)
+    intercept[AnalysisException] { catalog.getPartition("db2", "tbl2", part1.spec) }
+    intercept[AnalysisException] { catalog.getPartition("db2", "tbl2", part2.spec) }
   }
 
-  test("alter partition when database / table does not exist") {
+  test("rename partitions when database / table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterPartition("does_not_exist", "tbl1", part1.spec, part1)
+      catalog.renamePartitions("does_not_exist", "tbl1", Seq(part1.spec), Seq(part2.spec))
     }
     intercept[AnalysisException] {
-      catalog.alterPartition("db2", "does_not_exist", part1.spec, part1)
+      catalog.renamePartitions("db2", "does_not_exist", Seq(part1.spec), Seq(part2.spec))
+    }
+  }
+
+  test("alter partitions") {
+    val catalog = newBasicCatalog()
+    val newPart1 = part1.copy(storage = storageFormat.copy(locationUri = Some("usa")))
+    val newPart2 = part2.copy(storage = storageFormat.copy(locationUri = Some("china")))
+    assert(catalog.getPartition("db2", "tbl2", part1.spec).storage.locationUri.isEmpty)
+    assert(catalog.getPartition("db2", "tbl2", part2.spec).storage.locationUri.isEmpty)
+    // alter but keep spec the same
+    catalog.alterPartitions("db2", "tbl2", Seq(newPart1, newPart2))
+    assert(catalog.getPartition("db2", "tbl2", part1.spec).storage.locationUri === Some("usa"))
+    assert(catalog.getPartition("db2", "tbl2", part2.spec).storage.locationUri === Some("china"))
+    // alter but change spec, should fail because new partition specs do not exist yet
+    val badPart1 = part1.copy(spec = Map("k" -> "v"))
+    val badPart2 = part2.copy(spec = Map("k" -> "v"))
+    intercept[AnalysisException] {
+      catalog.alterPartitions("db2", "tbl2", Seq(badPart1, badPart2))
+    }
+  }
+
+  test("alter partitions when database / table does not exist") {
+    val catalog = newBasicCatalog()
+    intercept[AnalysisException] {
+      catalog.alterPartitions("does_not_exist", "tbl1", Seq(part1))
+    }
+    intercept[AnalysisException] {
+      catalog.alterPartitions("db2", "does_not_exist", Seq(part1))
     }
   }
 
