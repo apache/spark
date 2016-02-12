@@ -23,7 +23,7 @@ from pyspark.mllib.feature import Word2Vec
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="Word2VecExample") # SparkContext
+    sc = SparkContext(appName="Word2VecExample")  # SparkContext
 
     # $example on$
     inp = sc.textFile("text8_lines").map(lambda row: row.split(" "))

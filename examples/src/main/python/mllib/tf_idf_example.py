@@ -25,7 +25,7 @@ from pyspark.mllib.feature import IDF
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="TFIDFExample") # SparkContext
+    sc = SparkContext(appName="TFIDFExample")  # SparkContext
 
     # $example on$
     # Load documents (one per line).

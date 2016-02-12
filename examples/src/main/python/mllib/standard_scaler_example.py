@@ -27,7 +27,7 @@ from pyspark.mllib.feature import StandardScalerModel
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="StandardScalerExample") # SparkContext
+    sc = SparkContext(appName="StandardScalerExample")  # SparkContext
 
     # $example on$
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
@@ -38,7 +38,6 @@ if __name__ == "__main__":
     scaler2 = StandardScaler(withMean=True, withStd=True).fit(features)
     # scaler3 is an identical model to scaler2, and will produce identical transformations
     scaler3 = StandardScalerModel(scaler2.std, scaler2.mean)
-
 
     # data1 will be unit variance.
     data1 = label.zip(scaler1.transform(features))

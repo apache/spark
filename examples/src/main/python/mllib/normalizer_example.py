@@ -25,7 +25,7 @@ from pyspark.mllib.feature import Normalizer
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="NormalizerExample") # SparkContext
+    sc = SparkContext(appName="NormalizerExample")  # SparkContext
 
     # $example on$
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")

@@ -24,7 +24,7 @@ from pyspark.mllib.feature import ElementwiseProduct
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="ElementwiseProductExample") # SparkContext
+    sc = SparkContext(appName="ElementwiseProductExample")  # SparkContext
 
     # $example on$
     data = sc.textFile("data/mllib/kmeans_data.txt")
