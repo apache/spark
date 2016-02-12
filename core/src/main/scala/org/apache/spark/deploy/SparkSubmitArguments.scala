@@ -410,7 +410,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         keytab = value
 
       case HELP =>
-        printUsageAndExit(0)
+        if (args.length == 1) {
+          printUsageAndExit(0)
+        }
 
       case VERBOSE =>
         verbose = true
