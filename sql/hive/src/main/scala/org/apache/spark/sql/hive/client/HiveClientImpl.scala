@@ -317,73 +317,12 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  private def toInputFormat(name: String) =
-    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
-
-  private def toOutputFormat(name: String) =
-    Utils.classForName(name)
-      .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
-
-  private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
-    new HiveFunction(f.name, db, f.className, null, null, -1, null, List.empty[ResourceUri].asJava)
-  }
-
-  private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    new CatalogFunction(hf.getFunctionName, hf.getClassName)
-  }
-
-  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
-    new FieldSchema(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment.orNull)
-  }
-
-  private def fromHiveColumn(hc: FieldSchema): CatalogColumn = {
-    new CatalogColumn(
-      name = hc.getName,
-      dataType = HiveMetastoreTypes.toDataType(hc.getType),
-      nullable = true,
-      comment = Option(hc.getComment))
-  }
-
-  private def toHiveTable(table: CatalogTable): HiveTable = {
-    val hiveTable = new HiveTable(table.database, table.name)
-    hiveTable.setTableType(table.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
-      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE
-      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
-      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
-    })
-    hiveTable.setFields(table.schema.map(toHiveColumn).asJava)
-    hiveTable.setPartCols(table.partitionColumns.map(toHiveColumn).asJava)
-    // TODO: set sort columns here too
-    hiveTable.setOwner(conf.getUser)
-    hiveTable.setNumBuckets(table.numBuckets)
-    hiveTable.setCreateTime((table.createTime / 1000).toInt)
-    hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
-    table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
-    table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
-    table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
-    table.storage.serde.foreach(hiveTable.setSerializationLib)
-    table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
-    table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
-    table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
-    table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
-    hiveTable
-  }
-
-  private def toViewTable(view: CatalogTable): HiveTable = {
-    val tbl = toHiveTable(view)
-    tbl.setTableType(HiveTableType.VIRTUAL_VIEW)
-    tbl.setSerializationLib(null)
-    tbl.clearSerDeInfo()
-    tbl
-  }
-
   override def createView(view: CatalogTable): Unit = withHiveState {
-    client.createTable(toViewTable(view))
+    client.createTable(toHiveViewTable(view))
   }
 
   override def alertView(view: CatalogTable): Unit = withHiveState {
-    client.alterTable(view.qualifiedName, toViewTable(view))
+    client.alterTable(view.qualifiedName, toHiveViewTable(view))
   }
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
@@ -401,22 +340,6 @@ private[hive] class HiveClientImpl(
     val hiveTable = toHiveTable(table)
     val qualifiedTableName = s"${table.database}.$tableName"
     client.alterTable(qualifiedTableName, hiveTable)
-  }
-
-  private def toHivePartition(p: CatalogTablePartition, ht: HiveTable): HivePartition = {
-    new HivePartition(ht, p.spec.asJava, p.storage.locationUri.map { l => new Path(l) }.orNull)
-  }
-
-  private def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
-    val apiPartition = hp.getTPartition
-    CatalogTablePartition(
-      spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
-      storage = CatalogStorageFormat(
-        locationUri = Option(apiPartition.getSd.getLocation),
-        inputFormat = Option(apiPartition.getSd.getInputFormat),
-        outputFormat = Option(apiPartition.getSd.getOutputFormat),
-        serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
-        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
 
   override def createPartitions(
@@ -670,4 +593,87 @@ private[hive] class HiveClientImpl(
         client.dropDatabase(db, true, false, true)
       }
   }
+
+
+  /* -------------------------------------------------------- *
+   |  Helper methods for converting to and from Hive classes  |
+   * -------------------------------------------------------- */
+
+  private def toInputFormat(name: String) =
+    Utils.classForName(name).asInstanceOf[Class[_ <: org.apache.hadoop.mapred.InputFormat[_, _]]]
+
+  private def toOutputFormat(name: String) =
+    Utils.classForName(name)
+      .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
+
+  private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
+    new HiveFunction(f.name, db, f.className, null, null, -1, null, List.empty[ResourceUri].asJava)
+  }
+
+  private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
+    new CatalogFunction(hf.getFunctionName, hf.getClassName)
+  }
+
+  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
+    new FieldSchema(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment.orNull)
+  }
+
+  private def fromHiveColumn(hc: FieldSchema): CatalogColumn = {
+    new CatalogColumn(
+      name = hc.getName,
+      dataType = HiveMetastoreTypes.toDataType(hc.getType),
+      nullable = true,
+      comment = Option(hc.getComment))
+  }
+
+  private def toHiveTable(table: CatalogTable): HiveTable = {
+    val hiveTable = new HiveTable(table.database, table.name)
+    hiveTable.setTableType(table.tableType match {
+      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
+      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE
+      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE
+      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW
+    })
+    hiveTable.setFields(table.schema.map(toHiveColumn).asJava)
+    hiveTable.setPartCols(table.partitionColumns.map(toHiveColumn).asJava)
+    // TODO: set sort columns here too
+    hiveTable.setOwner(conf.getUser)
+    hiveTable.setNumBuckets(table.numBuckets)
+    hiveTable.setCreateTime((table.createTime / 1000).toInt)
+    hiveTable.setLastAccessTime((table.lastAccessTime / 1000).toInt)
+    table.storage.locationUri.foreach { loc => shim.setDataLocation(hiveTable, loc) }
+    table.storage.inputFormat.map(toInputFormat).foreach(hiveTable.setInputFormatClass)
+    table.storage.outputFormat.map(toOutputFormat).foreach(hiveTable.setOutputFormatClass)
+    table.storage.serde.foreach(hiveTable.setSerializationLib)
+    table.storage.serdeProperties.foreach { case (k, v) => hiveTable.setSerdeParam(k, v) }
+    table.properties.foreach { case (k, v) => hiveTable.setProperty(k, v) }
+    table.viewOriginalText.foreach { t => hiveTable.setViewOriginalText(t) }
+    table.viewText.foreach { t => hiveTable.setViewExpandedText(t) }
+    hiveTable
+  }
+
+  private def toHiveViewTable(view: CatalogTable): HiveTable = {
+    val tbl = toHiveTable(view)
+    tbl.setTableType(HiveTableType.VIRTUAL_VIEW)
+    tbl.setSerializationLib(null)
+    tbl.clearSerDeInfo()
+    tbl
+  }
+
+  private def toHivePartition(p: CatalogTablePartition, ht: HiveTable): HivePartition = {
+    new HivePartition(ht, p.spec.asJava, p.storage.locationUri.map { l => new Path(l) }.orNull)
+  }
+
+  private def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
+    val apiPartition = hp.getTPartition
+    CatalogTablePartition(
+      spec = Option(hp.getSpec).map(_.asScala.toMap).getOrElse(Map.empty),
+      storage = CatalogStorageFormat(
+        locationUri = Option(apiPartition.getSd.getLocation),
+        inputFormat = Option(apiPartition.getSd.getInputFormat),
+        outputFormat = Option(apiPartition.getSd.getOutputFormat),
+        serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
+        serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
+  }
+
 }
