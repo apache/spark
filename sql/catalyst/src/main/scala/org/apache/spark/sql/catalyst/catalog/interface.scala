@@ -194,6 +194,18 @@ case class CatalogTable(
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = s"$database.$name"
+
+  /** Syntactic sugar to update a field in `storage`. */
+  def withNewStorage(
+      locationUri: Option[String] = storage.locationUri,
+      inputFormat: Option[String] = storage.inputFormat,
+      outputFormat: Option[String] = storage.outputFormat,
+      serde: Option[String] = storage.serde,
+      serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
+    copy(storage = CatalogStorageFormat(
+      locationUri, inputFormat, outputFormat, serde, serdeProperties))
+  }
+
 }
 
 

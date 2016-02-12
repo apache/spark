@@ -86,9 +86,11 @@ abstract class CatalogTestCases extends SparkFunSuite {
     val catalog = newEmptyCatalog()
     catalog.createDatabase(newDb(), ignoreIfExists = false)
     assert(catalog.listDatabases().toSet == Set("default"))
-
     catalog.createDatabase(newDb("default2"), ignoreIfExists = false)
     assert(catalog.listDatabases().toSet == Set("default", "default2"))
+    assert(catalog.databaseExists("default"))
+    assert(catalog.databaseExists("default2"))
+    assert(!catalog.databaseExists("does_not_exist"))
   }
 
   test("get database when a database exists") {

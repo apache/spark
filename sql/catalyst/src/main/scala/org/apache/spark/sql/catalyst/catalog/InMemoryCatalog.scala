@@ -39,7 +39,7 @@ class InMemoryCatalog extends Catalog {
     val functions = new mutable.HashMap[String, CatalogFunction]
   }
 
-  // Database name -> spec
+  // Database name -> description
   private val catalog = new scala.collection.mutable.HashMap[String, DatabaseDesc]
 
   private def filterPattern(names: Seq[String], pattern: String): Seq[String] = {

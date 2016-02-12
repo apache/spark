@@ -399,11 +399,10 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
             outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
         }
 
-        var storDesc = tableDesc.storage
-        hiveSerDe.inputFormat.foreach { i => storDesc = storDesc.copy(inputFormat = Some(i)) }
-        hiveSerDe.outputFormat.foreach { o => storDesc = storDesc.copy(outputFormat = Some(o)) }
-        hiveSerDe.serde.foreach { s => storDesc = storDesc.copy(serde = Some(s)) }
-        tableDesc = tableDesc.copy(storage = storDesc)
+        tableDesc = tableDesc.withNewStorage(
+          inputFormat = hiveSerDe.inputFormat.orElse(tableDesc.storage.inputFormat),
+          outputFormat = hiveSerDe.inputFormat.orElse(tableDesc.storage.outputFormat),
+          serde = hiveSerDe.inputFormat.orElse(tableDesc.storage.serde))
 
         children.collect {
           case list @ Token("TOK_TABCOLLIST", _) =>
@@ -449,17 +448,14 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
               // TODO support the nullFormat
               case _ => assert(false)
             }
-            tableDesc = tableDesc.copy(
-              storage = tableDesc.storage.copy(
-                serdeProperties = tableDesc.storage.serdeProperties ++ serdeParams.asScala))
+            tableDesc = tableDesc.withNewStorage(
+              serdeProperties = tableDesc.storage.serdeProperties ++ serdeParams.asScala)
           case Token("TOK_TABLELOCATION", child :: Nil) =>
             val location = EximUtil.relativeToAbsolutePath(hiveConf, unescapeSQLString(child.text))
-            tableDesc = tableDesc.copy(
-              storage = tableDesc.storage.copy(locationUri = Option(location)))
+            tableDesc = tableDesc.withNewStorage(locationUri = Option(location))
           case Token("TOK_TABLESERIALIZER", child :: Nil) =>
-            tableDesc = tableDesc.copy(
-              storage = tableDesc.storage.copy(
-                serde = Option(unescapeSQLString(child.children.head.text))))
+            tableDesc = tableDesc.withNewStorage(
+              serde = Option(unescapeSQLString(child.children.head.text)))
             if (child.numChildren == 2) {
               // This is based on the readProps(..) method in
               // ql/src/java/org/apache/hadoop/hive/ql/parse/BaseSemanticAnalyzer.java:
@@ -471,74 +467,60 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
                     .orNull
                   (unescapeSQLString(prop), value)
               }.toMap
-              tableDesc = tableDesc.copy(
-                storage = tableDesc.storage.copy(
-                  serdeProperties = tableDesc.storage.serdeProperties ++ serdeParams))
+              tableDesc = tableDesc.withNewStorage(
+                serdeProperties = tableDesc.storage.serdeProperties ++ serdeParams)
             }
           case Token("TOK_FILEFORMAT_GENERIC", child :: Nil) =>
             child.text.toLowerCase(Locale.ENGLISH) match {
               case "orc" =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
-                    outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat")))
+                tableDesc = tableDesc.withNewStorage(
+                  inputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat"),
+                  outputFormat = Option("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat"))
                 if (tableDesc.storage.serde.isEmpty) {
-                  tableDesc = tableDesc.copy(
-                    storage = tableDesc.storage.copy(
-                      serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde")))
+                  tableDesc = tableDesc.withNewStorage(
+                    serde = Option("org.apache.hadoop.hive.ql.io.orc.OrcSerde"))
                 }
 
               case "parquet" =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    inputFormat =
-                      Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
-                    outputFormat =
-                      Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat")))
+                tableDesc = tableDesc.withNewStorage(
+                  inputFormat =
+                    Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"),
+                  outputFormat =
+                    Option("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
                 if (tableDesc.storage.serde.isEmpty) {
-                  tableDesc = tableDesc.copy(
-                    storage = tableDesc.storage.copy(
-                      serde =
-                        Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")))
+                  tableDesc = tableDesc.withNewStorage(
+                    serde = Option("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
                 }
 
               case "rcfile" =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
-                    outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat")))
+                tableDesc = tableDesc.withNewStorage(
+                  inputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"),
+                  outputFormat = Option("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
                 if (tableDesc.storage.serde.isEmpty) {
-                  tableDesc = tableDesc.copy(
-                    storage = tableDesc.storage.copy(
-                      serde =
-                        Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe")))
+                  tableDesc = tableDesc.withNewStorage(
+                    serde =
+                      Option("org.apache.hadoop.hive.serde2.columnar.LazyBinaryColumnarSerDe"))
                 }
 
               case "textfile" =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    inputFormat =
-                      Option("org.apache.hadoop.mapred.TextInputFormat"),
-                    outputFormat =
-                      Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat")))
+                tableDesc = tableDesc.withNewStorage(
+                  inputFormat = Option("org.apache.hadoop.mapred.TextInputFormat"),
+                  outputFormat = Option("org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat"))
 
               case "sequencefile" =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
-                    outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat")))
+                tableDesc = tableDesc.withNewStorage(
+                  inputFormat = Option("org.apache.hadoop.mapred.SequenceFileInputFormat"),
+                  outputFormat = Option("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
 
               case "avro" =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    inputFormat =
-                      Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"),
-                    outputFormat =
-                      Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat")))
+                tableDesc = tableDesc.withNewStorage(
+                  inputFormat =
+                    Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat"),
+                  outputFormat =
+                    Option("org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat"))
                 if (tableDesc.storage.serde.isEmpty) {
-                  tableDesc = tableDesc.copy(
-                    storage = tableDesc.storage.copy(
-                      serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe")))
+                  tableDesc = tableDesc.withNewStorage(
+                    serde = Option("org.apache.hadoop.hive.serde2.avro.AvroSerDe"))
                 }
 
               case _ =>
@@ -548,26 +530,21 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
           case Token("TOK_TABLESERIALIZER",
           Token("TOK_SERDENAME", Token(serdeName, Nil) :: otherProps) :: Nil) =>
-            tableDesc = tableDesc.copy(
-              storage = tableDesc.storage.copy(serde = Option(unquoteString(serdeName))))
+            tableDesc = tableDesc.withNewStorage(serde = Option(unquoteString(serdeName)))
 
             otherProps match {
               case Token("TOK_TABLEPROPERTIES", list :: Nil) :: Nil =>
-                tableDesc = tableDesc.copy(
-                  storage = tableDesc.storage.copy(
-                    serdeProperties = tableDesc.storage.serdeProperties ++ getProperties(list)))
+                tableDesc = tableDesc.withNewStorage(
+                  serdeProperties = tableDesc.storage.serdeProperties ++ getProperties(list))
               case _ =>
             }
 
           case Token("TOK_TABLEPROPERTIES", list :: Nil) =>
             tableDesc = tableDesc.copy(properties = tableDesc.properties ++ getProperties(list))
           case list @ Token("TOK_TABLEFILEFORMAT", _) =>
-            tableDesc = tableDesc.copy(
-              storage = tableDesc.storage.copy(
-                inputFormat =
-                  Option(unescapeSQLString(list.children.head.text)),
-                outputFormat =
-                  Option(unescapeSQLString(list.children(1).text))))
+            tableDesc = tableDesc.withNewStorage(
+              inputFormat = Option(unescapeSQLString(list.children.head.text)),
+              outputFormat = Option(unescapeSQLString(list.children(1).text)))
           case Token("TOK_STORAGEHANDLER", _) =>
             throw new AnalysisException(
               "CREATE TABLE AS SELECT cannot be used for a non-native table")

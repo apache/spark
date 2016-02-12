@@ -432,7 +432,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       }
     } else {
       MetastoreRelation(
-        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client)(hive)
+        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client, hive)
     }
   }
 
@@ -633,9 +633,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         } else {
           val desc = if (table.storage.serde.isEmpty) {
             // add default serde
-            table.copy(storage =
-              table.storage.copy(serde =
-                Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")))
+            table.withNewStorage(
+              serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
           } else {
             table
           }
@@ -748,8 +747,9 @@ private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
     alias: Option[String])
-    (val table: CatalogTable, @transient private val client: HiveClient)
-    (@transient private val sqlContext: SQLContext)
+    (val table: CatalogTable,
+     @transient private val client: HiveClient,
+     @transient private val sqlContext: SQLContext)
   extends LeafNode with MultiInstanceRelation with FileRelation {
 
   override def equals(other: Any): Boolean = other match {
@@ -920,7 +920,7 @@ private[hive] case class MetastoreRelation(
 
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(table, client)(sqlContext)
+    MetastoreRelation(databaseName, tableName, alias)(table, client, sqlContext)
   }
 }
 
