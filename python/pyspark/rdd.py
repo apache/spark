@@ -2004,20 +2004,20 @@ class RDD(object):
 
     def repartition(self, numPartitions):
         """
-         Return a new RDD that has exactly numPartitions partitions.
+        Return a new RDD that has exactly numPartitions partitions.
 
-         Can increase or decrease the level of parallelism in this RDD.
-         Internally, this uses a shuffle to redistribute data.
-         If you are decreasing the number of partitions in this RDD, consider
-         using `coalesce`, which can avoid performing a shuffle.
+        Can increase or decrease the level of parallelism in this RDD.
+        Internally, this uses a shuffle to redistribute data.
+        If you are decreasing the number of partitions in this RDD, consider
+        using `coalesce`, which can avoid performing a shuffle.
 
-         >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
-         >>> sorted(rdd.glom().collect())
-         [[1], [2, 3], [4, 5], [6, 7]]
-         >>> len(rdd.repartition(2).glom().collect())
-         2
-         >>> len(rdd.repartition(10).glom().collect())
-         10
+        >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
+        >>> sorted(rdd.glom().collect())
+        [[1], [2, 3], [4, 5], [6, 7]]
+        >>> len(rdd.repartition(2).glom().collect())
+        2
+        >>> len(rdd.repartition(10).glom().collect())
+        10
         """
         jrdd = self._jrdd.repartition(numPartitions)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
