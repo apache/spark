@@ -229,7 +229,7 @@ class Analyzer(
         else {
           g
         }
-      case x: GroupingSets =>
+      case x: GroupingSets if x.expressions.forall(_.resolved) =>
         // Find the grouping ID AttributeReference that has been added above
         val (groupingID, groupByExprsWithoutGroupingID) = x.groupByExprs.partition {
           case u: AttributeReference => resolver(u.name, VirtualColumn.groupingIdName)
