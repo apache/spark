@@ -42,12 +42,13 @@ object GenerateMIMAIgnore {
   private val classLoader = Thread.currentThread().getContextClassLoader
   private val mirror = runtimeMirror(classLoader)
 
+  private def isDeveloperApi(sym: unv.Symbol) = sym.annotations.exists {
+    _.tpe =:= mirror.staticClass("org.apache.spark.annotation.DeveloperApi").toType
+  }
 
-  private def isDeveloperApi(sym: unv.Symbol) =
-    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
-
-  private def isExperimental(sym: unv.Symbol) =
-    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
+  private def isExperimental(sym: unv.Symbol) = sym.annotations.exists {
+    _.tpe =:= mirror.staticClass("org.apache.spark.annotation.Experimental").toType
+  }
 
 
   private def isPackagePrivate(sym: unv.Symbol) =
