@@ -381,7 +381,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         // specific way.
         try {
           logInfo(message)
-          client.createTable(table)
+          client.createTable(table, ignoreIfExists = false)
         } catch {
           case throwable: Throwable =>
             val warningMessage =
@@ -389,13 +389,13 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
                 s"it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, throwable)
             val sparkSqlSpecificTable = newSparkSQLSpecificMetastoreTable()
-            client.createTable(sparkSqlSpecificTable)
+            client.createTable(sparkSqlSpecificTable, ignoreIfExists = false)
         }
 
       case (None, message) =>
         logWarning(message)
         val hiveTable = newSparkSQLSpecificMetastoreTable()
-        client.createTable(hiveTable)
+        client.createTable(hiveTable, ignoreIfExists = false)
     }
   }
 

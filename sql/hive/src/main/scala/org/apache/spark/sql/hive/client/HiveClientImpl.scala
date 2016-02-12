@@ -381,8 +381,8 @@ private[hive] class HiveClientImpl(
     client.alterTable(view.qualifiedName, toViewTable(view))
   }
 
-  override def createTable(table: CatalogTable): Unit = withHiveState {
-    client.createTable(toQlTable(table))
+  override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
+    client.createTable(toQlTable(table), ignoreIfExists)
   }
 
   override def dropTable(
@@ -432,6 +432,10 @@ private[hive] class HiveClientImpl(
 
   override def listTables(dbName: String): Seq[String] = withHiveState {
     client.getAllTables(dbName).asScala
+  }
+
+  override def listTables(dbName: String, pattern: String): Seq[String] = withHiveState {
+    client.getTablesByPattern(dbName, pattern).asScala
   }
 
   /**

@@ -217,7 +217,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("alter table") {
     val catalog = newBasicCatalog()
-    catalog.alterTable("db2", "tbl1", newTable("tbl1").copy(createTime = 10))
+    catalog.alterTable("db2", newTable("tbl1").copy(createTime = 10))
     assert(catalog.getTable("db2", "tbl1").createTime == 10)
   }
 
@@ -225,11 +225,11 @@ abstract class CatalogTestCases extends SparkFunSuite {
     val catalog = newBasicCatalog()
 
     intercept[AnalysisException] {  // Throw exception when the database does not exist
-      catalog.alterTable("unknown_db", "unknown_table", newTable("unknown_table"))
+      catalog.alterTable("unknown_db", newTable("unknown_table"))
     }
 
     intercept[AnalysisException] {  // Throw exception when the table does not exist
-      catalog.alterTable("db2", "unknown_table", newTable("unknown_table"))
+      catalog.alterTable("db2", newTable("unknown_table"))
     }
   }
 

@@ -51,6 +51,9 @@ private[hive] trait HiveClient {
   /** Returns the names of all tables in the given database. */
   def listTables(dbName: String): Seq[String]
 
+  /** Returns the names of tables in the given database that matches the given pattern. */
+  def listTables(dbName: String, pattern: String): Seq[String]
+
   /** Returns the name of the active database. */
   def currentDatabase: String
 
@@ -83,7 +86,7 @@ private[hive] trait HiveClient {
   def alertView(view: CatalogTable): Unit
 
   /** Creates a table with the given metadata. */
-  def createTable(table: CatalogTable): Unit
+  def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
 
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit

@@ -188,13 +188,9 @@ class InMemoryCatalog extends Catalog {
     catalog(db).tables.remove(oldName)
   }
 
-  override def alterTable(
-      db: String,
-      table: String,
-      tableDefinition: CatalogTable): Unit = synchronized {
-    assertTableExists(db, table)
-    assert(table == tableDefinition.name)
-    catalog(db).tables(table).table = tableDefinition
+  override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
+    assertTableExists(db, tableDefinition.name)
+    catalog(db).tables(tableDefinition.name).table = tableDefinition
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {

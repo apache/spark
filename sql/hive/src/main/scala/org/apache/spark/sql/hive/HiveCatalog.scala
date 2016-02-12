@@ -29,6 +29,14 @@ import org.apache.spark.sql.hive.client.HiveClient
 private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   import Catalog._
 
+  /**
+   * Assert that the provided database matches the one specified in the table.
+   */
+  private def assertDbMatches(db: String, table: CatalogTable): Unit = {
+    assert(table.specifiedDatabase == Some(db),
+      "provided database does not much the one specified in the table definition")
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -77,40 +85,38 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    assertDbMatches(db, tableDefinition)
+    client.createTable(tableDefinition, ignoreIfExists)
   }
 
   override def dropTable(
       db: String,
       table: String,
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    throw new UnsupportedOperationException
+    client.dropTable(db, table, ignoreIfNotExists)
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
-    throw new UnsupportedOperationException
+    val newTable = client.getTable(db, oldName).copy(name = newName)
+    assertDbMatches(db, newTable)
+    client.alterTable(oldName, newTable)
   }
 
-  /**
-   * Alter an existing table. This operation does not support renaming.
-   */
-  override def alterTable(
-      db: String,
-      table: String,
-      tableDefinition: CatalogTable): Unit = synchronized {
-    throw new UnsupportedOperationException
+  override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
+    assertDbMatches(db, tableDefinition)
+    client.alterTable(tableDefinition)
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
-    throw new UnsupportedOperationException
+    client.getTable(db, table)
   }
 
   override def listTables(db: String): Seq[String] = synchronized {
-    throw new UnsupportedOperationException
+    client.listTables(db)
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
-    throw new UnsupportedOperationException
+    client.listTables(db, pattern)
   }
 
   // --------------------------------------------------------------------------

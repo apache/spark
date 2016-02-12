@@ -137,7 +137,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
             serdeProperties = Map.empty
           ))
 
-      client.createTable(table)
+      client.createTable(table, ignoreIfExists = false)
     }
 
     test(s"$version: getTable") {

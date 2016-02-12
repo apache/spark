@@ -69,7 +69,7 @@ case class CreateTableAsSelect(
         withFormat
       }
 
-      hiveContext.catalog.client.createTable(withSchema)
+      hiveContext.catalog.client.createTable(withSchema, ignoreIfExists = false)
 
       // Get the Metastore Relation
       hiveContext.catalog.lookupRelation(tableIdentifier, None) match {

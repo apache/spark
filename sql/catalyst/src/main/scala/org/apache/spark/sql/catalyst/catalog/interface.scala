@@ -63,10 +63,7 @@ abstract class Catalog {
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
-  /**
-   * Alter an existing table. This operation does not support renaming.
-   */
-  def alterTable(db: String, table: String, tableDefinition: CatalogTable): Unit
+  def alterTable(db: String, tableDefinition: CatalogTable): Unit
 
   def getTable(db: String, table: String): CatalogTable
 
