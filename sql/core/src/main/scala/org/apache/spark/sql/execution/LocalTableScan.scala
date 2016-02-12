@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 
 /**
@@ -29,6 +30,9 @@ private[sql] case class LocalTableScan(
     output: Seq[Attribute],
     rows: Seq[InternalRow]) extends LeafNode {
 
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   private val unsafeRows: Array[InternalRow] = {
     val proj = UnsafeProjection.create(output, output)
     rows.map(r => proj(r).copy()).toArray
@@ -36,7 +40,13 @@ private[sql] case class LocalTableScan(
 
   private lazy val rdd = sqlContext.sparkContext.parallelize(unsafeRows)
 
-  protected override def doExecute(): RDD[InternalRow] = rdd
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    rdd.map { r =>
+      numOutputRows += 1
+      r
+    }
+  }
 
   override def executeCollect(): Array[InternalRow] = {
     unsafeRows

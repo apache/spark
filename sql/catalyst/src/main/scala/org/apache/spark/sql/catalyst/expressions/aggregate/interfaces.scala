@@ -344,4 +344,3 @@ abstract class DeclarativeAggregate
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
 }
-

@@ -238,14 +238,39 @@ class Analyzer(
           }
         }.toMap
 
-        val aggregations: Seq[NamedExpression] = x.aggregations.map {
-          // If an expression is an aggregate (contains a AggregateExpression) then we dont change
-          // it so that the aggregation is computed on the unmodified value of its argument
-          // expressions.
-          case expr if expr.find(_.isInstanceOf[AggregateExpression]).nonEmpty => expr
-          // If not then its a grouping expression and we need to use the modified (with nulls from
-          // Expand) value of the expression.
-          case expr => expr.transformDown {
+        val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
+          // collect all the found AggregateExpression, so we can check an expression is part of
+          // any AggregateExpression or not.
+          val aggsBuffer = ArrayBuffer[Expression]()
+          // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
+          def isPartOfAggregation(e: Expression): Boolean = {
+            aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+          }
+          expr.transformDown {
+            // AggregateExpression should be computed on the unmodified value of its argument
+            // expressions, so we should not replace any references to grouping expression
+            // inside it.
+            case e: AggregateExpression =>
+              aggsBuffer += e
+              e
+            case e if isPartOfAggregation(e) => e
+            case e: GroupingID =>
+              if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
+                gid
+              } else {
+                throw new AnalysisException(
+                  s"Columns of grouping_id (${e.groupByExprs.mkString(",")}) does not match " +
+                    s"grouping columns (${x.groupByExprs.mkString(",")})")
+              }
+            case Grouping(col: Expression) =>
+              val idx = x.groupByExprs.indexOf(col)
+              if (idx >= 0) {
+                Cast(BitwiseAnd(ShiftRight(gid, Literal(x.groupByExprs.length - 1 - idx)),
+                  Literal(1)), ByteType)
+              } else {
+                throw new AnalysisException(s"Column of grouping ($col) can't be found " +
+                  s"in grouping columns ${x.groupByExprs.mkString(",")}")
+              }
             case e =>
               groupByAliases.find(_.child.semanticEquals(e)).map(attributeMap(_)).getOrElse(e)
           }.asInstanceOf[NamedExpression]
@@ -416,9 +441,10 @@ class Analyzer(
             case UnresolvedAlias(f @ UnresolvedFunction(_, args, _), _) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
               UnresolvedAlias(child = f.copy(children = newChildren)) :: Nil
-            case Alias(f @ UnresolvedFunction(_, args, _), name) if containsStar(args) =>
+            case a @ Alias(f @ UnresolvedFunction(_, args, _), name) if containsStar(args) =>
               val newChildren = expandStarExpressions(args, child)
-              Alias(child = f.copy(children = newChildren), name)() :: Nil
+              Alias(child = f.copy(children = newChildren), name)(
+                isGenerated = a.isGenerated) :: Nil
             case UnresolvedAlias(c @ CreateArray(args), _) if containsStar(args) =>
               val expandedArgs = args.flatMap {
                 case s: Star => s.expand(child, resolver)
@@ -528,7 +554,7 @@ class Analyzer(
 
     def newAliases(expressions: Seq[NamedExpression]): Seq[NamedExpression] = {
       expressions.map {
-        case a: Alias => Alias(a.child, a.name)()
+        case a: Alias => Alias(a.child, a.name)(isGenerated = a.isGenerated)
         case other => other
       }
     }
@@ -734,7 +760,10 @@ class Analyzer(
 
         // Try resolving the condition of the filter as though it is in the aggregate clause
         val aggregatedCondition =
-          Aggregate(grouping, Alias(havingCondition, "havingCondition")() :: Nil, child)
+          Aggregate(
+            grouping,
+            Alias(havingCondition, "havingCondition")(isGenerated = true) :: Nil,
+            child)
         val resolvedOperator = execute(aggregatedCondition)
         def resolvedAggregateFilter =
           resolvedOperator
@@ -759,7 +788,8 @@ class Analyzer(
         // Try resolving the ordering as though it is in the aggregate clause.
         try {
           val unresolvedSortOrders = sortOrder.filter(s => !s.resolved || containsAggregate(s))
-          val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
+          val aliasedOrdering =
+            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")(isGenerated = true))
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
           val resolvedAggregate: Aggregate = execute(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -814,8 +844,11 @@ class Analyzer(
         }
     }
 
+    private def isAggregateExpression(e: Expression): Boolean = {
+      e.isInstanceOf[AggregateExpression] || e.isInstanceOf[Grouping] || e.isInstanceOf[GroupingID]
+    }
     def containsAggregate(condition: Expression): Boolean = {
-      condition.find(_.isInstanceOf[AggregateExpression]).isDefined
+      condition.find(isAggregateExpression).isDefined
     }
   }
 
@@ -997,7 +1030,7 @@ class Analyzer(
         _.transform {
           // Extracts children expressions of a WindowFunction (input parameters of
           // a WindowFunction).
-          case wf : WindowFunction =>
+          case wf: WindowFunction =>
             val newChildren = wf.children.map(extractExpr)
             wf.withNewChildren(newChildren)
 
@@ -1190,7 +1223,7 @@ class Analyzer(
           leafNondeterministic.map { e =>
             val ne = e match {
               case n: NamedExpression => n
-              case _ => Alias(e, "_nondeterministic")()
+              case _ => Alias(e, "_nondeterministic")(isGenerated = true)
             }
             new TreeNodeRef(e) -> ne
           }
@@ -1355,7 +1388,8 @@ object CleanupAliases extends Rule[LogicalPlan] {
 
   def trimNonTopLevelAliases(e: Expression): Expression = e match {
     case a: Alias =>
-      Alias(trimAliases(a.child), a.name)(a.exprId, a.qualifiers, a.explicitMetadata)
+      Alias(trimAliases(a.child), a.name)(
+        a.exprId, a.qualifiers, a.explicitMetadata, a.isGenerated)
     case other => trimAliases(other)
   }
 

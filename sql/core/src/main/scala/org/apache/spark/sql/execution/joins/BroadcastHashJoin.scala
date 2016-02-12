@@ -48,7 +48,6 @@ case class BroadcastHashJoin(
   }
 
   override private[sql] lazy val metrics = Map(
-    "numStreamRows" -> SQLMetrics.createLongMetric(sparkContext, s"number of $streamSideName rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
@@ -63,23 +62,20 @@ case class BroadcastHashJoin(
   private[this] val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
     // TODO: move this check into HashedRelation
     if (canJoinKeyFitWithinLong) {
-      LongHashedRelation(
-        input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+      LongHashedRelation(input.iterator, buildSideKeyGenerator, input.size)
     } else {
-      HashedRelation(
-        input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+      HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
     }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = longMetric("numStreamRows")
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
       TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
-      hashJoin(streamedIter, numStreamedRows, hashedRelation, numOutputRows)
+      hashJoin(streamedIter, hashedRelation, numOutputRows)
     }
   }
 
@@ -136,6 +132,7 @@ case class BroadcastHashJoin(
       case BuildRight => input ++ buildColumns
     }
 
+    val numOutput = metricTerm(ctx, "numOutputRows")
     val outputCode = if (condition.isDefined) {
       // filter the output via condition
       ctx.currentVars = resultVars
@@ -143,11 +140,15 @@ case class BroadcastHashJoin(
       s"""
          | ${ev.code}
          | if (!${ev.isNull} && ${ev.value}) {
+         |   $numOutput.add(1);
          |   ${consume(ctx, resultVars)}
          | }
        """.stripMargin
     } else {
-      consume(ctx, resultVars)
+      s"""
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
+       """.stripMargin
     }
 
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {

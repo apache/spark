@@ -37,7 +37,6 @@ case class BroadcastLeftSemiJoinHash(
     condition: Option[Expression]) extends BinaryNode with HashSemiJoin {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
@@ -47,28 +46,27 @@ case class BroadcastLeftSemiJoinHash(
   private[this] val buildRelation: Iterable[InternalRow] => Any = {
     if (condition.isEmpty) {
       (input: Iterable[InternalRow]) =>
-        buildKeyHashSet(input.toIterator, SQLMetrics.nullLongMetric)
+        buildKeyHashSet(input.toIterator)
     } else {
       (input: Iterable[InternalRow]) =>
-        HashedRelation(input.toIterator, SQLMetrics.nullLongMetric, rightKeyGenerator, input.size)
+        HashedRelation(input.toIterator, rightKeyGenerator, input.size)
     }
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
     val numOutputRows = longMetric("numOutputRows")
 
     if (condition.isEmpty) {
       val broadcastedRelation = right.executeBroadcast[java.util.Set[InternalRow]]()
       left.execute().mapPartitionsInternal { streamIter =>
-        hashSemiJoin(streamIter, numLeftRows, broadcastedRelation.value, numOutputRows)
+        hashSemiJoin(streamIter, broadcastedRelation.value, numOutputRows)
       }
     } else {
       val broadcastedRelation = right.executeBroadcast[HashedRelation]()
       left.execute().mapPartitionsInternal { streamIter =>
         val hashedRelation = broadcastedRelation.value
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
-        hashSemiJoin(streamIter, numLeftRows, hashedRelation, numOutputRows)
+        hashSemiJoin(streamIter, hashedRelation, numOutputRows)
       }
     }
   }

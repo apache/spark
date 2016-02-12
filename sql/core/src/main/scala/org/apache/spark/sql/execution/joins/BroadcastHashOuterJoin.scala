@@ -44,14 +44,7 @@ case class BroadcastHashOuterJoin(
     throw new IllegalArgumentException(s"HashOuterJoin should not take $jt as the JoinType")
   }
 
-  val streamSideName = joinType match {
-    case RightOuter => "right"
-    case LeftOuter => "left"
-    case jt => failOnWrongJoinType(jt)
-  }
-
   override private[sql] lazy val metrics = Map(
-    "numStreamRows" -> SQLMetrics.createLongMetric(sparkContext, s"number of $streamSideName rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = joinType match {
@@ -64,13 +57,12 @@ case class BroadcastHashOuterJoin(
   }
 
   private[this] val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
-    HashedRelation(input.iterator, SQLMetrics.nullLongMetric, buildKeyGenerator, input.size)
+    HashedRelation(input.iterator, buildKeyGenerator, input.size)
   }
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = longMetric("numStreamRows")
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = buildPlan.executeBroadcast[UnsafeHashedRelation]()
@@ -85,7 +77,6 @@ case class BroadcastHashOuterJoin(
       joinType match {
         case LeftOuter =>
           streamedIter.flatMap(currentRow => {
-            numStreamedRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
             leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj, numOutputRows)
@@ -93,7 +84,6 @@ case class BroadcastHashOuterJoin(
 
         case RightOuter =>
           streamedIter.flatMap(currentRow => {
-            numStreamedRows += 1
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
             rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj, numOutputRows)
