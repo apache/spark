@@ -47,6 +47,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
 
   override def dataType: DataType = trueValue.dataType
 
+  override def prettyDataType: DataType = trueValue.prettyDataType
+
   override def eval(input: InternalRow): Any = {
     if (java.lang.Boolean.TRUE.equals(predicate.eval(input))) {
       trueValue.eval(input)
@@ -101,6 +103,8 @@ abstract class CaseWhenBase(
   }
 
   override def dataType: DataType = branches.head._2.dataType
+
+  override def prettyDataType: DataType = thenList.head.prettyDataType
 
   override def nullable: Boolean = {
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
@@ -307,6 +311,8 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = children.head.dataType
 
+  override def prettyDataType: DataType = children.head.prettyDataType
+
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {
       val evalc = c.eval(input)
@@ -366,6 +372,8 @@ case class Greatest(children: Seq[Expression]) extends Expression {
   }
 
   override def dataType: DataType = children.head.dataType
+
+  override def prettyDataType: DataType = children.head.prettyDataType
 
   override def eval(input: InternalRow): Any = {
     children.foldLeft[Any](null)((r, c) => {

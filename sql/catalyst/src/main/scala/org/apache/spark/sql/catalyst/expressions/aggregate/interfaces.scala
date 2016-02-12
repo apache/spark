@@ -114,6 +114,7 @@ private[sql] case class AggregateExpression(
 
   override def children: Seq[Expression] = aggregateFunction :: Nil
   override def dataType: DataType = aggregateFunction.dataType
+  override def prettyDataType: DataType = aggregateFunction.prettyDataType
   override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 

@@ -137,6 +137,8 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def dataType: DataType
 
+  def prettyDataType: DataType = dataType
+
   /**
    * Returns true if  all the children of this expression have been resolved to a specific schema
    * and false if any still contains any unresolved placeholders.

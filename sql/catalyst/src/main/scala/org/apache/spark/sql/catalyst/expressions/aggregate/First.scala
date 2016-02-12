@@ -53,6 +53,8 @@ case class First(child: Expression, ignoreNullsExpr: Expression) extends Declara
   // Return data type.
   override def dataType: DataType = child.dataType
 
+  override def prettyDataType: DataType = child.prettyDataType
+
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
 

@@ -55,6 +55,9 @@ case class SortOrder(child: Expression, direction: SortDirection)
   }
 
   override def dataType: DataType = child.dataType
+
+  override def prettyDataType: DataType = child.prettyDataType
+
   override def nullable: Boolean = child.nullable
 
   override def toString: String = s"$child ${direction.sql}"

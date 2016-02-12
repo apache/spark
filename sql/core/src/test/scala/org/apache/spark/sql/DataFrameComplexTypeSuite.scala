@@ -58,4 +58,15 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     val nullIntRow = df.selectExpr("i[1]").collect()(0)
     assert(nullIntRow == org.apache.spark.sql.Row(null))
   }
+
+  test("SPARK-13253") {
+    val data = sparkContext.parallelize(Array.range(0, 10).map(x => (x, x + 1)))
+    val df = data.toDF("a", "b")
+    val arrayCol1 = functions.array(df("a"), df("b")).as("arrayCol1")
+    arrayCol1.toString
+
+    val arrayCol2 = functions.struct(df("a"), df("b")).as("arrayCol2")
+    arrayCol2.toString
+  }
+
 }

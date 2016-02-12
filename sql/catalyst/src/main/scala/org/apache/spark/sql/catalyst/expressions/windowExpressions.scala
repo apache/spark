@@ -292,6 +292,7 @@ case class WindowExpression(
   override def children: Seq[Expression] = windowFunction :: windowSpec :: Nil
 
   override def dataType: DataType = windowFunction.dataType
+  override def prettyDataType: DataType = windowFunction.prettyDataType
   override def foldable: Boolean = windowFunction.foldable
   override def nullable: Boolean = windowFunction.nullable
 
@@ -365,6 +366,8 @@ abstract class OffsetWindowFunction
   }
 
   override def dataType: DataType = input.dataType
+
+  override def prettyDataType: DataType = input.prettyDataType
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(AnyDataType, IntegerType, TypeCollection(input.dataType, NullType))

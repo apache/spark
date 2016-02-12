@@ -55,6 +55,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
   override def dataType: DataType = children.head.dataType
 
+  override def prettyDataType: DataType = children.head.prettyDataType
+
   override def eval(input: InternalRow): Any = {
     var result: Any = null
     val childIterator = children.iterator
@@ -135,6 +137,8 @@ case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = left.dataType
+
+  override def prettyDataType: DataType = left.prettyDataType
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, FloatType), TypeCollection(DoubleType, FloatType))

@@ -189,6 +189,13 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     case _ => LongType
   }
 
+  override def prettyDataType: DataType = child.prettyDataType match {
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
+    case _ => LongType
+  }
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(DoubleType, DecimalType))
 
@@ -270,6 +277,13 @@ case class Expm1(child: Expression) extends UnaryMathExpression(math.expm1, "EXP
   extended = "> SELECT _FUNC_(-0.1);\n -1\n> SELECT _FUNC_(5);\n 5")
 case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
   override def dataType: DataType = child.dataType match {
+    case dt @ DecimalType.Fixed(_, 0) => dt
+    case DecimalType.Fixed(precision, scale) =>
+      DecimalType.bounded(precision - scale + 1, 0)
+    case _ => LongType
+  }
+
+  override def prettyDataType: DataType = child.prettyDataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision - scale + 1, 0)
@@ -646,6 +660,8 @@ case class ShiftLeft(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
+  override def prettyDataType: DataType = left.prettyDataType
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l << input2.asInstanceOf[jl.Integer]
@@ -676,6 +692,8 @@ case class ShiftRight(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
+  override def prettyDataType: DataType = left.prettyDataType
+
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
       case l: jl.Long => l >> input2.asInstanceOf[jl.Integer]
@@ -705,6 +723,8 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
     Seq(TypeCollection(IntegerType, LongType), IntegerType)
 
   override def dataType: DataType = left.dataType
+
+  override def prettyDataType: DataType = left.prettyDataType
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1 match {
@@ -804,6 +824,13 @@ abstract class RoundBase(child: Expression, scale: Expression,
   override def foldable: Boolean = child.foldable
 
   override lazy val dataType: DataType = child.dataType match {
+    // if the new scale is bigger which means we are scaling up,
+    // keep the original scale as `Decimal` does
+    case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)
+    case t => t
+  }
+
+  override lazy val prettyDataType: DataType = child.prettyDataType match {
     // if the new scale is bigger which means we are scaling up,
     // keep the original scale as `Decimal` does
     case DecimalType.Fixed(p, s) => DecimalType(p, if (_scale > s) s else _scale)

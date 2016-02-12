@@ -117,6 +117,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression with ExpectsInp
 
   override def dataType: DataType = child.dataType
 
+  override def prettyDataType: DataType = child.prettyDataType
+
   override def toString: String = s"~$child"
 
   private lazy val not: (Any) => Any = dataType match {

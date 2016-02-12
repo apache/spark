@@ -86,9 +86,10 @@ trait NamedExpression extends Expression {
   /** Returns a copy of this expression with a new `exprId`. */
   def newInstance(): NamedExpression
 
+  /** avoid checking nullability for complex data type  */
   protected def typeSuffix =
     if (resolved) {
-      dataType match {
+      prettyDataType match {
         case LongType => "L"
         case _ => ""
       }
@@ -146,6 +147,7 @@ case class Alias(child: Expression, name: String)(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
 
   override def dataType: DataType = child.dataType
+  override def prettyDataType: DataType = child.prettyDataType
   override def nullable: Boolean = child.nullable
   override def metadata: Metadata = {
     explicitMetadata.getOrElse {

@@ -42,6 +42,11 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       containsNull = children.exists(_.nullable))
   }
 
+  override def prettyDataType: DataType = {
+    ArrayType(
+      children.headOption.map(_.prettyDataType).getOrElse(NullType))
+  }
+
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
@@ -173,6 +178,19 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
     StructType(fields)
   }
 
+  override lazy val prettyDataType: StructType = {
+    val fields = children.zipWithIndex.map { case (child, idx) =>
+      child match {
+        case ne: NamedExpression =>
+          StructField(ne.name, ne.prettyDataType, nullable = true, ne.metadata)
+        case _ =>
+          // give the default value to the nullable, since we just care about datatype
+          StructField(s"col${idx + 1}", child.prettyDataType, nullable = true, Metadata.empty)
+      }
+    }
+    StructType(fields)
+  }
+
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
@@ -229,6 +247,14 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     val fields = names.zip(valExprs).map { case (name, valExpr) =>
       StructField(name.asInstanceOf[UTF8String].toString,
         valExpr.dataType, valExpr.nullable, Metadata.empty)
+    }
+    StructType(fields)
+  }
+
+  override lazy val prettyDataType: StructType = {
+    val fields = names.zip(valExprs).map { case (name, valExpr) =>
+      StructField(name.asInstanceOf[UTF8String].toString,
+        valExpr.prettyDataType, nullable = true, Metadata.empty)
     }
     StructType(fields)
   }
@@ -302,6 +328,19 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
     StructType(fields)
   }
 
+  override lazy val prettyDataType: StructType = {
+    val fields = children.zipWithIndex.map { case (child, idx) =>
+      child match {
+        case ne: NamedExpression =>
+          StructField(ne.name, ne.prettyDataType, nullable = true, ne.metadata)
+        case _ =>
+          // for the prettyDataType, we just give the default nullable value
+          StructField(s"col${idx + 1}", child.prettyDataType, nullable = true, Metadata.empty)
+      }
+    }
+    StructType(fields)
+  }
+
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
@@ -334,6 +373,13 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map { case (name, valExpr) =>
       StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
+    }
+    StructType(fields)
+  }
+
+  override lazy val prettyDataType: StructType = {
+    val fields = names.zip(valExprs).map { case (name, valExpr) =>
+      StructField(name, valExpr.prettyDataType, nullable = true, Metadata.empty)
     }
     StructType(fields)
   }

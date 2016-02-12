@@ -107,8 +107,10 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   extends UnaryExpression with ExtractValue {
 
   private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+  private[sql] lazy val prettyChildSchema = child.prettyDataType.asInstanceOf[StructType]
 
   override def dataType: DataType = childSchema(ordinal).dataType
+  override def prettyDataType: DataType = prettyChildSchema(ordinal).dataType
   override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
 
   override def toString: String = {
@@ -229,6 +231,8 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
 
   override def dataType: DataType = child.dataType.asInstanceOf[ArrayType].elementType
 
+  override def prettyDataType: DataType = child.prettyDataType.asInstanceOf[ArrayType].elementType
+
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
@@ -277,6 +281,8 @@ case class GetMapValue(child: Expression, key: Expression)
   override def nullable: Boolean = true
 
   override def dataType: DataType = child.dataType.asInstanceOf[MapType].valueType
+
+  override def prettyDataType: DataType = child.prettyDataType.asInstanceOf[MapType].valueType
 
   // todo: current search is O(n), improve it.
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
