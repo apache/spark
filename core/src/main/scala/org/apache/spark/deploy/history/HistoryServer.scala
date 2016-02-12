@@ -25,8 +25,7 @@ import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import scala.util.control.NonFatal
 import scala.xml.Node
 
-import com.codahale.metrics.MetricRegistry
-import com.google.common.cache._
+import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -69,21 +68,9 @@ class HistoryServer(
   private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
   private val initialized = new AtomicBoolean(false)
 
-  private[history] val metricsSystem: MetricsSystem = MetricsSystem.createMetricsSystem("history",
+  private[history] val metricsSystem = MetricsSystem.createMetricsSystem("history",
     conf, securityManager)
   private[history] var metricsReg = metricsSystem.getMetricRegistry
-
-  private val appLoader = new CacheLoader[String, SparkUI] {
-    override def load(key: String): SparkUI = {
-      val parts = key.split("/")
-      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
-      val ui = provider
-        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
-        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
-      attachSparkUI(ui)
-      ui
-    }
-  }
 
   // and its metrics, for testing as well as monitoring
   val cacheMetrics = appCache.metrics
@@ -154,10 +141,9 @@ class HistoryServer(
 
       // hook up metrics
 
-      // start the provider against the metrics binding
-      val source = provider.start()
-      source.foreach(metricsSystem.registerSource)
+      provider.start().foreach(metricsSystem.registerSource)
       metricsSystem.registerSource(new HistoryMetrics(this))
+      metricsSystem.registerSource(appCache.metrics)
       metricsSystem.start()
       metricsSystem.getServletHandlers.foreach(attachHandler)
     }
@@ -298,6 +284,27 @@ class HistoryServer(
 private[history] class HistoryMetrics(val owner: HistoryServer) extends Source {
   override val metricRegistry = new MetricRegistry()
   override val sourceName = "history"
+}
+
+/**
+ * A timestamp is a gauge which is set to a point in time
+ * as measured in millseconds since the epoch began.
+ */
+private[history] class Timestamp extends Gauge[Long] {
+  var time = 0L
+
+  /** Current value. */
+  override def getValue: Long = time
+
+  /** set a new value. */
+  def setValue(t: Long): Unit = {
+    time = t
+  }
+
+  /** Set to the current system time. */
+  def touch(): Unit = {
+    setValue(System.currentTimeMillis())
+  }
 }
 
 /**

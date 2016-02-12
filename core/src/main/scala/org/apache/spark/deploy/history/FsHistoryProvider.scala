@@ -346,6 +346,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    */
   private[history] def checkForLogs(): Unit = {
     metrics.updateCount.inc()
+    metrics.updateLastAttempted.touch()
     time(metrics.updateTimer) {
       try {
         val newLastScanTime = getNewLastScanTime()
@@ -418,6 +419,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         }
 
         lastScanTime.set(newLastScanTime)
+        metrics.updateLastSucceeded.setValue(newLastScanTime)
       } catch {
         case e: Exception => logError(
           "Exception in checking for event log updates",
@@ -486,6 +488,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case None => throw new SparkException(s"Logs for $appId not found.")
     }
   }
+
 
   /**
    * Replay the log files in the list and merge the list of old applications with new ones
@@ -778,15 +781,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   /**
    * Metrics integration: the various counters of activity
    * Time a closure, returning its output.
-   * @param t timer
-   * @param f function
+   * @param timer timer
+   * @param fn function
    * @tparam T type of return value of time
    * @return the result of the function.
    */
-  private def time[T](t: Timer)(f: => T): T = {
-    val timeCtx = t.time()
+  private def time[T](timer: Timer)(fn: => T): T = {
+    val timeCtx = timer.time()
     try {
-      f
+      fn
     } finally {
       timeCtx.close()
     }
@@ -794,7 +797,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 }
 
 /**
- * Metrics integration: the various counters of activity
+ * Metrics integration: the various counters of activity.
  */
 private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extends Source {
 
@@ -802,36 +805,44 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extend
 
   private val name = MetricRegistry.name(sourceName)
 
-  /** Metrics registry */
+  /** Metrics registry. */
   override val metricRegistry = new MetricRegistry()
 
-  /** Number of updates */
+  /** Number of updates. */
   val updateCount = new Counter()
 
-  /** Number of update failures */
+  /** Number of update failures. */
   val updateFailureCount = new Counter()
 
-  /** Number of App UI load operations */
-  val appUILoadCount = new Counter()
-
-  /** Number of App UI load operations that failed */
-  val appUILoadFailureCount = new Counter()
-
-  /** Number of App UI load operations that failed due to an unknown file */
-  val appUILoadNotFoundCount = new Counter()
-
-  /** Statistics on update duration */
+  /** Update duration timer. */
   val updateTimer = new Timer()
 
-  /** Statistics on time to load app UIs */
+  /** Time the last update was attempted. */
+  val updateLastAttempted = new Timestamp()
+
+  /** Time the last update succeded. */
+  val updateLastSucceeded = new Timestamp()
+
+  /** Number of App UI load operations. */
+  val appUILoadCount = new Counter()
+
+  /** Number of App UI load operations that failed due to a load/parse/replay problem. */
+  val appUILoadFailureCount = new Counter()
+
+  /** Number of App UI load operations that failed due to an unknown file. */
+  val appUILoadNotFoundCount = new Counter()
+
+  /** Statistics on time to load app UIs. */
   val appUiLoadTimer = new Timer()
 
-  /** Statistics on time to replay and merge listings */
+  /** Statistics on time to replay and merge listings. */
   val mergeApplicationListingTimer = new Timer()
 
-    private val counters = Seq(
+  private val countersAndGauges = Seq(
     ("update.count", updateCount),
     ("update.failure.count", updateFailureCount),
+    ("update.last.attempted", updateLastAttempted),
+    ("update.last.succeeded", updateLastSucceeded),
     ("appui.load.count", appUILoadCount),
     ("appui.load.failure.count", appUILoadFailureCount))
     ("appui.load.not-found.count", appUILoadNotFoundCount)
@@ -841,12 +852,12 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extend
     ("merge.application.listings.timer", mergeApplicationListingTimer),
     ("appui.load.timer", appUiLoadTimer))
 
-  val allMetrics = counters ++ timers
+  val allMetrics = countersAndGauges ++ timers
 
   allMetrics.foreach(elt => metricRegistry.register(elt._1, elt._2))
 
   override def toString: String = {
-    def sb = new StringBuilder(counters.size * 20)
+    def sb = new StringBuilder(countersAndGauges.size * 20)
     allMetrics.foreach(elt => sb.append(s" ${elt._1} = ${elt._2}\n"))
     sb.toString()
   }
