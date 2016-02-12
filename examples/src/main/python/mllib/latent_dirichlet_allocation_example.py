@@ -24,7 +24,7 @@ from pyspark.mllib.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="LatentDirichletAllocationExample") # SparkContext
+    sc = SparkContext(appName="LatentDirichletAllocationExample")  # SparkContext
 
     # $example on$
     # Load and parse the data
@@ -37,7 +37,8 @@ if __name__ == "__main__":
     ldaModel = LDA.train(corpus, k=3)
 
     # Output topics. Each is a distribution over words (matching word count vectors)
-    print("Learned topics (as distributions over vocab of " + str(ldaModel.vocabSize()) + " words):")
+    print("Learned topics (as distributions over vocab of " + str(ldaModel.vocabSize())
+          + " words):")
     topics = ldaModel.topicsMatrix()
     for topic in range(3):
         print("Topic " + str(topic) + ":")
@@ -47,6 +48,6 @@ if __name__ == "__main__":
     # Save and load model
     ldaModel.save(sc, "myModelPath")
     sameModel = LDAModel.load(sc, "myModelPath")
-   # $example off$
+    # $example off$
 
     sc.stop()

@@ -26,7 +26,7 @@ from pyspark.mllib.clustering import StreamingKMeans
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="StreamingKMeansExample") # SparkContext
+    sc = SparkContext(appName="StreamingKMeansExample")  # SparkContext
     ssc = StreamingContext(sc, 1)
 
     # $example on$

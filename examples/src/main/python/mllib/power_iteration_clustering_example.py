@@ -23,7 +23,7 @@ from pyspark.mllib.clustering import PowerIterationClustering, PowerIterationClu
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="PowerIterationClusteringExample") # SparkContext
+    sc = SparkContext(appName="PowerIterationClusteringExample")  # SparkContext
 
     # $example on$
     # Load and parse the data
@@ -38,6 +38,6 @@ if __name__ == "__main__":
     # Save and load model
     model.save(sc, "myModelPath")
     sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
-   # $example off$
+    # $example off$
 
     sc.stop()

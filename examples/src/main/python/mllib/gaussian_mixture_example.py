@@ -24,7 +24,7 @@ from numpy import array
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="GaussianMixtureExample") # SparkContext
+    sc = SparkContext(appName="GaussianMixtureExample")  # SparkContext
 
     # $example on$
     # Load and parse the data

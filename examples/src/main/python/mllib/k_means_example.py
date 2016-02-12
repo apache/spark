@@ -25,7 +25,7 @@ from math import sqrt
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="KMeansExample") # SparkContext
+    sc = SparkContext(appName="KMeansExample")  # SparkContext
 
     # $example on$
     # Load and parse the data
