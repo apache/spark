@@ -255,8 +255,8 @@ def corr(col1, col2):
     >>> a = range(20)
     >>> b = [2 * x for x in range(20)]
     >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(corr("a", "b")).collect()
-    [Row(corr(a,b,0,0)=1.0)]
+    >>> df.agg(corr("a", "b").alias('c')).collect()
+    [Row(c=1.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.corr(_to_java_column(col1), _to_java_column(col2)))
@@ -270,8 +270,8 @@ def covar_pop(col1, col2):
     >>> a = [1] * 10
     >>> b = [1] * 10
     >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_pop("a", "b")).collect()
-    [Row(covpopulation(a,b,0,0)=0.0)]
+    >>> df.agg(covar_pop("a", "b").alias('c')).collect()
+    [Row(c=0.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.covar_pop(_to_java_column(col1), _to_java_column(col2)))
@@ -285,8 +285,8 @@ def covar_samp(col1, col2):
     >>> a = [1] * 10
     >>> b = [1] * 10
     >>> df = sqlContext.createDataFrame(zip(a, b), ["a", "b"])
-    >>> df.agg(covar_samp("a", "b")).collect()
-    [Row(covsample(a,b,0,0)=0.0)]
+    >>> df.agg(covar_samp("a", "b").alias('c')).collect()
+    [Row(c=0.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.covar_samp(_to_java_column(col1), _to_java_column(col2)))
