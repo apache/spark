@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -40,9 +42,7 @@ abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
   }
 
   protected def checkSQL(plan: LogicalPlan, expectedSQL: String): Unit = {
-    val maybeSQL = new SQLBuilder(plan, hiveContext).toSQL
-
-    if (maybeSQL.isEmpty) {
+    val generatedSQL = try new SQLBuilder(plan, hiveContext).toSQL catch { case NonFatal(e) =>
       fail(
         s"""Cannot convert the following logical query plan to SQL:
            |
@@ -50,10 +50,8 @@ abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
          """.stripMargin)
     }
 
-    val actualSQL = maybeSQL.get
-
     try {
-      assert(actualSQL === expectedSQL)
+      assert(generatedSQL === expectedSQL)
     } catch {
       case cause: Throwable =>
         fail(
@@ -65,7 +63,7 @@ abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
            """.stripMargin)
     }
 
-    checkAnswer(sqlContext.sql(actualSQL), new DataFrame(sqlContext, plan))
+    checkAnswer(sqlContext.sql(generatedSQL), new DataFrame(sqlContext, plan))
   }
 
   protected def checkSQL(df: DataFrame, expectedSQL: String): Unit = {

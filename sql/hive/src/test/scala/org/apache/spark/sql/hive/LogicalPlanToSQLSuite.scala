@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -46,29 +48,28 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   private def checkHiveQl(hiveQl: String): Unit = {
     val df = sql(hiveQl)
-    val convertedSQL = new SQLBuilder(df).toSQL
 
-    if (convertedSQL.isEmpty) {
-      fail(
-        s"""Cannot convert the following HiveQL query plan back to SQL query string:
-           |
-           |# Original HiveQL query string:
-           |$hiveQl
-           |
-           |# Resolved query plan:
-           |${df.queryExecution.analyzed.treeString}
-         """.stripMargin)
+    val convertedSQL = try new SQLBuilder(df).toSQL catch {
+      case NonFatal(e) =>
+        fail(
+          s"""Cannot convert the following HiveQL query plan back to SQL query string:
+             |
+             |# Original HiveQL query string:
+             |$hiveQl
+             |
+             |# Resolved query plan:
+             |${df.queryExecution.analyzed.treeString}
+           """.stripMargin)
     }
 
-    val sqlString = convertedSQL.get
     try {
-      checkAnswer(sql(sqlString), df)
+      checkAnswer(sql(convertedSQL), df)
     } catch { case cause: Throwable =>
       fail(
         s"""Failed to execute converted SQL string or got wrong answer:
            |
            |# Converted SQL query string:
-           |$sqlString
+           |$convertedSQL
            |
            |# Original HiveQL query string:
            |$hiveQl
