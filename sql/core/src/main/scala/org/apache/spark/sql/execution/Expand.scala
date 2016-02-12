@@ -96,55 +96,91 @@ case class Expand(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    // Some columns have the same expression in all the projections, so collect the unique
-    // expressions.
-    val columnUniqueExpressions: IndexedSeq[Set[Expression]] = output.indices.map { i =>
-      projections.map(p => p(i)).toSet
-    }
+    /*
+     * When the projections list looks like:
+     *   expr1A, exprB, expr1C
+     *   expr2A, exprB, expr2C
+     *   ...
+     *   expr(N-1)A, exprB, expr(N-1)C
+     *
+     * i.e. column A and C have different values for each output row, but column B stays constant.
+     *
+     * The generated code looks something like (note that B is only computed once in declaration):
+     *
+     * // part 1: declare all the columns
+     * colA = ...
+     * colB = ...
+     * colC = ...
+     *
+     * // part 2: code that computes the columns
+     * for (row = 0; row < N; row++) {
+     *   switch (row) {
+     *     case 0:
+     *       colA = ...
+     *       colC = ...
+     *     case 1:
+     *       colA = ...
+     *       colC = ...
+     *     ...
+     *     case N - 1:
+     *       colA = ...
+     *       colC = ...
+     *   }
+     *   // increment metrics and consume output values
+     * }
+     *
+     * We use a for loop here so we only includes one copy of the consume code and avoid code
+     * size explosion.
+     */
 
-    // Create the variables for output
+    // Set input variables
     ctx.currentVars = input
-    val resultVars = columnUniqueExpressions.zipWithIndex.map { case (exprs, i) =>
-      val firstExpr = exprs.head
-      if (exprs.size == 1) {
-        // The value of this column will not change, use the variables directly.
+
+    // Tracks whether a column has the same output for all rows.
+    // Size of sameOutput array should equal N.
+    // If sameOutput(i) is true, then the i-th column has the same value for all output rows given
+    // an input row.
+    val sameOutput: Array[Boolean] = output.indices.map { colIndex =>
+      projections.map(p => p(colIndex)).toSet.size == 1
+    }.toArray
+
+    // Part 1: declare variables for each column
+    // If a column has the same value for all output rows, then we also generate its computation
+    // right after declaration. Otherwise its value is computed in the part 2.
+    val outputColumns = output.indices.map { col =>
+      val firstExpr = projections.head(col)
+      if (sameOutput(col)) {
+        // This column is the same across all output rows. Just generate code for it here.
         BindReferences.bindReference(firstExpr, child.output).gen(ctx)
       } else {
-        // The value of this column will change, so create new variables for them, because they
-        // could be constants in some expressions.
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
         val code = s"""
-           |boolean $isNull = true;
-           |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
+          |boolean $isNull = true;
+          |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
          """.stripMargin
         ExprCode(code, isNull, value)
       }
     }
 
-    // The source code returned by `consume()` could be huge, we can't call `consume()` for each of
-    // the projections, otherwise the generated code will have lots of duplicated codes. Instead,
-    // we should generate a loop for all the projections, use switch/case to select a projection
-    // based on the loop index, then only call `consume()` once.
-    //
-    // These output variables will be created before the loop, their values will be updated in
-    // switch/case inside the loop.
-    val cases = projections.zipWithIndex.map { case (exprs, i) =>
-      val changes: Seq[(Expression, Int)] = exprs.zipWithIndex.filter { case (e, j) =>
-        // the column with single unique expression does not need to be updated inside the loop.
-        columnUniqueExpressions(j).size > 1
+    // Part 2: switch/case statements
+    val cases = projections.zipWithIndex.map { case (exprs, row) =>
+      var updateCode = ""
+      for (col <- exprs.indices) {
+        if (!sameOutput(col)) {
+          val ev = BindReferences.bindReference(exprs(col), child.output).gen(ctx)
+          updateCode +=
+            s"""
+               |${ev.code}
+               |${outputColumns(col).isNull} = ${ev.isNull};
+               |${outputColumns(col).value} = ${ev.value};
+            """.stripMargin
+        }
       }
-      val updates = changes.map { case (e, j) =>
-        val ev = BindReferences.bindReference(e, child.output).gen(ctx)
-        s"""
-           |${ev.code}
-           |${resultVars(j).isNull} = ${ev.isNull};
-           |${resultVars(j).value} = ${ev.value};
-         """.stripMargin
-      }
+
       s"""
-         |case $i:
-         |  ${updates.mkString("\n").trim}
+         |case $row:
+         |  ${updateCode.trim}
          |  break;
        """.stripMargin
     }
@@ -152,13 +188,13 @@ case class Expand(
     val numOutput = metricTerm(ctx, "numOutputRows")
     val i = ctx.freshName("i")
     s"""
-       |${resultVars.map(_.code).mkString("\n").trim}
+       |${outputColumns.map(_.code).mkString("\n").trim}
        |for (int $i = 0; $i < ${projections.length}; $i ++) {
        |  switch ($i) {
        |    ${cases.mkString("\n").trim}
        |  }
        |  $numOutput.add(1);
-       |  ${consume(ctx, resultVars)}
+       |  ${consume(ctx, outputColumns)}
        |}
      """.stripMargin
   }
