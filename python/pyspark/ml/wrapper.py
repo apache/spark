@@ -90,8 +90,9 @@ class JavaWrapper(Params):
         for param in self.params:
             if self._java_obj.hasParam(param.name):
                 java_param = self._java_obj.getParam(param.name)
-                value = _java2py(sc, self._java_obj.getOrDefault(java_param))
-                self._paramMap[param] = value
+                if self._java_obj.isDefined(java_param):
+                    value = _java2py(sc, self._java_obj.getOrDefault(java_param))
+                    self._paramMap[param] = value
 
     @staticmethod
     def _empty_java_param_map():
