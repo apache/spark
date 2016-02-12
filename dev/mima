@@ -27,7 +27,7 @@ cd "$FWDIR"
 echo -e "q\n" | build/sbt oldDeps/update
 rm -f .generated-mima*
 
-export SPARK_PREPEND_CLASSES=true
+export SPARK_PREPEND_CLASSES=1
 
 generate_mima_ignore() {
   SPARK_JAVA_OPTS="-XX:MaxPermSize=1g -Xmx2g" \
