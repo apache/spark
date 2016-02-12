@@ -142,7 +142,15 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       Some(s"`$database`.`$table`")
 
     case Subquery(alias, child) =>
-      toSQL(child).map(childSQL => s"($childSQL) AS $alias")
+      toSQL(child).map( childSQL =>
+        child match {
+          // Parentheses is not used for persisted data source relations
+          // e.g., select x.c1 from (t1) as x inner join (t1) as y on x.c1 = y.c1
+          case Subquery(_, _: LogicalRelation | _: MetastoreRelation) =>
+            s"$childSQL AS $alias"
+          case _ =>
+            s"($childSQL) AS $alias"
+        })
 
     case Join(left, right, joinType, condition) =>
       for {

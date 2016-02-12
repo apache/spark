@@ -38,7 +38,6 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.MemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryLocation;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
 
@@ -64,8 +63,6 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter;
 public final class BytesToBytesMap extends MemoryConsumer {
 
   private final Logger logger = LoggerFactory.getLogger(BytesToBytesMap.class);
-
-  private static final Murmur3_x86_32 HASHER = new Murmur3_x86_32(0);
 
   private static final HashMapGrowthStrategy growthStrategy = HashMapGrowthStrategy.DOUBLING;
 
@@ -417,7 +414,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
    * This function always return the same {@link Location} instance to avoid object allocation.
    */
   public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc);
+    safeLookup(keyBase, keyOffset, keyLength, loc,
+      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+    return loc;
+  }
+
+  /**
+   * Looks up a key, and return a {@link Location} handle that can be used to test existence
+   * and read/write values.
+   *
+   * This function always return the same {@link Location} instance to avoid object allocation.
+   */
+  public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
+    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
   }
 
@@ -426,14 +435,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
-  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc) {
+  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
 
     if (enablePerfMetrics) {
       numKeyLookups++;
     }
-    final int hashcode = HASHER.hashUnsafeWords(keyBase, keyOffset, keyLength);
-    int pos = hashcode & mask;
+    int pos = hash & mask;
     int step = 1;
     while (true) {
       if (enablePerfMetrics) {
@@ -441,22 +449,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
       if (longArray.get(pos * 2) == 0) {
         // This is a new key.
-        loc.with(pos, hashcode, false);
+        loc.with(pos, hash, false);
         return;
       } else {
         long stored = longArray.get(pos * 2 + 1);
-        if ((int) (stored) == hashcode) {
+        if ((int) (stored) == hash) {
           // Full hash code matches.  Let's compare the keys for equality.
-          loc.with(pos, hashcode, true);
+          loc.with(pos, hash, true);
           if (loc.getKeyLength() == keyLength) {
-            final MemoryLocation keyAddress = loc.getKeyAddress();
-            final Object storedkeyBase = keyAddress.getBaseObject();
-            final long storedkeyOffset = keyAddress.getBaseOffset();
             final boolean areEqual = ByteArrayMethods.arrayEquals(
               keyBase,
               keyOffset,
-              storedkeyBase,
-              storedkeyOffset,
+              loc.getKeyBase(),
+              loc.getKeyOffset(),
               keyLength
             );
             if (areEqual) {
@@ -484,13 +489,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean isDefined;
     /**
      * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int)}. Caching this hashcode here allows us to
-     * avoid re-hashing the key when storing a value for that key.
+     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
+     * to avoid re-hashing the key when storing a value for that key.
      */
     private int keyHashcode;
-    private final MemoryLocation keyMemoryLocation = new MemoryLocation();
-    private final MemoryLocation valueMemoryLocation = new MemoryLocation();
+    private Object baseObject;  // the base object for key and value
+    private long keyOffset;
     private int keyLength;
+    private long valueOffset;
     private int valueLength;
 
     /**
@@ -504,18 +510,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
         taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
-    private void updateAddressesAndSizes(final Object base, final long offset) {
-      long position = offset;
-      final int totalLength = Platform.getInt(base, position);
-      position += 4;
-      keyLength = Platform.getInt(base, position);
-      position += 4;
+    private void updateAddressesAndSizes(final Object base, long offset) {
+      baseObject = base;
+      final int totalLength = Platform.getInt(base, offset);
+      offset += 4;
+      keyLength = Platform.getInt(base, offset);
+      offset += 4;
+      keyOffset = offset;
+      valueOffset = offset + keyLength;
       valueLength = totalLength - keyLength - 4;
-
-      keyMemoryLocation.setObjAndOffset(base, position);
-
-      position += keyLength;
-      valueMemoryLocation.setObjAndOffset(base, position);
     }
 
     private Location with(int pos, int keyHashcode, boolean isDefined) {
@@ -543,10 +546,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private Location with(Object base, long offset, int length) {
       this.isDefined = true;
       this.memoryPage = null;
+      baseObject = base;
+      keyOffset = offset + 4;
       keyLength = Platform.getInt(base, offset);
+      valueOffset = offset + 4 + keyLength;
       valueLength = length - 4 - keyLength;
-      keyMemoryLocation.setObjAndOffset(base, offset + 4);
-      valueMemoryLocation.setObjAndOffset(base, offset + 4 + keyLength);
       return this;
     }
 
@@ -566,14 +570,35 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     /**
-     * Returns the address of the key defined at this position.
-     * This points to the first byte of the key data.
-     * Unspecified behavior if the key is not defined.
-     * For efficiency reasons, calls to this method always returns the same MemoryLocation object.
+     * Returns the base object for key.
      */
-    public MemoryLocation getKeyAddress() {
+    public Object getKeyBase() {
       assert (isDefined);
-      return keyMemoryLocation;
+      return baseObject;
+    }
+
+    /**
+     * Returns the offset for key.
+     */
+    public long getKeyOffset() {
+      assert (isDefined);
+      return keyOffset;
+    }
+
+    /**
+     * Returns the base object for value.
+     */
+    public Object getValueBase() {
+      assert (isDefined);
+      return baseObject;
+    }
+
+    /**
+     * Returns the offset for value.
+     */
+    public long getValueOffset() {
+      assert (isDefined);
+      return valueOffset;
     }
 
     /**
@@ -583,17 +608,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
     public int getKeyLength() {
       assert (isDefined);
       return keyLength;
-    }
-
-    /**
-     * Returns the address of the value defined at this position.
-     * This points to the first byte of the value data.
-     * Unspecified behavior if the key is not defined.
-     * For efficiency reasons, calls to this method always returns the same MemoryLocation object.
-     */
-    public MemoryLocation getValueAddress() {
-      assert (isDefined);
-      return valueMemoryLocation;
     }
 
     /**

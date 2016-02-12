@@ -118,7 +118,6 @@ trait HashJoin {
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
-      numStreamRows: LongSQLMetric,
       hashedRelation: HashedRelation,
       numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     new Iterator[InternalRow] {
@@ -143,7 +142,6 @@ trait HashJoin {
           // find the next match
           while (currentHashMatches == null && streamIter.hasNext) {
             currentStreamedRow = streamIter.next()
-            numStreamRows += 1
             val key = joinKeys(currentStreamedRow)
             if (!key.anyNull) {
               currentHashMatches = hashedRelation.get(key)
