@@ -36,7 +36,7 @@ private[sql] object StatFunctions extends Logging {
       epsilon: Double = 0.05): Double = {
     require(quantile > 0.0 && quantile < 1.0, "Quantile must be in the range of (0.0, 1.0).")
     val summeries = collectQuantileSummaries(df, col, epsilon)
-    summeries.query(quantile) 
+    summeries.query(quantile)
   }
 
   private def collectQuantileSummaries(
@@ -63,7 +63,7 @@ private[sql] object StatFunctions extends Logging {
    * This implementation is based on the algorithm proposed in the paper:
    * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
    * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
-   * 
+   *
    */
   private class QuantileSummaries(
       compress_threshold: Int = 1000,
@@ -77,12 +77,12 @@ private[sql] object StatFunctions extends Logging {
       var idx = sampled.indexWhere(_._1 > x)
       if (idx == -1) {
         idx = sampled.size
-      } 
+      }
       val delta = if (idx == 0 || idx == sampled.size) {
         0
       } else {
         math.floor(getConstant()).toInt
-      } 
+      }
       val tuple = (x, 1, delta)
       sampled.insert(idx, tuple)
       count += 1
