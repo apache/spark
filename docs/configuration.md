@@ -392,6 +392,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.reducer.maxReqsInFlight</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote requests to fetch blocks at any given point.
+    When the number of hosts in the cluster increase, it might lead to very large number
+    of in-bound connections to one or more nodes, causing the workers to fail under load.
+    By allowing it to limit the number of fetch requests, this scenario can be mitigated.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
