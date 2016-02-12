@@ -719,6 +719,8 @@ private[spark] class BlockManager(
       }
     }
 
+    // TODO: release write lock and split up this code.
+
     val startTimeMs = System.currentTimeMillis
 
     /* If we're storing values and we need to replicate the data, we'll want access to the values,

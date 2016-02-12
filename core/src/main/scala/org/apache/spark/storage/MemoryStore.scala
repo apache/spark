@@ -471,6 +471,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           logInfo(s"Will not store $id as it would require dropping another block " +
             "from the same RDD")
         }
+        // TODO: free write locks here.
         0L
       }
     }

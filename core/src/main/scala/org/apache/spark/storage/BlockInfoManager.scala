@@ -59,6 +59,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   // Invariants:
   //     (writerTask != -1) implies (readerCount == 0)
   //     (readerCount != 0) implies (writerTask == -1)
+  // TODO: add assertions around every method
 
   /**
    * True if this block has been removed from the BlockManager and false otherwise.
@@ -66,8 +67,11 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
    * in [[BlockInfoManager]]).
    */
   var removed: Boolean = false
-}
 
+  // TODO: Add timestamps on lock acquisitions
+}
+// In debugging mode, check that locks haven't been held for too long.
+// Every few minutes, dump debug info.
 
 /**
  * Component of the [[BlockManager]] which tracks metadata for blocks and manages block locking.
@@ -227,6 +231,8 @@ private[storage] class BlockInfoManager extends Logging {
   /**
    * Atomically create metadata for a non-existent block.
    *
+   * TODO: clarify locking semantics when this returns false.
+   *
    * @param blockId the block id.
    * @param newBlockInfo the block info for the new block.
    * @return true if the block did not already exist, false otherwise.
@@ -246,7 +252,7 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Release all pins held by the given task, clearing that task's pin bookkeeping
+   * Release all lock held by the given task, clearing that task's pin bookkeeping
    * structures and updating the global pin counts. This method should be called at the
    * end of a task (either by a task completion handler or in `TaskRunner.run()`).
    *
@@ -313,6 +319,8 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Removes the given block and automatically drops all locks on it.
+   *
+   * TODO: document validity conditions.
    */
   def remove(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to remove block $blockId")
