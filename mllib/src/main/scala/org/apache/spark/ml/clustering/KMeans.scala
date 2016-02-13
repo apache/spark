@@ -291,7 +291,7 @@ object KMeans extends DefaultParamsReadable[KMeans] {
 class KMeansSummary private[clustering] (
     @Since("2.0.0") @transient val predictions: DataFrame,
     @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val featuresCol: String) {
+    @Since("2.0.0") val featuresCol: String) extends Serializable {
 
   /**
    * Cluster centers of the transformed data.

@@ -14,7 +14,8 @@ export("print.jobj")
 exportMethods("glm",
               "predict",
               "summary",
-              "kmeans")
+              "kmeans",
+              "fitted")
 
 # Job group lifecycle management methods
 export("setJobGroup",

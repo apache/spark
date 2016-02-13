@@ -104,9 +104,28 @@ private[r] object SparkRWrappers {
     }
   }
 
-  def getKMeansModelSize(model: PipelineModel): Int = {
+  def getKMeansModelSize(model: PipelineModel): Array[Int] = {
     model.stages.last match {
-      case m: KMeansModel => m.getK
+      case m: KMeansModel => Array(m.getK) ++ m.summary.size
+      case other => throw new UnsupportedOperationException(
+        s"KMeansModel required but ${other.getClass.getSimpleName} found.")
+    }
+  }
+
+  def getKMeansCluster(model: PipelineModel, method: String): DataFrame = {
+    model.stages.last match {
+      case m: KMeansModel =>
+        if (method == "centers") {
+          // Drop the assembled vector for easy-print to R side.
+          m.summary.predictions.drop(m.summary.featuresCol)
+        } else if (method == "classes") {
+          m.summary.cluster
+        } else {
+          throw new UnsupportedOperationException(
+            s"Method (centers or classes) required but $method found.")
+        }
+      case other => throw new UnsupportedOperationException(
+        s"KMeansModel required but ${other.getClass.getSimpleName} found.")
     }
   }
 

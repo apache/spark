@@ -1164,3 +1164,7 @@ setGeneric("rbind", signature = "...")
 #' @rdname kmeans
 #' @export
 setGeneric("kmeans")
+
+#' @rdname fitted
+#' @export
+setGeneric("fitted")
