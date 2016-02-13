@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.security.{GeneralSecurityException, MessageDigest, NoSuchAlgorithmException}
+import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
@@ -446,10 +446,11 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
 }
 
 /**
- * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * 192 and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength
- * Jurisdiction Policy Files are installed. If either argument is NULL or the key length is
- * not one of the permitted values, the return value is NULL.
+ * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used. 192
+ * and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength Jurisdic-
+ * tion Policy Files are installed. If either argument is NULL, the result will also be null. If
+ * input is invalid, key length is not one of the permitted values or using 192/256 bits key before
+ * installing JCE, an exception will be thrown.
  */
 @ExpressionDescription(
   usage = "_FUNC_(input, key) - Encrypts input using AES.",
@@ -487,10 +488,11 @@ case class AesEncrypt(left: Expression, right: Expression)
 }
 
 /**
- * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used.
- * 192 and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength
- * Jurisdiction Policy Files are installed. If either argument is NULL or the key length is
- * not one of the permitted values, the return value is NULL.
+ * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used. 192
+ * and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength Jurisdic-
+ * tion Policy Files are installed. If either argument is NULL, the result will also be null. If
+ * input is invalid, key length is not one of the permitted values or using 192/256 bits key before
+ * installing JCE, an exception will be thrown.
  */
 @ExpressionDescription(
   usage = "_FUNC_(input, key) - Decrypts input using AES.",

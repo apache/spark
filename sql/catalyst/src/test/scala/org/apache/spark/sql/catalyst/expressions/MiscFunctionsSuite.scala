@@ -148,6 +148,11 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // both are null
     checkEvaluation(Base64(AesEncrypt(Literal.create(null, BinaryType),
       Literal.create(null, BinaryType))), null)
+
+    // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
+    intercept[java.security.InvalidKeyException] {
+      evaluate(AesEncrypt(Literal("ABC".getBytes), Literal("1234567890".getBytes)))
+    }
   }
 
   test("aesDecrypt") {
@@ -165,13 +170,30 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // both are null
     checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
       Literal.create(null, BinaryType)), null)
+
+    // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
+    intercept[java.security.InvalidKeyException] {
+      evaluate(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+        Literal("1234567890".getBytes)))
+    }
+
+    // input can not be decrypted
+    intercept[javax.crypto.IllegalBlockSizeException] {
+      evaluate(AesDecrypt(UnBase64(Literal("y6Ss+zCsdYObpCbgfWfyNW3Twewr")),
+        Literal("1234567890123456".getBytes)));
+    }
+
+    // input can not be decrypted
+    intercept[javax.crypto.BadPaddingException] {
+      evaluate(AesDecrypt(UnBase64(Literal("t6Ss+zCYObpCbgfWfyNWTw==")),
+        Literal("1234567890123456".getBytes)));
+    }
   }
 
   ignore("aesEncryptWith256bitsKey") {
-    // Before testing this, installing Java Cryptography Extension (JCE)
-    // Unlimited Strength Jurisdiction Policy Files first. Otherwise it
-    // will return `null`. Because Oracle JDK does not support 192 and 256
-    // bits key out of box.
+    // Before testing this, installing Java Cryptography Extension (JCE) Unlimited Strength Juris-
+    // diction Policy Files first. Otherwise `java.security.InvalidKeyException` will be thrown.
+    // Because Oracle JDK does not support 192 and 256 bits key out of box.
     checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
       Literal("12345678901234561234567890123456".getBytes))), "nYfCuJeRd5eD60yXDw7WEA==")
   }
