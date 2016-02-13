@@ -68,7 +68,8 @@ object NaiveBayesExample {
     val sameModel = NaiveBayesModel.load(sc, outputDir)
 
     val samePredictionAndLabel = test.map(p => (sameModel.predict(p.features), p.label))
-    val sameAccuracy = 1.0 * samePredictionAndLabel.filter(x => x._1 == x._2).count() / test.count()
+    val sameAccuracy = 1.0 * samePredictionAndLabel.filter(x => x._1 == x._2).count() /
+        test.count()
     println("sameModel accuracy %f".format(sameAccuracy))
     // $example off$
   }
