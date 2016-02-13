@@ -218,7 +218,7 @@ private[spark] class Executor(
           threwException = false
           res
         } finally {
-          val releasedPins = env.blockManager.releaseAllLocksForTask(taskId)
+          val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
 
           if (freedMemory > 0) {
@@ -230,8 +230,10 @@ private[spark] class Executor(
             }
           }
 
-          if (releasedPins > 0) {
-            val errMsg = s"$releasedPins block pins were not released, TID = $taskId"
+          if (releasedLocks.nonEmpty) {
+            val errMsg =
+              s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
+                releasedLocks.mkString("[", ", ", "]")
             if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false) && !threwException) {
               throw new SparkException(errMsg)
             } else {

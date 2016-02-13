@@ -614,11 +614,11 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Release all pins for the given task.
+   * Release all locks for the given task.
    *
-   * @return the total number of pins released.
+   * @return the blocks whose locks were released.
    */
-  def releaseAllLocksForTask(taskAttemptId: Long): Int = {
+  def releaseAllLocksForTask(taskAttemptId: Long): Seq[BlockId] = {
     blockInfoManager.releaseAllLocksForTask(taskAttemptId)
   }
 

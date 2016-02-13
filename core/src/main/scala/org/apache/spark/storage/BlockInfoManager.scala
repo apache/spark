@@ -258,9 +258,10 @@ private[storage] class BlockInfoManager extends Logging {
    * structures and updating the global pin counts. This method should be called at the
    * end of a task (either by a task completion handler or in `TaskRunner.run()`).
    *
-   * @return the number of pins released
+   * @return the ids of blocks whose pins were released
    */
-  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Int = {
+  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
+    val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
     synchronized {
       writeLocksByTask.remove(taskAttemptId).foreach { locks =>
         for (blockId <- locks) {
@@ -268,16 +269,17 @@ private[storage] class BlockInfoManager extends Logging {
             assert(info.writerTask == taskAttemptId)
             info.writerTask = -1
           }
+          blocksWithReleasedLocks += blockId
         }
       }
       notifyAll()
     }
     val readLocks = readLocksByTask.get(taskAttemptId)
     readLocksByTask.invalidate(taskAttemptId)
-    val totalPinCountForTask = readLocks.size()
     readLocks.entrySet().iterator().asScala.foreach { entry =>
       val blockId = entry.getElement
       val lockCount = entry.getCount
+      blocksWithReleasedLocks += blockId
       synchronized {
         get(blockId).foreach { info =>
           info.readerCount -= lockCount
@@ -288,7 +290,7 @@ private[storage] class BlockInfoManager extends Logging {
     synchronized {
       notifyAll()
     }
-    totalPinCountForTask
+    blocksWithReleasedLocks
   }
 
   /**
