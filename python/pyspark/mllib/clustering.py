@@ -362,12 +362,25 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     Model produced by [[PowerIterationClustering]].
 
-    >>> data = [(0, 1, 1.0), (0, 2, 1.0), (0, 3, 1.0), (1, 2, 1.0), (1, 3, 1.0),
-    ... (2, 3, 1.0), (3, 4, 0.1), (4, 5, 1.0), (4, 15, 1.0), (5, 6, 1.0),
-    ... (6, 7, 1.0), (7, 8, 1.0), (8, 9, 1.0), (9, 10, 1.0), (10, 11, 1.0),
-    ... (11, 12, 1.0), (12, 13, 1.0), (13, 14, 1.0), (14, 15, 1.0)]
-    >>> rdd = sc.parallelize(data, 2)
-    >>> model = PowerIterationClustering.train(rdd, 2, 100)
+    >>> import math
+    >>> def genCircle(r, n):
+    ...   points = []
+    ...   for i in range(0, n):
+    ...     theta = 2.0 * math.pi * i / n
+    ...     points.append((r * math.cos(theta), r * math.sin(theta)))
+    ...   return points
+    >>> def sim(x, y):
+    ...   dist2 = (x[0] - y[0]) * (x[0] - y[0]) + (x[1] - y[1]) * (x[1] - y[1])
+    ...   return math.exp(-dist2 / 2.0)
+    >>> r1 = 1.0
+    >>> n1 = 10
+    >>> r2 = 4.0
+    >>> n2 = 40
+    >>> n = n1 + n2
+    >>> points = genCircle(r1, n1) + genCircle(r2, n2)
+    >>> similarities = [(i, j, sim(points[i], points[j])) for i in range(1, n) for j in range(0, i)]
+    >>> rdd = sc.parallelize(similarities, 2)
+    >>> model = PowerIterationClustering.train(rdd, 2, 40)
     >>> model.k
     2
     >>> result = sorted(model.assignments().collect(), key=lambda x: x.id)
