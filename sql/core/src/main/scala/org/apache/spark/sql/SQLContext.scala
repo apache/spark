@@ -181,6 +181,8 @@ class SQLContext private[sql](
   @transient
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
+  protected[sql] lazy val continuousQueryManager = new ContinuousQueryManager(this)
+
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
@@ -718,7 +720,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(TableIdentifier(tableName), df.logicalPlan)
+    catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -833,6 +835,16 @@ class SQLContext private[sql](
    */
   def tables(databaseName: String): DataFrame = {
     DataFrame(this, ShowTablesCommand(Some(databaseName)))
+  }
+
+  /**
+   * Returns a [[ContinuousQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   *
+   * @since 2.0.0
+   */
+  def streams: ContinuousQueryManager = {
+    continuousQueryManager
   }
 
   /**

@@ -63,7 +63,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     rang/filter/sum:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
     rang/filter/sum codegen=false          14332 / 16646         36.0          27.8       1.0X
-    rang/filter/sum codegen=true              845 /  940        620.0           1.6      17.0X
+    rang/filter/sum codegen=true              897 / 1022        584.6           1.7      16.4X
     */
   }
 
@@ -155,6 +155,23 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     Join w 2 ints codegen=true              1265 / 1424         82.0          12.2       9.0X
     */
 
+  }
+
+  ignore("rube") {
+    val N = 5 << 20
+
+    runBenchmark("cube", N) {
+      sqlContext.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
+        .cube("k1", "k2").sum("id").collect()
+    }
+
+    /**
+      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+      cube:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      -------------------------------------------------------------------------------------------
+      cube codegen=false                       3188 / 3392          1.6         608.2       1.0X
+      cube codegen=true                        1239 / 1394          4.2         236.3       2.6X
+      */
   }
 
   ignore("hash and BytesToBytesMap") {

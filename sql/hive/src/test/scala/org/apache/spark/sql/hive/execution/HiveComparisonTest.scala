@@ -412,21 +412,22 @@ abstract class HiveComparisonTest
                 originalQuery
               } else {
                 numTotalQueries += 1
-                new SQLBuilder(originalQuery.analyzed, TestHive).toSQL.map { sql =>
+                try {
+                  val sql = new SQLBuilder(originalQuery.analyzed, TestHive).toSQL
                   numConvertibleQueries += 1
                   logInfo(
                     s"""
-                       |### Running SQL generation round-trip test {{{
-                       |${originalQuery.analyzed.treeString}
-                       |Original SQL:
-                       |$queryString
-                       |
-                     |Generated SQL:
-                       |$sql
-                       |}}}
+                      |### Running SQL generation round-trip test {{{
+                      |${originalQuery.analyzed.treeString}
+                      |Original SQL:
+                      |$queryString
+                      |
+                      |Generated SQL:
+                      |$sql
+                      |}}}
                    """.stripMargin.trim)
                   new TestHive.QueryExecution(sql)
-                }.getOrElse {
+                } catch { case NonFatal(e) =>
                   logInfo(
                     s"""
                        |### Cannot convert the following logical plan back to SQL {{{
