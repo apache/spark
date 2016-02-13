@@ -89,9 +89,8 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  private val ord: LazilyGeneratedOrdering = new LazilyGeneratedOrdering(sortOrder, child.output)
-
   override def executeCollect(): Array[InternalRow] = {
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     if (projectList.isDefined) {
       val proj = UnsafeProjection.create(projectList.get, child.output)
@@ -104,6 +103,7 @@ case class TakeOrderedAndProject(
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val localTopK: RDD[InternalRow] = {
       child.execute().map(_.copy()).mapPartitions { iter =>
         org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
