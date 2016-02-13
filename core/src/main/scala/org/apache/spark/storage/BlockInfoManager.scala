@@ -148,6 +148,7 @@ private[storage] class BlockInfoManager extends Logging {
         if (info.removed) return None
         if (blocking) wait() else return None
       }
+      if (info.removed) return None
       info.readerCount += 1
       readLocksByTask(currentTaskAttemptId).add(blockId)
       logTrace(s"Task $currentTaskAttemptId acquired read lock for $blockId")
@@ -178,6 +179,7 @@ private[storage] class BlockInfoManager extends Logging {
           if (info.removed) return None
           if (blocking) wait() else return None
         }
+        if (info.removed) return None
       }
       info.writerTask = currentTaskAttemptId
       writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
