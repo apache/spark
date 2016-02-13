@@ -22,6 +22,7 @@ import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.BooleanType;
 import org.apache.spark.sql.types.ByteType;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.DateType;
 import org.apache.spark.sql.types.DecimalType;
 import org.apache.spark.sql.types.DoubleType;
 import org.apache.spark.sql.types.FloatType;
@@ -391,7 +392,8 @@ public final class OffHeapColumnVector extends ColumnVector {
       this.data = Platform.reallocateMemory(data, elementsAppended, newCapacity);
     } else if (type instanceof ShortType) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 2, newCapacity * 2);
-    } else if (type instanceof IntegerType || type instanceof FloatType) {
+    } else if (type instanceof IntegerType || type instanceof FloatType ||
+        type instanceof DateType) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 4, newCapacity * 4);
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type)) {

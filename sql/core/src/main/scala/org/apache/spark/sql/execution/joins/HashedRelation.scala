@@ -159,18 +159,17 @@ private[joins] class UniqueKeyHashedRelation(
 private[execution] object HashedRelation {
 
   def apply(localNode: LocalNode, keyGenerator: Projection): HashedRelation = {
-    apply(localNode.asIterator, SQLMetrics.nullLongMetric, keyGenerator)
+    apply(localNode.asIterator, keyGenerator)
   }
 
   def apply(
       input: Iterator[InternalRow],
-      numInputRows: LongSQLMetric,
       keyGenerator: Projection,
       sizeEstimate: Int = 64): HashedRelation = {
 
     if (keyGenerator.isInstanceOf[UnsafeProjection]) {
       return UnsafeHashedRelation(
-        input, numInputRows, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
+        input, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
     }
 
     // TODO: Use Spark's HashMap implementation.
@@ -184,7 +183,6 @@ private[execution] object HashedRelation {
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
       currentRow = input.next()
-      numInputRows += 1
       val rowKey = keyGenerator(currentRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
@@ -277,13 +275,13 @@ private[joins] final class UnsafeHashedRelation(
       val map = binaryMap  // avoid the compiler error
       val loc = new map.Location  // this could be allocated in stack
       binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
-        unsafeKey.getSizeInBytes, loc)
+        unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
       if (loc.isDefined) {
         val buffer = CompactBuffer[UnsafeRow]()
 
-        val base = loc.getValueAddress.getBaseObject
-        var offset = loc.getValueAddress.getBaseOffset
-        val last = loc.getValueAddress.getBaseOffset + loc.getValueLength
+        val base = loc.getValueBase
+        var offset = loc.getValueOffset
+        val last = offset + loc.getValueLength
         while (offset < last) {
           val numFields = Platform.getInt(base, offset)
           val sizeInBytes = Platform.getInt(base, offset + 4)
@@ -311,12 +309,11 @@ private[joins] final class UnsafeHashedRelation(
       out.writeInt(binaryMap.numElements())
 
       var buffer = new Array[Byte](64)
-      def write(addr: MemoryLocation, length: Int): Unit = {
+      def write(base: Object, offset: Long, length: Int): Unit = {
         if (buffer.length < length) {
           buffer = new Array[Byte](length)
         }
-        Platform.copyMemory(addr.getBaseObject, addr.getBaseOffset,
-          buffer, Platform.BYTE_ARRAY_OFFSET, length)
+        Platform.copyMemory(base, offset, buffer, Platform.BYTE_ARRAY_OFFSET, length)
         out.write(buffer, 0, length)
       }
 
@@ -326,8 +323,8 @@ private[joins] final class UnsafeHashedRelation(
         // [key size] [values size] [key bytes] [values bytes]
         out.writeInt(loc.getKeyLength)
         out.writeInt(loc.getValueLength)
-        write(loc.getKeyAddress, loc.getKeyLength)
-        write(loc.getValueAddress, loc.getValueLength)
+        write(loc.getKeyBase, loc.getKeyOffset, loc.getKeyLength)
+        write(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
       }
 
     } else {
@@ -428,7 +425,6 @@ private[joins] object UnsafeHashedRelation {
 
   def apply(
       input: Iterator[InternalRow],
-      numInputRows: LongSQLMetric,
       keyGenerator: UnsafeProjection,
       sizeEstimate: Int): HashedRelation = {
 
@@ -438,7 +434,6 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
-      numInputRows += 1
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
@@ -605,7 +600,6 @@ private[joins] object LongHashedRelation {
 
   def apply(
     input: Iterator[InternalRow],
-    numInputRows: LongSQLMetric,
     keyGenerator: Projection,
     sizeEstimate: Int): HashedRelation = {
 
@@ -620,7 +614,6 @@ private[joins] object LongHashedRelation {
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
-      numInputRows += 1
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val key = rowKey.getLong(0)
