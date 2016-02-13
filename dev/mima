@@ -35,13 +35,16 @@ TOOLS_CLASSPATH="$(build/sbt "export tools/fullClasspath" | tail -n1)"
 # Because of a bug in GenerateMIMAIgnore that when old jars are ahead on classpath
 # it did not process the new classes (which are in assembly jar).
 
-java \
-  -cp "$(build/sbt "export assembly/fullClasspath" | tail -n1):$TOOLS_CLASSPATH" \
-  org.apache.spark.tools.GenerateMIMAIgnore
+generate_mima_ignore() {
+    java \
+      -XX:MaxPermSize=1g \
+      -Xmx2g \
+      -cp "$1:$TOOLS_CLASSPATH" \
+      org.apache.spark.tools.GenerateMIMAIgnore
+}
 
-java \
-  -cp "$(build/sbt "export oldDeps/fullClasspath" | tail -n1):$TOOLS_CLASSPATH" \
-  org.apache.spark.tools.GenerateMIMAIgnore
+generate_mima_ignore "$(build/sbt "export assembly/fullClasspath" | tail -n1)"
+generate_mima_ignore "$(build/sbt "export oldDeps/fullClasspath" | tail -n1)"
 
 echo -e "q\n" | build/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?
