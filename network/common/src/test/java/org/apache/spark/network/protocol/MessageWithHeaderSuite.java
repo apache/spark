@@ -29,6 +29,8 @@ import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 
 public class MessageWithHeaderSuite {
@@ -47,7 +49,8 @@ public class MessageWithHeaderSuite {
   public void testByteBufBody() throws Exception {
     ByteBuf header = Unpooled.copyLong(42);
     ByteBuf body = Unpooled.copyLong(84);
-    MessageWithHeader msg = new MessageWithHeader(header, body, body.readableBytes());
+    ManagedBuffer managedBuf = new NettyManagedBuffer(body);
+    MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, body.readableBytes());
 
     ByteBuf result = doWrite(msg, 1);
     assertEquals(msg.count(), result.readableBytes());
@@ -59,7 +62,7 @@ public class MessageWithHeaderSuite {
     ByteBuf header = Unpooled.copyLong(42);
     int headerLength = header.readableBytes();
     TestFileRegion region = new TestFileRegion(totalWrites, writesPerCall);
-    MessageWithHeader msg = new MessageWithHeader(header, region, region.count());
+    MessageWithHeader msg = new MessageWithHeader(null, header, region, region.count());
 
     ByteBuf result = doWrite(msg, totalWrites / writesPerCall);
     assertEquals(headerLength + region.count(), result.readableBytes());

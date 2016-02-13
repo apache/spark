@@ -49,11 +49,15 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
     // If the message has a body, take it out to enable zero-copy transfer for the payload.
     if (in.body() != null) {
+      bodyLength = in.body().size();
+      if (bodyLength > 0) {
+        in.body().retain();
+      }
       try {
-        bodyLength = in.body().size();
         body = in.body().convertToNetty();
         isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
+        in.body().release();
         if (in instanceof AbstractResponseMessage) {
           AbstractResponseMessage resp = (AbstractResponseMessage) in;
           // Re-encode this message as a failure response.
@@ -80,8 +84,10 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
     in.encode(header);
     assert header.writableBytes() == 0;
 
-    if (body != null && bodyLength > 0) {
-      out.add(new MessageWithHeader(header, body, bodyLength));
+    if (body != null) {
+      // We transfer ownership of the reference on in.body() to MessageWithHeader.
+      // This reference will be freed when MessageWithHeader.deallocate() is called.
+      out.add(new MessageWithHeader(in.body(), header, body, bodyLength));
     } else {
       out.add(header);
     }
