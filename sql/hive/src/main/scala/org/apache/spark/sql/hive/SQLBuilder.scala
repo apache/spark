@@ -83,12 +83,23 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     // TABLESAMPLE is part of tableSource clause in the parser,
     // and thus we must handle it with subquery.
-    case Sample(lb, ub, withReplacement, _, child @ Subquery(alias, grandChild))
-      if !withReplacement && lb <= (ub + RandomSampler.roundingEpsilon) =>
+    case p @ Sample(lb, ub, withReplacement, _, _)
+        if !withReplacement && lb <= (ub + RandomSampler.roundingEpsilon) =>
       val fraction = math.min(100, math.max(0, (ub - lb) * 100))
-      val aliasName = if (grandChild.isInstanceOf[Subquery]) alias else ""
-      val plan = if (grandChild.isInstanceOf[Subquery]) grandChild else child
-      s"${toSQL(plan)} TABLESAMPLE($fraction PERCENT) $aliasName"
+      p.child match {
+        case m: MetastoreRelation =>
+          val aliasName = m.alias.getOrElse("")
+          build(
+            s"`${m.databaseName}`.`${m.tableName}`",
+            "TABLESAMPLE(" + fraction + " PERCENT)",
+            aliasName)
+        case s: Subquery =>
+          val aliasName = if (s.child.isInstanceOf[Subquery]) s.alias else ""
+          val plan = if (s.child.isInstanceOf[Subquery]) s.child else s
+          build(toSQL(plan), "TABLESAMPLE(" + fraction + " PERCENT)", aliasName)
+        case _ =>
+          build(toSQL(p.child), "TABLESAMPLE(" + fraction + " PERCENT)")
+      }
 
     case p: Filter =>
       val whereOrHaving = p.child match {
