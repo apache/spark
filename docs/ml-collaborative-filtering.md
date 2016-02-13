@@ -33,16 +33,16 @@ following parameters:
 
 The standard approach to matrix factorization based collaborative filtering treats 
 the entries in the user-item matrix as *explicit* preferences given by the user to the item.
+For example, users giving ratings to movies.
 
-It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
-clicks, purchases, likes, shares etc.). The approach used in `spark.ml` to deal with such data is taken
-from
-[Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
-Essentially instead of trying to model the matrix of ratings directly, this approach treats the data
-as a combination of binary preferences and *confidence values*. The ratings are then related to the
-level of confidence in observed user preferences, rather than explicit ratings given to items.  The
-model then tries to find latent factors that can be used to predict the expected preference of a
-user for an item.
+It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views, 
+clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
+from [Collaborative Filtering for Implicit Feedback Datasets](http://dx.doi.org/10.1109/ICDM.2008.22).
+Essentially, instead of trying to model the matrix of ratings directly, this approach treats the data
+as the number of observations of user actions. Those numbers are then related to the level of
+confidence in observed user preferences, rather than explicit ratings given to items. The model
+then tries to find latent factors that can be used to predict the expected preference of a user for
+an item.     
 
 ### Scaling of the regularization parameter
 
@@ -51,9 +51,8 @@ the number of ratings the user generated in updating user factors,
 or the number of ratings the product received in updating product factors.
 This approach is named "ALS-WR" and discussed in the paper
 "[Large-Scale Parallel Collaborative Filtering for the Netflix Prize](http://dx.doi.org/10.1007/978-3-540-68880-8_32)".
-It makes `regParam` less dependent on the scale of the dataset.
-So we can apply the best parameter learned from a sampled subset to the full dataset
-and expect similar performance.
+It makes `regParam` less dependent on the scale of the dataset, so we can apply the
+best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
 ## Examples
 
@@ -73,7 +72,7 @@ for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/ALSExample.scala %}
 
-If the rating matrix is derived from another source of information (e.g. it is
+If the rating matrix is derived from another source of information (i.e. it is
 inferred from other signals), you can set `implicitPrefs` to `true` to get
 better results:
 
@@ -104,7 +103,7 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaALSExample.java %}
 
-If the rating matrix is derived from another source of information (e.g. it is
+If the rating matrix is derived from another source of information (i.e. it is
 inferred from other signals), you can set `implicitPrefs` to `true` to get
 better results:
 
@@ -135,7 +134,7 @@ for more details on the API.
 
 {% include_example python/ml/als_example.py %}
 
-If the rating matrix is derived from another source of information (e.g. it is
+If the rating matrix is derived from another source of information (i.e. it is
 inferred from other signals), you can set `implicitPrefs` to `True` to get
 better results:
 
