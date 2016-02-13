@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Add
 import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -49,6 +50,14 @@ class LimitPushdownSuite extends PlanTest {
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
       Limit(1, Union(LocalLimit(1, testRelation), LocalLimit(1, testRelation2))).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("Union: limit to each side with constant-foldable limit expressions") {
+    val unionQuery = Union(testRelation, testRelation2).limit(Add(1, 1))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Limit(2, Union(LocalLimit(2, testRelation), LocalLimit(2, testRelation2))).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 

@@ -144,7 +144,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
   private def maybePushLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
     (limitExp, plan.maxRows) match {
-      case (IntegerLiteral(maxRow), Some(IntegerLiteral(childMaxRows))) if maxRow < childMaxRows =>
+      case (IntegerLiteral(maxRow), Some(childMaxRows)) if maxRow < childMaxRows =>
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
       case (_, None) =>
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
