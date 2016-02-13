@@ -39,7 +39,7 @@ generate_mima_ignore() {
     java \
       -XX:MaxPermSize=1g \
       -Xmx2g \
-      -cp "$1:$TOOLS_CLASSPATH" \
+      -cp "$TOOLS_CLASSPATH:$1" \
       org.apache.spark.tools.GenerateMIMAIgnore
 }
 
