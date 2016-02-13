@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 
 
@@ -89,9 +90,7 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  // We need to use an interpreted ordering here because generated orderings cannot be serialized
-  // and this ordering needs to be created on the driver in order to be passed into Spark core code.
-  private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
+  private val ord: LazilyGeneratedOrdering = new LazilyGeneratedOrdering(sortOrder, child.output)
 
   private def collectData(): Array[InternalRow] = {
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
