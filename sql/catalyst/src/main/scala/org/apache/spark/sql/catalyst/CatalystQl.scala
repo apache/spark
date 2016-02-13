@@ -186,8 +186,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
    *
    * The bitmask denotes the grouping expressions validity for a grouping set,
    * the bitmask also be called as grouping id (`GROUPING__ID`, the virtual column in Hive)
-   * e.g. In superset (k1, k2, k3), (bit 0: k1, bit 1: k2, and bit 2: k3), the grouping id of
-   * GROUPING SETS (k1, k2) and (k2) should be 3 and 2 respectively.
+   * e.g. In superset (k1, k2, k3), (bit 2: k1, bit 1: k2, and bit 0: k3), the grouping id of
+   * GROUPING SETS (k1, k2) and (k2) should be 1 and 5 respectively.
    */
   protected def extractGroupingSet(children: Seq[ASTNode]): (Seq[Expression], Seq[Int]) = {
     val (keyASTs, setASTs) = children.partition {
@@ -198,12 +198,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val keys = keyASTs.map(nodeToExpr)
     val keyMap = keyASTs.zipWithIndex.toMap
 
+    val mask = (1 << keys.length) - 1
     val bitmasks: Seq[Int] = setASTs.map {
       case Token("TOK_GROUPING_SETS_EXPRESSION", columns) =>
-        columns.foldLeft(0)((bitmap, col) => {
-          val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2)
-          bitmap | 1 << keyIndex.getOrElse(
+        columns.foldLeft(mask)((bitmap, col) => {
+          val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2).getOrElse(
             throw new AnalysisException(s"${col.treeString} doesn't show up in the GROUP BY list"))
+          // 0 means that the column at the given index is a grouping column, 1 means it is not,
+          // so we unset the bit in bitmap.
+          bitmap & ~(1 << (keys.length - 1 - keyIndex))
         })
       case _ => sys.error("Expect GROUPING SETS clause")
     }

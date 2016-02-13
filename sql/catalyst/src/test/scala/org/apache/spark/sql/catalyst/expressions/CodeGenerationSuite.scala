@@ -36,7 +36,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     import scala.concurrent.duration._
 
     val futures = (1 to 20).map { _ =>
-      future {
+      Future {
         GeneratePredicate.generate(EqualTo(Literal(1), Literal(1)))
         GenerateMutableProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateOrdering.generate(Add(Literal(1), Literal(1)).asc :: Nil)

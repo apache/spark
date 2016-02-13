@@ -18,9 +18,9 @@
 package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream}
+import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.SynchronizedBuffer
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -87,17 +87,17 @@ class TestInputStream[T: ClassTag](_ssc: StreamingContext, input: Seq[Seq[T]], n
 
 /**
  * This is a output stream just for the testsuites. All the output is collected into a
- * ArrayBuffer. This buffer is wiped clean on being restored from checkpoint.
+ * ConcurrentLinkedQueue. This queue is wiped clean on being restored from checkpoint.
  *
- * The buffer contains a sequence of RDD's, each containing a sequence of items
+ * The buffer contains a sequence of RDD's, each containing a sequence of items.
  */
 class TestOutputStream[T: ClassTag](
     parent: DStream[T],
-    val output: SynchronizedBuffer[Seq[T]] =
-      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
+    val output: ConcurrentLinkedQueue[Seq[T]] =
+      new ConcurrentLinkedQueue[Seq[T]]()
   ) extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
-    output += collected
+    output.add(collected)
   }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
@@ -110,18 +110,18 @@ class TestOutputStream[T: ClassTag](
 
 /**
  * This is a output stream just for the testsuites. All the output is collected into a
- * ArrayBuffer. This buffer is wiped clean on being restored from checkpoint.
+ * ConcurrentLinkedQueue. This queue is wiped clean on being restored from checkpoint.
  *
- * The buffer contains a sequence of RDD's, each containing a sequence of partitions, each
+ * The queue contains a sequence of RDD's, each containing a sequence of partitions, each
  * containing a sequence of items.
  */
 class TestOutputStreamWithPartitions[T: ClassTag](
     parent: DStream[T],
-    val output: SynchronizedBuffer[Seq[Seq[T]]] =
-      new ArrayBuffer[Seq[Seq[T]]] with SynchronizedBuffer[Seq[Seq[T]]])
+    val output: ConcurrentLinkedQueue[Seq[Seq[T]]] =
+      new ConcurrentLinkedQueue[Seq[Seq[T]]]())
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
-    output += collected
+    output.add(collected)
   }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
@@ -322,7 +322,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     val inputStream = new TestInputStream(ssc, input, numPartitions)
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
-      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
+      new ConcurrentLinkedQueue[Seq[Seq[V]]])
     outputStream.register()
     ssc
   }
@@ -347,7 +347,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     val inputStream2 = new TestInputStream(ssc, input2, numInputPartitions)
     val operatedStream = operation(inputStream1, inputStream2)
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
-      new ArrayBuffer[Seq[Seq[W]]] with SynchronizedBuffer[Seq[Seq[W]]])
+      new ConcurrentLinkedQueue[Seq[Seq[W]]])
     outputStream.register()
     ssc
   }
@@ -418,7 +418,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
       }
       val timeTaken = System.currentTimeMillis() - startTime
       logInfo("Output generated in " + timeTaken + " milliseconds")
-      output.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+      output.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 
@@ -426,7 +426,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     } finally {
       ssc.stop(stopSparkContext = true)
     }
-    output
+    output.asScala.toSeq
   }
 
   /**
@@ -501,7 +501,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     withStreamingContext(setupStreams[U, V](input, operation)) { ssc =>
       val output = runStreams[V](ssc, numBatches_, expectedOutput.size)
-      verifyOutput[V](output, expectedOutput, useSet)
+      verifyOutput[V](output.toSeq, expectedOutput, useSet)
     }
   }
 
@@ -540,7 +540,7 @@ trait TestSuiteBase extends SparkFunSuite with BeforeAndAfter with Logging {
     val numBatches_ = if (numBatches > 0) numBatches else expectedOutput.size
     withStreamingContext(setupStreams[U, V, W](input1, input2, operation)) { ssc =>
       val output = runStreams[W](ssc, numBatches_, expectedOutput.size)
-      verifyOutput[W](output, expectedOutput, useSet)
+      verifyOutput[W](output.toSeq, expectedOutput, useSet)
     }
   }
 }

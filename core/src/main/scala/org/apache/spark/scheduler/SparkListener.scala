@@ -61,6 +61,7 @@ case class SparkListenerTaskEnd(
     taskType: String,
     reason: TaskEndReason,
     taskInfo: TaskInfo,
+    // may be null if the task has failed
     @Nullable taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 

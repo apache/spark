@@ -97,8 +97,8 @@ public final class UnsafeKVExternalSorter {
       UnsafeRow row = new UnsafeRow(numKeyFields);
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
-        final Object baseObject = loc.getKeyAddress().getBaseObject();
-        final long baseOffset = loc.getKeyAddress().getBaseOffset();
+        final Object baseObject = loc.getKeyBase();
+        final long baseOffset = loc.getKeyOffset();
 
         // Get encoded memory address
         // baseObject + baseOffset point to the beginning of the key data in the map, but that
