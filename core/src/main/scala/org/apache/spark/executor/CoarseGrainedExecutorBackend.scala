@@ -62,10 +62,9 @@ private[spark] class CoarseGrainedExecutorBackend(
       case Success(msg) => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(msg)) // msg must be RegisterExecutorResponse
       }
-      case Failure(e) => {
+      case Failure(e) =>
         logError(s"Cannot register with driver: $driverUrl", e)
         System.exit(1)
-      }
     }(ThreadUtils.sameThread)
   }
 
@@ -208,7 +207,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     val userClassPath = new mutable.ListBuffer[URL]()
 
     var argv = args.toList
-    while (!argv.isEmpty) {
+    while (argv.nonEmpty) {
       argv match {
         case ("--driver-url") :: value :: tail =>
           driverUrl = value
@@ -268,5 +267,4 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     // scalastyle:on println
     System.exit(1)
   }
-
 }
