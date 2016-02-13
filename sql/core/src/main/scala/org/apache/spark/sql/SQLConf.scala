@@ -345,6 +345,14 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
+  // Note: this can not be enabled all the time because the reader will not be returning UnsafeRows.
+  // Doing so is very expensive and we should remove this requirement instead of fixing it here.
+  // Initial testing seems to indicate only sort requires this.
+  val PARQUET_VECTORIZED_READER_ENABLED = booleanConf(
+    key = "spark.sql.parquet.enableVectorizedReader",
+    defaultValue = Some(false),
+    doc = "Enables vectorized parquet decoding.")
+
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
     defaultValue = Some(false),
     doc = "When true, enable filter pushdown for ORC files.")

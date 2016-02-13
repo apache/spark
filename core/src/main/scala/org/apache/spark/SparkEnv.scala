@@ -35,7 +35,7 @@ import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
@@ -91,6 +91,7 @@ class SparkEnv (
       metricsSystem.stop()
       outputCommitCoordinator.stop()
       rpcEnv.shutdown()
+      rpcEnv.awaitTermination()
 
       // Note that blockTransferService is stopped by BlockManager since it is started by it.
 
@@ -276,8 +277,7 @@ object SparkEnv extends Logging {
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
-    val closureSerializer = instantiateClassFromConf[Serializer](
-      "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
+    val closureSerializer = new JavaSerializer(conf)
 
     def registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):

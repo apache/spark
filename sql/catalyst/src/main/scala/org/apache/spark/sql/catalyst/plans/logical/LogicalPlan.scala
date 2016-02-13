@@ -139,7 +139,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       case a: Alias =>
         // As the root of the expression, Alias will always take an arbitrary exprId, we need
         // to erase that for equality testing.
-        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+        val cleanedExprId =
+          Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
         BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
       case other => BindReferences.bindReference(other, input, allowFailures = true)
     }
@@ -222,7 +223,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (resolver(attribute.name, nameParts.head)) {
+    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
@@ -305,6 +306,8 @@ abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
   override def children: Seq[LogicalPlan] = child :: Nil
+
+  override protected def validConstraints: Set[Expression] = child.constraints
 }
 
 /**

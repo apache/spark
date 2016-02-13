@@ -57,6 +57,7 @@ class ExecutorSummary private[spark](
     val rddBlocks: Int,
     val memoryUsed: Long,
     val diskUsed: Long,
+    val totalCores: Int,
     val maxTasks: Int,
     val activeTasks: Int,
     val failedTasks: Int,

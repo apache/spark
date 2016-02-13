@@ -2055,6 +2055,56 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("grouping sets") {
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by course, year " +
+        "grouping sets(course, year)"),
+      Row("Java", null, 50000.0) ::
+        Row("dotNET", null, 63000.0) ::
+        Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by course, year " +
+        "grouping sets(course)"),
+      Row("Java", null, 50000.0) ::
+        Row("dotNET", null, 63000.0) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, sum(earnings) from courseSales group by course, year " +
+        "grouping sets(year)"),
+      Row(null, 2012, 35000.0) ::
+        Row(null, 2013, 78000.0) :: Nil
+    )
+  }
+
+  test("grouping and grouping_id") {
+    checkAnswer(
+      sql("select course, year, grouping(course), grouping(year), grouping_id(course, year)" +
+        " from courseSales group by cube(course, year)"),
+      Row("Java", 2012, 0, 0, 0) ::
+        Row("Java", 2013, 0, 0, 0) ::
+        Row("Java", null, 0, 1, 1) ::
+        Row("dotNET", 2012, 0, 0, 0) ::
+        Row("dotNET", 2013, 0, 0, 0) ::
+        Row("dotNET", null, 0, 1, 1) ::
+        Row(null, 2012, 1, 0, 2) ::
+        Row(null, 2013, 1, 0, 2) ::
+        Row(null, null, 1, 1, 3) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year, grouping(course) from courseSales group by course, year")
+    }
+    assert(error.getMessage contains "grouping() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
+    }
+    assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
+  }
+
   test("SPARK-13056: Null in map value causes NPE") {
     val df = Seq(1 -> Map("abc" -> "somestring", "cba" -> null)).toDF("key", "value")
     withTempTable("maptest") {
@@ -2073,6 +2123,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.select(hash($"i", $"j")),
         sql("SELECT hash(i, j) from tbl")
       )
+    }
+  }
+
+  test("natural join") {
+    val df1 = Seq(("one", 1), ("two", 2), ("three", 3)).toDF("k", "v1")
+    val df2 = Seq(("one", 1), ("two", 22), ("one", 5)).toDF("k", "v2")
+    withTempTable("nt1", "nt2") {
+      df1.registerTempTable("nt1")
+      df2.registerTempTable("nt2")
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural join nt2 where k = \"one\""),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Nil)
+
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural left join nt2 order by v1, v2"),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Row("three", 3, null) :: Nil)
+
+      checkAnswer(
+        sql("SELECT * FROM nt1 natural right join nt2 order by v1, v2"),
+        Row("one", 1, 1) :: Row("one", 1, 5) :: Row("two", 2, 22) :: Nil)
+
+      checkAnswer(
+        sql("SELECT count(*) FROM nt1 natural full outer join nt2"),
+        Row(4) :: Nil)
     }
   }
 }

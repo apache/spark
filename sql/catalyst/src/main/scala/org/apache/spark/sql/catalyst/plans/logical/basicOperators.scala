@@ -25,6 +25,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.types._
 
+/**
+ * When planning take() or collect() operations, this special node that is inserted at the top of
+ * the logical plan before invoking the query planner.
+ *
+ * Rules can pattern-match on this node in order to apply transformations that only take effect
+ * at the top of the logical query plan.
+ */
+case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+}
+
 case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -87,11 +98,27 @@ case class Generate(
   }
 }
 
-case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+case class Filter(condition: Expression, child: LogicalPlan)
+  extends UnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
+
+  override protected def validConstraints: Set[Expression] = {
+    child.constraints.union(splitConjunctivePredicates(condition).toSet)
+  }
 }
 
-abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode
+abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+
+  protected def leftConstraints: Set[Expression] = left.constraints
+
+  protected def rightConstraints: Set[Expression] = {
+    require(left.output.size == right.output.size)
+    val attributeRewrites = AttributeMap(right.output.zip(left.output))
+    right.constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
+}
 
 private[sql] object SetOperation {
   def unapply(p: SetOperation): Option[(LogicalPlan, LogicalPlan)] = Some((p.left, p.right))
@@ -106,6 +133,10 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
+  override protected def validConstraints: Set[Expression] = {
+    leftConstraints.union(rightConstraints)
+  }
+
   // Intersect are only resolved if they don't introduce ambiguous expression ids,
   // since the Optimizer will convert Intersect to Join.
   override lazy val resolved: Boolean =
@@ -118,6 +149,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
+
+  override protected def validConstraints: Set[Expression] = leftConstraints
 
   override lazy val resolved: Boolean =
     childrenResolved &&
@@ -157,13 +190,36 @@ case class Union(children: Seq[LogicalPlan]) extends LogicalPlan {
     val sizeInBytes = children.map(_.statistics.sizeInBytes).sum
     Statistics(sizeInBytes = sizeInBytes)
   }
+
+  /**
+   * Maps the constraints containing a given (original) sequence of attributes to those with a
+   * given (reference) sequence of attributes. Given the nature of union, we expect that the
+   * mapping between the original and reference sequences are symmetric.
+   */
+  private def rewriteConstraints(
+      reference: Seq[Attribute],
+      original: Seq[Attribute],
+      constraints: Set[Expression]): Set[Expression] = {
+    require(reference.size == original.size)
+    val attributeRewrites = AttributeMap(original.zip(reference))
+    constraints.map(_ transform {
+      case a: Attribute => attributeRewrites(a)
+    })
+  }
+
+  override protected def validConstraints: Set[Expression] = {
+    children
+      .map(child => rewriteConstraints(children.head.output, child.output, child.constraints))
+      .reduce(_ intersect _)
+  }
 }
 
 case class Join(
-  left: LogicalPlan,
-  right: LogicalPlan,
-  joinType: JoinType,
-  condition: Option[Expression]) extends BinaryNode {
+    left: LogicalPlan,
+    right: LogicalPlan,
+    joinType: JoinType,
+    condition: Option[Expression])
+  extends BinaryNode with PredicateHelper {
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -180,14 +236,44 @@ case class Join(
     }
   }
 
+  override protected def validConstraints: Set[Expression] = {
+    joinType match {
+      case Inner if condition.isDefined =>
+        left.constraints
+          .union(right.constraints)
+          .union(splitConjunctivePredicates(condition.get).toSet)
+      case LeftSemi if condition.isDefined =>
+        left.constraints
+          .union(splitConjunctivePredicates(condition.get).toSet)
+      case Inner =>
+        left.constraints.union(right.constraints)
+      case LeftSemi =>
+        left.constraints
+      case LeftOuter =>
+        left.constraints
+      case RightOuter =>
+        right.constraints
+      case FullOuter =>
+        Set.empty[Expression]
+    }
+  }
+
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.
-  override lazy val resolved: Boolean = {
+  // NaturalJoin should be ready for resolution only if everything else is resolved here
+  lazy val resolvedExceptNatural: Boolean = {
     childrenResolved &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       condition.forall(_.dataType == BooleanType)
+  }
+
+  // if not a natural join, use `resolvedExceptNatural`. if it is a natural join, we still need
+  // to eliminate natural before we mark it resolved.
+  override lazy val resolved: Boolean = joinType match {
+    case NaturalJoin(_) => false
+    case _ => resolvedExceptNatural
   }
 }
 
@@ -326,7 +412,7 @@ private[sql] object Expand {
 
     var bit = exprs.length - 1
     while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 0) set += exprs(bit)
+      if (((bitmask >> bit) & 1) == 1) set += exprs(exprs.length - bit - 1)
       bit -= 1
     }
 
