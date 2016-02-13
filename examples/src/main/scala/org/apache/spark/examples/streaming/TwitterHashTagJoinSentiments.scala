@@ -19,8 +19,8 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.streaming.twitter.TwitterUtils
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.twitter.TwitterUtils
 
 /**
  * Displays the most positive hash tags by joining the streaming Twitter data with a static RDD of

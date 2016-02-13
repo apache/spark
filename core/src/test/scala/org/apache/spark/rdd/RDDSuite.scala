@@ -17,13 +17,13 @@
 
 package org.apache.spark.rdd
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.KryoException
-
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -441,66 +441,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(prunedData(0) === 10)
   }
 
-  test("mapWith") {
-    import java.util.Random
-    val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
-    @deprecated("suppress compile time deprecation warning", "1.0.0")
-    val randoms = ones.mapWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) => prng.nextDouble * t}.collect()
-    val prn42_3 = {
-      val prng42 = new Random(42)
-      prng42.nextDouble(); prng42.nextDouble(); prng42.nextDouble()
-    }
-    val prn43_3 = {
-      val prng43 = new Random(43)
-      prng43.nextDouble(); prng43.nextDouble(); prng43.nextDouble()
-    }
-    assert(randoms(2) === prn42_3)
-    assert(randoms(5) === prn43_3)
-  }
-
-  test("flatMapWith") {
-    import java.util.Random
-    val ones = sc.makeRDD(Array(1, 1, 1, 1, 1, 1), 2)
-    @deprecated("suppress compile time deprecation warning", "1.0.0")
-    val randoms = ones.flatMapWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) =>
-        val random = prng.nextDouble()
-        Seq(random * t, random * t * 10)}.
-      collect()
-    val prn42_3 = {
-      val prng42 = new Random(42)
-      prng42.nextDouble(); prng42.nextDouble(); prng42.nextDouble()
-    }
-    val prn43_3 = {
-      val prng43 = new Random(43)
-      prng43.nextDouble(); prng43.nextDouble(); prng43.nextDouble()
-    }
-    assert(randoms(5) === prn42_3 * 10)
-    assert(randoms(11) === prn43_3 * 10)
-  }
-
-  test("filterWith") {
-    import java.util.Random
-    val ints = sc.makeRDD(Array(1, 2, 3, 4, 5, 6), 2)
-    @deprecated("suppress compile time deprecation warning", "1.0.0")
-    val sample = ints.filterWith(
-      (index: Int) => new Random(index + 42))
-      {(t: Int, prng: Random) => prng.nextInt(3) == 0}.
-      collect()
-    val checkSample = {
-      val prng42 = new Random(42)
-      val prng43 = new Random(43)
-      Array(1, 2, 3, 4, 5, 6).filter{i =>
-        if (i < 4) 0 == prng42.nextInt(3) else 0 == prng43.nextInt(3)
-      }
-    }
-    assert(sample.size === checkSample.size)
-    for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
-  }
-
   test("collect large number of empty partitions") {
     // Regression test for SPARK-4019
     assert(sc.makeRDD(0 until 10, 1000).repartition(2001).collect().toSet === (0 until 10).toSet)
@@ -542,6 +482,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(nums.take(501) === (1 to 501).toArray)
     assert(nums.take(999) === (1 to 999).toArray)
     assert(nums.take(1000) === (1 to 999).toArray)
+
+    nums = sc.parallelize(1 to 2, 2)
+    assert(nums.take(2147483638).size === 2)
+    assert(nums.takeAsync(2147483638).get.size === 2)
   }
 
   test("top with predefined ordering") {
@@ -968,6 +912,24 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     def addDependency(dep: Dependency[_]) {
       mutableDependencies += dep
     }
+  }
+
+  test("RDD.partitions() fails fast when partitions indicies are incorrect (SPARK-13021)") {
+    class BadRDD[T: ClassTag](prev: RDD[T]) extends RDD[T](prev) {
+
+      override def compute(part: Partition, context: TaskContext): Iterator[T] = {
+        prev.compute(part, context)
+      }
+
+      override protected def getPartitions: Array[Partition] = {
+        prev.partitions.reverse // breaks contract, which is that `rdd.partitions(i).index == i`
+      }
+    }
+    val rdd = new BadRDD(sc.parallelize(1 to 100, 100))
+    val e = intercept[IllegalArgumentException] {
+      rdd.partitions
+    }
+    assert(e.getMessage.contains("partitions"))
   }
 
   test("nested RDDs are not supported (SPARK-5063)") {

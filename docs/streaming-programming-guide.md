@@ -165,8 +165,8 @@ space into words.
 // Split each line into words
 JavaDStream<String> words = lines.flatMap(
   new FlatMapFunction<String, String>() {
-    @Override public Iterable<String> call(String x) {
-      return Arrays.asList(x.split(" "));
+    @Override public Iterator<String> call(String x) {
+      return Arrays.asList(x.split(" ")).iterator();
     }
   });
 {% endhighlight %}
@@ -659,11 +659,11 @@ methods for creating DStreams from files and Akka actors as input sources.
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
-  actors by using `streamingContext.actorStream(actorProps, actor-name)`. See the [Custom Receiver
+  actors by using `AkkaUtils.createStream(ssc, actorProps, actor-name)`. See the [Custom Receiver
   Guide](streaming-custom-receivers.html) for more details.
 
   <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
-  libraries, `actorStream` is not available in the Python API.
+  libraries, `AkkaUtils.createStream` is not available in the Python API.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
@@ -881,7 +881,6 @@ Scala code, take a look at the example
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-import com.google.common.base.Optional;
 Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction =
   new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
     @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
@@ -1985,7 +1984,11 @@ To run a Spark Streaming applications, you need to have the following.
   to increase aggregate throughput. Additionally, it is recommended that the replication of the
   received data within Spark be disabled when the write ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
-  input stream to `StorageLevel.MEMORY_AND_DISK_SER`.
+  input stream to `StorageLevel.MEMORY_AND_DISK_SER`. While using S3 (or any file system that
+  does not support flushing) for _write ahead logs_, please remember to enable
+  `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
+  `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
+  [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
   application to process data as fast as it is being received, the receivers can be rate limited
@@ -2022,12 +2025,6 @@ information of pre-upgrade code cannot be done. The checkpoint information essen
 contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
 modified classes may lead to errors. In this case, either start the upgraded app with a different
 checkpoint directory, or delete the previous checkpoint directory.
-
-### Other Considerations
-{:.no_toc}
-If the data is being received by the receivers faster than what can be processed,
-you can limit the rate by setting the [configuration parameter](configuration.html#spark-streaming)
-`spark.streaming.receiver.maxRate`.
 
 ***
 
@@ -2165,8 +2162,6 @@ In specific cases where the amount of data that needs to be retained for the str
 If the number of tasks launched per second is high (say, 50 or more per second), then the overhead
 of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
-
-* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task sizes, and therefore reduce the time taken to send them to the slaves. This is controlled by the ```spark.closure.serializer``` property. However, at this time, Kryo serialization cannot be enabled for closure serialization. This may be resolved in a future release.
 
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
   better task launch times than the fine-grained Mesos mode. Please refer to the

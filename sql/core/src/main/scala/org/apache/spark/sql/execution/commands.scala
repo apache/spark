@@ -21,13 +21,13 @@ import java.util.NoSuchElementException
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLConf, SQLContext}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -201,13 +201,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     case Some((key, None)) =>
       val runFunc = (sqlContext: SQLContext) => {
         val value =
-          try {
-            if (key == SQLConf.DIALECT.key) {
-              sqlContext.conf.dialect
-            } else {
-              sqlContext.getConf(key)
-            }
-          } catch {
+          try sqlContext.getConf(key) catch {
             case _: NoSuchElementException => "<undefined>"
           }
         Seq(Row(key, value))
@@ -410,7 +404,17 @@ case class DescribeFunction(
           result
         }
 
-      case None => Seq(Row(s"Function: $functionName is not found."))
+      case None => Seq(Row(s"Function: $functionName not found."))
     }
   }
+}
+
+case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.setCurrentDatabase(databaseName)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
 }

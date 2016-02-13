@@ -335,7 +335,6 @@ writeLines(mockLinesMapType, mapTypeJsonPath)
 test_that("Collect DataFrame with complex types", {
   # ArrayType
   df <- read.json(sqlContext, complexTypeJsonPath)
-
   ldf <- collect(df)
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
@@ -423,12 +422,12 @@ test_that("read/write json files", {
 test_that("jsonRDD() on a RDD with json string", {
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
-  df <- jsonRDD(sqlContext, rdd)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 3)
 
   rdd2 <- flatMap(rdd, function(x) c(x, x))
-  df <- jsonRDD(sqlContext, rdd2)
+  df <- suppressWarnings(jsonRDD(sqlContext, rdd2))
   expect_is(df, "DataFrame")
   expect_equal(count(df), 6)
 })
@@ -490,17 +489,15 @@ test_that("insertInto() on a registered table", {
   unlink(parquetPath2)
 })
 
-test_that("table() returns a new DataFrame", {
+test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(sqlContext, jsonPath)
   registerTempTable(df, "table1")
-  tabledf <- table(sqlContext, "table1")
+  tabledf <- tableToDF(sqlContext, "table1")
   expect_is(tabledf, "DataFrame")
   expect_equal(count(tabledf), 3)
+  tabledf2 <- tableToDF(sqlContext, "table1")
+  expect_equal(count(tabledf2), 3)
   dropTempTable(sqlContext, "table1")
-
-  # Test base::table is working
-  #a <- letters[1:3]
-  #expect_equal(class(table(a, sample(a))), "table")
 })
 
 test_that("toRDD() returns an RRDD", {
@@ -732,7 +729,7 @@ test_that("head() and first() return the correct data", {
   expect_equal(ncol(testFirst), 2)
 })
 
-test_that("distinct() and unique on DataFrames", {
+test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
   lines <- c("{\"name\":\"Michael\"}",
              "{\"name\":\"Andy\", \"age\":30}",
              "{\"name\":\"Justin\", \"age\":19}",
@@ -748,6 +745,42 @@ test_that("distinct() and unique on DataFrames", {
   uniques2 <- unique(df)
   expect_is(uniques2, "DataFrame")
   expect_equal(count(uniques2), 3)
+
+  # Test dropDuplicates()
+  df <- createDataFrame(
+    sqlContext,
+    list(
+      list(2, 1, 2), list(1, 1, 1),
+      list(1, 2, 1), list(2, 1, 2),
+      list(2, 2, 2), list(2, 2, 1),
+      list(2, 1, 1), list(1, 1, 2),
+      list(1, 2, 2), list(1, 2, 1)),
+    schema = c("key", "value1", "value2"))
+  result <- collect(dropDuplicates(df))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 1, 2), c(1, 2, 1),
+    c(1, 2, 2), c(2, 1, 1), c(2, 1, 2),
+    c(2, 2, 1), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, c("key", "value1")))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
+
+  result <- collect(dropDuplicates(df, "key"))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(2, 1, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2),],
+    expected)
 })
 
 test_that("sample on a DataFrame", {
@@ -766,8 +799,10 @@ test_that("sample on a DataFrame", {
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 
+  # nolint start
   # Test base::sample is working
   #expect_equal(length(sample(1:12)), 12)
+  # nolint end
 })
 
 test_that("select operators", {
@@ -789,11 +824,6 @@ test_that("select operators", {
   df$age2 <- df$age * 2
   expect_equal(columns(df), c("name", "age", "age2"))
   expect_equal(count(where(df, df$age2 == df$age * 2)), 2)
-
-  df$age2 <- NULL
-  expect_equal(columns(df), c("name", "age"))
-  df$age3 <- NULL
-  expect_equal(columns(df), c("name", "age"))
 })
 
 test_that("select with column", {
@@ -817,6 +847,27 @@ test_that("select with column", {
 
   expect_error(select(df, c("name", "age"), "name"),
                 "To select multiple columns, use a character vector or list for col")
+})
+
+test_that("drop column", {
+  df <- select(read.json(sqlContext, jsonPath), "name", "age")
+  df1 <- drop(df, "name")
+  expect_equal(columns(df1), c("age"))
+
+  df$age2 <- df$age
+  df1 <- drop(df, c("name", "age"))
+  expect_equal(columns(df1), c("age2"))
+
+  df1 <- drop(df, df$age)
+  expect_equal(columns(df1), c("name", "age2"))
+
+  df$age2 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+  df$age3 <- NULL
+  expect_equal(columns(df), c("name", "age"))
+
+  # Test to make sure base::drop is not masked
+  expect_equal(drop(1:3 %*% 2:4), 20)
 })
 
 test_that("subsetting", {
@@ -902,8 +953,21 @@ test_that("test HiveContext", {
   df3 <- sql(hiveCtx, "select * from json2")
   expect_is(df3, "DataFrame")
   expect_equal(count(df3), 3)
-
   unlink(jsonPath2)
+
+  hivetestDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
+  df4 <- sql(hiveCtx, "select * from hivetestbl")
+  expect_is(df4, "DataFrame")
+  expect_equal(count(df4), 3)
+  unlink(hivetestDataPath)
+
+  parquetDataPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+  invisible(saveAsTable(df, "parquetest", "parquet", mode="overwrite", path=parquetDataPath))
+  df5 <- sql(hiveCtx, "select * from parquetest")
+  expect_is(df5, "DataFrame")
+  expect_equal(count(df5), 3)
+  unlink(parquetDataPath)
 })
 
 test_that("column operators", {
@@ -918,7 +982,7 @@ test_that("column functions", {
   c <- column("a")
   c1 <- abs(c) + acos(c) + approxCountDistinct(c) + ascii(c) + asin(c) + atan(c)
   c2 <- avg(c) + base64(c) + bin(c) + bitwiseNOT(c) + cbrt(c) + ceil(c) + cos(c)
-  c3 <- cosh(c) + count(c) + crc32(c) + exp(c)
+  c3 <- cosh(c) + count(c) + crc32(c) + hash(c) + exp(c)
   c4 <- explode(c) + expm1(c) + factorial(c) + first(c) + floor(c) + hex(c)
   c5 <- hour(c) + initcap(c) + last(c) + last_day(c) + length(c)
   c6 <- log(c) + (c) + log1p(c) + log2(c) + lower(c) + ltrim(c) + max(c) + md5(c)
@@ -932,6 +996,8 @@ test_that("column functions", {
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
+  c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
+  c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1052,8 +1118,8 @@ test_that("string operators", {
   df2 <- createDataFrame(sqlContext, l2)
   expect_equal(collect(select(df2, locate("aa", df2$a)))[1, 1], 1)
   expect_equal(collect(select(df2, locate("aa", df2$a, 1)))[1, 1], 2)
-  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads")
-  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###")
+  expect_equal(collect(select(df2, lpad(df2$a, 8, "#")))[1, 1], "###aaads") # nolint
+  expect_equal(collect(select(df2, rpad(df2$a, 8, "#")))[1, 1], "aaads###") # nolint
 
   l3 <- list(list(a = "a.b.c.d"))
   df3 <- createDataFrame(sqlContext, l3)
@@ -1169,7 +1235,7 @@ test_that("group by, agg functions", {
 
   expect_equal(3, count(mean(gd)))
   expect_equal(3, count(max(gd)))
-  expect_equal(30, collect(max(gd))[1, 2])
+  expect_equal(30, collect(max(gd))[2, 2])
   expect_equal(1, collect(count(gd))[1, 2])
 
   mockLines2 <- c("{\"name\":\"ID1\", \"value\": \"10\"}",
@@ -1259,7 +1325,7 @@ test_that("filter() on a DataFrame", {
   expect_equal(count(filtered6), 2)
 
   # Test stats::filter is working
-  #expect_true(is.ts(filter(1:100, rep(1, 3))))
+  #expect_true(is.ts(filter(1:100, rep(1, 3)))) # nolint
 })
 
 test_that("join() and merge() on a DataFrame", {
@@ -1427,6 +1493,11 @@ test_that("withColumn() and withColumnRenamed()", {
   expect_equal(columns(newDF)[3], "newAge")
   expect_equal(first(filter(newDF, df$name != "Michael"))$newAge, 32)
 
+  # Replace existing column
+  newDF <- withColumn(df, "age", df$age + 2)
+  expect_equal(length(columns(newDF)), 2)
+  expect_equal(first(filter(newDF, df$name != "Michael"))$age, 32)
+
   newDF2 <- withColumnRenamed(df, "age", "newerAge")
   expect_equal(length(columns(newDF2)), 2)
   expect_equal(columns(newDF2)[1], "newerAge")
@@ -1491,6 +1562,27 @@ test_that("read/write Parquet files", {
   unlink(parquetPath2)
   unlink(parquetPath3)
   unlink(parquetPath4)
+})
+
+test_that("read/write text files", {
+  # Test write.df and read.df
+  df <- read.df(sqlContext, jsonPath, "text")
+  expect_is(df, "DataFrame")
+  expect_equal(colnames(df), c("value"))
+  expect_equal(count(df), 3)
+  textPath <- tempfile(pattern = "textPath", fileext = ".txt")
+  write.df(df, textPath, "text", mode="overwrite")
+
+  # Test write.text and read.text
+  textPath2 <- tempfile(pattern = "textPath2", fileext = ".txt")
+  write.text(df, textPath2)
+  df2 <- read.text(sqlContext, c(textPath, textPath2))
+  expect_is(df2, "DataFrame")
+  expect_equal(colnames(df2), c("value"))
+  expect_equal(count(df2), count(df) * 2)
+
+  unlink(textPath)
+  unlink(textPath2)
 })
 
 test_that("describe() and summarize() on a DataFrame", {
@@ -1659,7 +1751,7 @@ test_that("cov() and corr() on a DataFrame", {
   expect_true(abs(result - 1.0) < 1e-12)
 
   # Test stats::cov is working
-  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3)
+  #expect_true(abs(max(cov(swiss)) - 1739.295) < 1e-3) # nolint
 })
 
 test_that("freqItems() on a DataFrame", {
@@ -1772,6 +1864,37 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
                "Length of type vector should match the number of columns for DataFrame")
   expect_error(coltypes(df) <- c("environment", "list"),
                "Only atomic type is supported for column types")
+})
+
+test_that("Method str()", {
+  # Structure of Iris
+  iris2 <- iris
+  colnames(iris2) <- c("Sepal_Length", "Sepal_Width", "Petal_Length", "Petal_Width", "Species")
+  iris2$col <- TRUE
+  irisDF2 <- createDataFrame(sqlContext, iris2)
+
+  out <- capture.output(str(irisDF2))
+  expect_equal(length(out), 7)
+  expect_equal(out[1], "'DataFrame': 6 variables:")
+  expect_equal(out[2], " $ Sepal_Length: num 5.1 4.9 4.7 4.6 5 5.4")
+  expect_equal(out[3], " $ Sepal_Width : num 3.5 3 3.2 3.1 3.6 3.9")
+  expect_equal(out[4], " $ Petal_Length: num 1.4 1.4 1.3 1.5 1.4 1.7")
+  expect_equal(out[5], " $ Petal_Width : num 0.2 0.2 0.2 0.2 0.2 0.4")
+  expect_equal(out[6], paste0(" $ Species     : chr \"setosa\" \"setosa\" \"",
+                              "setosa\" \"setosa\" \"setosa\" \"setosa\""))
+  expect_equal(out[7], " $ col         : logi TRUE TRUE TRUE TRUE TRUE TRUE")
+
+  # A random dataset with many columns. This test is to check str limits
+  # the number of columns. Therefore, it will suffice to check for the
+  # number of returned rows
+  x <- runif(200, 1, 10)
+  df <- data.frame(t(as.matrix(data.frame(x,x,x,x,x,x,x,x,x))))
+  DF <- createDataFrame(sqlContext, df)
+  out <- capture.output(str(DF))
+  expect_equal(length(out), 103)
+
+  # Test utils:::str
+  expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
 })
 
 unlink(parquetPath)

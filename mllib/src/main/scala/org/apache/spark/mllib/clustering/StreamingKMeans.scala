@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext._
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream}
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -183,7 +183,7 @@ class StreamingKMeans @Since("1.2.0") (
   }
 
   /**
-   * Set the decay factor directly (for forgetful algorithms).
+   * Set the forgetfulness of the previous centroids.
    */
   @Since("1.2.0")
   def setDecayFactor(a: Double): this.type = {
@@ -192,7 +192,9 @@ class StreamingKMeans @Since("1.2.0") (
   }
 
   /**
-   * Set the half life and time unit ("batches" or "points") for forgetful algorithms.
+   * Set the half life and time unit ("batches" or "points"). If points, then the decay factor
+   * is raised to the power of number of new points and if batches, then decay factor will be
+   * used as is.
    */
   @Since("1.2.0")
   def setHalfLife(halfLife: Double, timeUnit: String): this.type = {

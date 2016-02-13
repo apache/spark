@@ -18,8 +18,8 @@
 // scalastyle:off println
 package org.apache.spark.examples
 
-import scala.util.Random
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._

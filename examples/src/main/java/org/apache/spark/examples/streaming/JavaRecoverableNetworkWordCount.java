@@ -21,11 +21,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
-import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 
 import org.apache.spark.Accumulator;
@@ -36,6 +36,7 @@ import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.broadcast.Broadcast;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.Time;
@@ -137,8 +138,8 @@ public final class JavaRecoverableNetworkWordCount {
     JavaReceiverInputDStream<String> lines = ssc.socketTextStream(ip, port);
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
@@ -154,9 +155,9 @@ public final class JavaRecoverableNetworkWordCount {
         }
       });
 
-    wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() {
+    wordCounts.foreachRDD(new VoidFunction2<JavaPairRDD<String, Integer>, Time>() {
       @Override
-      public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+      public void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
         // Get or register the blacklist Broadcast
         final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
         // Get or register the droppedWordsCounter Accumulator
@@ -164,7 +165,7 @@ public final class JavaRecoverableNetworkWordCount {
         // Use blacklist to drop words and use droppedWordsCounter to count them
         String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
           @Override
-          public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
+          public Boolean call(Tuple2<String, Integer> wordCount) {
             if (blacklist.value().contains(wordCount._1())) {
               droppedWordsCounter.add(wordCount._2());
               return false;
@@ -178,7 +179,6 @@ public final class JavaRecoverableNetworkWordCount {
         System.out.println("Dropped " + droppedWordsCounter.value() + " word(s) totally");
         System.out.println("Appending to " + outputFile.getAbsolutePath());
         Files.append(output + "\n", outputFile, Charset.defaultCharset());
-        return null;
       }
     });
 

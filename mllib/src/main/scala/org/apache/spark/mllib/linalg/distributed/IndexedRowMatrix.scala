@@ -20,9 +20,9 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
+import org.apache.spark.rdd.RDD
 
 /**
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].

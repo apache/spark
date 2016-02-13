@@ -37,7 +37,7 @@ private[spark] object CholeskyDecomposition {
     val info = new intW(0)
     lapack.dppsv("U", k, 1, A, bx, k, info)
     val code = info.`val`
-    assert(code == 0, s"lapack.dpotrs returned $code.")
+    assert(code == 0, s"lapack.dppsv returned $code.")
     bx
   }
 

@@ -32,12 +32,11 @@ import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 case class SortMergeJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
+    condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryNode {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = left.output ++ right.output
@@ -53,21 +52,22 @@ case class SortMergeJoin(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
 
-  override def outputsUnsafeRows: Boolean = true
-  override def canProcessUnsafeRows: Boolean = true
-  override def canProcessSafeRows: Boolean = false
-
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
     keys.map(SortOrder(_, Ascending))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
+      val boundCondition: (InternalRow) => Boolean = {
+        condition.map { cond =>
+          newPredicate(cond, left.output ++ right.output)
+        }.getOrElse {
+          (r: InternalRow) => true
+        }
+      }
       new RowIterator {
         // The projection used to extract keys from input rows of the left child.
         private[this] val leftKeyGenerator = UnsafeProjection.create(leftKeys, left.output)
@@ -85,34 +85,40 @@ case class SortMergeJoin(
           rightKeyGenerator,
           keyOrdering,
           RowIterator.fromScala(leftIter),
-          numLeftRows,
-          RowIterator.fromScala(rightIter),
-          numRightRows
+          RowIterator.fromScala(rightIter)
         )
         private[this] val joinRow = new JoinedRow
         private[this] val resultProjection: (InternalRow) => InternalRow =
           UnsafeProjection.create(schema)
 
+        if (smjScanner.findNextInnerJoinRows()) {
+          currentRightMatches = smjScanner.getBufferedMatches
+          currentLeftRow = smjScanner.getStreamedRow
+          currentMatchIdx = 0
+        }
+
         override def advanceNext(): Boolean = {
-          if (currentMatchIdx == -1 || currentMatchIdx == currentRightMatches.length) {
-            if (smjScanner.findNextInnerJoinRows()) {
-              currentRightMatches = smjScanner.getBufferedMatches
-              currentLeftRow = smjScanner.getStreamedRow
-              currentMatchIdx = 0
-            } else {
-              currentRightMatches = null
-              currentLeftRow = null
-              currentMatchIdx = -1
+          while (currentMatchIdx >= 0) {
+            if (currentMatchIdx == currentRightMatches.length) {
+              if (smjScanner.findNextInnerJoinRows()) {
+                currentRightMatches = smjScanner.getBufferedMatches
+                currentLeftRow = smjScanner.getStreamedRow
+                currentMatchIdx = 0
+              } else {
+                currentRightMatches = null
+                currentLeftRow = null
+                currentMatchIdx = -1
+                return false
+              }
             }
-          }
-          if (currentLeftRow != null) {
             joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
             currentMatchIdx += 1
-            numOutputRows += 1
-            true
-          } else {
-            false
+            if (boundCondition(joinRow)) {
+              numOutputRows += 1
+              return true
+            }
           }
+          false
         }
 
         override def getRow: InternalRow = resultProjection(joinRow)
@@ -145,9 +151,7 @@ private[joins] class SortMergeJoinScanner(
     bufferedKeyGenerator: Projection,
     keyOrdering: Ordering[InternalRow],
     streamedIter: RowIterator,
-    numStreamedRows: LongSQLMetric,
-    bufferedIter: RowIterator,
-    numBufferedRows: LongSQLMetric) {
+    bufferedIter: RowIterator) {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
@@ -272,7 +276,6 @@ private[joins] class SortMergeJoinScanner(
     if (streamedIter.advanceNext()) {
       streamedRow = streamedIter.getRow
       streamedRowKey = streamedKeyGenerator(streamedRow)
-      numStreamedRows += 1
       true
     } else {
       streamedRow = null
@@ -290,7 +293,6 @@ private[joins] class SortMergeJoinScanner(
     while (!foundRow && bufferedIter.advanceNext()) {
       bufferedRow = bufferedIter.getRow
       bufferedRowKey = bufferedKeyGenerator(bufferedRow)
-      numBufferedRows += 1
       foundRow = !bufferedRowKey.anyNull
     }
     if (!foundRow) {

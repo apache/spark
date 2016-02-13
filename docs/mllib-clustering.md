@@ -152,11 +152,7 @@ clusters = KMeans.train(parsedData, 2, maxIterations=10,
         runs=10, initializationMode="random")
 
 # Evaluate clustering by computing Within Set Sum of Squared Errors
-def error(point):
-    center = clusters.centers[clusters.predict(point)]
-    return sqrt(sum([x**2 for x in (point - center)]))
-
-WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
+WSSSE = clusters.computeCost(parsedData)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
 
 # Save and load model
