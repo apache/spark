@@ -44,7 +44,7 @@ public class TestManagedBuffer extends ManagedBuffer {
     for (int i = 0; i < len; i ++) {
       byteArray[i] = (byte) i;
     }
-    this.underlying = new NettyManagedBuffer(Unpooled.wrappedBuffer(byteArray));
+    this.underlying = new NettyManagedBuffer(Unpooled.wrappedBuffer(byteArray).retain());
   }
 
 

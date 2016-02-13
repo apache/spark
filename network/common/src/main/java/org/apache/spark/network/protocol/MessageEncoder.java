@@ -49,11 +49,8 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
 
     // If the message has a body, take it out to enable zero-copy transfer for the payload.
     if (in.body() != null) {
-      bodyLength = in.body().size();
-      if (bodyLength > 0) {
-        in.body().retain();
-      }
       try {
+        bodyLength = in.body().size();
         body = in.body().convertToNetty();
         isBodyInFrame = in.isBodyInFrame();
       } catch (Exception e) {
