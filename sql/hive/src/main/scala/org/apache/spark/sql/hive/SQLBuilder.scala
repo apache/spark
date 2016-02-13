@@ -77,8 +77,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case p: Aggregate =>
       aggregateToSQL(p)
 
-    case p: Limit =>
-      s"${toSQL(p.child)} LIMIT ${p.limitExpr.sql}"
+    case Limit(limitExpr, child) =>
+      s"${toSQL(child)} LIMIT ${limitExpr.sql}"
 
     case p: Filter =>
       val whereOrHaving = p.child match {
