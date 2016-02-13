@@ -81,11 +81,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case p: Limit =>
       s"${toSQL(p.child)} LIMIT ${p.limitExpr.sql}"
 
-    // TABLESAMPLE is part of tableSource clause in the parser,
-    // and thus we must handle it with subquery.
-    case p @ Sample(lb, ub, withReplacement, _, _)
-        if !withReplacement && lb <= (ub + RandomSampler.roundingEpsilon) =>
-      val fraction = math.min(100, math.max(0, (ub - lb) * 100))
+    case p: Sample if p.isTableSample =>
+      val fraction = math.min(100, math.max(0, (p.upperBound - p.lowerBound) * 100))
       p.child match {
         case m: MetastoreRelation =>
           val aliasName = m.alias.getOrElse("")
