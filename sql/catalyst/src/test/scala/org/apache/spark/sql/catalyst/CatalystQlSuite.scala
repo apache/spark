@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
@@ -203,10 +204,47 @@ class CatalystQlSuite extends PlanTest {
   }
 
   test("subquery") {
-    parser.parsePlan("select (select max(b) from s) ss from t")
-    parser.parsePlan("select * from t where a = (select b from s)")
-    parser.parsePlan("select * from t where a > (select b from s)")
-    parser.parsePlan("select * from t group by g having a = (select b from s)")
-    parser.parsePlan("select * from t group by g having a > (select b from s)")
+    comparePlans(
+      parser.parsePlan("select (select max(b) from s) ss from t"),
+      Project(
+        UnresolvedAlias(
+          Alias(
+            ScalarSubquery(
+              Project(
+                UnresolvedAlias(
+                  UnresolvedFunction("max", UnresolvedAttribute("b") :: Nil, false)) :: Nil,
+                UnresolvedRelation(TableIdentifier("s")))),
+            "ss")(ExprId(0))) :: Nil,
+        UnresolvedRelation(TableIdentifier("t"))))
+    comparePlans(
+      parser.parsePlan("select * from t where a = (select b from s)"),
+      Project(
+        UnresolvedAlias(
+          UnresolvedStar(None)) :: Nil,
+        Filter(
+          EqualTo(
+            UnresolvedAttribute("a"),
+              ScalarSubquery(
+                Project(
+                  UnresolvedAlias(
+                    UnresolvedAttribute("b")) :: Nil,
+                  UnresolvedRelation(TableIdentifier("s"))))),
+          UnresolvedRelation(TableIdentifier("t")))))
+    comparePlans(
+      parser.parsePlan("select * from t group by g having a > (select b from s)"),
+      Filter(
+        Cast(
+          GreaterThan(
+            UnresolvedAttribute("a"),
+            ScalarSubquery(
+              Project(
+                UnresolvedAlias(
+                  UnresolvedAttribute("b")) :: Nil,
+                UnresolvedRelation(TableIdentifier("s"))))),
+          BooleanType),
+        Aggregate(
+          UnresolvedAttribute("g") :: Nil,
+          UnresolvedAlias(UnresolvedStar(None)) :: Nil,
+          UnresolvedRelation(TableIdentifier("t")))))
   }
 }

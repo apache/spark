@@ -55,6 +55,8 @@ case class ScalarSubquery(query: LogicalPlan) extends SubqueryExpression with Co
 
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = ScalarSubquery(plan)
 
+  // TODO: support sql()
+
   // the first column in first row from `query`.
   private var result: Any = null
 

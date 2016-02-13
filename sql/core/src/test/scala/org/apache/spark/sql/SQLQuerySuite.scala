@@ -2115,6 +2115,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "select a from (select 1 as a union all select 2 as a) t " +
         "where a = (select max(b) from t2) ").collect()
     }
+
+    assertResult(Array(Row(3))) {
+      sql("select (select (select 1) + 1) + 1").collect()
+    }
   }
 
   test("SPARK-13056: Null in map value causes NPE") {
