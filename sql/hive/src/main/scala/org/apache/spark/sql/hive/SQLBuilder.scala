@@ -87,9 +87,19 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       }
       build(toSQL(p.child), whereOrHaving, p.condition.sql)
 
+    case p @ Distinct(u: Union) if u.children.length > 1 =>
+      val childrenSql = u.children.map(toSQL(_))
+      childrenSql.mkString(" UNION DISTINCT ")
+
     case p: Union if p.children.length > 1 =>
       val childrenSql = p.children.map(toSQL(_))
       childrenSql.mkString(" UNION ALL ")
+
+    case p: Intersect =>
+      build(toSQL(p.left), "INTERSECT", toSQL(p.right))
+
+    case p: Except =>
+      build(toSQL(p.left), "EXCEPT", toSQL(p.right))
 
     case p: Subquery =>
       p.child match {
