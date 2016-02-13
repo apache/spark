@@ -167,9 +167,8 @@ object SparkBuild extends PomBuild {
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
 
     javacOptions in (Compile, doc) ++= {
-      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
-      val major = versionParts(0).toInt
-      if (major > 1 || (major == 1 && versionParts(1).toInt >= 8)) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+      val version = System.getProperty("java.version")
+      if (version >= "1.8.0") Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
     javacJVMVersion := "1.7",
