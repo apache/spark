@@ -40,8 +40,17 @@ object PMMLModelExportExample {
     val numIterations = 20
     val clusters = KMeans.train(parsedData, numClusters, numIterations)
 
-    // Export to PMML
+    // Export to PMML to a String in PMML format
     println("PMML Model:\n" + clusters.toPMML)
+
+    // Export the model to a local file in PMML format
+    clusters.toPMML("/tmp/kmeans.xml")
+
+    // Export the model to a directory on a distributed file system in PMML format
+    clusters.toPMML(sc,"/tmp/kmeans")
+
+    // Export the model to the OutputStream in PMML format
+    clusters.toPMML(System.out)
     // $example off$
 
     sc.stop()
