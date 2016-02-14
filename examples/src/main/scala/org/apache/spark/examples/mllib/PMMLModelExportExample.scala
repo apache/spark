@@ -47,7 +47,7 @@ object PMMLModelExportExample {
     clusters.toPMML("/tmp/kmeans.xml")
 
     // Export the model to a directory on a distributed file system in PMML format
-    clusters.toPMML(sc,"/tmp/kmeans")
+    clusters.toPMML(sc, "/tmp/kmeans")
 
     // Export the model to the OutputStream in PMML format
     clusters.toPMML(System.out)
