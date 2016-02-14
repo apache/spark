@@ -121,7 +121,7 @@ object Pregel extends Logging {
   {
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
-    var messages = mapReduceTriplets(g, sendMsg, mergeMsg)
+    var messages = GraphXUtils.mapReduceTriplets(g, sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop
     var prevG: Graph[VD, ED] = null
@@ -135,7 +135,7 @@ object Pregel extends Logging {
       // Send new messages, skipping edges where neither side received a message. We must cache
       // messages so it can be materialized on the next line, allowing us to uncache the previous
       // iteration.
-      messages = mapReduceTriplets(
+      messages = GraphXUtils.mapReduceTriplets(
         g, sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       // The call to count() materializes `messages` and the vertices of `g`. This hides oldMessages
       // (depended on by the vertices of g) and the vertices of prevG (depended on by oldMessages
@@ -155,24 +155,4 @@ object Pregel extends Logging {
     g
   } // end of apply
 
-  private[this] def mapReduceTriplets[VD: ClassTag, ED: ClassTag, A: ClassTag](
-      g: Graph[VD, ED],
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
-    def sendMsg(ctx: EdgeContext[VD, ED, A]) {
-      mapFunc(ctx.toEdgeTriplet).foreach { kv =>
-        val id = kv._1
-        val msg = kv._2
-        if (id == ctx.srcId) {
-          ctx.sendToSrc(msg)
-        } else {
-          assert(id == ctx.dstId)
-          ctx.sendToDst(msg)
-        }
-      }
-    }
-    g.aggregateMessagesWithActiveSet(
-      sendMsg, reduceFunc, TripletFields.All, activeSetOpt)
-  }
 } // end of class Pregel
