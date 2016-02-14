@@ -24,7 +24,7 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Accumulable, Accumulators, Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.streaming.scheduler.JobGenerator
@@ -41,6 +41,12 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
   val sparkConfPairs = ssc.conf.getAll
+
+  // initialize from ssc.context after SPARK-13051
+  val trackedAccMap: Map[Long, Accumulable[_, _]] = Accumulators.originals.filter(ele =>
+    ssc.streamingAccuIdToName.contains(ele._1)).map{
+    case (id, weakRef) => (id, weakRef.get.get)
+  }.toMap
 
   def createSparkConf(): SparkConf = {
 
@@ -84,6 +90,10 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
     assert(graph != null, "Checkpoint.graph is null")
     assert(checkpointTime != null, "Checkpoint.checkpointTime is null")
     logInfo("Checkpoint for time " + checkpointTime + " validated")
+  }
+
+  def registAcc(): Unit = {
+    trackedAccMap.foreach(ele => Accumulators.register(ele._2))
   }
 }
 

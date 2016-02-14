@@ -21,6 +21,7 @@ import java.io.{InputStream, NotSerializableException}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
+import scala.collection.mutable
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -267,6 +268,42 @@ class StreamingContext private[streaming] (
    */
   private[streaming] def withNamedScope[U](name: String)(body: => U): U = {
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
+  }
+
+  private[streaming] val streamingAccuIdToName: mutable.Map[Long, String] = {
+    if (isCheckpointPresent) {
+      // accumulators created by StreamingContext must provide name, so it's safe to call name.get
+      mutable.Map(_cp.trackedAccMap.mapValues(_.name.get).toSeq: _*)
+    } else {
+      mutable.Map.empty
+    }
+  }
+
+  /**
+    * Different from accumulator in SparkContext, it will first try to recover from Checkpoint
+    * if it exist.
+    *
+    * @param initialValue   initial value of accumulator. It will be ignored when recovering from
+    *                       checkpoint
+    * @param name           name is required as identity to find corresponding accumulator. This
+    *                       method make sure that all accumulators created by it have unique name
+    */
+  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
+    : Accumulator[T] = {
+    if (isCheckpointPresent) {
+      val accs = _cp.trackedAccMap.values.filter(_.name == Some(name))
+      assert(accs.size == 1)
+      accs.head.asInstanceOf[Accumulator[T]]
+    } else {
+      if (streamingAccuIdToName.values.toSet.contains(name)) {
+        throw new SparkException(s"name ${name} is duplicated with other accumulator created" +
+          s" by StreamingContext")
+      } else {
+        val acc = sc.accumulator(initialValue, name)
+        streamingAccuIdToName(acc.id) = name
+        acc
+      }
+    }
   }
 
   /**
