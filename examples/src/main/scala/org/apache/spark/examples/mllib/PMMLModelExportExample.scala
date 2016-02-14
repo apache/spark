@@ -26,9 +26,8 @@ import org.apache.spark.mllib.linalg.Vectors
 
 object PMMLModelExportExample {
 
-  def main(args: Array[String]) {
-
-    val conf = new SparkConf().setAppName("PMMLModelExportExample").setMaster("local[*]")
+  def main(args: Array[String]): Unit = {
+    val conf = new SparkConf().setAppName("PMMLModelExportExample")
     val sc = new SparkContext(conf)
 
     // $example on$
