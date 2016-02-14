@@ -25,7 +25,7 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, DataFrameStatFunctions}
 import org.apache.spark.sql.types.{StringType, StructType}
 
 /**
@@ -33,6 +33,8 @@ import org.apache.spark.sql.types.{StringType, StructType}
  *
  * Stratified sampling on the DataFrame according to the keys in a specific label column. User
  * can set 'fraction' to assign different sampling rate for each key.
+ *
+ * @see [[DataFrameStatFunctions#sampleBy(java.lang.String, java.util.Map, long)]]
  *
  * @param withReplacement can elements be sampled multiple times (replaced when sampled out)
  * @param fraction expected size of the sample as a fraction of the items
