@@ -48,7 +48,7 @@ private[csv] object CSVInferSchema {
 
     val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
-        case z: NullType => StringType
+        case _: NullType => StringType
         case other => other
       }
       StructField(thisHeader, dType, nullable = true)
@@ -68,7 +68,7 @@ private[csv] object CSVInferSchema {
   }
 
   def mergeRowTypes(first: Array[DataType], second: Array[DataType]): Array[DataType] = {
-    first.zipAll(second, NullType, NullType).map { case ((a, b)) =>
+    first.zipAll(second, NullType, NullType).map { case (a, b) =>
       findTightestCommonType(a, b).getOrElse(NullType)
     }
   }

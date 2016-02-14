@@ -70,8 +70,7 @@ class InferSchemaSuite extends SparkFunSuite {
   }
 
   test("Merging Nulltypes should yeild Nulltype.") {
-    assert(
-      CSVInferSchema.mergeRowTypes(Array(NullType),
-      Array(NullType)).deep == Array(NullType).deep)
+    val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
+    assert(mergedNullTypes.deep == Array(NullType).deep)
   }
 }

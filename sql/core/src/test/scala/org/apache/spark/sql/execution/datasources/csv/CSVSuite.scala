@@ -396,7 +396,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(simpleSparseFile))
 
     assert(
-      df.schema.fields.map{field => field.dataType}.deep ==
+      df.schema.fields.map(field => field.dataType).deep ==
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
 }
