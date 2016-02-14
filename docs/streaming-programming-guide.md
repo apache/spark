@@ -1741,9 +1741,10 @@ information on different persistence levels can be found in the [Spark Programmi
 ## Checkpointing
 A streaming application must operate 24/7 and hence must be resilient to failures unrelated
 to the application logic (e.g., system failures, JVM crashes, etc.). For this to be possible,
-Spark Streaming needs to *checkpoint* enough information to a fault-
-tolerant storage system such that it can recover from failures. There are two types of data
-that are checkpointed.
+Spark Streaming needs to *checkpoint* enough information to a fault-tolerant storage system
+such that it can recover from failures.
+
+There are two types of data that are checkpointed:
 
 - *Metadata checkpointing* - Saving of the information defining the streaming computation to
   fault-tolerant storage like HDFS. This is used to recover from failure of the node running the
@@ -1787,11 +1788,11 @@ reliable file system (e.g., HDFS, S3, etc.) to which the checkpoint information 
 This is done by using `streamingContext.checkpoint(checkpointDirectory)`. This will allow you to
 use the aforementioned stateful transformations. Additionally,
 if you want to make the application recover from driver failures, you should rewrite your
-streaming application to have the following behavior.
+streaming application to have the following behavior:
 
-  + When the program is being started for the first time, it will create a new StreamingContext,
-    set up all the streams and then call start().
-  + When the program is being restarted after failure, it will re-create a StreamingContext
+  + When the program is started for the first time, it will create a new `StreamingContext`,
+    set up all the streams and then call `start()`.
+  + When the program is restarted after failure, it will re-create a `StreamingContext`
     from the checkpoint data in the checkpoint directory.
 
 <div class="codetabs">
@@ -1800,8 +1801,10 @@ streaming application to have the following behavior.
 This behavior is made simple by using `StreamingContext.getOrCreate`. This is used as follows.
 
 {% highlight scala %}
+val checkpointDirectory = ...
+
 // Function to create and setup a new StreamingContext
-def functionToCreateContext(): StreamingContext = {
+def createContext(): StreamingContext = {
     val ssc = new StreamingContext(...)   // new context
     val lines = ssc.socketTextStream(...) // create DStreams
     ...
@@ -1810,7 +1813,7 @@ def functionToCreateContext(): StreamingContext = {
 }
 
 // Get StreamingContext from checkpoint data or create a new one
-val context = StreamingContext.getOrCreate(checkpointDirectory, functionToCreateContext _)
+val context = StreamingContext.getOrCreate(checkpointDirectory, createContext)
 
 // Do additional setup on context that needs to be done,
 // irrespective of whether it is being started or restarted
@@ -1823,7 +1826,7 @@ context.awaitTermination()
 
 If the `checkpointDirectory` exists, then the context will be recreated from the checkpoint data.
 If the directory does not exist (i.e., running for the first time),
-then the function `functionToCreateContext` will be called to create a new
+then the function `createContext` will be called to create a new
 context and set up the DStreams. See the Scala example
 [RecoverableNetworkWordCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
 This example appends the word counts of network data into a file.
@@ -1913,7 +1916,7 @@ Note that checkpointing of RDDs incurs the cost of saving to reliable storage.
 This may cause an increase in the processing time of those batches where RDDs get checkpointed.
 Hence, the interval of
 checkpointing needs to be set carefully. At small batch sizes (say 1 second), checkpointing every
-batch may significantly reduce operation throughput. Conversely, checkpointing too infrequently
+batch may significantly reduce operation throughput. Conversely, checkpointing less frequently
 causes the lineage and task sizes to grow, which may have detrimental effects. For stateful
 transformations that require RDD checkpointing, the default interval is a multiple of the
 batch interval that is at least 10 seconds. It can be set by using
