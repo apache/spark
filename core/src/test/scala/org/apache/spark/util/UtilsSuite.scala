@@ -784,8 +784,10 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         signal(pid, "SIGKILL")
       }
 
-      val v: String = System.getProperty("java.version")
-      if (v >= "1.8.0") {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var majorVersion = versionParts(0).toInt
+      if (majorVersion == 1) majorVersion = versionParts(1).toInt
+      if (majorVersion >= 8) {
         // Java8 added a way to forcibly terminate a process. We'll make sure that works by
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
