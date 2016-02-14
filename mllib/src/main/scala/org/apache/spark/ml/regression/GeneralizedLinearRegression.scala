@@ -295,19 +295,25 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
 
   /** Weights for IRLS steps. */
   def weights(mu: Double): Double = {
-    1.0 / (math.pow(this.link.deriv(mu), 2.0) * this.variance(mu))
+    val x = clean(mu)
+    1.0 / (math.pow(this.link.deriv(x), 2.0) * this.variance(x))
   }
 
   /** The adjusted response variable. */
   def adjusted(y: Double, mu: Double, eta: Double): Double = {
-    eta + (y - mu) * link.deriv(mu)
+    val x = clean(mu)
+    eta + (y - x) * link.deriv(x)
   }
 
   /** Linear predictors based on given mu. */
-  def predict(mu: Double): Double = this.link.link(mu)
+  def predict(mu: Double): Double = this.link.link(clean(mu))
 
   /** Fitted values based on linear predictors eta. */
-  def fitted(eta: Double): Double = this.link.unlink(eta)
+  def fitted(eta: Double): Double = clean(this.link.unlink(eta))
+
+  def clean(mu: Double): Double = mu
+
+  val epsilon: Double = 1E-16
 }
 
 /**
@@ -317,7 +323,13 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
  */
 private[ml] class Gaussian(link: Link = Identity) extends Family(link) {
 
-  override def initialize(y: Double, weight: Double): Double = y
+  override def initialize(y: Double, weight: Double): Double = {
+    if (link == Log) {
+      require(y > 0.0, "The response variable of Gaussian family with Log link " +
+        s"should be positive, but got $y")
+    }
+    y
+  }
 
   def variance(mu: Double): Double = 1.0
 }
@@ -341,10 +353,23 @@ private[ml] object Gaussian {
 private[ml] class Binomial(link: Link = Logit) extends Family(link) {
 
   override def initialize(y: Double, weight: Double): Double = {
-    (weight * y + 0.5) / (weight + 1.0)
+    val mu = (weight * y + 0.5) / (weight + 1.0)
+    require(mu > 0.0 && mu < 1.0, "The response variable of Binomial family" +
+      s"should be in range (0, 1), but got $mu")
+    mu
   }
 
-  override def variance(mu: Double): Double = mu * (1 - mu)
+  override def variance(mu: Double): Double = mu * (1.0 - mu)
+
+  override def clean(mu: Double): Double = {
+    if (mu < epsilon) {
+      epsilon
+    } else if (mu > 1.0 - epsilon) {
+      1.0 - epsilon
+    } else {
+      mu
+    }
+  }
 }
 
 private[ml] object Binomial {
@@ -365,7 +390,11 @@ private[ml] object Binomial {
  */
 private[ml] class Poisson(link: Link = Log) extends Family(link) {
 
-  override def initialize(y: Double, weight: Double): Double = y + 0.1
+  override def initialize(y: Double, weight: Double): Double = {
+    require(y > 0.0, "The response variable of Poisson family " +
+      s"should be positive, but got $y")
+    y
+  }
 
   override def variance(mu: Double): Double = mu
 }
@@ -388,7 +417,11 @@ private[ml] object Poisson {
  */
 private[ml] class Gamma(link: Link = Inverse) extends Family(link) {
 
-  override def initialize(y: Double, weight: Double): Double = y
+  override def initialize(y: Double, weight: Double): Double = {
+    require(y > 0.0, "The response variable of Gamma family " +
+      s"should be positive, but got $y")
+    y
+  }
 
   override def variance(mu: Double): Double = math.pow(mu, 2.0)
 }
