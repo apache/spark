@@ -119,7 +119,7 @@ test_that("kmeans", {
   newIris$Species <- NULL
   training <- suppressWarnings(createDataFrame(sqlContext, newIris))
 
-  # Cahce the DataFrame here to work around the bug SPARK-13178.
+  # Cache the DataFrame here to work around the bug SPARK-13178.
   cache(training)
   take(training, 1)
 
