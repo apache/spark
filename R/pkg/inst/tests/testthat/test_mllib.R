@@ -127,4 +127,17 @@ test_that("kmeans", {
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 1)
+
+  # Test stats::kmeans is working
+  statsModel <- kmeans(x = newIris, centers = 2)
+  expect_equal(unique(statsModel$cluster), c(1, 2))
+
+  # Test fitted works on KMeans
+  fitted.model <- fitted(model)
+  expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction), c(0, 1))
+
+  # Test summary works on KMeans
+  summary.model <- summary(model)
+  cluster <- summary.model$cluster
+  expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 })
