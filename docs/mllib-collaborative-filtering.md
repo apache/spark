@@ -31,8 +31,8 @@ following parameters:
 ### Explicit vs. implicit feedback
 
 The standard approach to matrix factorization based collaborative filtering treats 
-the entries in the user-item matrix as *explicit* preferences given by the user to the item.
-For example, users giving ratings to movies.
+the entries in the user-item matrix as *explicit* preferences given by the user to the item,
+for example, users giving ratings to movies.
 
 It is common in many real-world use cases to only have access to *implicit feedback* (e.g. views,
 clicks, purchases, likes, shares etc.). The approach used in `spark.mllib` to deal with such data is taken
