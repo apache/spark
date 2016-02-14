@@ -98,13 +98,12 @@ final class Binarizer(override val uid: String)
   override def transformSchema(schema: StructType): StructType = {
     val inputType = schema($(inputCol)).dataType
     val outputColName = $(outputCol)
-    var outCol: StructField = null
 
-    inputType match {
+    val outCol: StructField = inputType match {
       case DoubleType =>
-        outCol = BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
+        BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
       case _: VectorUDT =>
-        outCol = new StructField(outputColName, new VectorUDT, true)
+        new StructField(outputColName, new VectorUDT, true)
       case other =>
         throw new IllegalArgumentException(s"Data type $other is not supported.")
     }
