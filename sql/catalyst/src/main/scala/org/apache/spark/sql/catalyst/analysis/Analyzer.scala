@@ -655,9 +655,9 @@ class Analyzer(
         resolved
       } else {
         plan match {
-          case g: Generate if g.join =>
-            resolveExpressionRecursively(resolved, g.child)
-          case u: UnaryNode if !u.isInstanceOf[Subquery] && !u.isInstanceOf[Generate] =>
+          case g: Generate =>
+            if (g.join) resolveExpressionRecursively(resolved, g.child) else resolved
+          case u: UnaryNode if !u.isInstanceOf[Subquery] =>
             resolveExpressionRecursively(resolved, u.child)
           case other => resolved
         }
