@@ -927,6 +927,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
+  test("Sorting columns are not in Generate") {
+    withTempTable("data") {
+      val rdd = sparkContext.makeRDD((1 to 5)
+        .map(i => s"""{"a":[$i, ${i + 1}], "b":"$i", "c":"${i * 2}"}"""))
+      read.json(rdd).registerTempTable("data")
+
+      // case 1: missing sort columns are resolvable if join is true
+      checkAnswer(
+        sql("SELECT explode(a) AS val, b FROM data WHERE b < 2 order by val, c"),
+        Row(1, "1") :: Row(2, "1") :: Nil)
+
+      // case 2: missing sort columns are not resolvable if join is false
+      val message = intercept[AnalysisException] {
+        sql("SELECT explode(a) AS val FROM data order by val, c")
+      }.getMessage
+      assert(message.contains("cannot resolve \'c\' given input columns: [val]"))
+    }
+  }
+
   test("window function: Sorting columns are not in Project") {
     val data = Seq(
       WindowData(1, "d", 10),
