@@ -1652,9 +1652,9 @@ class UserDefinedFunction(object):
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        judf = sc._jvm.UserDefinedPythonFunction(name, bytearray(pickled_command), env, includes,
-                                                 sc.pythonExec, sc.pythonVer, broadcast_vars,
-                                                 sc._javaAccumulator, jdt)
+        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
+            name, bytearray(pickled_command), env, includes, sc.pythonExec, sc.pythonVer,
+            broadcast_vars, sc._javaAccumulator, jdt)
         return judf
 
     def __del__(self):
