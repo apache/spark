@@ -22,7 +22,7 @@ if sys.version > '3':
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.param.shared import *
-from pyspark.ml.util import keyword_only
+from pyspark.ml.util import keyword_only, MLReadable, MLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
@@ -38,7 +38,7 @@ __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel',
 
 
 @inherit_doc
-class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
+class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -53,6 +53,18 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> params = {binarizer.threshold: -0.5, binarizer.outputCol: "vector"}
     >>> binarizer.transform(df, params).head().vector
     1.0
+     >>> import tempfile
+     >>> path = tempfile.mkdtemp()
+     >>> featurePath = path + "/feature-transformer"
+     >>> binarizer.save(featurePath)
+     >>> loadedBinarizer = Binarizer.load(featurePath)
+     >>> loadedBinarizer.getThreshold()
+     1.0
+     >>> from shutil import rmtree
+     >>> try:
+     ...     rmtree(path)
+     ... except OSError:
+     ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -98,7 +110,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -118,6 +130,18 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
     2.0
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> bucketizer.save(featurePath)
+    >>> loadedBucketizer = Bucketizer.load(featurePath)
+    >>> loadedBucketizer.getSplits()
+    [-inf, 0.5, 1.4, inf]
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -168,7 +192,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
+class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -187,8 +211,29 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
     |1    |[a, b, b, c, a]|(3,[0,1,2],[2.0,2.0,1.0])|
     +-----+---------------+-------------------------+
     ...
-    >>> sorted(map(str, model.vocabulary))
-    ['a', 'b', 'c']
+    >>> sorted(model.vocabulary)
+    [u'a', u'b', u'c']
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> cv.save(featurePath)
+    >>> loadedCv = CountVectorizer.load(featurePath)
+    >>> loadedCv.getMinDF()
+    1.0
+    >>> loadedCv.getMinTF()
+    1.0
+    >>> loadedCv.getVocabSize()
+    262144
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = CountVectorizerModel.load(modelPath)
+    >>> sorted(loadedModel.vocabulary)
+    [u'a', u'b', u'c']
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -280,7 +325,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol):
         return CountVectorizerModel(java_model)
 
 
-class CountVectorizerModel(JavaModel):
+class CountVectorizerModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -299,7 +344,7 @@ class CountVectorizerModel(JavaModel):
 
 
 @inherit_doc
-class DCT(JavaTransformer, HasInputCol, HasOutputCol):
+class DCT(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -321,6 +366,18 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
     >>> df3 = DCT(inverse=True, inputCol="resultVec", outputCol="origVec").transform(df2)
     >>> df3.head().origVec
     DenseVector([5.0, 8.0, 6.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> dct.save(featurePath)
+    >>> loadedDtc = DCT.load(featurePath)
+    >>> loadedDtc.getInverse()
+    False
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -366,7 +423,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
+class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -382,6 +439,18 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
     DenseVector([2.0, 2.0, 9.0])
     >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
     DenseVector([4.0, 3.0, 15.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> ep.save(featurePath)
+    >>> loadedEp = ElementwiseProduct.load(featurePath)
+    >>> loadedEp.getScalingVec()
+    DenseVector([2.0, 3.0, 5.0])
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.5.0
     """
@@ -427,7 +496,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
+class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -443,6 +512,19 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
     SparseVector(5, {2: 1.0, 3: 1.0, 4: 1.0})
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> hashingTF.save(featurePath)
+    >>> loadedHashingTF = HashingTF.load(featurePath)
+    >>> param = loadedHashingTF.getParam("numFeatures")
+    >>> loadedHashingTF.getOrDefault(param)
+    10
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -470,7 +552,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
 
 
 @inherit_doc
-class IDF(JavaEstimator, HasInputCol, HasOutputCol):
+class IDF(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -480,13 +562,31 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
     >>> df = sqlContext.createDataFrame([(DenseVector([1.0, 2.0]),),
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
-    >>> idf.fit(df).transform(df).head().idf
+    >>> model = idf.fit(df)
+    >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
     DenseVector([0.0, 0.0])
     >>> params = {idf.minDocFreq: 1, idf.outputCol: "vector"}
     >>> idf.fit(df, params).transform(df).head().vector
     DenseVector([0.2877, 0.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> idf.save(featurePath)
+    >>> loadedIdf = IDF.load(featurePath)
+    >>> loadedIdf.getMinDocFreq()
+    3
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = IDFModel.load(modelPath)
+    >>> loadedModel.transform(df).head().idf
+    DenseVector([0.0, 0.0])
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -534,7 +634,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol):
         return IDFModel(java_model)
 
 
-class IDFModel(JavaModel):
+class IDFModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -545,7 +645,7 @@ class IDFModel(JavaModel):
 
 
 @inherit_doc
-class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
+class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -576,6 +676,27 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     |[2.0]| [1.0]|
     +-----+------+
     ...
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> mmScaler.save(featurePath)
+    >>> loadedMMScaler = MinMaxScaler.load(featurePath)
+    >>> loadedMMScaler.getMin()
+    0.0
+    >>> loadedMMScaler.getMax()
+    1.0
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = MinMaxScalerModel.load(modelPath)
+    >>> loadedModel.originalMin
+    DenseVector([0.0])
+    >>> loadedModel.originalMax
+    DenseVector([2.0])
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -638,7 +759,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
         return MinMaxScalerModel(java_model)
 
 
-class MinMaxScalerModel(JavaModel):
+class MinMaxScalerModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -666,7 +787,7 @@ class MinMaxScalerModel(JavaModel):
 
 @inherit_doc
 @ignore_unicode_prefix
-class NGram(JavaTransformer, HasInputCol, HasOutputCol):
+class NGram(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -695,6 +816,18 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> ngram.save(featurePath)
+    >>> loadedNGram = NGram.load(featurePath)
+    >>> loadedNGram.getN()
+    4
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.5.0
     """
@@ -739,7 +872,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
+class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -756,6 +889,18 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> params = {normalizer.p: 1.0, normalizer.inputCol: "dense", normalizer.outputCol: "vector"}
     >>> normalizer.transform(df, params).head().vector
     DenseVector([0.4286, -0.5714])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> normalizer.save(featurePath)
+    >>> loadedNormalizer = Normalizer.load(featurePath)
+    >>> loadedNormalizer.getP()
+    2.0
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -800,7 +945,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
+class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -833,6 +978,18 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
     >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
     >>> encoder.transform(td, params).head().test
     SparseVector(3, {0: 1.0})
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> encoder.save(featurePath)
+    >>> loadedEncoder = OneHotEncoder.load(featurePath)
+    >>> loadedEncoder.getDropLast() == encoder.getDropLast()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -877,7 +1034,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
+class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -894,6 +1051,18 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
     >>> px.setParams(outputCol="test").transform(df).head().test
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> px.save(featurePath)
+    >>> loadedPx = PolynomialExpansion.load(featurePath)
+    >>> loadedPx.getDegree() == px.getDegree()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -939,7 +1108,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -961,6 +1130,18 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> bucketed = bucketizer.transform(df).head()
     >>> bucketed.buckets
     0.0
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> qds.save(featurePath)
+    >>> loadedQds = QuantileDiscretizer.load(featurePath)
+    >>> loadedQds.getNumBuckets() == qds.getNumBuckets()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 2.0.0
     """
@@ -1021,7 +1202,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
 
 @inherit_doc
 @ignore_unicode_prefix
-class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
+class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1049,6 +1230,20 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> reTokenizer.save(featurePath)
+    >>> loadedReTokenizer = RegexTokenizer.load(featurePath)
+    >>> loadedReTokenizer.getMinTokenLength() == reTokenizer.getMinTokenLength()
+    True
+    >>> loadedReTokenizer.getGaps() == reTokenizer.getGaps()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1146,7 +1341,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class SQLTransformer(JavaTransformer):
+class SQLTransformer(JavaTransformer, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1159,6 +1354,18 @@ class SQLTransformer(JavaTransformer):
     ...     statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
     >>> sqlTrans.transform(df).head()
     Row(id=0, v1=1.0, v2=3.0, v3=4.0, v4=3.0)
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> sqlTrans.save(featurePath)
+    >>> loadedSqlTrans = SQLTransformer.load(featurePath)
+    >>> loadedSqlTrans.getStatement() == sqlTrans.getStatement()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -1202,7 +1409,7 @@ class SQLTransformer(JavaTransformer):
 
 
 @inherit_doc
-class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
+class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1219,6 +1426,27 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
     DenseVector([1.4142])
     >>> model.transform(df).collect()[1].scaled
     DenseVector([1.4142])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> standardScaler.save(featurePath)
+    >>> loadedStandardScaler = StandardScaler.load(featurePath)
+    >>> loadedStandardScaler.getWithMean() == standardScaler.getWithMean()
+    True
+    >>> loadedStandardScaler.getWithStd() == standardScaler.getWithStd()
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = StandardScalerModel.load(modelPath)
+    >>> loadedModel.std == model.std
+    True
+    >>> loadedModel.mean == model.mean
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1281,7 +1509,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol):
         return StandardScalerModel(java_model)
 
 
-class StandardScalerModel(JavaModel):
+class StandardScalerModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1308,7 +1536,8 @@ class StandardScalerModel(JavaModel):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
+class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, MLReadable,
+                    MLWritable):
     """
     .. note:: Experimental
 
@@ -1328,6 +1557,28 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> stringIndexer.save(featurePath)
+    >>> loadedIndexerModel = StringIndexer.load(featurePath).fit(stringIndDf)
+    >>> loadedIndexerModel.labels == model.labels
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = StringIndexerModel.load(modelPath)
+    >>> loadedModel.labels == model.labels
+    True
+    >>> featurePath2 = path + "/feature-transformer2"
+    >>> inverter.save(featurePath2)
+    >>> loadedInverter = IndexToString.load(featurePath2)
+    >>> loadedInverter.getLabels() == inverter.getLabels()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1357,7 +1608,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
         return StringIndexerModel(java_model)
 
 
-class StringIndexerModel(JavaModel):
+class StringIndexerModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1376,7 +1627,7 @@ class StringIndexerModel(JavaModel):
 
 
 @inherit_doc
-class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
+class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1430,7 +1681,7 @@ class IndexToString(JavaTransformer, HasInputCol, HasOutputCol):
         return self.getOrDefault(self.labels)
 
 
-class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol):
+class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -2240,9 +2491,12 @@ class ChiSqSelectorModel(JavaModel):
 
 if __name__ == "__main__":
     import doctest
+    import pyspark.ml.feature
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
     globs = globals().copy()
+    features = pyspark.ml.feature.__dict__.copy()
+    globs.update(features)
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.feature tests")
