@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, LongSQLMetricValue, SQLMetric}
+import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 
 /**
   * An interface for those physical operators that support codegen.
@@ -395,10 +394,10 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
             // The build side can't be compiled together
-            case b @ BroadcastHashJoin(_, _, BuildLeft, _, Broadcast(f, left), _) =>
-              b.copy(left = Broadcast(f, apply(left)))
-            case b @ BroadcastHashJoin(_, _, BuildRight, _, _, Broadcast(f, right)) =>
-              b.copy(right = Broadcast(f, apply(right)))
+            case b @ BroadcastHashJoin(_, _, BuildLeft, _, bc: Broadcast, _) =>
+              b.copy(left = bc.copy(child = apply(bc.child)))
+            case b @ BroadcastHashJoin(_, _, BuildRight, _, _, bc: Broadcast) =>
+              b.copy(right = bc.copy(child = apply(bc.child)))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input

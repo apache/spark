@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -37,7 +37,7 @@ case class LeftSemiJoinBNL(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    UnspecifiedDistribution :: BroadcastDistribution(_.toIndexedSeq) :: Nil
+    UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
   override def outputPartitioning: Partitioning = left.outputPartitioning
@@ -50,7 +50,7 @@ case class LeftSemiJoinBNL(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastedRelation = right.executeBroadcast[IndexedSeq[InternalRow]]()
+    val broadcastedRelation = right.executeBroadcast[Array[InternalRow]]()
 
     left.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
@@ -60,7 +60,7 @@ case class LeftSemiJoinBNL(
         var i = 0
         var matched = false
 
-        while (i < relation.size && !matched) {
+        while (i < relation.length && !matched) {
           if (boundCondition(joinedRow(streamedRow, relation(i)))) {
             matched = true
           }

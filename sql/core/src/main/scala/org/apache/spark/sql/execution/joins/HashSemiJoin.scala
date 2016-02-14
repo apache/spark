@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
+import org.apache.spark.sql.execution.{Broadcast, SparkPlan}
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
@@ -44,22 +45,7 @@ trait HashSemiJoin {
 
   protected def buildKeyHashSet(
       buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
-    val hashSet = new java.util.HashSet[InternalRow]()
-
-    // Create a Hash set of buildKeys
-    val rightKey = rightKeyGenerator
-    while (buildIter.hasNext) {
-      val currentRow = buildIter.next()
-      val rowKey = rightKey(currentRow)
-      if (!rowKey.anyNull) {
-        val keyExists = hashSet.contains(rowKey)
-        if (!keyExists) {
-          hashSet.add(rowKey.copy())
-        }
-      }
-    }
-
-    hashSet
+    HashSemiJoin.buildKeyHashSet(rightKeys, right.output, buildIter)
   }
 
   protected def hashSemiJoin(
@@ -92,3 +78,36 @@ trait HashSemiJoin {
     }
   }
 }
+
+private[execution] object HashSemiJoin {
+  def buildKeyHashSet(
+    keys: Seq[Expression],
+    plan: SparkPlan,
+    rows: Array[InternalRow]): java.util.HashSet[InternalRow] = {
+    buildKeyHashSet(keys, plan.output, rows.iterator)
+  }
+
+  def buildKeyHashSet(
+    keys: Seq[Expression],
+    attributes: Seq[Attribute],
+    rows: Iterator[InternalRow]): java.util.HashSet[InternalRow] = {
+    val hashSet = new java.util.HashSet[InternalRow]()
+
+    // Create a Hash set of buildKeys
+    val key = UnsafeProjection.create(keys, attributes)
+    while (rows.hasNext) {
+      val currentRow = rows.next()
+      val rowKey = key(currentRow)
+      if (!rowKey.anyNull) {
+        val keyExists = hashSet.contains(rowKey)
+        if (!keyExists) {
+          hashSet.add(rowKey.copy())
+        }
+      }
+    }
+    hashSet
+  }
+}
+
+/** HashSetBroadcastMode requires that the input rows are broadcasted as a set. */
+private[execution] case class HashSetBroadcastMode(keys: Seq[Expression]) extends BroadcastMode

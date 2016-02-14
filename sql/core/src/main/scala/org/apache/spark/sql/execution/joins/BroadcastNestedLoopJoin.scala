@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
@@ -45,9 +45,9 @@ case class BroadcastNestedLoopJoin(
 
   override def requiredChildDistribution: Seq[Distribution] = buildSide match {
     case BuildLeft =>
-      BroadcastDistribution(_.toIndexedSeq) :: UnspecifiedDistribution :: Nil
+      BroadcastDistribution(IdentityBroadcastMode) :: UnspecifiedDistribution :: Nil
     case BuildRight =>
-      UnspecifiedDistribution :: BroadcastDistribution(_.toIndexedSeq) :: Nil
+      UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
   private[this] def genResultProjection: InternalRow => InternalRow = {
@@ -79,25 +79,25 @@ case class BroadcastNestedLoopJoin(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastedRelation = broadcast.executeBroadcast[IndexedSeq[InternalRow]]()
+    val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val matchesOrStreamedRowsWithNulls = streamed.execute().mapPartitions { streamedIter =>
+      val relation = broadcastedRelation.value
+
       val matchedRows = new CompactBuffer[InternalRow]
-      val includedBroadcastTuples = new BitSet(broadcastedRelation.value.size)
+      val includedBroadcastTuples = new BitSet(relation.length)
       val joinedRow = new JoinedRow
 
       val leftNulls = new GenericMutableRow(left.output.size)
       val rightNulls = new GenericMutableRow(right.output.size)
       val resultProj = genResultProjection
 
-      val relation = broadcastedRelation.value
-
       streamedIter.foreach { streamedRow =>
         var i = 0
         var streamRowMatched = false
 
-        while (i < relation.size) {
+        while (i < relation.length) {
           val broadcastedRow = relation(i)
           buildSide match {
             case BuildRight if boundCondition(joinedRow(streamedRow, broadcastedRow)) =>

@@ -52,19 +52,13 @@ case class BroadcastHashJoin(
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
-  override def requiredChildDistribution: Seq[Distribution] = buildSide match {
-    case BuildLeft =>
-      BroadcastDistribution(buildRelation) :: UnspecifiedDistribution :: Nil
-    case BuildRight =>
-      UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
-  }
-
-  private[this] val buildRelation: Iterable[InternalRow] => HashedRelation = { input =>
-    // TODO: move this check into HashedRelation
-    if (canJoinKeyFitWithinLong) {
-      LongHashedRelation(input.iterator, buildSideKeyGenerator, input.size)
-    } else {
-      HashedRelation(input.iterator, buildSideKeyGenerator, input.size)
+  override def requiredChildDistribution: Seq[Distribution] = {
+    val mode = HashedRelationBroadcastMode(canJoinKeyFitWithinLong, rewriteKeyExpr(buildKeys))
+    buildSide match {
+      case BuildLeft =>
+        BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
+      case BuildRight =>
+        UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
     }
   }
 

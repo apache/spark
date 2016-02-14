@@ -77,10 +77,21 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 }
 
 /**
+ * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
+ * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
+ */
+trait BroadcastMode
+
+/**
+ * IdentityBroadcastMode requires that rows are broadcasted in their original form.
+ */
+case object IdentityBroadcastMode extends BroadcastMode
+
+/**
   * Represents data where tuples are broadcasted to every node. It is quite common that the
   * entire set of tuples is transformed into different data structure.
   */
-case class BroadcastDistribution(f: Iterable[InternalRow] => Any = identity) extends Distribution
+case class BroadcastDistribution(mode: BroadcastMode) extends Distribution
 
 /**
  * Describes how an operator's output is split across partitions. The `compatibleWith`,

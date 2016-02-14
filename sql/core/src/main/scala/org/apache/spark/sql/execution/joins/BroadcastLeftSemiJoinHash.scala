@@ -40,17 +40,12 @@ case class BroadcastLeftSemiJoinHash(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    UnspecifiedDistribution :: BroadcastDistribution(buildRelation) :: Nil
-  }
-
-  private[this] val buildRelation: Iterable[InternalRow] => Any = {
-    if (condition.isEmpty) {
-      (input: Iterable[InternalRow]) =>
-        buildKeyHashSet(input.toIterator)
+    val mode = if (condition.isEmpty) {
+      HashSetBroadcastMode(rightKeys)
     } else {
-      (input: Iterable[InternalRow]) =>
-        HashedRelation(input.toIterator, rightKeyGenerator, input.size)
+      HashedRelationBroadcastMode(canJoinKeyFitWithinLong = false, rightKeys)
     }
+    UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

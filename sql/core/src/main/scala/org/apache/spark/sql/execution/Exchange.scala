@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode, HashSemiJoin, HashSetBroadcastMode}
 import org.apache.spark.util.MutablePair
 
 /**
@@ -387,6 +388,19 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     withCoordinator
   }
 
+  /**
+   * Create a [[Broadcast]] operator for a given [[BroadcastMode]] and [[SparkPlan]].
+   */
+  private def createBroadcast(mode: BroadcastMode, plan: SparkPlan): Broadcast = mode match {
+    case IdentityBroadcastMode =>
+      Broadcast(mode, identity, plan)
+    case HashSetBroadcastMode(keys) =>
+      Broadcast(mode, HashSemiJoin.buildKeyHashSet(keys, plan, _), plan)
+    case HashedRelationBroadcastMode(canJoinKeyFitWithinLong, keys) =>
+      Broadcast(mode, HashedRelation(canJoinKeyFitWithinLong, keys, plan, _), plan)
+    case _ => sys.error(s"Unknown BroadcastMode: $mode")
+  }
+
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
     val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
@@ -398,14 +412,14 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
-      case (child, BroadcastDistribution(f1)) =>
+      case (child, BroadcastDistribution(m1)) =>
         child match {
           // The child is broadcasting the same variable: keep the child.
-          case Broadcast(f2, _) if f1 == f2 => child
+          case Broadcast(m2, _, _) if m1 == m2 => child
           // The child is broadcasting a different variable: replace the child.
-          case Broadcast(f2, src) => Broadcast(f1, src)
+          case Broadcast(m2, _, src) => createBroadcast(m1, src)
           // Create a broadcast on top of the child.
-          case _ => Broadcast(f1, child)
+          case _ => createBroadcast(m1, child)
         }
       case (child, distribution) =>
         Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)

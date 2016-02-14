@@ -23,20 +23,18 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.util.ThreadUtils
 
 /**
  * A broadcast collects, transforms and finally broadcasts the result of a transformed SparkPlan.
  */
-case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends UnaryNode {
+case class Broadcast(
+    mode: BroadcastMode,
+    transform: Array[InternalRow] => Any,
+    child: SparkPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
-
-  override private[sql] lazy val metrics = Map(
-    "numRows" -> SQLMetrics.createLongMetric(sparkContext, "number of rows")
-  )
 
   val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
@@ -49,8 +47,6 @@ case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends 
 
   @transient
   private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
-    val numBuildRows = longMetric("numRows")
-
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -60,12 +56,11 @@ case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends 
         // Note that we use .execute().collect() because we don't want to convert data to Scala
         // types
         val input: Array[InternalRow] = child.execute().map { row =>
-          numBuildRows += 1
           row.copy()
         }.collect()
 
         // Construct and broadcast the relation.
-        sparkContext.broadcast(f(input))
+        sparkContext.broadcast(transform(input))
       }
     }(Broadcast.executionContext)
   }
@@ -87,5 +82,5 @@ case class Broadcast(f: Iterable[InternalRow] => Any, child: SparkPlan) extends 
 
 object Broadcast {
   private[execution] val executionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("build-broadcast", 128))
+    ThreadUtils.newDaemonCachedThreadPool("broadcast", 128))
 }
