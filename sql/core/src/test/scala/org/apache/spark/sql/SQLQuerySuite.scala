@@ -2133,6 +2133,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select course, year, grouping_id(course, year) from courseSales group by course, year")
     }
     assert(error.getMessage contains "grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year, grouping__id from courseSales group by cube(course, year)")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
   }
 
   test("SPARK-13056: Null in map value causes NPE") {
