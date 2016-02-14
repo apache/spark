@@ -262,7 +262,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.EvaluatePython.takeAndServe(
+            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
                 self._jdf, num)
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 

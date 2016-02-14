@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.Alias
@@ -72,7 +74,9 @@ private[hive] case class CreateViewAsSelect(
 
   private def prepareTable(sqlContext: SQLContext): HiveTable = {
     val expandedText = if (sqlContext.conf.canonicalView) {
-      rebuildViewQueryString(sqlContext).getOrElse(wrapViewTextWithSelect)
+      try rebuildViewQueryString(sqlContext) catch {
+        case NonFatal(e) => wrapViewTextWithSelect
+      }
     } else {
       wrapViewTextWithSelect
     }
@@ -112,7 +116,7 @@ private[hive] case class CreateViewAsSelect(
     s"SELECT $viewOutput FROM ($viewText) $viewName"
   }
 
-  private def rebuildViewQueryString(sqlContext: SQLContext): Option[String] = {
+  private def rebuildViewQueryString(sqlContext: SQLContext): String = {
     val logicalPlan = if (tableDesc.schema.isEmpty) {
       child
     } else {
