@@ -119,10 +119,12 @@ object StratifiedSampler extends DefaultParamsReadable[StratifiedSampler] {
     override def load(path: String): StratifiedSampler = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val Row(withReplacement: Boolean, fraction: Map[String, Double]) = sqlContext.read
+      val data = sqlContext.read
         .parquet(dataPath)
         .select("withReplacement", "fraction")
         .head()
+      val withReplacement = data.getBoolean(0)
+      val fraction = data.getAs[Map[String, Double]](1)
       val model = new StratifiedSampler(metadata.uid, withReplacement, fraction)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
