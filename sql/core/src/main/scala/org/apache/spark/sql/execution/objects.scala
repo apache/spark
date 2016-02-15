@@ -127,14 +127,22 @@ case class PythonMapPartitions(
           reuseWorker
         ).compute(inputIterator, context.partitionId(), context)
 
+      val resultProj = UnsafeProjection.create(output, output)
+
       if (outputIsPickled) {
-        outputIterator.map(bytes => InternalRow(bytes))
+        val row = new GenericMutableRow(1)
+        outputIterator.map { bytes =>
+          row(0) = bytes
+          resultProj(row)
+        }
       } else {
         val unpickle = new Unpickler
         outputIterator.flatMap { pickedResult =>
           val unpickledBatch = unpickle.loads(pickedResult)
           unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-        }.map(result => EvaluatePython.fromJava(result, schema).asInstanceOf[InternalRow])
+        }.map { result =>
+          resultProj(EvaluatePython.fromJava(result, schema).asInstanceOf[InternalRow])
+        }
       }
     }
   }
