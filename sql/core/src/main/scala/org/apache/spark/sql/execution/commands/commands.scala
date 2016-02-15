@@ -31,6 +31,15 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
+abstract class NativeDDLCommands(val sql: String) extends RunnableCommand {
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.runNativeCommand(sql)
+  }
+
+  override val output: Seq[Attribute] =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
 case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
@@ -381,84 +390,41 @@ case class CreateDataBase(
     allowExisting: Boolean,
     path: Option[String],
     comment: Option[String],
-    props: Map[String, String])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    props: Map[String, String])(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class CreateFunction(
     functionName: String,
     asName: String,
     resourcesMap: Map[String, String],
-    isTemp: Boolean)(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    isTemp: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class AlterTableRename(
     tableName: TableIdentifier,
-    renameTableName: Option[TableIdentifier])(sql: String) extends RunnableCommand with Logging {
+    renameTableName: TableIdentifier)(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
-
-case class AlterTableProperties(
+case class AlterTableSetProperties(
     tableName: TableIdentifier,
-    setProperties: Option[Map[String, Option[String]]],
-    dropProperties: Option[Map[String, Option[String]]],
-    allowExisting: Boolean)(sql: String) extends RunnableCommand with Logging {
+    setProperties: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+case class AlterTableDropProperties(
+    tableName: TableIdentifier,
+    dropProperties: Map[String, Option[String]],
+    allowExisting: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class AlterTableSerDeProperties(
     tableName: TableIdentifier,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, Option[String]]],
-    partition: Option[Map[String, Option[String]]])(sql: String) extends RunnableCommand
-    with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    partition: Option[Map[String, Option[String]]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableStoreProperties(
     tableName: TableIdentifier,
     buckets: Option[BucketSpec],
     noClustered: Boolean,
-    noSorted: Boolean)(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    noSorted: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class AlterTableSkewed(
     tableName: TableIdentifier,
@@ -466,171 +432,75 @@ case class AlterTableSkewed(
     skewedValues: Seq[Seq[String]],
     storedAsDirs: Boolean,
     notSkewed: Boolean,
-    notStoredAsDirs: Boolean)(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    notStoredAsDirs: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class AlterTableSkewedLocation(
     tableName: TableIdentifier,
-    skewedMap: Map[Seq[String], String])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    skewedMap: Map[Seq[String], String])(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class AlterTableAddPartition(
     tableName: TableIdentifier,
     partitionsAndLocs: Seq[(Map[String, Option[String]], Option[String])],
-    allowExisting: Boolean)(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    allowExisting: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
 
 case class AlterTableRenamePartition(
     tableName: TableIdentifier,
     oldPartition: Map[String, Option[String]],
-    newPartition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    newPartition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableExchangePartition(
     tableName: TableIdentifier,
     fromTableName: TableIdentifier,
-    partition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    partition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableDropPartition(
     tableName: TableIdentifier,
     partitions: Seq[Seq[(String, String, String)]],
     allowExisting: Boolean,
     purge: Boolean,
-    replication: Option[(String, Boolean)])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    replication: Option[(String, Boolean)])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableArchivePartition(
     tableName: TableIdentifier,
-    partition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    partition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableUnarchivePartition(
     tableName: TableIdentifier,
-    partition: Map[String, Option[String]])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    partition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableSetFileFormat(
     tableName: TableIdentifier,
     partition: Option[Map[String, Option[String]]],
     fileFormat: Option[Seq[String]],
-    genericFormat: Option[String])(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    genericFormat: Option[String])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableSetLocation(
     tableName: TableIdentifier,
     partition: Option[Map[String, Option[String]]],
-    location: String)(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    location: String)(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableTouch(
     tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]])(sql: String) extends RunnableCommand
-    with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    partition: Option[Map[String, Option[String]]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableCompact(
     tableName: TableIdentifier,
     partition: Option[Map[String, Option[String]]],
-    compactType: String)(sql: String) extends RunnableCommand with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    compactType: String)(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableMerge(
     tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]])(sql: String) extends RunnableCommand
-    with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    partition: Option[Map[String, Option[String]]])(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableChangeCol(
     tableName: TableIdentifier,
@@ -642,45 +512,22 @@ case class AlterTableChangeCol(
     afterPos: Boolean,
     afterPosCol: Option[String],
     restrict: Boolean,
-    cascade: Boolean)(sql: String) extends RunnableCommand
-    with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    cascade: Boolean)(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableAddCol(
     tableName: TableIdentifier,
     partition: Option[Map[String, Option[String]]],
     columns: StructType,
     restrict: Boolean,
-    cascade: Boolean)(sql: String) extends RunnableCommand
-    with Logging {
-
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
+    cascade: Boolean)(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
 case class AlterTableReplaceCol(
     tableName: TableIdentifier,
     partition: Option[Map[String, Option[String]]],
     columns: StructType,
     restrict: Boolean,
-    cascade: Boolean)(sql: String) extends RunnableCommand
-    with Logging {
+    cascade: Boolean)(sql: String) extends NativeDDLCommands(sql)
+    with Logging
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}

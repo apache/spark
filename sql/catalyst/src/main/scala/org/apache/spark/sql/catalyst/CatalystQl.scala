@@ -30,17 +30,20 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.random.RandomSampler
 
+abstract class BaseParser(val conf: ParserConf) extends ParserInterface with ParserBase {
+  val planParsers: Seq[PlanParser] = Nil
+
+  lazy val planParser: PlanParser = planParsers.reduce(_.orElse(_).asInstanceOf[PlanParser])
+
+  protected def nodeToPlan(node: ASTNode): LogicalPlan = {
+    planParser.applyOrElse(node, throw new NotImplementedError(node.text))
+  }
+}
+
 /**
  * This class translates SQL to Catalyst [[LogicalPlan]]s or [[Expression]]s.
  */
-private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends ParserInterface {
-  object Token {
-    def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
-      CurrentOrigin.setPosition(node.line, node.positionInLine)
-      node.pattern
-    }
-  }
-
+private[sql] class CatalystQl(conf: ParserConf = SimpleParserConf()) extends BaseParser(conf) {
   /**
    * The safeParse method allows a user to focus on the parsing/AST transformation logic. This
    * method will take care of possible errors during the parsing process.
@@ -90,7 +93,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
     }
   }
 
-  protected def getClauses(
+  def getClauses(
       clauseNames: Seq[String],
       nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
     var remainingNodes = nodeList
@@ -108,11 +111,11 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
     clauses
   }
 
-  protected def getClause(clauseName: String, nodeList: Seq[ASTNode]): ASTNode =
+  def getClause(clauseName: String, nodeList: Seq[ASTNode]): ASTNode =
     getClauseOption(clauseName, nodeList).getOrElse(sys.error(
       s"Expected clause $clauseName missing from ${nodeList.map(_.treeString).mkString("\n")}"))
 
-  protected def getClauseOption(clauseName: String, nodeList: Seq[ASTNode]): Option[ASTNode] = {
+  def getClauseOption(clauseName: String, nodeList: Seq[ASTNode]): Option[ASTNode] = {
     nodeList.filter { case ast: ASTNode => ast.text == clauseName } match {
       case Seq(oneMatch) => Some(oneMatch)
       case Seq() => None
@@ -120,14 +123,14 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
     }
   }
 
-  protected def nodeToAttribute(node: ASTNode): Attribute = node match {
+  def nodeToAttribute(node: ASTNode): Attribute = node match {
     case Token("TOK_TABCOL", Token(colName, Nil) :: dataType :: Nil) =>
       AttributeReference(colName, nodeToDataType(dataType), nullable = true)()
     case _ =>
       noParseRule("Attribute", node)
   }
 
-  protected def nodeToDataType(node: ASTNode): DataType = node match {
+  def nodeToDataType(node: ASTNode): DataType = node match {
     case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
       DecimalType(precision.text.toInt, scale.text.toInt)
     case Token("TOK_DECIMAL", precision :: Nil) =>
@@ -155,7 +158,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
       noParseRule("DataType", node)
   }
 
-  protected def nodeToStructField(node: ASTNode): StructField = node match {
+  def nodeToStructField(node: ASTNode): StructField = node match {
     case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: Nil) =>
       StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true)
     case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: comment :: Nil) =>
@@ -165,7 +168,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
       noParseRule("StructField", node)
   }
 
-  protected def extractTableIdent(tableNameParts: ASTNode): TableIdentifier = {
+  def extractTableIdent(tableNameParts: ASTNode): TableIdentifier = {
     tableNameParts.children.map {
       case Token(part, Nil) => cleanIdentifier(part)
     } match {
@@ -214,7 +217,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     (keys, bitmasks)
   }
 
-  protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
+  override protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
     case Token("TOK_SHOWFUNCTIONS", args) =>
       // Skip LIKE.
       val pattern = args match {
@@ -619,22 +622,6 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     case _ =>
       noParseRule("Select", node)
-  }
-
-  protected val escapedIdentifier = "`(.+)`".r
-  protected val doubleQuotedString = "\"([^\"]+)\"".r
-  protected val singleQuotedString = "'([^']+)'".r
-
-  protected def unquoteString(str: String) = str match {
-    case singleQuotedString(s) => s
-    case doubleQuotedString(s) => s
-    case other => other
-  }
-
-  /** Strips backticks from ident if present */
-  protected def cleanIdentifier(ident: String): String = ident match {
-    case escapedIdentifier(i) => i
-    case plainIdent => plainIdent
   }
 
   /* Case insensitive matches */
