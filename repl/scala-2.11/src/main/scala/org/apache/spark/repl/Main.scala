@@ -19,7 +19,7 @@ package org.apache.spark.repl
 
 import java.io.File
 
-import scala.tools.nsc.Settings
+import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark.util.Utils
 import org.apache.spark._
@@ -33,7 +33,8 @@ object Main extends Logging {
 
   var sparkContext: SparkContext = _
   var sqlContext: SQLContext = _
-  var interp = new SparkILoop // this is a public var because tests reset it.
+  // this is a public var because tests reset it.
+  var interp: SparkILoop = _
 
   private var hasErrors = false
 
@@ -43,13 +44,19 @@ object Main extends Logging {
   }
 
   def main(args: Array[String]) {
+    doMain(args, new SparkILoop)
+  }
+
+  // Visible for testing
+  private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
+    interp = _interp
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
       "-classpath", getAddedJars.mkString(File.pathSeparator)
     ) ++ args.toList
 
-    val settings = new Settings(scalaOptionError)
+    val settings = new GenericRunnerSettings(scalaOptionError)
     settings.processArguments(interpArguments, true)
 
     if (!hasErrors) {

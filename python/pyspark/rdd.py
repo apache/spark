@@ -426,6 +426,9 @@ class RDD(object):
         """
         Return a fixed-size sampled subset of this RDD.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
         20
@@ -766,6 +769,8 @@ class RDD(object):
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
@@ -1213,6 +1218,9 @@ class RDD(object):
         """
         Get the top N elements from a RDD.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         Note: It returns the list sorted in descending order.
 
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
@@ -1235,6 +1243,9 @@ class RDD(object):
         Get the N elements from a RDD ordered in ascending order or as
         specified by the optional key function.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
         [1, 2, 3, 4, 5, 6]
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7], 2).takeOrdered(6, key=lambda x: -x)
@@ -1253,6 +1264,9 @@ class RDD(object):
         It works by first scanning one partition, and use the results from
         that partition to estimate the number of additional partitions needed
         to satisfy the limit.
+
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         Translated from the Scala implementation in RDD#take().
 
@@ -1510,6 +1524,9 @@ class RDD(object):
     def collectAsMap(self):
         """
         Return the key-value pairs in this RDD to the master as a dictionary.
+
+        Note that this method should only be used if the resulting data is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         >>> m = sc.parallelize([(1, 2), (3, 4)]).collectAsMap()
         >>> m[1]

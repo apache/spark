@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
@@ -102,16 +105,34 @@ public abstract class ColumnVector {
       DataType dt = data.dataType();
       Object[] list = new Object[length];
 
-      if (dt instanceof ByteType) {
+      if (dt instanceof BooleanType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getBoolean(offset + i);
+          }
+        }
+      } else if (dt instanceof ByteType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
             list[i] = data.getByte(offset + i);
+          }
+        }
+      } else if (dt instanceof ShortType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getShort(offset + i);
           }
         }
       } else if (dt instanceof IntegerType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
             list[i] = data.getInt(offset + i);
+          }
+        }
+      } else if (dt instanceof FloatType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = data.getFloat(offset + i);
           }
         }
       } else if (dt instanceof DoubleType) {
@@ -126,10 +147,23 @@ public abstract class ColumnVector {
             list[i] = data.getLong(offset + i);
           }
         }
+      } else if (dt instanceof DecimalType) {
+        DecimalType decType = (DecimalType)dt;
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = getDecimal(i, decType.precision(), decType.scale());
+          }
+        }
       } else if (dt instanceof StringType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
             list[i] = ColumnVectorUtils.toString(data.getByteArray(offset + i));
+          }
+        }
+      } else if (dt instanceof CalendarIntervalType) {
+        for (int i = 0; i < length; i++) {
+          if (!data.getIsNull(offset + i)) {
+            list[i] = getInterval(i);
           }
         }
       } else {
@@ -170,7 +204,14 @@ public abstract class ColumnVector {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      throw new NotImplementedException();
+      if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        return Decimal.apply(getLong(ordinal), precision, scale);
+      } else {
+        byte[] bytes = getBinary(ordinal);
+        BigInteger bigInteger = new BigInteger(bytes);
+        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+        return Decimal.apply(javaDecimal, precision, scale);
+      }
     }
 
     @Override
@@ -181,17 +222,22 @@ public abstract class ColumnVector {
 
     @Override
     public byte[] getBinary(int ordinal) {
-      throw new NotImplementedException();
+      ColumnVector.Array array = data.getByteArray(offset + ordinal);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
     }
 
     @Override
     public CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
+      int month = data.getChildColumn(0).getInt(offset + ordinal);
+      long microseconds = data.getChildColumn(1).getLong(offset + ordinal);
+      return new CalendarInterval(month, microseconds);
     }
 
     @Override
     public InternalRow getStruct(int ordinal, int numFields) {
-      throw new NotImplementedException();
+      return data.getStruct(offset + ordinal);
     }
 
     @Override
@@ -207,104 +253,6 @@ public abstract class ColumnVector {
     @Override
     public Object get(int ordinal, DataType dataType) {
       throw new NotImplementedException();
-    }
-  }
-
-  /**
-   * Holder object to return a struct. This object is intended to be reused.
-   */
-  public static final class Struct extends InternalRow {
-    // The fields that make up this struct. For example, if the struct had 2 int fields, the access
-    // to it would be:
-    //   int f1 = fields[0].getInt[rowId]
-    //   int f2 = fields[1].getInt[rowId]
-    public final ColumnVector[] fields;
-
-    @Override
-    public boolean isNullAt(int fieldIdx) { return fields[fieldIdx].getIsNull(rowId); }
-
-    @Override
-    public boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    public byte getByte(int fieldIdx) { return fields[fieldIdx].getByte(rowId); }
-
-    @Override
-    public short getShort(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    public int getInt(int fieldIdx) { return fields[fieldIdx].getInt(rowId); }
-    public long getLong(int fieldIdx) { return fields[fieldIdx].getLong(rowId); }
-
-    @Override
-    public float getFloat(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    public double getDouble(int fieldIdx) { return fields[fieldIdx].getDouble(rowId); }
-
-    @Override
-    public Decimal getDecimal(int ordinal, int precision, int scale) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public UTF8String getUTF8String(int ordinal) {
-      Array a = getByteArray(ordinal);
-      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
-    }
-
-    @Override
-    public byte[] getBinary(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public InternalRow getStruct(int ordinal, int numFields) {
-      return fields[ordinal].getStruct(rowId);
-    }
-
-    public Array getArray(int fieldIdx) { return fields[fieldIdx].getArray(rowId); }
-
-    @Override
-    public MapData getMap(int ordinal) {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public Object get(int ordinal, DataType dataType) {
-      throw new NotImplementedException();
-    }
-
-    public Array getByteArray(int fieldIdx) { return fields[fieldIdx].getByteArray(rowId); }
-    public Struct getStruct(int fieldIdx) { return fields[fieldIdx].getStruct(rowId); }
-
-    @Override
-    public final int numFields() {
-      return fields.length;
-    }
-
-    @Override
-    public InternalRow copy() {
-      throw new NotImplementedException();
-    }
-
-    @Override
-    public boolean anyNull() {
-      throw new NotImplementedException();
-    }
-
-    protected int rowId;
-
-    protected Struct(ColumnVector[] fields) {
-      this.fields = fields;
     }
   }
 
@@ -380,6 +328,21 @@ public abstract class ColumnVector {
   /**
    * Sets the value at rowId to `value`.
    */
+  public abstract void putBoolean(int rowId, boolean value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to value.
+   */
+  public abstract void putBooleans(int rowId, int count, boolean value);
+
+  /**
+   * Returns the value for rowId.
+   */
+  public abstract boolean getBoolean(int rowId);
+
+  /**
+   * Sets the value at rowId to `value`.
+   */
   public abstract void putByte(int rowId, byte value);
 
   /**
@@ -396,6 +359,26 @@ public abstract class ColumnVector {
    * Returns the value for rowId.
    */
   public abstract byte getByte(int rowId);
+
+  /**
+   * Sets the value at rowId to `value`.
+   */
+  public abstract void putShort(int rowId, short value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to value.
+   */
+  public abstract void putShorts(int rowId, int count, short value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   */
+  public abstract void putShorts(int rowId, int count, short[] src, int srcIndex);
+
+  /**
+   * Returns the value for rowId.
+   */
+  public abstract short getShort(int rowId);
 
   /**
    * Sets the value at rowId to `value`.
@@ -452,6 +435,33 @@ public abstract class ColumnVector {
   /**
    * Sets the value at rowId to `value`.
    */
+  public abstract void putFloat(int rowId, float value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to value.
+   */
+  public abstract void putFloats(int rowId, int count, float value);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
+   * src should contain `count` doubles written as ieee format.
+   */
+  public abstract void putFloats(int rowId, int count, float[] src, int srcIndex);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   * The data in src must be ieee formatted floats.
+   */
+  public abstract void putFloats(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
+   * Returns the value for rowId.
+   */
+  public abstract float getFloat(int rowId);
+
+  /**
+   * Sets the value at rowId to `value`.
+   */
   public abstract void putDouble(int rowId, double value);
 
   /**
@@ -467,7 +477,7 @@ public abstract class ColumnVector {
 
   /**
    * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
-   * The data in src must be ieee formated doubles.
+   * The data in src must be ieee formatted doubles.
    */
   public abstract void putDoubles(int rowId, int count, byte[] src, int srcIndex);
 
@@ -494,7 +504,7 @@ public abstract class ColumnVector {
   /**
    * Returns a utility object to get structs.
    */
-  public Struct getStruct(int rowId) {
+  public ColumnarBatch.Row getStruct(int rowId) {
     resultStruct.rowId = rowId;
     return resultStruct;
   }
@@ -567,6 +577,20 @@ public abstract class ColumnVector {
     return result;
   }
 
+  public final int appendBoolean(boolean v) {
+    reserve(elementsAppended + 1);
+    putBoolean(elementsAppended, v);
+    return elementsAppended++;
+  }
+
+  public final int appendBooleans(int count, boolean v) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putBooleans(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
   public final int appendByte(byte v) {
     reserve(elementsAppended + 1);
     putByte(elementsAppended, v);
@@ -585,6 +609,28 @@ public abstract class ColumnVector {
     reserve(elementsAppended + length);
     int result = elementsAppended;
     putBytes(elementsAppended, length, src, offset);
+    elementsAppended += length;
+    return result;
+  }
+
+  public final int appendShort(short v) {
+    reserve(elementsAppended + 1);
+    putShort(elementsAppended, v);
+    return elementsAppended++;
+  }
+
+  public final int appendShorts(int count, short v) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putShorts(elementsAppended, count, v);
+    elementsAppended += count;
+    return result;
+  }
+
+  public final int appendShorts(int length, short[] src, int offset) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putShorts(elementsAppended, length, src, offset);
     elementsAppended += length;
     return result;
   }
@@ -630,6 +676,20 @@ public abstract class ColumnVector {
     int result = elementsAppended;
     putLongs(elementsAppended, length, src, offset);
     elementsAppended += length;
+    return result;
+  }
+
+  public final int appendFloat(float v) {
+    reserve(elementsAppended + 1);
+    putFloat(elementsAppended, v);
+    return elementsAppended++;
+  }
+
+  public final int appendFloats(int count, float v) {
+    reserve(elementsAppended + count);
+    int result = elementsAppended;
+    putFloats(elementsAppended, count, v);
+    elementsAppended += count;
     return result;
   }
 
@@ -703,7 +763,12 @@ public abstract class ColumnVector {
   /**
    * Returns the elements appended.
    */
-  public int getElementsAppended() { return elementsAppended; }
+  public final int getElementsAppended() { return elementsAppended; }
+
+  /**
+   * Returns true if this column is an array.
+   */
+  public final boolean isArray() { return resultArray != null; }
 
   /**
    * Maximum number of rows that can be stored in this column.
@@ -749,7 +814,7 @@ public abstract class ColumnVector {
   /**
    * Reusable Struct holder for getStruct().
    */
-  protected final Struct resultStruct;
+  protected final ColumnarBatch.Row resultStruct;
 
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested
@@ -759,7 +824,8 @@ public abstract class ColumnVector {
     this.capacity = capacity;
     this.type = type;
 
-    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType) {
+    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+        || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
       int childCapacity = capacity;
       if (type instanceof ArrayType) {
@@ -779,7 +845,14 @@ public abstract class ColumnVector {
         this.childColumns[i] = ColumnVector.allocate(capacity, st.fields()[i].dataType(), memMode);
       }
       this.resultArray = null;
-      this.resultStruct = new Struct(this.childColumns);
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else if (type instanceof CalendarIntervalType) {
+      // Two columns. Months as int. Microseconds as Long.
+      this.childColumns = new ColumnVector[2];
+      this.childColumns[0] = ColumnVector.allocate(capacity, DataTypes.IntegerType, memMode);
+      this.childColumns[1] = ColumnVector.allocate(capacity, DataTypes.LongType, memMode);
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
     } else {
       this.childColumns = null;
       this.resultArray = null;

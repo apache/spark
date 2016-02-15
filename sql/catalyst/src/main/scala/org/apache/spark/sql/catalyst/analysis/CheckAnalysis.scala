@@ -70,6 +70,11 @@ trait CheckAnalysis {
             failAnalysis(
               s"invalid cast from ${c.child.dataType.simpleString} to ${c.dataType.simpleString}")
 
+          case g: Grouping =>
+            failAnalysis(s"grouping() can only be used with GroupingSets/Cube/Rollup")
+          case g: GroupingID =>
+            failAnalysis(s"grouping_id() can only be used with GroupingSets/Cube/Rollup")
+
           case w @ WindowExpression(AggregateExpression(_, _, true), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
@@ -214,12 +219,20 @@ trait CheckAnalysis {
               s"""Only a single table generating function is allowed in a SELECT clause, found:
                  | ${exprs.map(_.prettyString).mkString(",")}""".stripMargin)
 
-          // Special handling for cases when self-join introduce duplicate expression ids.
-          case j @ Join(left, right, _, _) if left.outputSet.intersect(right.outputSet).nonEmpty =>
-            val conflictingAttributes = left.outputSet.intersect(right.outputSet)
+          case j: Join if !j.duplicateResolved =>
+            val conflictingAttributes = j.left.outputSet.intersect(j.right.outputSet)
             failAnalysis(
               s"""
                  |Failure when resolving conflicting references in Join:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+                 |""".stripMargin)
+
+          case i: Intersect if !i.duplicateResolved =>
+            val conflictingAttributes = i.left.outputSet.intersect(i.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                  |""".stripMargin)

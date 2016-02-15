@@ -21,16 +21,28 @@ import java.net.{HttpURLConnection, URL}
 import java.util.zip.ZipInputStream
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import com.codahale.metrics.Counter
 import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.io.{FileUtils, IOUtils}
-import org.mockito.Mockito.when
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods
+import org.json4s.jackson.JsonMethods._
+import org.openqa.selenium.WebDriver
+import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.concurrent.Eventually
 import org.scalatest.mock.MockitoSugar
+import org.scalatest.selenium.WebBrowser
 
-import org.apache.spark.{JsonTestUtils, SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.ui.{SparkUI, UIUtils}
-import org.apache.spark.util.ResetSystemProperties
+import org.apache.spark._
+import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.jobs.UIData.JobUIData
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
  * A collection of tests against the historyserver, including comparing responses from the json
@@ -44,7 +56,8 @@ import org.apache.spark.util.ResetSystemProperties
  * are considered part of Spark's public api.
  */
 class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers with MockitoSugar
-  with JsonTestUtils with ResetSystemProperties {
+  with JsonTestUtils with Eventually with WebBrowser with LocalSparkContext
+  with ResetSystemProperties {
 
   private val logDir = new File("src/test/resources/spark-events")
   private val expRoot = new File("src/test/resources/HistoryServerExpectations/")
@@ -56,7 +69,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   def init(): Unit = {
     val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
-      .set("spark.history.fs.updateInterval", "0")
+      .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -139,7 +152,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       code should be (HttpServletResponse.SC_OK)
       jsonOpt should be ('defined)
       errOpt should be (None)
-      val json = jsonOpt.get
+      val jsonOrg = jsonOpt.get
+
+      // SPARK-10873 added the lastUpdated field for each application's attempt,
+      // the REST API returns the last modified time of EVENT LOG file for this field.
+      // It is not applicable to hard-code this dynamic field in a static expected file,
+      // so here we skip checking the lastUpdated field's value (setting it as "").
+      val json = if (jsonOrg.indexOf("lastUpdated") >= 0) {
+        val subStrings = jsonOrg.split(",")
+        for (i <- subStrings.indices) {
+          if (subStrings(i).indexOf("lastUpdated") >= 0) {
+            subStrings(i) = "\"lastUpdated\":\"\""
+          }
+        }
+        subStrings.mkString(",")
+      } else {
+        jsonOrg
+      }
+
       val exp = IOUtils.toString(new FileInputStream(
         new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
       // compare the ASTs so formatting differences don't cause failures
@@ -159,18 +189,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     (1 to 2).foreach { attemptId => doDownloadTest("local-1430917381535", Some(attemptId)) }
   }
 
-  test("download legacy logs - all attempts") {
-    doDownloadTest("local-1426533911241", None, legacy = true)
-  }
-
-  test("download legacy logs - single  attempts") {
-    (1 to 2). foreach {
-      attemptId => doDownloadTest("local-1426533911241", Some(attemptId), legacy = true)
-    }
-  }
-
   // Test that the files are downloaded correctly, and validate them.
-  def doDownloadTest(appId: String, attemptId: Option[Int], legacy: Boolean = false): Unit = {
+  def doDownloadTest(appId: String, attemptId: Option[Int]): Unit = {
 
     val url = attemptId match {
       case Some(id) =>
@@ -188,22 +208,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     var entry = zipStream.getNextEntry
     entry should not be null
     val totalFiles = {
-      if (legacy) {
-        attemptId.map { x => 3 }.getOrElse(6)
-      } else {
-        attemptId.map { x => 1 }.getOrElse(2)
-      }
+      attemptId.map { x => 1 }.getOrElse(2)
     }
     var filesCompared = 0
     while (entry != null) {
       if (!entry.isDirectory) {
         val expectedFile = {
-          if (legacy) {
-            val splits = entry.getName.split("/")
-            new File(new File(logDir, splits(0)), splits(1))
-          } else {
-            new File(logDir, entry.getName)
-          }
+          new File(logDir, entry.getName)
         }
         val expected = Files.toString(expectedFile, Charsets.UTF_8)
         val actual = new String(ByteStreams.toByteArray(zipStream), Charsets.UTF_8)
@@ -241,30 +252,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
-  test("generate history page with relative links") {
-    val historyServer = mock[HistoryServer]
-    val request = mock[HttpServletRequest]
-    val ui = mock[SparkUI]
-    val link = "/history/app1"
-    val info = new ApplicationHistoryInfo("app1", "app1",
-      List(ApplicationAttemptInfo(None, 0, 2, 1, "xxx", true)))
-    when(historyServer.getApplicationList()).thenReturn(Seq(info))
-    when(ui.basePath).thenReturn(link)
-    when(historyServer.getProviderConfig()).thenReturn(Map[String, String]())
-    val page = new HistoryPage(historyServer)
-
-    // when
-    val response = page.render(request)
-
-    // then
-    val links = response \\ "a"
-    val justHrefs = for {
-      l <- links
-      attrs <- l.attribute("href")
-    } yield (attrs.toString)
-    justHrefs should contain (UIUtils.prependBaseUri(resource = link))
-  }
-
   test("relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val proxyBaseBeforeTest = System.getProperty("spark.ui.proxyBase")
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
@@ -280,6 +267,204 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  test("incomplete apps get refreshed") {
+
+    implicit val webDriver: WebDriver = new HtmlUnitDriver
+    implicit val formats = org.json4s.DefaultFormats
+
+    // this test dir is explictly deleted on successful runs; retained for diagnostics when
+    // not
+    val logDir = Utils.createDirectory(System.getProperty("java.io.tmpdir", "logs"))
+
+    // a new conf is used with the background thread set and running at its fastest
+    // alllowed refresh rate (1Hz)
+    val myConf = new SparkConf()
+      .set("spark.history.fs.logDirectory", logDir.getAbsolutePath)
+      .set("spark.eventLog.dir", logDir.getAbsolutePath)
+      .set("spark.history.fs.update.interval", "1s")
+      .set("spark.eventLog.enabled", "true")
+      .set("spark.history.cache.window", "250ms")
+      .remove("spark.testing")
+    val provider = new FsHistoryProvider(myConf)
+    val securityManager = new SecurityManager(myConf)
+
+    sc = new SparkContext("local", "test", myConf)
+    val logDirUri = logDir.toURI
+    val logDirPath = new Path(logDirUri)
+    val fs = FileSystem.get(logDirUri, sc.hadoopConfiguration)
+
+    def listDir(dir: Path): Seq[FileStatus] = {
+      val statuses = fs.listStatus(dir)
+      statuses.flatMap(
+        stat => if (stat.isDirectory) listDir(stat.getPath) else Seq(stat))
+    }
+
+    def dumpLogDir(msg: String = ""): Unit = {
+      if (log.isDebugEnabled) {
+        logDebug(msg)
+        listDir(logDirPath).foreach { status =>
+          val s = status.toString
+          logDebug(s)
+        }
+      }
+    }
+
+    // stop the server with the old config, and start the new one
+    server.stop()
+    server = new HistoryServer(myConf, provider, securityManager, 18080)
+    server.initialize()
+    server.bind()
+    val port = server.boundPort
+    val metrics = server.cacheMetrics
+
+    // assert that a metric has a value; if not dump the whole metrics instance
+    def assertMetric(name: String, counter: Counter, expected: Long): Unit = {
+      val actual = counter.getCount
+      if (actual != expected) {
+        // this is here because Scalatest loses stack depth
+        fail(s"Wrong $name value - expected $expected but got $actual" +
+            s" in metrics\n$metrics")
+      }
+    }
+
+    // build a URL for an app or app/attempt plus a page underneath
+    def buildURL(appId: String, suffix: String): URL = {
+      new URL(s"http://localhost:$port/history/$appId$suffix")
+    }
+
+    // build a rest URL for the application and suffix.
+    def applications(appId: String, suffix: String): URL = {
+      new URL(s"http://localhost:$port/api/v1/applications/$appId$suffix")
+    }
+
+    val historyServerRoot = new URL(s"http://localhost:$port/")
+
+    // start initial job
+    val d = sc.parallelize(1 to 10)
+    d.count()
+    val stdInterval = interval(100 milliseconds)
+    val appId = eventually(timeout(20 seconds), stdInterval) {
+      val json = getContentAndCode("applications", port)._2.get
+      val apps = parse(json).asInstanceOf[JArray].arr
+      apps should have size 1
+      (apps.head \ "id").extract[String]
+    }
+
+    val appIdRoot = buildURL(appId, "")
+    val rootAppPage = HistoryServerSuite.getUrl(appIdRoot)
+    logDebug(s"$appIdRoot ->[${rootAppPage.length}] \n$rootAppPage")
+    // sanity check to make sure filter is chaining calls
+    rootAppPage should not be empty
+
+    def getAppUI: SparkUI = {
+      provider.getAppUI(appId, None).get.ui
+    }
+
+    // selenium isn't that useful on failures...add our own reporting
+    def getNumJobs(suffix: String): Int = {
+      val target = buildURL(appId, suffix)
+      val targetBody = HistoryServerSuite.getUrl(target)
+      try {
+        go to target.toExternalForm
+        findAll(cssSelector("tbody tr")).toIndexedSeq.size
+      } catch {
+        case ex: Exception =>
+          throw new Exception(s"Against $target\n$targetBody", ex)
+      }
+    }
+    // use REST API to get #of jobs
+    def getNumJobsRestful(): Int = {
+      val json = HistoryServerSuite.getUrl(applications(appId, "/jobs"))
+      val jsonAst = parse(json)
+      val jobList = jsonAst.asInstanceOf[JArray]
+      jobList.values.size
+    }
+
+    // get a list of app Ids of all apps in a given state. REST API
+    def listApplications(completed: Boolean): Seq[String] = {
+      val json = parse(HistoryServerSuite.getUrl(applications("", "")))
+      logDebug(s"${JsonMethods.pretty(json)}")
+      json match {
+        case JNothing => Seq()
+        case apps: JArray =>
+          apps.filter(app => {
+            (app \ "attempts") match {
+              case attempts: JArray =>
+                val state = (attempts.children.head \ "completed").asInstanceOf[JBool]
+                state.value == completed
+              case _ => false
+            }
+          }).map(app => (app \ "id").asInstanceOf[JString].values)
+        case _ => Seq()
+      }
+    }
+
+    def completedJobs(): Seq[JobUIData] = {
+      getAppUI.jobProgressListener.completedJobs
+    }
+
+    def activeJobs(): Seq[JobUIData] = {
+      getAppUI.jobProgressListener.activeJobs.values.toSeq
+    }
+
+    activeJobs() should have size 0
+    completedJobs() should have size 1
+    getNumJobs("") should be (1)
+    getNumJobs("/jobs") should be (1)
+    getNumJobsRestful() should be (1)
+    assert(metrics.lookupCount.getCount > 1, s"lookup count too low in $metrics")
+
+    // dump state before the next bit of test, which is where update
+    // checking really gets stressed
+    dumpLogDir("filesystem before executing second job")
+    logDebug(s"History Server: $server")
+
+    val d2 = sc.parallelize(1 to 10)
+    d2.count()
+    dumpLogDir("After second job")
+
+    val stdTimeout = timeout(10 seconds)
+    logDebug("waiting for UI to update")
+    eventually(stdTimeout, stdInterval) {
+      assert(2 === getNumJobs(""),
+        s"jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
+      assert(2 === getNumJobs("/jobs"),
+        s"job count under /jobs not updated, server=$server\n dir = ${listDir(logDirPath)}")
+      getNumJobsRestful() should be(2)
+    }
+
+    d.count()
+    d.count()
+    eventually(stdTimeout, stdInterval) {
+      assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
+    }
+    val jobcount = getNumJobs("/jobs")
+    assert(!provider.getListing().head.completed)
+
+    listApplications(false) should contain(appId)
+
+    // stop the spark context
+    resetSparkContext()
+    // check the app is now found as completed
+    eventually(stdTimeout, stdInterval) {
+      assert(provider.getListing().head.completed,
+        s"application never completed, server=$server\n")
+    }
+
+    // app becomes observably complete
+    eventually(stdTimeout, stdInterval) {
+      listApplications(true) should contain (appId)
+    }
+    // app is no longer incomplete
+    listApplications(false) should not contain(appId)
+
+    assert(jobcount === getNumJobs("/jobs"))
+
+    // no need to retain the test dir now the tests complete
+    logDir.deleteOnExit();
+
   }
 
   def getContentAndCode(path: String, port: Int = port): (Int, Option[String], Option[String]) = {
@@ -301,6 +486,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     out.write(json)
     out.close()
   }
+
 }
 
 object HistoryServerSuite {

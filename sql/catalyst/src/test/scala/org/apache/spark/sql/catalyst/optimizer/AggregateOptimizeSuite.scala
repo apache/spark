@@ -28,19 +28,7 @@ class AggregateOptimizeSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
-      ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) :: Nil
-  }
-
-  test("replace distinct with aggregate") {
-    val input = LocalRelation('a.int, 'b.int)
-
-    val query = Distinct(input)
-    val optimized = Optimize.execute(query.analyze)
-
-    val correctAnswer = Aggregate(input.output, input.output, input)
-
-    comparePlans(optimized, correctAnswer)
   }
 
   test("remove literals in grouping expression") {

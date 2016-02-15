@@ -91,6 +91,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
+   * Returns the maximum number of rows that this plan may compute.
+   *
+   * Any operator that a Limit can be pushed passed should override this function (e.g., Union).
+   * Any operator that can push through a Limit should override this function (e.g., Project).
+   */
+  def maxRows: Option[Long] = None
+
+  /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it still contains any unresolved placeholders. Implementations of LogicalPlan
    * can override this (e.g.
@@ -139,7 +147,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       case a: Alias =>
         // As the root of the expression, Alias will always take an arbitrary exprId, we need
         // to erase that for equality testing.
-        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
+        val cleanedExprId =
+          Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
         BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
       case other => BindReferences.bindReference(other, input, allowFailures = true)
     }
@@ -222,7 +231,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (resolver(attribute.name, nameParts.head)) {
+    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
@@ -305,6 +314,8 @@ abstract class UnaryNode extends LogicalPlan {
   def child: LogicalPlan
 
   override def children: Seq[LogicalPlan] = child :: Nil
+
+  override protected def validConstraints: Set[Expression] = child.constraints
 }
 
 /**
