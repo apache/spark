@@ -901,7 +901,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     try {
       Utils.copyStream(in, out)
     } finally {
-      in.close()
+      out.close()
     }
   }
 
