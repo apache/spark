@@ -66,6 +66,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      // LimitPushDown, // Disabled until we have whole-stage codegen for limit
       ColumnPruning,
       // Operator combine
       CollapseRepartition,
@@ -126,6 +127,69 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       m.copy(
         deserializer = childWithoutSerialization.output.head,
         child = childWithoutSerialization)
+  }
+}
+
+/**
+ * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
+ */
+object LimitPushDown extends Rule[LogicalPlan] {
+
+  private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case GlobalLimit(expr, child) => child
+      case _ => plan
+    }
+  }
+
+  private def maybePushLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRows) match {
+      case (IntegerLiteral(maxRow), Some(childMaxRows)) if maxRow < childMaxRows =>
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+      case (_, None) =>
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+      case _ => plan
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
+    // descendants whose maxRow is larger. This heuristic is valid assuming there does not exist any
+    // Limit push-down rule that is unable to infer the value of maxRows.
+    // Note: right now Union means UNION ALL, which does not de-duplicate rows, so it is safe to
+    // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
+    // pushdown Limit.
+    case LocalLimit(exp, Union(children)) =>
+      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
+    // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
+    // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
+    // because we need to ensure that rows from the limited side still have an opportunity to match
+    // against all candidates from the non-limited side. We also need to ensure that this limit
+    // pushdown rule will not eventually introduce limits on both sides if it is applied multiple
+    // times. Therefore:
+    //   - If one side is already limited, stack another limit on top if the new limit is smaller.
+    //     The redundant limit will be collapsed by the CombineLimits rule.
+    //   - If neither side is limited, limit the side that is estimated to be bigger.
+    case LocalLimit(exp, join @ Join(left, right, joinType, condition)) =>
+      val newJoin = joinType match {
+        case RightOuter => join.copy(right = maybePushLimit(exp, right))
+        case LeftOuter => join.copy(left = maybePushLimit(exp, left))
+        case FullOuter =>
+          (left.maxRows, right.maxRows) match {
+            case (None, None) =>
+              if (left.statistics.sizeInBytes >= right.statistics.sizeInBytes) {
+                join.copy(left = maybePushLimit(exp, left))
+              } else {
+                join.copy(right = maybePushLimit(exp, right))
+              }
+            case (Some(_), Some(_)) => join
+            case (Some(_), None) => join.copy(left = maybePushLimit(exp, left))
+            case (None, Some(_)) => join.copy(right = maybePushLimit(exp, right))
+
+          }
+        case _ => join
+      }
+      LocalLimit(exp, newJoin)
   }
 }
 
@@ -985,8 +1049,12 @@ object RemoveDispensableExpressions extends Rule[LogicalPlan] {
  */
 object CombineLimits extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ll @ GlobalLimit(le, nl @ GlobalLimit(ne, grandChild)) =>
+      GlobalLimit(Least(Seq(ne, le)), grandChild)
+    case ll @ LocalLimit(le, nl @ LocalLimit(ne, grandChild)) =>
+      LocalLimit(Least(Seq(ne, le)), grandChild)
     case ll @ Limit(le, nl @ Limit(ne, grandChild)) =>
-      Limit(If(LessThan(ne, le), ne, le), grandChild)
+      Limit(Least(Seq(ne, le)), grandChild)
   }
 }
 
