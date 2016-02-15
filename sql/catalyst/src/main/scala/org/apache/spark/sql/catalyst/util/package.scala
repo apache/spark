@@ -149,6 +149,13 @@ package object util {
     "`" + name.replace("`", "``") + "`"
   }
 
+  /**
+   * Returns the string representation of this expression that is safe to be put in
+   * code comments of generated code.
+   */
+  def toCommentSafeString(str: String): String =
+    str.replace("*/", "\\*\\/").replace("\\u", "\\\\u")
+
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {

@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -95,7 +96,7 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
       // as a function and called in advance. Just use it.
-      val code = s"/* ${this.toCommentSafeString} */"
+      val code = s"/* ${toCommentSafeString(this.toString)} */"
       ExprCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
@@ -104,7 +105,7 @@ abstract class Expression extends TreeNode[Expression] {
       ve.code = genCode(ctx, ve)
       if (ve.code != "") {
         // Add `this` in the comment.
-        ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+        ve.copy(s"/* ${toCommentSafeString(this.toString)} */\n" + ve.code.trim)
       } else {
         ve
       }
@@ -208,14 +209,6 @@ abstract class Expression extends TreeNode[Expression] {
   override def simpleString: String = toString
 
   override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
-
-  /**
-   * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code.
-   */
-  protected def toCommentSafeString: String = this.toString
-    .replace("*/", "\\*\\/")
-    .replace("\\u", "\\\\u")
 
   /**
    * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],

@@ -171,6 +171,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("plans with non-SQL expressions") {
     sqlContext.udf.register("foo", (_: Int) * 2)
-    assert(new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL.isEmpty)
+    intercept[UnsupportedOperationException](new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL)
   }
 }

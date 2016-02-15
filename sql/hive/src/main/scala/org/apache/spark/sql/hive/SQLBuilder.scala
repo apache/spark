@@ -21,10 +21,10 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{NonSQLExpression, Attribute, NamedExpression, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -43,6 +43,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
     try {
+      canonicalizedPlan.transformAllExpressions {
+        case e: NonSQLExpression =>
+          throw new UnsupportedOperationException(
+            s"Expression $e doesn't have a SQL representation"
+          )
+        case e => e
+      }
+
       val generatedSQL = toSQL(canonicalizedPlan)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
