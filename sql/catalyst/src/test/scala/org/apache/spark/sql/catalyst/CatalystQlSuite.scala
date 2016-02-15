@@ -201,4 +201,13 @@ class CatalystQlSuite extends PlanTest {
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
   }
+
+  test("nesting UNION") {
+    parser.parsePlan("SELECT  `u_1`.`id` FROM (((SELECT  `t0`.`id` FROM `default`.`t0`) " +
+      "UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) UNION ALL " +
+      "(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1")
+    parser.parsePlan("SELECT  `u_1`.`id` FROM ((SELECT  `t0`.`id` FROM `default`.`t0`) " +
+      "UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`) UNION ALL " +
+      "(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1")
+  }
 }
