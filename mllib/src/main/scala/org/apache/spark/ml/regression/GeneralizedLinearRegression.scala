@@ -305,12 +305,13 @@ private[ml] abstract class Family(val link: Link) extends Serializable {
     eta + (y - x) * link.deriv(x)
   }
 
-  /** Linear predictors based on given mu. */
+  /** Linear predictor based on given mu. */
   def predict(mu: Double): Double = this.link.link(clean(mu))
 
-  /** Fitted values based on linear predictors eta. */
+  /** Fitted value based on linear predictor eta. */
   def fitted(eta: Double): Double = clean(this.link.unlink(eta))
 
+  /** Trim the fitted value so that it will be in valid range. */
   def clean(mu: Double): Double = mu
 
   val epsilon: Double = 1E-16
@@ -332,6 +333,16 @@ private[ml] class Gaussian(link: Link = Identity) extends Family(link) {
   }
 
   def variance(mu: Double): Double = 1.0
+
+  override def clean(mu: Double): Double = {
+    if (mu.isNegInfinity) {
+      Double.MinValue
+    } else if (mu.isPosInfinity) {
+      Double.MaxValue
+    } else {
+      mu
+    }
+  }
 }
 
 private[ml] object Gaussian {
@@ -397,6 +408,16 @@ private[ml] class Poisson(link: Link = Log) extends Family(link) {
   }
 
   override def variance(mu: Double): Double = mu
+
+  override def clean(mu: Double): Double = {
+    if (mu < epsilon) {
+      epsilon
+    } else if (mu.isInfinity) {
+      Double.MaxValue
+    } else {
+      mu
+    }
+  }
 }
 
 private[ml] object Poisson {
@@ -424,6 +445,16 @@ private[ml] class Gamma(link: Link = Inverse) extends Family(link) {
   }
 
   override def variance(mu: Double): Double = math.pow(mu, 2.0)
+
+  override def clean(mu: Double): Double = {
+    if (mu < epsilon) {
+      epsilon
+    } else if (mu.isInfinity) {
+      Double.MaxValue
+    } else {
+      mu
+    }
+  }
 }
 
 private[ml] object Gamma {
