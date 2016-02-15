@@ -42,6 +42,15 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
 }
 
 private[kinesis]
+object Utilities {
+    def createCredentials(awsAccessKey: String, awsSecretKey: String) : Option[SerializableAWSCredentials] = {
+        if(awsAccessKey != null && awsSecretKey != null)
+            Some(new SerializableAWSCredentials(awsAccessKey, awsSecretKey))
+        else
+            None
+    }
+}
+
 case class AWSCredentialPool(
      kinesisCredentials: Option[SerializableAWSCredentials], 
      dynamoDBCredentials: Option[SerializableAWSCredentials], 
@@ -50,7 +59,15 @@ case class AWSCredentialPool(
   def this() {
     this(None, None, None);
   }
-    
+
+  def this(kinesisAwsAccessKey: String, kinesisAwsSecretKey: String, 
+           dynamoDBAwsAccessKey: String, dynamoDBAwsSecretKey: String,
+           cloudWatchAwsAccessKey: String, cloudWatchAwsSecretKey: String) {
+    this(Utilities.createCredentials(kinesisAwsAccessKey, kinesisAwsSecretKey),
+         Utilities.createCredentials(dynamoDBAwsAccessKey, dynamoDBAwsSecretKey),
+         Utilities.createCredentials(cloudWatchAwsAccessKey, cloudWatchAwsSecretKey));
+  }
+  
   def getKinesisCredentials() = kinesisCredentials
 
 	/**

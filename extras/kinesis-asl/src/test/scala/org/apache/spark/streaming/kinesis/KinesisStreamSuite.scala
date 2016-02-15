@@ -214,7 +214,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
       Seconds(10), StorageLevel.MEMORY_ONLY,addFive _,
-      Some(serializedKinesisCred),Some(serializedDynamoDbCred),Some(serializedCloudWatchCred))
+      new AWSCredentialPool(Some(serializedKinesisCred),Some(serializedDynamoDbCred),Some(serializedCloudWatchCred)))
 
     val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
     stream.foreachRDD { rdd =>
