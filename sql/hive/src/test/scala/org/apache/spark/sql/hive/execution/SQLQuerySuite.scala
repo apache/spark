@@ -930,7 +930,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("Sorting columns are not in Generate") {
     withTempTable("data") {
       val rdd = sparkContext.makeRDD((1 to 5)
-        .map(i => s"""{"a":[$i, ${i + 1}], "b":"$i", "c":"${i * 2}"}"""))
+        .map(i => s"""{"a":[$i, ${i + 1}], "b":"$i", "c":"${10 - i}", "d":[$i, ${i + 5}]}"""))
       read.json(rdd).registerTempTable("data")
 
       // case 1: missing sort columns are resolvable if join is true
@@ -938,11 +938,19 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("SELECT explode(a) AS val, b FROM data WHERE b < 2 order by val, c"),
         Row(1, "1") :: Row(2, "1") :: Nil)
 
-      // case 2: missing sort columns are not resolvable if join is false
-      val message = intercept[AnalysisException] {
-        sql("SELECT explode(a) AS val FROM data order by val, c")
-      }.getMessage
-      assert(message.contains("cannot resolve \'c\' given input columns: [val]"))
+      // case 2: missing sort columns are resolvable if join is false
+      checkAnswer(
+        sql("SELECT explode(a) AS val FROM data order by val, c"),
+        Seq(1, 2, 2, 3, 3, 4, 4, 5, 5, 6).map(i => Row(i)))
+
+      // case 3: missing sort columns are resolvable if join is true and outer is true
+      checkAnswer(
+        sql(
+          """
+            |SELECT C.val, b FROM data LATERAL VIEW OUTER explode(a) C as val
+            |where b < 2 order by c, val, b
+          """.stripMargin),
+        Row(1, "1") :: Row(2, "1") :: Nil)
     }
   }
 
