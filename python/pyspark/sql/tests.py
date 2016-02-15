@@ -1159,23 +1159,30 @@ class SQLTests(ReusedPySparkTestCase):
         func = lambda row: {"key": row.key + 1, "value": row.value}  # convert row to python dict
         ds2 = ds.mapPartitions2(lambda iterator: map(func, iterator))
         schema = StructType().add("key", IntegerType()).add("value", StringType())
-        ds3 = ds2.applySchema(schema)
+        ds3 = ds2.schema(schema)
         result = ds3.select("key").collect()
         self.assertEqual(result[0][0], 2)
         self.assertEqual(result[1][0], 3)
 
         schema = StructType().add("value", StringType())  # use a different but compatible schema
-        ds3 = ds2.applySchema(schema)
+        ds3 = ds2.schema(schema)
         result = ds3.collect()
         self.assertEqual(result[0][0], "1")
         self.assertEqual(result[1][0], "2")
 
         func = lambda row: row.key * 3
         ds2 = ds.mapPartitions2(lambda iterator: map(func, iterator))
-        ds3 = ds2.applySchema(IntegerType())  # use a flat schema
+        ds3 = ds2.schema(IntegerType())  # use a flat schema
         result = ds3.collect()
         self.assertEqual(result[0][0], 3)
         self.assertEqual(result[1][0], 6)
+
+        result = ds2.collect()  # schema can be inferred automatically
+        self.assertEqual(result[0][0], 3)
+        self.assertEqual(result[1][0], 6)
+
+        # row count should be corrected even no schema is specified.
+        self.assertEqual(ds2.count(), 2)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

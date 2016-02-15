@@ -1374,7 +1374,7 @@ class PipelinedDataFrame(DataFrame):
         self._lazy_rdd = None
 
         if output_schema is not None:
-            # This transformation is applying schema, just copy member variables from prev.
+            # This transformation is adding schema, just copy member variables from prev.
             self.func = func
             self._prev_jdf = prev._prev_jdf
         elif not isinstance(prev, PipelinedDataFrame) or not prev.is_cached:
@@ -1385,16 +1385,22 @@ class PipelinedDataFrame(DataFrame):
             self.func = _pipeline_func(prev.func, func)
             self._prev_jdf = prev._prev_jdf  # maintain the pipeline
 
-    def applySchema(self, schema):
+    def schema(self, schema):
         return PipelinedDataFrame(self, self.func, schema)
 
     @property
     def _jdf(self):
+        from pyspark.sql.types import _infer_type, _merge_type
+
         if self._jdf_val is None:
             if self.output_schema is None:
-                schema = StructType().add("binary", BinaryType(), False, {"pickled": True})
-                final_func = self.func
-            elif isinstance(self.output_schema, StructType):
+                # If no schema is specified, infer it from the whole data set.
+                jrdd = self._prev_jdf.javaToPython()
+                rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+                func = self.func  # assign to a local varible to avoid referencing self in closure.
+                self.output_schema = rdd.mapPartitions(func).map(_infer_type).reduce(_merge_type)
+
+            if isinstance(self.output_schema, StructType):
                 schema = self.output_schema
                 to_row = lambda iterator: map(schema.toInternal, iterator)
                 final_func = _pipeline_func(self.func, to_row)
