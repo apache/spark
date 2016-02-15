@@ -209,19 +209,6 @@ private[execution] object HashedRelation {
       new GeneralHashedRelation(hashTable)
     }
   }
-
-  def apply(
-    canJoinKeyFitWithinLong: Boolean,
-    keys: Seq[Expression],
-    child: SparkPlan,
-    rows: Array[InternalRow]): HashedRelation = {
-    val generator = UnsafeProjection.create(keys, child.output)
-    if (canJoinKeyFitWithinLong) {
-      LongHashedRelation(rows.iterator, generator, rows.length)
-    } else {
-      HashedRelation(rows.iterator, generator, rows.length)
-    }
-  }
 }
 
 /**
@@ -691,5 +678,15 @@ private[joins] object LongHashedRelation {
 /** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
 private[execution] case class HashedRelationBroadcastMode(
     canJoinKeyFitWithinLong: Boolean,
-    keys: Seq[Expression]) extends BroadcastMode
+    keys: Seq[Expression],
+    attributes: Seq[Attribute]) extends BroadcastMode {
+  def apply(rows: Array[InternalRow]): HashedRelation = {
+    val generator = UnsafeProjection.create(keys, attributes)
+    if (canJoinKeyFitWithinLong) {
+      LongHashedRelation(rows.iterator, generator, rows.length)
+    } else {
+      HashedRelation(rows.iterator, generator, rows.length)
+    }
+  }
+}
 

@@ -41,9 +41,9 @@ case class BroadcastLeftSemiJoinHash(
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = if (condition.isEmpty) {
-      HashSetBroadcastMode(rightKeys)
+      HashSetBroadcastMode(rightKeys, right.output)
     } else {
-      HashedRelationBroadcastMode(canJoinKeyFitWithinLong = false, rightKeys)
+      HashedRelationBroadcastMode(canJoinKeyFitWithinLong = false, rightKeys, right.output)
     }
     UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
   }

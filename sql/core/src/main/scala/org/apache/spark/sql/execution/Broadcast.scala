@@ -31,7 +31,6 @@ import org.apache.spark.util.ThreadUtils
  */
 case class Broadcast(
     mode: BroadcastMode,
-    transform: Array[InternalRow] => Any,
     child: SparkPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
@@ -60,7 +59,7 @@ case class Broadcast(
         }.collect()
 
         // Construct and broadcast the relation.
-        sparkContext.broadcast(transform(input))
+        sparkContext.broadcast(mode(input))
       }
     }(Broadcast.executionContext)
   }

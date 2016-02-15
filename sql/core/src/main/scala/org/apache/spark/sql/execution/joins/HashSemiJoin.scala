@@ -82,13 +82,6 @@ trait HashSemiJoin {
 private[execution] object HashSemiJoin {
   def buildKeyHashSet(
     keys: Seq[Expression],
-    plan: SparkPlan,
-    rows: Array[InternalRow]): java.util.HashSet[InternalRow] = {
-    buildKeyHashSet(keys, plan.output, rows.iterator)
-  }
-
-  def buildKeyHashSet(
-    keys: Seq[Expression],
     attributes: Seq[Attribute],
     rows: Iterator[InternalRow]): java.util.HashSet[InternalRow] = {
     val hashSet = new java.util.HashSet[InternalRow]()
@@ -110,4 +103,10 @@ private[execution] object HashSemiJoin {
 }
 
 /** HashSetBroadcastMode requires that the input rows are broadcasted as a set. */
-private[execution] case class HashSetBroadcastMode(keys: Seq[Expression]) extends BroadcastMode
+private[execution] case class HashSetBroadcastMode(
+    keys: Seq[Expression],
+    attributes: Seq[Attribute]) extends BroadcastMode {
+  def apply(rows: Array[InternalRow]): java.util.HashSet[InternalRow] = {
+    HashSemiJoin.buildKeyHashSet(keys, attributes, rows.iterator)
+  }
+}

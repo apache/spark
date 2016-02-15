@@ -48,7 +48,10 @@ case class BroadcastHashOuterJoin(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = HashedRelationBroadcastMode(canJoinKeyFitWithinLong = false, buildKeys)
+    val mode = HashedRelationBroadcastMode(
+      canJoinKeyFitWithinLong = false,
+      buildKeys,
+      buildPlan.output)
     joinType match {
       case RightOuter =>
         BroadcastDistribution(mode) :: UnspecifiedDistribution :: Nil
