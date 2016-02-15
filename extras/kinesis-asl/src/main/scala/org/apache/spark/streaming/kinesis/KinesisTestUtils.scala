@@ -59,13 +59,13 @@ private[kinesis] class KinesisTestUtils extends Logging {
   }
 
   private lazy val dynamoDB = {
-    val dynamoDBClient = new AmazonDynamoDBClient(new ProfileCredentialsProvider(KinesisTestUtils.dynamoDbProfile))
+    val dynamoDBClient = new AmazonDynamoDBClient(new DefaultAWSCredentialsProviderChain())
     dynamoDBClient.setRegion(RegionUtils.getRegion(regionName))
     new DynamoDB(dynamoDBClient)
   }
 
-  private lazy val dynamoDbProfileClient = {
-    val dynamoDBClient = new AmazonDynamoDBClient(new DefaultAWSCredentialsProviderChain())
+  private lazy val profileDynamoDb = {
+    val dynamoDBClient = new AmazonDynamoDBClient(KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.DYNAMODB_PROFILE))
     dynamoDBClient.setRegion(RegionUtils.getRegion(regionName))
     new DynamoDB(dynamoDBClient)
   }
@@ -135,10 +135,13 @@ private[kinesis] class KinesisTestUtils extends Logging {
       val table = dynamoDB.getTable(tableName)
       table.delete()
       table.waitForDelete()
-      if (KinesisTestUtils.cleanUpProfileDynamoTables) {
-        val profileTable = dynamoDbProfileClient.getTable(tableName)
-        profileTable.delete()
-        profileTable.waitForDelete()
+      val defaultAccountAccessKeyId = KinesisTestUtils.getAWSCredentials().getAWSAccessKeyId;
+      val profileAccountAccessKeyId = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.DYNAMODB_PROFILE).getAWSAccessKeyId;
+      if (!defaultAccountAccessKeyId.equals(profileAccountAccessKeyId)) {
+        logInfo(s"Deleting tables in AWS account with profile name $KinesisTestUtils.DYNAMODB_PROFILE");
+        val table = profileDynamoDb.getTable(tableName)
+        table.delete()
+        table.waitForDelete()
       }
     } catch {
       case e: Exception =>
@@ -189,8 +192,8 @@ private[kinesis] object KinesisTestUtils {
   val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
   val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
   val envVarNameForCredentialPoolTests = "ENABLE_CREDENTIAL_POOL_TESTS"
-  final val dynamoDbProfile = "dynamoDB"
-  final val cloudWatchProfile = "cloudWatch"
+  final val DYNAMODB_PROFILE = "dynamoDB"
+  final val CLOUDWATCH_PROFILE = "cloudWatch"
   var cleanUpProfileDynamoTables = false
 
   lazy val shouldRunTests = {
@@ -248,7 +251,7 @@ private[kinesis] object KinesisTestUtils {
   def getAWSProfileCredentials(profile: String): AWSCredentials = {
     Try { new ProfileCredentialsProvider(profile).getCredentials() } match {
       case Success(cred) => {
-        if (profile.equals(KinesisTestUtils.dynamoDbProfile)) {
+        if (profile.equals(KinesisTestUtils.DYNAMODB_PROFILE)) {
           KinesisTestUtils.cleanUpProfileDynamoTables = true;
         }
         cred

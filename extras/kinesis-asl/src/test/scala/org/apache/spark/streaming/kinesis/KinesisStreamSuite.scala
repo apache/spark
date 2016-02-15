@@ -202,12 +202,12 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
    * and you have to set the system environment variable RUN_KINESIS_TESTS=1 .
    * This test uses the credential pool to set different AWS account credentials for Kinesis, Dynamo DB and cloudWatch 
    */
-    testIfEnabled("multiple AWS account setup with Credentialpool") ({
+    testIfEnabled("Multiple AWS account setup with Credentialpool") ({
     logInfo(" Multiple AWS Account setup test with Credentialpool")
     def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
     val awsKinesisCredentials = KinesisTestUtils.getAWSCredentials()
-    val awsDynamoDBCredentials = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.dynamoDbProfile)
-    val awsCloudWatchCredentials = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.cloudWatchProfile)
+    val awsDynamoDBCredentials = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.DYNAMODB_PROFILE)
+    val awsCloudWatchCredentials = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.CLOUDWATCH_PROFILE)
     val serializedKinesisCred = SerializableAWSCredentials(awsKinesisCredentials.getAWSAccessKeyId,awsKinesisCredentials.getAWSSecretKey)
     val serializedDynamoDbCred = SerializableAWSCredentials(awsDynamoDBCredentials.getAWSAccessKeyId,awsDynamoDBCredentials.getAWSSecretKey)
     val serializedCloudWatchCred = SerializableAWSCredentials(awsCloudWatchCredentials.getAWSAccessKeyId,awsCloudWatchCredentials.getAWSSecretKey)
