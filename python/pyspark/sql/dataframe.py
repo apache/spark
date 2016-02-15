@@ -1405,10 +1405,10 @@ class PipelinedDataFrame(DataFrame):
                 to_row = lambda iterator: map(converter, iterator)
                 final_func = _pipeline_func(self.func, to_row)
 
-            self._jdf_val = self._prev_jdf.pythonMapPartitions(self._wrap_function(final_func), schema.json())
+            wrapped_func = self._wrap_function(final_func)
+            self._jdf_val = self._prev_jdf.pythonMapPartitions(wrapped_func, schema.json())
 
         return self._jdf_val
-
 
     def _wrap_function(self, f):
         from pyspark.rdd import _prepare_for_python_RDD
