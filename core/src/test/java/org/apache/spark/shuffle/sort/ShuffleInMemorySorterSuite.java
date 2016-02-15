@@ -75,6 +75,9 @@ public class ShuffleInMemorySorterSuite {
     // Write the records into the data page and store pointers into the sorter
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
+      if (!sorter.hasSpaceForAnotherRecord()) {
+        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
+      }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final byte[] strBytes = str.getBytes("utf-8");
       Platform.putInt(baseObject, position, strBytes.length);
@@ -114,6 +117,9 @@ public class ShuffleInMemorySorterSuite {
     int[] numbersToSort = new int[128000];
     Random random = new Random(16);
     for (int i = 0; i < numbersToSort.length; i++) {
+      if (!sorter.hasSpaceForAnotherRecord()) {
+        sorter.expandPointerArray(consumer.allocateArray(sorter.numRecords() * 2));
+      }
       numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
       sorter.insertRecord(0, numbersToSort[i]);
     }

@@ -1695,7 +1695,7 @@ on all of the worker nodes, as they will need access to the Hive serialization a
 
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
  `hdfs-site.xml` (for HDFS configuration) file in `conf/`. Please note when running
-the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib_managed/jars` directory
+the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib` directory
 and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
 YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
 `spark-submit` command.
@@ -1869,7 +1869,7 @@ spark classpath. For example, to connect to postgres from the Spark Shell you wo
 following command:
 
 {% highlight bash %}
-SPARK_CLASSPATH=postgresql-9.3-1102-jdbc41.jar bin/spark-shell
+bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
 Tables from the remote database can be loaded as a DataFrame or Spark SQL Temporary table using
@@ -2389,7 +2389,7 @@ let user control table caching explicitly:
     CACHE TABLE logs_last_month;
     UNCACHE TABLE logs_last_month;
 
-**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don’t need to trigger cache materialization manually anymore.
+**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don't need to trigger cache materialization manually anymore.
 
 Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
 

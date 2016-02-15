@@ -770,14 +770,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
-      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+      .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
     TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
-      .map(x => Pair(x.getString(0), x.getInt(1)))
+      .map(x => (x.getString(0), x.getInt(1)))
 
-    assert(results === Array(Pair("foo", 4)))
+    assert(results === Array(("foo", 4)))
     TestHive.reset()
   }
 

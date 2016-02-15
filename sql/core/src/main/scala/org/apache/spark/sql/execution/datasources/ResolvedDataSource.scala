@@ -29,10 +29,10 @@ import org.apache.hadoop.util.StringUtils
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
-
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
@@ -90,6 +90,36 @@ object ResolvedDataSource extends Logging {
           s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
           "please specify the fully qualified class name.")
     }
+  }
+
+  def createSource(
+      sqlContext: SQLContext,
+      userSpecifiedSchema: Option[StructType],
+      providerName: String,
+      options: Map[String, String]): Source = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSourceProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed reading")
+    }
+
+    provider.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+  }
+
+  def createSink(
+      sqlContext: SQLContext,
+      providerName: String,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Sink = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSinkProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed writing")
+    }
+
+    provider.createSink(sqlContext, options, partitionColumns)
   }
 
   /** Create a [[ResolvedDataSource]] for reading data in. */
