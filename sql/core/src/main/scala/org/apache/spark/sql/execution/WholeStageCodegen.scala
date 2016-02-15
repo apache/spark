@@ -350,7 +350,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     builder.append(simpleString)
     builder.append("\n")
 
-    plan.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
+    plan.generateTreeString(depth + 2, lastChildren :+ children.isEmpty :+ true, builder)
     if (children.nonEmpty) {
       children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
       children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
