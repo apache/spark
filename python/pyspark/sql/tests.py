@@ -1155,14 +1155,27 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_dataset(self):
         ds = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
-        process = lambda row: {"key": 33, "value": "abc"}
-        ds2 = ds.mapPartitions2(lambda iterator: map(process, iterator))
 
+        func = lambda row: {"key": row.key + 1, "value": row.value}  # convert row to python dict
+        ds2 = ds.mapPartitions2(lambda iterator: map(func, iterator))
         schema = StructType().add("key", IntegerType()).add("value", StringType())
         ds3 = ds2.applySchema(schema)
         result = ds3.select("key").collect()
-        self.assertEqual(result[0][0], 33)
-        self.assertEqual(result[1][0], 33)
+        self.assertEqual(result[0][0], 2)
+        self.assertEqual(result[1][0], 3)
+
+        schema = StructType().add("value", StringType())  # use a different but compatible schema
+        ds3 = ds2.applySchema(schema)
+        result = ds3.collect()
+        self.assertEqual(result[0][0], "1")
+        self.assertEqual(result[1][0], "2")
+
+        func = lambda row: row.key * 3
+        ds2 = ds.mapPartitions2(lambda iterator: map(func, iterator))
+        ds3 = ds2.applySchema(IntegerType())  # use a flat schema
+        result = ds3.collect()
+        self.assertEqual(result[0][0], 3)
+        self.assertEqual(result[1][0], 6)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

@@ -285,12 +285,6 @@ class DataFrame(object):
         return PipelinedDataFrame(self, func)
 
     @ignore_unicode_prefix
-    @since(2.0)
-    def applySchema(self, schema):
-        """ TODO """
-        return PipelinedDataFrame(self, lambda iterator: map(schema.toInternal, iterator), schema)
-
-    @ignore_unicode_prefix
     @since(1.3)
     def flatMap(self, f):
         """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
@@ -1370,50 +1364,62 @@ class PipelinedDataFrame(DataFrame):
 
     """ TODO """
 
-    schemaOfPickled = StructType().add("binary", BinaryType(), False, {"pickled": True})
-
-    def __init__(self, prev, func, schema=None):
-        if schema is None:
-            self._schema = self.schemaOfPickled
-        else:
-            self._schema = schema
-
-        self.func = func
-        self._prev_jdf = prev._jdf  # maintain the pipeline
+    def __init__(self, prev, func, output_schema=None):
+        self.output_schema = output_schema
+        self._schema = None
         self.is_cached = False
         self.sql_ctx = prev.sql_ctx
         self._sc = self.sql_ctx and self.sql_ctx._sc
         self._jdf_val = None
         self._lazy_rdd = None
 
-        if not isinstance(prev, PipelinedDataFrame) or not prev.is_cached:
+        if output_schema is not None:
+            # This transformation is applying schema, just copy member variables from prev.
+            self.func = func
+            self._prev_jdf = prev._prev_jdf
+        elif not isinstance(prev, PipelinedDataFrame) or not prev.is_cached:
             # This transformation is the first in its stage:
-            self.prev_func = None
-        elif prev._schema is not self.schemaOfPickled and self._schema is not self.schemaOfPickled:
-            # The previous operation is also adding schema, override it.
-            self.prev_func = prev.prev_func
+            self.func = func
+            self._prev_jdf = prev._jdf
         else:
-            self.prev_func = _pipeline_func(prev.prev_func, prev.func)
+            self.func = _pipeline_func(prev.func, func)
+            self._prev_jdf = prev._prev_jdf  # maintain the pipeline
+
+    def applySchema(self, schema):
+        return PipelinedDataFrame(self, self.func, schema)
 
     @property
     def _jdf(self):
         if self._jdf_val is None:
-            final_func = _pipeline_func(self.prev_func, self.func)
-            self._jdf_val = self._prev_jdf.pythonMapPartitions(
-                _wrap_function(final_func, self._sc), self._schema.json())
+            if self.output_schema is None:
+                schema = StructType().add("binary", BinaryType(), False, {"pickled": True})
+                final_func = self.func
+            elif isinstance(self.output_schema, StructType):
+                schema = self.output_schema
+                to_row = lambda iterator: map(schema.toInternal, iterator)
+                final_func = _pipeline_func(self.func, to_row)
+            else:
+                data_type = self.output_schema
+                schema = StructType().add("value", data_type)
+                converter = lambda obj: (data_type.toInternal(obj), )
+                to_row = lambda iterator: map(converter, iterator)
+                final_func = _pipeline_func(self.func, to_row)
+
+            self._jdf_val = self._prev_jdf.pythonMapPartitions(self._wrap_function(final_func), schema.json())
 
         return self._jdf_val
 
 
-def _wrap_function(f, sc):
-    from pyspark.rdd import _prepare_for_python_RDD
-    from pyspark.serializers import AutoBatchedSerializer
+    def _wrap_function(self, f):
+        from pyspark.rdd import _prepare_for_python_RDD
+        from pyspark.serializers import AutoBatchedSerializer
 
-    ser = AutoBatchedSerializer(PickleSerializer())
-    command = (lambda _, iterator: f(iterator), None, ser, ser)
-    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
-    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
-                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+        ser = AutoBatchedSerializer(PickleSerializer())
+        command = (lambda _, iterator: f(iterator), None, ser, ser)
+        sc = self._sc
+        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+        return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                      sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
 def _pipeline_func(prev_func, next_func):
