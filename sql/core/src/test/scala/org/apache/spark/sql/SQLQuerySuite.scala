@@ -1834,6 +1834,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       """.stripMargin).select($"r.*"),
       Row(3, 2) :: Nil)
 
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
+
     // With GROUP BY
     checkAnswer(sql(
       """

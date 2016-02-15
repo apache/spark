@@ -362,12 +362,26 @@ class Analyzer(
       exprs.flatMap {
         case s: Star => s.expand(child, resolver)
         case e =>
-          e.transformDown {
+          e.transformUp {
+            // ResolveFunctions can handle the case when the number of variables is not valid
             case f1: UnresolvedFunction if containsStar(f1.children) =>
               f1.copy(children = f1.children.flatMap {
                 case s: Star => s.expand(child, resolver)
                 case o => o :: Nil
               })
+            case c: CreateStruct if containsStar(c.children) =>
+              c.copy(children = c.children.flatMap {
+                case s: Star => s.expand(child, resolver)
+                case o => o :: Nil
+              })
+            case c: CreateStructUnsafe if containsStar(c.children) =>
+              c.copy(children = c.children.flatMap {
+                case s: Star => s.expand(child, resolver)
+                case o => o :: Nil
+              })
+            // count(*) has been replaced by count(1)
+            case f2: ExpectsInputTypes if containsStar(f2.children) =>
+              failAnalysis(s"Invalid usage of '*' in function '${f2.prettyName}'")
           } :: Nil
       }
     }
