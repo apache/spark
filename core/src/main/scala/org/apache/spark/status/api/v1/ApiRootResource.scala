@@ -20,9 +20,10 @@ import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
+import javax.ws.rs.ext.Provider
 
-import com.sun.jersey.api.core.ResourceConfig
-import com.sun.jersey.spi.container.servlet.ServletContainer
+import org.glassfish.jersey.server.{ServerProperties, ResourceConfig}
+import org.glassfish.jersey.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
@@ -185,12 +186,7 @@ private[spark] object ApiRootResource {
     val jerseyContext = new ServletContextHandler(ServletContextHandler.NO_SESSIONS)
     jerseyContext.setContextPath("/api")
     val holder: ServletHolder = new ServletHolder(classOf[ServletContainer])
-    holder.setInitParameter("com.sun.jersey.config.property.resourceConfigClass",
-      "com.sun.jersey.api.core.PackagesResourceConfig")
-    holder.setInitParameter("com.sun.jersey.config.property.packages",
-      "org.apache.spark.status.api.v1")
-    holder.setInitParameter(ResourceConfig.PROPERTY_CONTAINER_REQUEST_FILTERS,
-      classOf[SecurityFilter].getCanonicalName)
+    holder.setInitParameter(ServerProperties.PROVIDER_PACKAGES, "org.apache.spark.status.api.v1")
     UIRootFromServletContext.setUiRoot(jerseyContext, uiRoot)
     jerseyContext.addServlet(holder, "/*")
     jerseyContext

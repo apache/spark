@@ -69,15 +69,15 @@
       <artifactId>hive-beeline</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
+      <groupId>org.glassfish.jersey</groupId>
       <artifactId>jersey-core</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
+      <groupId>org.glassfish.jersey</groupId>
       <artifactId>jersey-json</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
+      <groupId>org.glassfish.jersey</groupId>
       <artifactId>jersey-server</artifactId>
     </dependency>
     <!-- Added for selenium: -->
