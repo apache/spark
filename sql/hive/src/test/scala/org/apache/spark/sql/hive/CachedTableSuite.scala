@@ -41,7 +41,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
 
   def isMaterialized(rddId: Int): Boolean = {
     val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
-    maybeBlock.foreach(_ => sparkContext.env.blockManager.unpin(RDDBlockId(rddId, 0)))
+    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
     maybeBlock.nonEmpty
   }
 
