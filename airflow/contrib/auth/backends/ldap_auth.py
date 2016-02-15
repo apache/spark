@@ -48,7 +48,7 @@ def get_ldap_connection(dn=None, password=None):
 
     if not conn.bind():
         LOG.error("Cannot bind to ldap server: %s ", conn.last_error)
-        raise AuthenticationError("Username or password incorrect")
+        raise AuthenticationError("Cannot bind to ldap server")
 
     return conn
 
@@ -122,6 +122,12 @@ class LdapUser(models.User):
         entry = conn.response[0]
 
         conn.unbind()
+
+        if not 'dn' in entry:
+            # The search fitler for the user did not return any values, so an
+            # invalid user was used for credentials.
+            raise AuthenticationError("Invalid username or password")
+
         try:
             conn = get_ldap_connection(entry['dn'], password)
         except KeyError as e:
