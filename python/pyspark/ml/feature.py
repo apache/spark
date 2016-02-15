@@ -1688,6 +1688,23 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
     A feature transformer that filters out stop words from input.
     Note: null values from input array are preserved unless adding null to stopWords explicitly.
 
+    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["text"])
+    >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
+    >>> remover.transform(df).head()
+    Row(text=[u'a', u'b', u'c'], words=[u'a', u'c'])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> remover.save(featurePath)
+    >>> loadedRemover = StopWordsRemover.load(featurePath)
+    >>> loadedRemover.transform(df).head().words == remover.transform(df).head().words
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
+
     .. versionadded:: 1.6.0
     """
 
@@ -1756,7 +1773,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
 
 @inherit_doc
 @ignore_unicode_prefix
-class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
+class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1780,6 +1797,18 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> tokenizer.save(featurePath)
+    >>> loadedTokenizer = Tokenizer.load(featurePath)
+    >>> loadedTokenizer.transform(df).head().tokens == tokenizer.transform(df).head().tokens
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -1806,7 +1835,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
+class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1821,6 +1850,18 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
     >>> params = {vecAssembler.inputCols: ["b", "a"], vecAssembler.outputCol: "vector"}
     >>> vecAssembler.transform(df, params).head().vector
     DenseVector([0.0, 1.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> vecAssembler.save(featurePath)
+    >>> loadedAssembler = VectorAssembler.load(featurePath)
+    >>> loadedAssembler.transform(df).head().freqs == vecAssembler.transform(df).head().freqs
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1847,7 +1888,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol):
 
 
 @inherit_doc
-class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
+class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1903,6 +1944,25 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
     >>> model2 = indexer.fit(df, params)
     >>> model2.transform(df).head().vector
     DenseVector([1.0, 0.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> indexer.save(featurePath)
+    >>> loadedIndexer = VectorIndexer.load(featurePath)
+    >>> loadedIndexer.getMaxCategories() == indexer.getMaxCategories()
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = VectorIndexerModel.load(modelPath)
+    >>> loadedModel.numFeatures == model.numFeatures
+    True
+    >>> loadedModel.categoryMaps == model.categoryMaps
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1952,7 +2012,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol):
         return VectorIndexerModel(java_model)
 
 
-class VectorIndexerModel(JavaModel):
+class VectorIndexerModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -1981,7 +2041,7 @@ class VectorIndexerModel(JavaModel):
 
 
 @inherit_doc
-class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
+class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -2003,6 +2063,20 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> vs = VectorSlicer(inputCol="features", outputCol="sliced", indices=[1, 4])
     >>> vs.transform(df).head().sliced
     DenseVector([2.3, 1.0])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> vs.save(featurePath)
+    >>> loadedVs = VectorSlicer.load(featurePath)
+    >>> loadedVs.getIndices() == vs.getIndices()
+    True
+    >>> loadedVs.getNames() == vs.getNames()
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -2021,6 +2095,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
         """
         super(VectorSlicer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSlicer", self.uid)
+        self._setDefault(indices=[], names=[])
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -2067,7 +2142,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol):
 
 @inherit_doc
 @ignore_unicode_prefix
-class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol):
+class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, HasOutputCol,
+               MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -2076,7 +2152,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
 
     >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
     >>> doc = sqlContext.createDataFrame([(sent,), (sent,)], ["sentence"])
-    >>> model = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model").fit(doc)
+    >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
+    >>> model = word2Vec.fit(doc)
     >>> model.getVectors().show()
     +----+--------------------+
     |word|              vector|
@@ -2096,6 +2173,27 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     ...
     >>> model.transform(doc).head().model
     DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> word2Vec.save(featurePath)
+    >>> loadedWord2Vec = Word2Vec.load(featurePath)
+    >>> loadedWord2Vec.getVectorSize() == word2Vec.getVectorSize()
+    True
+    >>> loadedWord2Vec.getNumPartitions() == word2Vec.getNumPartitions()
+    True
+    >>> loadedWord2Vec.getMinCount() == word2Vec.getMinCount()
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = Word2VecModel.load(modelPath)
+    >>> loadedModel.transform(doc).head().model == model.transform(doc).head().model
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -2183,7 +2281,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         return Word2VecModel(java_model)
 
 
-class Word2VecModel(JavaModel):
+class Word2VecModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -2214,7 +2312,7 @@ class Word2VecModel(JavaModel):
 
 
 @inherit_doc
-class PCA(JavaEstimator, HasInputCol, HasOutputCol):
+class PCA(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -2231,6 +2329,25 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
     DenseVector([1.648..., -4.013...])
     >>> model.explainedVariance
     DenseVector([0.794..., 0.205...])
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> pca.save(featurePath)
+    >>> loadedPca = PCA.load(featurePath)
+    >>> loadedPca.getK() == pca.getK()
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = PCAModel.load(modelPath)
+    >>> loadedModel.pc == model.pc
+    True
+    >>> loadedModel.explainedVariance == model.explainedVariance
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.5.0
     """
@@ -2276,7 +2393,7 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol):
         return PCAModel(java_model)
 
 
-class PCAModel(JavaModel):
+class PCAModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -2395,7 +2512,8 @@ class RFormulaModel(JavaModel):
 
 
 @inherit_doc
-class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
+class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, MLReadable,
+                    MLWritable):
     """
     .. note:: Experimental
 
@@ -2414,6 +2532,23 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
     DenseVector([1.0])
     >>> model.selectedFeatures
     [3]
+    >>> import tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> featurePath = path + "/feature-transformer"
+    >>> selector.save(featurePath)
+    >>> loadedSelector = ChiSqSelector.load(featurePath)
+    >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
+    True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = ChiSqSelectorModel.load(modelPath)
+    >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 2.0.0
     """
@@ -2471,7 +2606,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol):
         return ChiSqSelectorModel(java_model)
 
 
-class ChiSqSelectorModel(JavaModel):
+class ChiSqSelectorModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
