@@ -48,8 +48,6 @@ case class BroadcastHashJoin(
   extends BinaryNode with HashJoin with CodegenSupport {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   val timeout: Duration = {
@@ -70,11 +68,6 @@ case class BroadcastHashJoin(
   // for the same query.
   @transient
   private lazy val broadcastFuture = {
-    val numBuildRows = buildSide match {
-      case BuildLeft => longMetric("numLeftRows")
-      case BuildRight => longMetric("numRightRows")
-    }
-
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -84,14 +77,19 @@ case class BroadcastHashJoin(
         // Note that we use .execute().collect() because we don't want to convert data to Scala
         // types
         val input: Array[InternalRow] = buildPlan.execute().map { row =>
-          numBuildRows += 1
           row.copy()
         }.collect()
         // The following line doesn't run in a job so we cannot track the metric value. However, we
         // have already tracked it in the above lines. So here we can use
         // `SQLMetrics.nullLongMetric` to ignore it.
-        val hashed = HashedRelation(
-          input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+        // TODO: move this check into HashedRelation
+        val hashed = if (canJoinKeyFitWithinLong) {
+          LongHashedRelation(
+            input.iterator, buildSideKeyGenerator, input.size)
+        } else {
+          HashedRelation(
+            input.iterator, buildSideKeyGenerator, input.size)
+        }
         sparkContext.broadcast(hashed)
       }
     }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
@@ -102,25 +100,18 @@ case class BroadcastHashJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = buildSide match {
-      case BuildLeft => longMetric("numRightRows")
-      case BuildRight => longMetric("numLeftRows")
-    }
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = Await.result(broadcastFuture, timeout)
 
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
-      hashedRelation match {
-        case unsafe: UnsafeHashedRelation =>
-          TaskContext.get().taskMetrics().incPeakExecutionMemory(unsafe.getUnsafeSize)
-        case _ =>
-      }
-      hashJoin(streamedIter, numStreamedRows, hashedRelation, numOutputRows)
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
+      hashJoin(streamedIter, hashedRelation, numOutputRows)
     }
   }
 
+  private var broadcastRelation: Broadcast[HashedRelation] = _
   // the term for hash relation
   private var relationTerm: String = _
 
@@ -129,16 +120,15 @@ case class BroadcastHashJoin(
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    // create a name for HashRelation
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
+    // create a name for HashedRelation
+    broadcastRelation = Await.result(broadcastFuture, timeout)
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     relationTerm = ctx.freshName("relation")
-    // TODO: create specialized HashRelation for single join key
-    val clsName = classOf[UnsafeHashedRelation].getName
+    val clsName = broadcastRelation.value.getClass.getName
     ctx.addMutableState(clsName, relationTerm,
       s"""
          | $relationTerm = ($clsName) $broadcast.value();
-         | incPeakExecutionMemory($relationTerm.getUnsafeSize());
+         | incPeakExecutionMemory($relationTerm.getMemorySize());
        """.stripMargin)
 
     s"""
@@ -147,23 +137,24 @@ case class BroadcastHashJoin(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    // generate the key as UnsafeRow
+    // generate the key as UnsafeRow or Long
     ctx.currentVars = input
-    val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
-    val keyVal = GenerateUnsafeProjection.createCode(ctx, keyExpr)
-    val keyTerm = keyVal.value
-    val anyNull = if (keyExpr.exists(_.nullable)) s"$keyTerm.anyNull()" else "false"
+    val (keyVal, anyNull) = if (canJoinKeyFitWithinLong) {
+      val expr = rewriteKeyExpr(streamedKeys).head
+      val ev = BindReferences.bindReference(expr, streamedPlan.output).gen(ctx)
+      (ev, ev.isNull)
+    } else {
+      val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
+      val ev = GenerateUnsafeProjection.createCode(ctx, keyExpr)
+      (ev, s"${ev.value}.anyNull()")
+    }
 
     // find the matches from HashedRelation
-    val matches = ctx.freshName("matches")
-    val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
-    val i = ctx.freshName("i")
-    val size = ctx.freshName("size")
-    val row = ctx.freshName("row")
+    val matched = ctx.freshName("matched")
 
     // create variables for output
     ctx.currentVars = null
-    ctx.INPUT_ROW = row
+    ctx.INPUT_ROW = matched
     val buildColumns = buildPlan.output.zipWithIndex.map { case (a, i) =>
       BoundReference(i, a.dataType, a.nullable).gen(ctx)
     }
@@ -172,34 +163,58 @@ case class BroadcastHashJoin(
       case BuildRight => input ++ buildColumns
     }
 
-    val ouputCode = if (condition.isDefined) {
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val outputCode = if (condition.isDefined) {
       // filter the output via condition
       ctx.currentVars = resultVars
       val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
       s"""
          | ${ev.code}
          | if (!${ev.isNull} && ${ev.value}) {
+         |   $numOutput.add(1);
          |   ${consume(ctx, resultVars)}
          | }
        """.stripMargin
     } else {
-      consume(ctx, resultVars)
+      s"""
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
+       """.stripMargin
     }
 
-    s"""
-       | // generate join key
-       | ${keyVal.code}
-       | // find matches from HashRelation
-       | $bufferType $matches = $anyNull ? null : ($bufferType) $relationTerm.get($keyTerm);
-       | if ($matches != null) {
-       |   int $size = $matches.size();
-       |   for (int $i = 0; $i < $size; $i++) {
-       |     UnsafeRow $row = (UnsafeRow) $matches.apply($i);
-       |     ${buildColumns.map(_.code).mkString("\n")}
-       |     $ouputCode
-       |   }
-       | }
+    if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
+      s"""
+         | // generate join key
+         | ${keyVal.code}
+         | // find matches from HashedRelation
+         | UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyVal.value});
+         | if ($matched != null) {
+         |   ${buildColumns.map(_.code).mkString("\n")}
+         |   $outputCode
+         | }
      """.stripMargin
+
+    } else {
+      val matches = ctx.freshName("matches")
+      val bufferType = classOf[CompactBuffer[UnsafeRow]].getName
+      val i = ctx.freshName("i")
+      val size = ctx.freshName("size")
+      s"""
+         | // generate join key
+         | ${keyVal.code}
+         | // find matches from HashRelation
+         | $bufferType $matches = ${anyNull} ? null :
+         |  ($bufferType) $relationTerm.get(${keyVal.value});
+         | if ($matches != null) {
+         |   int $size = $matches.size();
+         |   for (int $i = 0; $i < $size; $i++) {
+         |     UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
+         |     ${buildColumns.map(_.code).mkString("\n")}
+         |     $outputCode
+         |   }
+         | }
+     """.stripMargin
+    }
   }
 }
 

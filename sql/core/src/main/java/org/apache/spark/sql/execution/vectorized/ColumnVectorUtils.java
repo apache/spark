@@ -18,11 +18,13 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.Date;
 import java.util.Iterator;
 import java.util.List;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 
@@ -100,6 +102,8 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         dst.getChildColumn(0).appendInt(c.months);
         dst.getChildColumn(1).appendLong(c.microseconds);
+      } else if (t instanceof DateType) {
+        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
         throw new NotImplementedException("Type " + t);
       }

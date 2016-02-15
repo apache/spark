@@ -87,7 +87,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("create") {
-    val accums = create()
+    val accums = createAll()
     val shuffleReadAccums = createShuffleReadAccums()
     val shuffleWriteAccums = createShuffleWriteAccums()
     val inputAccums = createInputAccums()
@@ -123,7 +123,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("naming") {
-    val accums = create()
+    val accums = createAll()
     val shuffleReadAccums = createShuffleReadAccums()
     val shuffleWriteAccums = createShuffleWriteAccums()
     val inputAccums = createInputAccums()
@@ -291,7 +291,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
     }
     assert(Accumulators.originals.isEmpty)
     sc.parallelize(1 to 100).map { i => (i, i) }.reduceByKey { _ + _ }.count()
-    val internalAccums = InternalAccumulator.create()
+    val internalAccums = InternalAccumulator.createAll()
     // We ran 2 stages, so we should have 2 sets of internal accumulators, 1 for each stage
     assert(Accumulators.originals.size === internalAccums.size * 2)
     val accumsRegistered = sc.cleaner match {

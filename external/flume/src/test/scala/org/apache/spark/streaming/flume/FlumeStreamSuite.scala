@@ -17,8 +17,9 @@
 
 package org.apache.spark.streaming.flume
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -51,14 +52,14 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
     val input = (1 to 100).map { _.toString }
     val utils = new FlumeTestUtils
     try {
-      val outputBuffer = startContext(utils.getTestPort(), testCompression)
+      val outputQueue = startContext(utils.getTestPort(), testCompression)
 
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
         utils.writeInput(input.asJava, testCompression)
       }
 
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        val outputEvents = outputBuffer.flatten.map { _.event }
+        val outputEvents = outputQueue.asScala.toSeq.flatten.map { _.event }
         outputEvents.foreach {
           event =>
             event.getHeaders.get("test") should be("header")
@@ -76,16 +77,15 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
 
   /** Setup and start the streaming context */
   private def startContext(
-      testPort: Int, testCompression: Boolean): (ArrayBuffer[Seq[SparkFlumeEvent]]) = {
+      testPort: Int, testCompression: Boolean): (ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]) = {
     ssc = new StreamingContext(conf, Milliseconds(200))
     val flumeStream = FlumeUtils.createStream(
       ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK, testCompression)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputQueue)
     outputStream.register()
     ssc.start()
-    outputBuffer
+    outputQueue
   }
 
   /** Class to create socket channel with compression */
