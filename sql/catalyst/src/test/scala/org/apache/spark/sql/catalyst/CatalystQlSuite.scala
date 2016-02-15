@@ -203,11 +203,37 @@ class CatalystQlSuite extends PlanTest {
   }
 
   test("nesting UNION") {
-    parser.parsePlan("SELECT  `u_1`.`id` FROM (((SELECT  `t0`.`id` FROM `default`.`t0`) " +
-      "UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) UNION ALL " +
-      "(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1")
-    parser.parsePlan("SELECT  `u_1`.`id` FROM ((SELECT  `t0`.`id` FROM `default`.`t0`) " +
-      "UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`) UNION ALL " +
-      "(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1")
+    val parsed = parser.parsePlan(
+      """
+       |SELECT  `u_1`.`id` FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) UNION ALL
+       |(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+      """.stripMargin)
+
+    val expected = Project(
+      UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
+      Subquery("u_1",
+        Union(
+          Union(
+            Project(
+              UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0", Some("default")), None)),
+            Project(
+              UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0", Some("default")), None))),
+          Project(
+            UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+            UnresolvedRelation(TableIdentifier("t0", Some("default")), None)))))
+
+    comparePlans(parsed, expected)
+
+    val parsed2 = parser.parsePlan(
+      """
+       |SELECT  `u_1`.`id` FROM ((SELECT  `t0`.`id` FROM `default`.`t0`)
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`) UNION ALL
+       |(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+      """.stripMargin)
+
+    comparePlans(parsed2, expected)
   }
 }
