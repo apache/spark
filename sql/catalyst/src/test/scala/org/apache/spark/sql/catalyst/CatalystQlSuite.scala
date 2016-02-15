@@ -227,13 +227,42 @@ class CatalystQlSuite extends PlanTest {
 
     comparePlans(parsed, expected)
 
-    val parsed2 = parser.parsePlan(
+    val parsedSame = parser.parsePlan(
       """
        |SELECT  `u_1`.`id` FROM ((SELECT  `t0`.`id` FROM `default`.`t0`)
        |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`) UNION ALL
        |(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
       """.stripMargin)
 
-    comparePlans(parsed2, expected)
+    comparePlans(parsedSame, expected)
+
+    val parsed2 = parser.parsePlan(
+      """
+       |SELECT  `u_1`.`id` FROM ((((SELECT  `t0`.`id` FROM `default`.`t0`)
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) UNION ALL
+       |(SELECT  `t0`.`id` FROM `default`.`t0`))
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+      """.stripMargin)
+
+    val expected2 = Project(
+      UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
+      Subquery("u_1",
+        Union(
+          Union(
+            Union(
+              Project(
+                UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+                UnresolvedRelation(TableIdentifier("t0", Some("default")), None)),
+              Project(
+                UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+                UnresolvedRelation(TableIdentifier("t0", Some("default")), None))),
+            Project(
+              UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0", Some("default")), None))),
+          Project(
+            UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+            UnresolvedRelation(TableIdentifier("t0", Some("default")), None)))))
+
+    comparePlans(parsed2, expected2)
   }
 }
