@@ -29,6 +29,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     sql("DROP TABLE IF EXISTS t0")
     sql("DROP TABLE IF EXISTS t1")
     sql("DROP TABLE IF EXISTS t2")
+
     sqlContext.range(10).write.saveAsTable("t0")
 
     sqlContext
@@ -172,5 +173,57 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   test("plans with non-SQL expressions") {
     sqlContext.udf.register("foo", (_: Int) * 2)
     intercept[UnsupportedOperationException](new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL)
+  }
+
+  test("no back-ticks or double quotes in column names") {
+    def checkColumnNames(query: String, expectedColNames: String*): Unit = {
+      checkHiveQl(query)
+      assert(sql(query).columns === expectedColNames)
+    }
+
+    // Attributes
+    checkColumnNames(
+      """SELECT * FROM (
+        |  SELECT 1 AS a, 2 AS b, 3 AS `we``ird`
+        |) s
+      """.stripMargin,
+      "a", "b", "we`ird"
+    )
+
+    checkColumnNames(
+      """SELECT x.a, y.a, x.b, y.b
+        |FROM (SELECT 1 AS a, 2 AS b) x
+        |INNER JOIN (SELECT 1 AS a, 2 AS b) y
+        |ON x.a = y.a
+      """.stripMargin,
+      "a", "a", "b", "b"
+    )
+
+    // String literal
+    checkColumnNames(
+      "SELECT 'foo', '\"bar\\''",
+      "foo", "\"bar\'"
+    )
+
+    // Aliases
+    checkColumnNames(
+      "SELECT 1 AS a",
+      "a"
+    )
+
+    // Complex type extractors
+    checkColumnNames(
+      """SELECT
+        |  a.f1, b[0].f1, c["foo"], d[0]
+        |FROM (
+        |  SELECT
+        |    NAMED_STRUCT("f1", 1, "f2", "foo") AS a,
+        |    ARRAY(NAMED_STRUCT("f1", 1, "f2", "foo")) AS b,
+        |    MAP("foo", 1) AS c,
+        |    ARRAY(1) AS d
+        |) s
+      """.stripMargin,
+      "f1", "b[0].f1", "c[foo]", "d[0]"
+    )
   }
 }

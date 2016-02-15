@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -171,14 +172,6 @@ class Analyzer(
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
-    }
-
-    private def usePrettyExpression(e: Expression): Expression = e transform {
-      case a: Attribute => new PrettyAttribute(a)
-      case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
-      case e @ GetStructField(child, _, Some(name)) => PrettyGetStructField(child, name, e.dataType)
-      case e: GetArrayStructFields =>
-        PrettyGetArrayStructFields(e.child, e.ordinal, e.field.name, e.field.dataType)
     }
 
     private def hasUnresolvedAlias(exprs: Seq[NamedExpression]) =

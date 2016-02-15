@@ -69,12 +69,18 @@ private[hive] class HiveFunctionRegistry(
       // catch the exception and throw AnalysisException instead.
       try {
         if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveGenericUDF(
+          val udf = HiveGenericUDF(
             name, new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
+          udf.dataType // Force it to check input data types.
+          udf
         } else if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveSimpleUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          udf.dataType // Force it to check input data types.
+          udf
         } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveGenericUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          val udf = HiveGenericUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          udf.dataType // Force it to check input data types.
+          udf
         } else if (
           classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
           HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
@@ -162,7 +168,7 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val conversionHelper = new ConversionHelper(method, arguments)
 
-  override val dataType = javaClassToDataType(method.getReturnType)
+  override lazy val dataType = javaClassToDataType(method.getReturnType)
 
   @transient
   lazy val returnInspector = ObjectInspectorFactory.getReflectionObjectInspector(

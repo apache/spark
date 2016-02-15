@@ -21,10 +21,10 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{NonSQLExpression, Attribute, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, NonSQLExpression, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -38,6 +38,8 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * supported by this builder (yet).
  */
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
+  require(logicalPlan.resolved, "SQLBuilder only supports reslved logical query plans")
+
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 
   def toSQL: String = {
@@ -157,7 +159,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
    * The segments are trimmed so only a single space appears in the separation.
    * For example, `build("a", " b ", " c")` becomes "a b c".
    */
-  private def build(segments: String*): String = segments.map(_.trim).mkString(" ")
+  private def build(segments: String*): String =
+    segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
     build(

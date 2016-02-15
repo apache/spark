@@ -311,7 +311,10 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String, dataType: DataType = NullType)
+case class PrettyAttribute(
+                            name: String,
+                            dataType: DataType = NullType,
+                            override val foldable: Boolean = false)
   extends Attribute with Unevaluable {
 
   def this(attribute: Attribute) = this(attribute.name, attribute match {
