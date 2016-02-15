@@ -351,10 +351,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
-      case logical.Limit(IntegerLiteral(limit), child) =>
-        val perPartitionLimit = execution.LocalLimit(limit, planLater(child))
-        val globalLimit = execution.GlobalLimit(limit, perPartitionLimit)
-        globalLimit :: Nil
+      case logical.LocalLimit(IntegerLiteral(limit), child) =>
+        execution.LocalLimit(limit, planLater(child)) :: Nil
+      case logical.GlobalLimit(IntegerLiteral(limit), child) =>
+        execution.GlobalLimit(limit, planLater(child)) :: Nil
       case logical.Union(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
@@ -369,8 +369,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         execution.Exchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
-      case e @ EvaluatePython(udf, child, _) =>
-        BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
+      case e @ python.EvaluatePython(udf, child, _) =>
+        python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil
