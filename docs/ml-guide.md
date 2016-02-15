@@ -870,7 +870,7 @@ import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 
 // Prepare training and test data.
-val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+val data = sqlContext.read.format("libsvm").load("data/mllib/sample_linear_regression_data.txt")
 val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
 val lr = new LinearRegression()
@@ -913,7 +913,7 @@ import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.tuning.*;
 import org.apache.spark.sql.DataFrame;
 
-DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_linear_regression_data.txt");
 
 // Prepare training and test data.
 DataFrame[] splits = data.randomSplit(new double[] {0.9, 0.1}, 12345);
