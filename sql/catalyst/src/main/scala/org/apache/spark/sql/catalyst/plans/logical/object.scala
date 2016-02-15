@@ -92,19 +92,10 @@ case class MapPartitions(
   override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
 }
 
-object PythonMapPartitions {
-  def apply(func: PythonFunction, schema: StructType, child: LogicalPlan): PythonMapPartitions = {
-    PythonMapPartitions(func, schema, schema.toAttributes, child)
-  }
-}
-
 case class PythonMapPartitions(
     func: PythonFunction,
-    outputSchema: StructType,
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-  override lazy val schema: StructType = outputSchema
-
   override def expressions: Seq[Expression] = Nil
 }
 

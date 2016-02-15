@@ -1765,7 +1765,7 @@ class DataFrame private[sql](
       func: PythonFunction,
       schemaJson: String): DataFrame = withPlan {
     val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
-    PythonMapPartitions(func, schema, logicalPlan)
+    PythonMapPartitions(func, schema.toAttributes, logicalPlan)
   }
 
   /**

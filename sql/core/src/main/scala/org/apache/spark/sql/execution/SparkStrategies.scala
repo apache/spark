@@ -371,8 +371,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
       case e @ python.EvaluatePython(udf, child, _) =>
         python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
-      case logical.PythonMapPartitions(func, schema, output, child) =>
-        execution.PythonMapPartitions(func, schema, output, planLater(child)) :: Nil
+      case logical.PythonMapPartitions(func, output, child) =>
+        execution.PythonMapPartitions(func, output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil

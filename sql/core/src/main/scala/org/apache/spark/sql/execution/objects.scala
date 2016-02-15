@@ -76,13 +76,10 @@ case class MapPartitions(
 
 case class PythonMapPartitions(
     func: PythonFunction,
-    outputSchema: StructType,
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {
 
-  override def producedAttributes: AttributeSet = outputSet
-
-  override lazy val schema: StructType = outputSchema
+  override def expressions: Seq[Expression] = Nil
 
   private def isPickled(schema: StructType): Boolean = {
     schema.length == 1 && schema.head.dataType == BinaryType &&
@@ -93,9 +90,8 @@ case class PythonMapPartitions(
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
-    val childSchema = child.schema
-    val childIsPickled = isPickled(childSchema)
-    val outputIsPickled = isPickled(outputSchema)
+    val childIsPickled = isPickled(child.schema)
+    val outputIsPickled = isPickled(schema)
 
     inputRDD.mapPartitions { iter =>
       val inputIterator = if (childIsPickled) {
@@ -109,7 +105,7 @@ case class PythonMapPartitions(
         // For each row, add it to the queue.
         iter.grouped(100).map { inputRows =>
           val toBePickled = inputRows.map { row =>
-            EvaluatePython.toJava(row, childSchema)
+            EvaluatePython.toJava(row, child.schema)
           }.toArray
           pickle.dumps(toBePickled)
         }
@@ -138,7 +134,7 @@ case class PythonMapPartitions(
         outputIterator.flatMap { pickedResult =>
           val unpickledBatch = unpickle.loads(pickedResult)
           unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-        }.map(result => EvaluatePython.fromJava(result, outputSchema).asInstanceOf[InternalRow])
+        }.map(result => EvaluatePython.fromJava(result, schema).asInstanceOf[InternalRow])
       }
     }
   }
