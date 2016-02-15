@@ -149,6 +149,10 @@ case class HyperLogLogPlusPlus(
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
+  // xxHash64 experimentation
+  var hasher: XxHash64 = null
+  var childDataType: DataType = null
+
   /** Fill all words with zeros. */
   override def initialize(buffer: MutableRow): Unit = {
     var word = 0
@@ -156,6 +160,8 @@ case class HyperLogLogPlusPlus(
       buffer.setLong(mutableAggBufferOffset + word, 0)
       word += 1
     }
+    hasher = new XxHash64(children)
+    childDataType = child.dataType
   }
 
   /**
@@ -167,7 +173,7 @@ case class HyperLogLogPlusPlus(
     val v = child.eval(input)
     if (v != null) {
       // Create the hashed value 'x'.
-      val x = MurmurHash.hash64(v)
+      val x = hasher.computeHash(v, childDataType)
 
       // Determine the index of the register we are going to use.
       val idx = (x >>> idxShift).toInt

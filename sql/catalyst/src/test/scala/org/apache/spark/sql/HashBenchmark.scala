@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Murmur3Hash, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Benchmark
@@ -63,6 +63,19 @@ object HashBenchmark {
         }
       }
     }
+
+    val getHashCode64b = UnsafeProjection.create(new XxHash64(attrs) :: Nil, attrs)
+    benchmark.addCase("codegen version 64-bit") { _: Int =>
+      for (_ <- 0L until iters) {
+        var sum = 0
+        var i = 0
+        while (i < numRows) {
+          sum += getHashCode64b(rows(i)).getInt(0)
+          i += 1
+        }
+      }
+    }
+
     benchmark.run()
   }
 

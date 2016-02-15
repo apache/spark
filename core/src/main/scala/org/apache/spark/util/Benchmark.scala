@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.apache.commons.lang3.SystemUtils
 
@@ -90,13 +91,16 @@ private[spark] object Benchmark {
    * This should return something like "Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz"
    */
   def getProcessorName(): String = {
-    if (SystemUtils.IS_OS_MAC_OSX) {
-      Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
-    } else if (SystemUtils.IS_OS_LINUX) {
-      Utils.executeAndGetOutput(Seq("/usr/bin/grep", "-m", "1", "\"model name\"", "/proc/cpuinfo"))
-    } else {
-      System.getenv("PROCESSOR_IDENTIFIER")
-    }
+    Try{
+      if (SystemUtils.IS_OS_MAC_OSX) {
+        Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
+      } else if (SystemUtils.IS_OS_LINUX) {
+        Utils.executeAndGetOutput(
+          Seq("/usr/bin/grep", "-m", "1", "\"model name\"", "/proc/cpuinfo"))
+      } else {
+        System.getenv("PROCESSOR_IDENTIFIER")
+      }
+    }.getOrElse("Unknown")
   }
 
   /**

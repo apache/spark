@@ -25,13 +25,13 @@ import org.apache.spark.util.SystemClock;
  * xxHash64. A high quality and fast 64 bit hash code by Yann Colet and Mathias Westerdahl. The
  * class below is modelled like its Murmur3_x86_32 cousin.
  * <p/>
- * This was largely based on the following C and Java implementations:
+ * This was largely based on the following (original) C and Java implementations:
  * https://github.com/Cyan4973/xxHash/blob/master/xxhash.c
  * https://github.com/OpenHFT/Zero-Allocation-Hashing/blob/master/src/main/java/net/openhft/hashing/XxHash_r39.java
  * https://github.com/airlift/slice/blob/master/src/main/java/io/airlift/slice/XxHash64.java
  */
 // scalastyle: on
-public final class XxHash64 {
+public final class XXH64 {
 
   private static final long PRIME64_1 = 0x9E3779B185EBCA87L;
   private static final long PRIME64_2 = 0xC2B2AE3D27D4EB4FL;
@@ -41,7 +41,7 @@ public final class XxHash64 {
 
   private final long seed;
 
-  public XxHash64(long seed) {
+  public XXH64(long seed) {
     super();
     this.seed = seed;
   }

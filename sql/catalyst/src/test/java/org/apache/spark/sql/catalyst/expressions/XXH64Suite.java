@@ -27,13 +27,13 @@ import org.junit.Assert;
 import org.junit.Test;
 
 /**
- * Test the XxHash64 function.
+ * Test the XXH64 function.
  *
  * Test constants were taken from the original implementation and the airlift/slice implementation.
  */
-public class XxHash64Suite {
+public class XXH64Suite {
 
-  private static final XxHash64 hasher = new XxHash64(0);
+  private static final XXH64 hasher = new XXH64(0);
 
   private static final int SIZE = 101;
   private static final long PRIME = 2654435761L;
@@ -53,13 +53,13 @@ public class XxHash64Suite {
   @Test
   public void testKnownIntegerInputs() {
     Assert.assertEquals(0x9256E58AA397AEF1L, hasher.hashInt(TEST_INT));
-    Assert.assertEquals(0x9D5FFDFB928AB4BL, XxHash64.hashInt(TEST_INT, PRIME));
+    Assert.assertEquals(0x9D5FFDFB928AB4BL, XXH64.hashInt(TEST_INT, PRIME));
   }
 
   @Test
   public void testKnownLongInputs() {
     Assert.assertEquals(0xF74CB1451B32B8CFL, hasher.hashLong(TEST_LONG));
-    Assert.assertEquals(0x9C44B77FBCC302C5L, XxHash64.hashLong(TEST_LONG, PRIME));
+    Assert.assertEquals(0x9C44B77FBCC302C5L, XXH64.hashLong(TEST_LONG, PRIME));
   }
 
   @Test
@@ -67,27 +67,27 @@ public class XxHash64Suite {
     Assert.assertEquals(0xEF46DB3751D8E999L,
             hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 0));
     Assert.assertEquals(0xAC75FDA2929B17EFL,
-            XxHash64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 0, PRIME));
+            XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 0, PRIME));
     Assert.assertEquals(0x4FCE394CC88952D8L,
             hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 1));
     Assert.assertEquals(0x739840CB819FA723L,
-            XxHash64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 1, PRIME));
+            XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 1, PRIME));
     Assert.assertEquals(0x9256E58AA397AEF1L,
             hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 4));
     Assert.assertEquals(0x9D5FFDFB928AB4BL,
-            XxHash64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 4, PRIME));
+            XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 4, PRIME));
     Assert.assertEquals(0xF74CB1451B32B8CFL,
             hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8));
     Assert.assertEquals(0x9C44B77FBCC302C5L,
-            XxHash64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8, PRIME));
+            XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 8, PRIME));
     Assert.assertEquals(0xCFFA8DB881BC3A3DL,
             hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 14));
     Assert.assertEquals(0x5B9611585EFCC9CBL,
-            XxHash64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 14, PRIME));
+            XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, 14, PRIME));
     Assert.assertEquals(0x0EAB543384F878ADL,
             hasher.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE));
     Assert.assertEquals(0xCAA65939306F1E21L,
-            XxHash64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE, PRIME));
+            XXH64.hashUnsafeBytes(BUFFER, Platform.BYTE_ARRAY_OFFSET, SIZE, PRIME));
   }
 
   @Test
