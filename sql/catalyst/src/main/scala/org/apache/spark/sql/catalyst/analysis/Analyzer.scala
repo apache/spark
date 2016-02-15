@@ -598,17 +598,24 @@ class Analyzer(
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
-        val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
-        val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
-        val missingAttrs = requiredAttrs -- child.outputSet
-        if (missingAttrs.nonEmpty) {
-          // Add missing attributes and then project them away after the sort.
-          Project(child.output,
-            Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
-        } else if (newOrder != order) {
-          s.copy(order = newOrder)
-        } else {
-          s
+        try {
+          val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
+          val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
+          val missingAttrs = requiredAttrs -- child.outputSet
+          if (missingAttrs.nonEmpty) {
+            // Add missing attributes and then project them away after the sort.
+            Project(child.output,
+              Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
+          } else if (newOrder != order) {
+            s.copy(order = newOrder)
+          } else {
+            s
+          }
+        } catch {
+          // Attempting to resolve it might fail. When this happens, return the original plan.
+          // Users will see an AnalysisException for resolution failure of missing attributes
+          // in Sort
+          case ae: AnalysisException => s
         }
     }
 
