@@ -247,7 +247,6 @@ object CSVRelation extends Logging {
               s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
             None
         }
-        Some(Row.fromSeq(rowArray.take(requiredSize)))
       }
     }
   }
