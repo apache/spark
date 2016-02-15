@@ -135,8 +135,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWrita
     >>> featurePath = path + "/feature-transformer"
     >>> bucketizer.save(featurePath)
     >>> loadedBucketizer = Bucketizer.load(featurePath)
-    >>> loadedBucketizer.getSplits()
-    [-inf, 0.5, 1.4, inf]
+    >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
