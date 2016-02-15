@@ -29,10 +29,6 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-  }
-
   private lazy val myUpperCaseData = sqlContext.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "A"),

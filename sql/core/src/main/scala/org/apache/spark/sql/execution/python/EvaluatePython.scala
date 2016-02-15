@@ -49,6 +49,7 @@ case class EvaluatePython(
   override def references: AttributeSet = udf.references
 }
 
+
 object EvaluatePython {
   def apply(udf: PythonUDF, child: LogicalPlan): EvaluatePython =
     new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
