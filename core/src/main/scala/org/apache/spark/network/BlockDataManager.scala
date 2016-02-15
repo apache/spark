@@ -31,8 +31,11 @@ trait BlockDataManager {
 
   /**
    * Put the block locally, using the given storage level.
+   *
+   * Returns true if the block was stored and false if the put operation failed or the block
+   * aready existed.
    */
-  def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit
+  def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Boolean
 
   /**
    * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
