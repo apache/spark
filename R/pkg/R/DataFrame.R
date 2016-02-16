@@ -303,8 +303,28 @@ setMethod("colnames",
 #' @rdname columns
 #' @name colnames<-
 setMethod("colnames<-",
-          signature(x = "DataFrame", value = "character"),
+          signature(x = "DataFrame"),
           function(x, value) {
+
+            # Check parameter integrity
+            if (class(value) != "character") {
+              stop("Invalid column names.")
+            }
+
+            if (length(value) != ncol(x)) {
+              stop(
+                "Column names must have the same length as the number of columns in the dataset.")
+            }
+
+            if (any(is.na(value))) {
+              stop("Column names cannot be NA.")
+            }
+
+            # Check if the column names have . in it
+            if (any(regexec(".", value, fixed=TRUE)[[1]][1] != -1)) {
+              stop("Colum names cannot contain the '.' symbol.")
+            }
+
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
             dataFrame(sdf)
           })
