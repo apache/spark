@@ -19,8 +19,8 @@ from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
+from pyspark.ml.base import Estimator, Transformer, Model
 from pyspark.ml.param import Params
-from pyspark.ml.pipeline import Estimator, Transformer, Model
 from pyspark.ml.util import _jvm
 from pyspark.mllib.common import inherit_doc, _java2py, _py2java
 
