@@ -398,15 +398,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
-      case (child, BroadcastDistribution(m1)) =>
-        child match {
-          // The child is broadcasting the same variable: keep the child.
-          case Broadcast(m2, _) if m1 == m2 => child
-          // The child is broadcasting a different variable: replace the child.
-          case Broadcast(m2, src) => Broadcast(m1, src)
-          // Create a broadcast on top of the child.
-          case _ => Broadcast(m1, child)
-        }
+      case (child, BroadcastDistribution(mode)) =>
+        Broadcast(mode, child)
       case (child, distribution) =>
         Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
     }

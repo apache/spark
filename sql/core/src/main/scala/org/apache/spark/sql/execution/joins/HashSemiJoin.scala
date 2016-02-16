@@ -106,7 +106,8 @@ private[execution] object HashSemiJoin {
 private[execution] case class HashSetBroadcastMode(
     keys: Seq[Expression],
     attributes: Seq[Attribute]) extends BroadcastMode {
-  def apply(rows: Array[InternalRow]): java.util.HashSet[InternalRow] = {
+
+  override def transform(rows: Array[InternalRow]): java.util.HashSet[InternalRow] = {
     HashSemiJoin.buildKeyHashSet(keys, attributes, rows.iterator)
   }
 }

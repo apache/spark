@@ -680,7 +680,8 @@ private[execution] case class HashedRelationBroadcastMode(
     canJoinKeyFitWithinLong: Boolean,
     keys: Seq[Expression],
     attributes: Seq[Attribute]) extends BroadcastMode {
-  def apply(rows: Array[InternalRow]): HashedRelation = {
+
+  def transform(rows: Array[InternalRow]): HashedRelation = {
     val generator = UnsafeProjection.create(keys, attributes)
     if (canJoinKeyFitWithinLong) {
       LongHashedRelation(rows.iterator, generator, rows.length)

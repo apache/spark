@@ -23,7 +23,7 @@ import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -34,6 +34,8 @@ case class Broadcast(
     child: SparkPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
   val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
@@ -59,7 +61,7 @@ case class Broadcast(
         }.collect()
 
         // Construct and broadcast the relation.
-        sparkContext.broadcast(mode(input))
+        sparkContext.broadcast(mode.transform(input))
       }
     }(Broadcast.executionContext)
   }
@@ -70,7 +72,7 @@ case class Broadcast(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    child.execute() // TODO throw an Exception here?
+    throw new UnsupportedOperationException("Broadcast does not support the execute() code path.")
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {

@@ -80,13 +80,15 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
  * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
  * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
  */
-trait BroadcastMode extends (Array[InternalRow] => Any)
+trait BroadcastMode {
+  def transform(rows: Array[InternalRow]): Any
+}
 
 /**
  * IdentityBroadcastMode requires that rows are broadcasted in their original form.
  */
 case object IdentityBroadcastMode extends BroadcastMode {
-  def apply(rows: Array[InternalRow]): Array[InternalRow] = rows
+  override def transform(rows: Array[InternalRow]): Array[InternalRow] = rows
 }
 
 /**
@@ -372,5 +374,23 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   override def toString: String = {
     partitionings.map(_.toString).mkString("(", " or ", ")")
+  }
+}
+
+/**
+ * Represents a partitioning where rows are collected, transformed and broadcasted to each
+ * node in the cluster.
+ */
+case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
+  override val numPartitions: Int = 1
+
+  override def satisfies(required: Distribution): Boolean = required match {
+    case BroadcastDistribution(m) if m == mode => true
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = other match {
+    case BroadcastPartitioning(m) if m == mode => true
+    case _ => false
   }
 }
