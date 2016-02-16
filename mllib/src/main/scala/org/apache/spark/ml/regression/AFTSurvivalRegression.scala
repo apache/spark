@@ -437,15 +437,15 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
 private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
   extends Serializable {
 
-  // beta is the intercept and regression coefficients to the covariates
-  private val beta = parameters.slice(2, parameters.length)
+  // the regression coefficients to the covariates
+  private val coefficients = parameters.slice(2, parameters.length)
   private val intercept = parameters.valueAt(1)
   // sigma is the scale parameter of the AFT model
   private val sigma = math.exp(parameters(0))
 
   private var totalCnt: Long = 0L
   private var lossSum = 0.0
-  private var gradientBetaSum = BDV.zeros[Double](beta.length)
+  private var gradientCoefficientSum = BDV.zeros[Double](coefficients.length)
   private var gradientInterceptSum = 0.0
   private var gradientLogSigmaSum = 0.0
 
@@ -453,10 +453,9 @@ private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
 
   def loss: Double = if (totalCnt == 0) 1.0 else lossSum / totalCnt
 
-  // Here we optimize loss function over beta and log(sigma)
+  // Here we optimize loss function over coefficients and log(sigma)
   def gradient: BDV[Double] = BDV.vertcat(BDV(Array(gradientLogSigmaSum / totalCnt.toDouble)),
-    BDV.vertcat(BDV(Array(gradientInterceptSum/totalCnt.toDouble)),
-                gradientBetaSum/totalCnt.toDouble))
+    BDV(Array(gradientInterceptSum/totalCnt.toDouble)), gradientCoefficientSum/totalCnt.toDouble)
 
   /**
    * Add a new training data to this AFTAggregator, and update the loss and gradient
@@ -467,12 +466,12 @@ private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
    */
   def add(data: AFTPoint): this.type = {
 
-    val fitInterceptFlag = if (fitIntercept) 1.0 else 0.0
+    val interceptFlag = if (fitIntercept) 1.0 else 0.0
 
     val xi = data.features.toBreeze
     val ti = data.label
     val delta = data.censor
-    val epsilon = (math.log(ti) - beta.dot(xi) - intercept * fitInterceptFlag ) / sigma
+    val epsilon = (math.log(ti) - coefficients.dot(xi) - intercept * interceptFlag ) / sigma
 
     lossSum += math.log(sigma) * delta
     lossSum += (math.exp(epsilon) - delta * epsilon)
@@ -481,10 +480,10 @@ private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
     assert(!lossSum.isInfinity,
       s"AFTAggregator loss sum is infinity. Error for unknown reason.")
 
-    val delta_expeps = delta - math.exp(epsilon)
-    gradientBetaSum += xi * delta_expeps / sigma
-    gradientInterceptSum += fitInterceptFlag * delta_expeps / sigma
-    gradientLogSigmaSum += delta + delta_expeps * epsilon
+    val deltaMinusExpEps = delta - math.exp(epsilon)
+    gradientCoefficientSum += xi * deltaMinusExpEps / sigma
+    gradientInterceptSum += interceptFlag * deltaMinusExpEps / sigma
+    gradientLogSigmaSum += delta + deltaMinusExpEps * epsilon
 
     totalCnt += 1
     this
@@ -503,7 +502,7 @@ private class AFTAggregator(parameters: BDV[Double], fitIntercept: Boolean)
       totalCnt += other.totalCnt
       lossSum += other.lossSum
 
-      gradientBetaSum += other.gradientBetaSum
+      gradientCoefficientSum += other.gradientCoefficientSum
       gradientInterceptSum += other.gradientInterceptSum
       gradientLogSigmaSum += other.gradientLogSigmaSum
     }
