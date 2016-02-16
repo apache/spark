@@ -48,8 +48,6 @@ case class BroadcastHashJoin(
   extends BinaryNode with HashJoin with CodegenSupport {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   val timeout: Duration = {
@@ -70,11 +68,6 @@ case class BroadcastHashJoin(
   // for the same query.
   @transient
   private lazy val broadcastFuture = {
-    val numBuildRows = buildSide match {
-      case BuildLeft => longMetric("numLeftRows")
-      case BuildRight => longMetric("numRightRows")
-    }
-
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -84,7 +77,6 @@ case class BroadcastHashJoin(
         // Note that we use .execute().collect() because we don't want to convert data to Scala
         // types
         val input: Array[InternalRow] = buildPlan.execute().map { row =>
-          numBuildRows += 1
           row.copy()
         }.collect()
         // The following line doesn't run in a job so we cannot track the metric value. However, we
@@ -93,10 +85,10 @@ case class BroadcastHashJoin(
         // TODO: move this check into HashedRelation
         val hashed = if (canJoinKeyFitWithinLong) {
           LongHashedRelation(
-            input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+            input.iterator, buildSideKeyGenerator, input.size)
         } else {
           HashedRelation(
-            input.iterator, SQLMetrics.nullLongMetric, buildSideKeyGenerator, input.size)
+            input.iterator, buildSideKeyGenerator, input.size)
         }
         sparkContext.broadcast(hashed)
       }
@@ -108,10 +100,6 @@ case class BroadcastHashJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numStreamedRows = buildSide match {
-      case BuildLeft => longMetric("numRightRows")
-      case BuildRight => longMetric("numLeftRows")
-    }
     val numOutputRows = longMetric("numOutputRows")
 
     val broadcastRelation = Await.result(broadcastFuture, timeout)
@@ -119,7 +107,7 @@ case class BroadcastHashJoin(
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashedRelation = broadcastRelation.value
       TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
-      hashJoin(streamedIter, numStreamedRows, hashedRelation, numOutputRows)
+      hashJoin(streamedIter, hashedRelation, numOutputRows)
     }
   }
 
@@ -175,6 +163,7 @@ case class BroadcastHashJoin(
       case BuildRight => input ++ buildColumns
     }
 
+    val numOutput = metricTerm(ctx, "numOutputRows")
     val outputCode = if (condition.isDefined) {
       // filter the output via condition
       ctx.currentVars = resultVars
@@ -182,11 +171,15 @@ case class BroadcastHashJoin(
       s"""
          | ${ev.code}
          | if (!${ev.isNull} && ${ev.value}) {
+         |   $numOutput.add(1);
          |   ${consume(ctx, resultVars)}
          | }
        """.stripMargin
     } else {
-      consume(ctx, resultVars)
+      s"""
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
+       """.stripMargin
     }
 
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {

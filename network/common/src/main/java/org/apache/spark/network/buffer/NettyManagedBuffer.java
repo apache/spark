@@ -64,7 +64,7 @@ public final class NettyManagedBuffer extends ManagedBuffer {
 
   @Override
   public Object convertToNetty() throws IOException {
-    return buf.duplicate();
+    return buf.duplicate().retain();
   }
 
   @Override

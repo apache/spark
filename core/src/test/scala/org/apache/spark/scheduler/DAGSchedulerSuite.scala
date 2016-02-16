@@ -31,7 +31,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{CallSite, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -1669,7 +1669,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     }
 
     // Does not include message, ONLY stack trace.
-    val stackTraceString = e.getStackTraceString
+    val stackTraceString = Utils.exceptionString(e)
 
     // should actually include the RDD operation that invoked the method:
     assert(stackTraceString.contains("org.apache.spark.rdd.RDD.count"))

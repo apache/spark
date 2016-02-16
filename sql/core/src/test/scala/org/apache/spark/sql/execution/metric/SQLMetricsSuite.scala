@@ -113,23 +113,12 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("Project metrics") {
-    // Assume the execution plan is
-    // PhysicalRDD(nodeId = 1) -> Project(nodeId = 0)
-    val df = person.select('name)
-    testSparkPlanMetrics(df, 1, Map(
-      0L -> ("Project", Map(
-        "number of rows" -> 2L)))
-    )
-  }
-
   test("Filter metrics") {
     // Assume the execution plan is
     // PhysicalRDD(nodeId = 1) -> Filter(nodeId = 0)
     val df = person.filter('age < 25)
     testSparkPlanMetrics(df, 1, Map(
       0L -> ("Filter", Map(
-        "number of input rows" -> 2L,
         "number of output rows" -> 1L)))
     )
   }
@@ -149,10 +138,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = testData2.groupBy().count() // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> ("TungstenAggregate", Map(
-        "number of input rows" -> 6L,
         "number of output rows" -> 2L)),
       0L -> ("TungstenAggregate", Map(
-        "number of input rows" -> 2L,
         "number of output rows" -> 1L)))
     )
 
@@ -160,10 +147,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df2 = testData2.groupBy('a).count()
     testSparkPlanMetrics(df2, 1, Map(
       2L -> ("TungstenAggregate", Map(
-        "number of input rows" -> 6L,
         "number of output rows" -> 4L)),
       0L -> ("TungstenAggregate", Map(
-        "number of input rows" -> 4L,
         "number of output rows" -> 3L)))
     )
   }
@@ -181,8 +166,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df, 1, Map(
         1L -> ("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of left rows" -> 4L,
-          "number of right rows" -> 2L,
           "number of output rows" -> 4L)))
       )
     }
@@ -201,8 +184,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df, 1, Map(
         1L -> ("SortMergeOuterJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of left rows" -> 6L,
-          "number of right rows" -> 2L,
           "number of output rows" -> 8L)))
       )
 
@@ -211,8 +192,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       testSparkPlanMetrics(df2, 1, Map(
         1L -> ("SortMergeOuterJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-          "number of left rows" -> 2L,
-          "number of right rows" -> 6L,
           "number of output rows" -> 8L)))
       )
     }
@@ -226,8 +205,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(broadcast(df2), "key")
     testSparkPlanMetrics(df, 2, Map(
       1L -> ("BroadcastHashJoin", Map(
-        "number of left rows" -> 2L,
-        "number of right rows" -> 4L,
         "number of output rows" -> 2L)))
     )
   }
@@ -240,16 +217,12 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("BroadcastHashOuterJoin", Map(
-        "number of left rows" -> 3L,
-        "number of right rows" -> 4L,
         "number of output rows" -> 5L)))
     )
 
     val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
     testSparkPlanMetrics(df3, 2, Map(
       0L -> ("BroadcastHashOuterJoin", Map(
-        "number of left rows" -> 3L,
-        "number of right rows" -> 4L,
         "number of output rows" -> 6L)))
     )
   }
@@ -265,8 +238,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
       testSparkPlanMetrics(df, 3, Map(
         1L -> ("BroadcastNestedLoopJoin", Map(
-          "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 2L,
           "number of output rows" -> 12L)))
       )
     }
@@ -280,8 +251,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(broadcast(df2), $"key" === $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("BroadcastLeftSemiJoinHash", Map(
-        "number of left rows" -> 2L,
-        "number of right rows" -> 4L,
         "number of output rows" -> 2L)))
     )
   }
@@ -295,8 +264,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = df1.join(df2, $"key" === $"key2", "leftsemi")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("LeftSemiJoinHash", Map(
-          "number of left rows" -> 2L,
-          "number of right rows" -> 4L,
           "number of output rows" -> 2L)))
       )
     }
@@ -310,8 +277,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     val df = df1.join(df2, $"key" < $"key2", "leftsemi")
     testSparkPlanMetrics(df, 2, Map(
       0L -> ("LeftSemiJoinBNL", Map(
-        "number of left rows" -> 2L,
-        "number of right rows" -> 4L,
         "number of output rows" -> 2L)))
     )
   }
@@ -326,8 +291,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         "SELECT * FROM testData2 JOIN testDataForJoin")
       testSparkPlanMetrics(df, 1, Map(
         1L -> ("CartesianProduct", Map(
-          "number of left rows" -> 12L, // left needs to be scanned twice
-          "number of right rows" -> 4L, // right is read twice
           "number of output rows" -> 12L)))
       )
     }
@@ -335,24 +298,22 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("save metrics") {
     withTempPath { file =>
-      withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
-        val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
-        // Assume the execution plan is
-        // PhysicalRDD(nodeId = 0)
-        person.select('name).write.format("json").save(file.getAbsolutePath)
-        sparkContext.listenerBus.waitUntilEmpty(10000)
-        val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
-        assert(executionIds.size === 1)
-        val executionId = executionIds.head
-        val jobs = sqlContext.listener.getExecution(executionId).get.jobs
-        // Use "<=" because there is a race condition that we may miss some jobs
-        // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
-        assert(jobs.size <= 1)
-        val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
-        // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
-        // However, we still can check the value.
-        assert(metricValues.values.toSeq === Seq("2"))
-      }
+      val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
+      // Assume the execution plan is
+      // PhysicalRDD(nodeId = 0)
+      person.select('name).write.format("json").save(file.getAbsolutePath)
+      sparkContext.listenerBus.waitUntilEmpty(10000)
+      val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+      assert(executionIds.size === 1)
+      val executionId = executionIds.head
+      val jobs = sqlContext.listener.getExecution(executionId).get.jobs
+      // Use "<=" because there is a race condition that we may miss some jobs
+      // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
+      assert(jobs.size <= 1)
+      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
+      // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
+      // However, we still can check the value.
+      assert(metricValues.values.toSeq === Seq("2"))
     }
   }
 
