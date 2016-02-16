@@ -249,7 +249,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
       g.copy(child = Project(g.references.toSeq, g.child))
 
     case p @ Project(_, g: Generate) if g.join && p.references.subsetOf(g.generatedSet) =>
-      p.copy(child = g.copy(join = false))
+      p.copy(child = g.copy(join = false, outer = false))
 
     case p @ Project(projectList, g: Generate) if g.join =>
       val neededChildOutput = p.references -- g.generatorOutput ++ g.references
