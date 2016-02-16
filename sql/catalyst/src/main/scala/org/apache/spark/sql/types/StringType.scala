@@ -38,9 +38,9 @@ class StringType private() extends AtomicType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
-   * The default size of a value of the StringType is 4096 bytes.
+   * The default size of a value of the StringType is 20 bytes.
    */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = 20
 
   private[spark] override def asNullable: StringType = this
 }

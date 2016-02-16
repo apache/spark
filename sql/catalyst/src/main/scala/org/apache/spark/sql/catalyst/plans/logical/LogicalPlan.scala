@@ -316,6 +316,19 @@ abstract class UnaryNode extends LogicalPlan {
   override def children: Seq[LogicalPlan] = child :: Nil
 
   override protected def validConstraints: Set[Expression] = child.constraints
+
+  override def statistics: Statistics = {
+    val childRowSize = child.output.map(_.dataType.defaultSize).sum
+    val outputRowSize = output.map(_.dataType.defaultSize).sum
+    // Assume there will be the same number of rows as child has.
+    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 /**

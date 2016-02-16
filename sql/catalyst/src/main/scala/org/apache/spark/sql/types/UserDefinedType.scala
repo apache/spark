@@ -74,7 +74,7 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
   /**
    * The default size of a value of the UserDefinedType is 4096 bytes.
    */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = sqlType.defaultSize
 
   /**
    * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
