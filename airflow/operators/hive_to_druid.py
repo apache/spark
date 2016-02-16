@@ -111,4 +111,4 @@ class HiveToDruidTransfer(BaseOperator):
             "Cleaning up by dropping the temp "
             "Hive table {}".format(hive_table))
         hql = "DROP TABLE IF EXISTS {}".format(hive_table)
-        #hive.run_cli(hql)
+        hive.run_cli(hql)
