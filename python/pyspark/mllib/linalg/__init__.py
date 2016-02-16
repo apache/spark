@@ -556,7 +556,7 @@ class SparseVector(Vector):
     @staticmethod
     def parse(s):
         """
-        Parse string representation back into the DenseVector.
+        Parse string representation back into the SparseVector.
 
         >>> SparseVector.parse(' (4, [0,1 ],[ 4.0,5.0] )')
         SparseVector(4, {0: 4.0, 1: 5.0})
