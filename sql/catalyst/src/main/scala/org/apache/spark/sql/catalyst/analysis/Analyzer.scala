@@ -646,16 +646,10 @@ class Analyzer(
           val newAggregateExpressions = a.aggregateExpressions ++ missingAttrs
           a.copy(aggregateExpressions = newAggregateExpressions)
         case g: Generate =>
-          if (g.outer && !g.join) {
-            // For Generate, the missing sort-by attributes are not resolvable
-            // when the outer is true but join is false because it might add extra NULL.
-            throw new AnalysisException(s"Can't add $missingAttrs to $g")
-          } else {
-            // If join is false, we will convert it to true for getting from the child the missing
-            // attributes that its child might have or could have.
-            val missing = missingAttrs -- g.child.outputSet
-            g.copy(join = true, child = addMissingAttr(g.child, missing))
-          }
+          // If join is false, we will convert it to true for getting from the child the missing
+          // attributes that its child might have or could have.
+          val missing = missingAttrs -- g.child.outputSet
+          g.copy(join = true, child = addMissingAttr(g.child, missing))
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>
