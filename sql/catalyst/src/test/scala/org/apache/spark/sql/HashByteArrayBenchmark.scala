@@ -135,11 +135,11 @@ object HashByteArrayBenchmark {
       Running case: xxHash 64-bit
 
     Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    Hash byte arrays with length 8127:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    Hash byte arrays with length 8223:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    Murmur3_x86_32                           8068 / 8072          0.3        3847.1       1.0X
-    xxHash 64-bit                            1538 / 1541          1.4         733.6       5.2X
+    Murmur3_x86_32                           8184 / 8198          0.3        3902.3       1.0X
+    xxHash 64-bit                            1563 / 1569          1.3         745.4       5.2X
      */
-    test(8096 + 31, 42L, 1 << 10, 1 << 11)
+    test(8192 + 31, 42L, 1 << 10, 1 << 11)
   }
 }
