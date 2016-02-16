@@ -38,16 +38,18 @@ public class XXH64Suite {
   private static final int SIZE = 101;
   private static final long PRIME = 2654435761L;
   private static final byte[] BUFFER = new byte[SIZE];
-  private static final int TEST_INT = Platform.getInt(BUFFER, Platform.BYTE_ARRAY_OFFSET);
-  private static final long TEST_LONG = Platform.getLong(BUFFER, Platform.BYTE_ARRAY_OFFSET);
+  private static final int TEST_INT;
+  private static final long TEST_LONG;
 
-  /* Create the test data buffer. */
+  /* Create the test data. */
   static {
     long seed = PRIME;
     for (int i = 0; i < SIZE; i++) {
       BUFFER[i] = (byte)(seed >> 24);
       seed *= seed;
     }
+    TEST_INT = Platform.getInt(BUFFER, Platform.BYTE_ARRAY_OFFSET);
+    TEST_LONG = Platform.getLong(BUFFER, Platform.BYTE_ARRAY_OFFSET);
   }
 
   @Test
