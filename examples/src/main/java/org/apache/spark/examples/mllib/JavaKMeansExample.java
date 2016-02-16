@@ -28,42 +28,42 @@ import org.apache.spark.SparkConf;
 // $example off$
 
 public class JavaKMeansExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaKMeansExample").setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
+    SparkConf conf = new SparkConf().setAppName("JavaKMeansExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        // $example on$
-        // Load and parse data
-        String path = "data/mllib/kmeans_data.txt";
-        JavaRDD<String> data = jsc.textFile(path);
-        JavaRDD<Vector> parsedData = data.map(
-                new Function<String, Vector>() {
-                    public Vector call(String s) {
-                        String[] sarray = s.split(" ");
-                        double[] values = new double[sarray.length];
-                        for (int i = 0; i < sarray.length; i++)
-                            values[i] = Double.parseDouble(sarray[i]);
-                        return Vectors.dense(values);
-                    }
+    // $example on$
+    // Load and parse data
+    String path = "data/mllib/kmeans_data.txt";
+    JavaRDD<String> data = jsc.textFile(path);
+    JavaRDD<Vector> parsedData = data.map(
+            new Function<String, Vector>() {
+                public Vector call(String s) {
+                    String[] sarray = s.split(" ");
+                    double[] values = new double[sarray.length];
+                    for (int i = 0; i < sarray.length; i++)
+                        values[i] = Double.parseDouble(sarray[i]);
+                    return Vectors.dense(values);
                 }
-        );
-        parsedData.cache();
+            }
+    );
+    parsedData.cache();
 
-        // Cluster the data into two classes using KMeans
-        int numClusters = 2;
-        int numIterations = 20;
-        KMeansModel clusters = KMeans.train(parsedData.rdd(), numClusters, numIterations);
+    // Cluster the data into two classes using KMeans
+    int numClusters = 2;
+    int numIterations = 20;
+    KMeansModel clusters = KMeans.train(parsedData.rdd(), numClusters, numIterations);
 
-        // Evaluate clustering by computing Within Set Sum of Squared Errors
-        double WSSSE = clusters.computeCost(parsedData.rdd());
-        System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+    // Evaluate clustering by computing Within Set Sum of Squared Errors
+    double WSSSE = clusters.computeCost(parsedData.rdd());
+    System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
 
-        // Save and load model
-        clusters.save(jsc.sc(), "myModelPath");
-        KMeansModel sameModel = KMeansModel.load(jsc.sc(), "myModelPath");
-        // $example off$
+    // Save and load model
+    clusters.save(jsc.sc(), "myModelPath");
+    KMeansModel sameModel = KMeansModel.load(jsc.sc(), "myModelPath");
+    // $example off$
 
-        jsc.stop();
-    }
+    jsc.stop();
+}
 }

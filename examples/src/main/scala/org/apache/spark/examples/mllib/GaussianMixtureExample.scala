@@ -28,7 +28,7 @@ object GaussianMixtureExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("GaussianMixtureExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("GaussianMixtureExample")
     val sc = new SparkContext(conf)
 
     // $example on$

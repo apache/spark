@@ -30,7 +30,7 @@ object StreamingKMeansExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("StreamingKMeansExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("StreamingKMeansExample")
     val ssc = new StreamingContext(conf, Seconds(1.toLong))
 
     // $example on$

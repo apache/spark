@@ -28,7 +28,7 @@ object KMeansExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("KMeansExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("KMeansExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -48,7 +48,6 @@ object KMeansExample {
     // Save and load model
     clusters.save(sc, "myModelPath")
     val sameModel = KMeansModel.load(sc, "myModelPath")
-
     // $example off$
 
     sc.stop()

@@ -33,8 +33,7 @@ import org.apache.spark.sql.SQLContext;
 public class JavaPowerIterationClusteringExample {
   public static void main(String[] args) {
 
-    SparkConf conf = new SparkConf().setAppName("JavaPowerIterationClusteringExample")
-            .setMaster("local[*]");
+    SparkConf conf = new SparkConf().setAppName("JavaPowerIterationClusteringExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext sqlContext = new SQLContext(jsc);
 

@@ -24,52 +24,46 @@ import org.apache.spark.mllib.clustering.GaussianMixture;
 import org.apache.spark.mllib.clustering.GaussianMixtureModel;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.SparkConf;
 // $example off$
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.mllib.linalg.Vectors;
-import java.util.Arrays;
 
 public class JavaGaussianMixtureExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaGaussianMixtureExample")
-                .setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
+    SparkConf conf = new SparkConf().setAppName("JavaGaussianMixtureExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        // $example on$
-        // Load and parse data
-        String path = "data/mllib/gmm_data.txt";
-        JavaRDD<String> data = jsc.textFile(path);
-        JavaRDD<Vector> parsedData = data.map(
-                new Function<String, Vector>() {
-                    public Vector call(String s) {
-                        String[] sarray = s.trim().split(" ");
-                        double[] values = new double[sarray.length];
-                        for (int i = 0; i < sarray.length; i++)
-                            values[i] = Double.parseDouble(sarray[i]);
-                        return Vectors.dense(values);
-                    }
+    // $example on$
+    // Load and parse data
+    String path = "data/mllib/gmm_data.txt";
+    JavaRDD<String> data = jsc.textFile(path);
+    JavaRDD<Vector> parsedData = data.map(
+        new Function<String, Vector>() {
+            public Vector call(String s) {
+                String[] sarray = s.trim().split(" ");
+                    double[] values = new double[sarray.length];
+                    for (int i = 0; i < sarray.length; i++)
+                        values[i] = Double.parseDouble(sarray[i]);
+                    return Vectors.dense(values);
                 }
-        );
-        parsedData.cache();
+            }
+    );
+    parsedData.cache();
 
-        // Cluster the data into two classes using GaussianMixture
-        GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
+    // Cluster the data into two classes using GaussianMixture
+    GaussianMixtureModel gmm = new GaussianMixture().setK(2).run(parsedData.rdd());
 
-        // Save and load GaussianMixtureModel
-        gmm.save(jsc.sc(), "myGMMModel");
-        GaussianMixtureModel sameModel = GaussianMixtureModel.load(jsc.sc(), "myGMMModel");
-        // Output the parameters of the mixture model
-        for(int j=0; j<gmm.k(); j++) {
-            System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
-                    gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
-        }
-       // $example off$
-
-        jsc.stop();
+    // Save and load GaussianMixtureModel
+    gmm.save(jsc.sc(), "myGMMModel");
+    GaussianMixtureModel sameModel = GaussianMixtureModel.load(jsc.sc(), "myGMMModel");
+    // Output the parameters of the mixture model
+    for(int j=0; j<gmm.k(); j++) {
+        System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
+                gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
     }
+    // $example off$
+
+    jsc.stop();
+  }
 }

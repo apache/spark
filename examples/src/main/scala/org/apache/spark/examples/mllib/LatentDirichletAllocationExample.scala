@@ -28,7 +28,7 @@ object LatentDirichletAllocationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("LatentDirichletAllocationExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("LatentDirichletAllocationExample")
     val sc = new SparkContext(conf)
 
     // $example on$

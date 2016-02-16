@@ -35,8 +35,7 @@ import org.apache.spark.SparkConf;
 public class JavaLatentDirichletAllocationExample {
     public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaKLatentDirichletAllocationExample")
-                .setMaster("local[*]");
+        SparkConf conf = new SparkConf().setAppName("JavaKLatentDirichletAllocationExample");
         JavaSparkContext jsc = new JavaSparkContext(conf);
 
         // $example on$
