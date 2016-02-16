@@ -58,8 +58,8 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritab
      >>> featurePath = path + "/feature-transformer"
      >>> binarizer.save(featurePath)
      >>> loadedBinarizer = Binarizer.load(featurePath)
-     >>> loadedBinarizer.getThreshold()
-     1.0
+     >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
+     True
      >>> from shutil import rmtree
      >>> try:
      ...     rmtree(path)
@@ -211,24 +211,24 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWr
     |1    |[a, b, b, c, a]|(3,[0,1,2],[2.0,2.0,1.0])|
     +-----+---------------+-------------------------+
     ...
-    >>> sorted(model.vocabulary)
-    [u'a', u'b', u'c']
+    >>> sorted(model.vocabulary) == ['a', 'b', 'c']
+    True
     >>> import tempfile
     >>> path = tempfile.mkdtemp()
     >>> featurePath = path + "/feature-transformer"
     >>> cv.save(featurePath)
     >>> loadedCv = CountVectorizer.load(featurePath)
-    >>> loadedCv.getMinDF()
-    1.0
-    >>> loadedCv.getMinTF()
-    1.0
-    >>> loadedCv.getVocabSize()
-    262144
+    >>> loadedCv.getMinDF() == cv.getMinDF()
+    True
+    >>> loadedCv.getMinTF() == cv.getMinTF()
+    True
+    >>> loadedCv.getVocabSize() == cv.getVocabSize()
+    True
     >>> modelPath = path + "/feature-model"
     >>> model.save(modelPath)
     >>> loadedModel = CountVectorizerModel.load(modelPath)
-    >>> sorted(loadedModel.vocabulary)
-    [u'a', u'b', u'c']
+    >>> loadedModel.vocabulary == model.vocabulary
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -444,8 +444,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, MLReadable,
     >>> featurePath = path + "/feature-transformer"
     >>> ep.save(featurePath)
     >>> loadedEp = ElementwiseProduct.load(featurePath)
-    >>> loadedEp.getScalingVec()
-    DenseVector([2.0, 3.0, 5.0])
+    >>> loadedEp.getScalingVec() == ep.getScalingVec()
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -518,8 +518,8 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, MLRe
     >>> hashingTF.save(featurePath)
     >>> loadedHashingTF = HashingTF.load(featurePath)
     >>> param = loadedHashingTF.getParam("numFeatures")
-    >>> loadedHashingTF.getOrDefault(param)
-    10
+    >>> loadedHashingTF.getOrDefault(param) == hashingTF.getOrDefault(param)
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -575,13 +575,13 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     >>> featurePath = path + "/feature-transformer"
     >>> idf.save(featurePath)
     >>> loadedIdf = IDF.load(featurePath)
-    >>> loadedIdf.getMinDocFreq()
-    3
+    >>> loadedIdf.getMinDocFreq() == idf.getMinDocFreq()
+    True
     >>> modelPath = path + "/feature-model"
     >>> model.save(modelPath)
     >>> loadedModel = IDFModel.load(modelPath)
-    >>> loadedModel.transform(df).head().idf
-    DenseVector([0.0, 0.0])
+    >>> loadedModel.transform(df).head().idf == model.transform(df).head().idf
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -681,17 +681,17 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWrita
     >>> featurePath = path + "/feature-transformer"
     >>> mmScaler.save(featurePath)
     >>> loadedMMScaler = MinMaxScaler.load(featurePath)
-    >>> loadedMMScaler.getMin()
-    0.0
-    >>> loadedMMScaler.getMax()
-    1.0
+    >>> loadedMMScaler.getMin() == mmScaler.getMin()
+    True
+    >>> loadedMMScaler.getMax() == mmScaler.getMax()
+    True
     >>> modelPath = path + "/feature-model"
     >>> model.save(modelPath)
     >>> loadedModel = MinMaxScalerModel.load(modelPath)
-    >>> loadedModel.originalMin
-    DenseVector([0.0])
-    >>> loadedModel.originalMax
-    DenseVector([2.0])
+    >>> loadedModel.originalMin == model.originalMin
+    True
+    >>> loadedModel.originalMax == model.originalMax
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -821,8 +821,8 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     >>> featurePath = path + "/feature-transformer"
     >>> ngram.save(featurePath)
     >>> loadedNGram = NGram.load(featurePath)
-    >>> loadedNGram.getN()
-    4
+    >>> loadedNGram.getN() == ngram.getN()
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -894,8 +894,8 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWrita
     >>> featurePath = path + "/feature-transformer"
     >>> normalizer.save(featurePath)
     >>> loadedNormalizer = Normalizer.load(featurePath)
-    >>> loadedNormalizer.getP()
-    2.0
+    >>> loadedNormalizer.getP() == normalizer.getP()
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -1690,8 +1690,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
-    >>> remover.transform(df).head()
-    Row(text=[u'a', u'b', u'c'], words=[u'a', u'c'])
+    >>> remover.transform(df).head().words == ['a', 'c']
+    True
     >>> import tempfile
     >>> path = tempfile.mkdtemp()
     >>> featurePath = path + "/feature-transformer"
