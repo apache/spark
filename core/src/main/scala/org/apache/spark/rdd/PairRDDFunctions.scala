@@ -300,7 +300,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
+   * Merge the values for each key using an associative and commutative binary operator. This will also perform
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
    */
