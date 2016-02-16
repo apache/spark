@@ -305,16 +305,15 @@ class Word2Vec extends Serializable with Logging {
     // will be translated into arrays of Index integer
     val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
       // Each sentence will map to 0 or more Array[Int]
-      sentenceIter.flatMap { sentence => {
-          // Sentence of words, some of which map to a word index
-          val wordIndexes = sentence.flatMap(bcVocabHash.value.get)
-          if (wordIndexes.nonEmpty) {
-            // break wordIndexes into trunks of maxSentenceLength when has more
-            val sentenceSplit = wordIndexes.grouped(maxSentenceLength)
-            sentenceSplit.map(_.toArray)
-          } else {
-            None
-          }
+      sentenceIter.flatMap { sentence =>
+        // Sentence of words, some of which map to a word index
+        val wordIndexes = sentence.flatMap(bcVocabHash.value.get)
+        if (wordIndexes.nonEmpty) {
+          // break wordIndexes into trunks of maxSentenceLength when has more
+          val sentenceSplit = wordIndexes.grouped(maxSentenceLength)
+          sentenceSplit.map(_.toArray)
+        } else {
+          None
         }
       }
     }
