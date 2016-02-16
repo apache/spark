@@ -140,6 +140,7 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
     case Token("TOK_BOOLEAN", Nil) => BooleanType
     case Token("TOK_STRING", Nil) => StringType
     case Token("TOK_VARCHAR", Token(_, Nil) :: Nil) => StringType
+    case Token("TOK_CHAR", Token(_, Nil) :: Nil) => StringType
     case Token("TOK_FLOAT", Nil) => FloatType
     case Token("TOK_DOUBLE", Nil) => DoubleType
     case Token("TOK_DATE", Nil) => DateType
@@ -156,9 +157,10 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
 
   protected def nodeToStructField(node: ASTNode): StructField = node match {
     case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
-    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: _ /* comment */:: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType), nullable = true)
+      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true)
+    case Token("TOK_TABCOL", Token(fieldName, Nil) :: dataType :: comment :: Nil) =>
+      val meta = new MetadataBuilder().putString("comment", unquoteString(comment.text)).build()
+      StructField(cleanIdentifier(fieldName), nodeToDataType(dataType), nullable = true, meta)
     case _ =>
       noParseRule("StructField", node)
   }
@@ -184,8 +186,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
    *
    * The bitmask denotes the grouping expressions validity for a grouping set,
    * the bitmask also be called as grouping id (`GROUPING__ID`, the virtual column in Hive)
-   * e.g. In superset (k1, k2, k3), (bit 0: k1, bit 1: k2, and bit 2: k3), the grouping id of
-   * GROUPING SETS (k1, k2) and (k2) should be 3 and 2 respectively.
+   * e.g. In superset (k1, k2, k3), (bit 2: k1, bit 1: k2, and bit 0: k3), the grouping id of
+   * GROUPING SETS (k1, k2) and (k2) should be 1 and 5 respectively.
    */
   protected def extractGroupingSet(children: Seq[ASTNode]): (Seq[Expression], Seq[Int]) = {
     val (keyASTs, setASTs) = children.partition {
@@ -196,12 +198,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     val keys = keyASTs.map(nodeToExpr)
     val keyMap = keyASTs.zipWithIndex.toMap
 
+    val mask = (1 << keys.length) - 1
     val bitmasks: Seq[Int] = setASTs.map {
       case Token("TOK_GROUPING_SETS_EXPRESSION", columns) =>
-        columns.foldLeft(0)((bitmap, col) => {
-          val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2)
-          bitmap | 1 << keyIndex.getOrElse(
+        columns.foldLeft(mask)((bitmap, col) => {
+          val keyIndex = keyMap.find(_._1.treeEquals(col)).map(_._2).getOrElse(
             throw new AnalysisException(s"${col.treeString} doesn't show up in the GROUP BY list"))
+          // 0 means that the column at the given index is a grouping column, 1 means it is not,
+          // so we unset the bit in bitmap.
+          bitmap & ~(1 << (keys.length - 1 - keyIndex))
         })
       case _ => sys.error("Expect GROUPING SETS clause")
     }
@@ -210,6 +215,29 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   }
 
   protected def nodeToPlan(node: ASTNode): LogicalPlan = node match {
+    case Token("TOK_SHOWFUNCTIONS", args) =>
+      // Skip LIKE.
+      val pattern = args match {
+        case like :: nodes if like.text.toUpperCase == "LIKE" => nodes
+        case nodes => nodes
+      }
+
+      // Extract Database and Function name
+      pattern match {
+        case Nil =>
+          ShowFunctions(None, None)
+        case Token(name, Nil) :: Nil =>
+          ShowFunctions(None, Some(unquoteString(cleanIdentifier(name))))
+        case Token(db, Nil) :: Token(name, Nil) :: Nil =>
+          ShowFunctions(Some(unquoteString(cleanIdentifier(db))),
+            Some(unquoteString(cleanIdentifier(name))))
+        case _ =>
+          noParseRule("SHOW FUNCTIONS", node)
+      }
+
+    case Token("TOK_DESCFUNCTION", Token(functionName, Nil) :: isExtended) =>
+      DescribeFunction(cleanIdentifier(functionName), isExtended.nonEmpty)
+
     case Token("TOK_QUERY", queryArgs @ Token("TOK_CTE" | "TOK_FROM" | "TOK_INSERT", _) :: _) =>
       val (fromClause: Option[ASTNode], insertClauses, cteRelations) =
         queryArgs match {
@@ -495,6 +523,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case "TOK_LEFTSEMIJOIN" => LeftSemi
           case "TOK_UNIQUEJOIN" => noParseRule("Unique Join", node)
           case "TOK_ANTIJOIN" => noParseRule("Anti Join", node)
+          case "TOK_NATURALJOIN" => NaturalJoin(Inner)
+          case "TOK_NATURALRIGHTOUTERJOIN" => NaturalJoin(RightOuter)
+          case "TOK_NATURALLEFTOUTERJOIN" => NaturalJoin(LeftOuter)
+          case "TOK_NATURALFULLOUTERJOIN" => NaturalJoin(FullOuter)
         }
         Join(nodeToRelation(relation1),
           nodeToRelation(relation2),
@@ -589,7 +621,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("Select", node)
   }
 
-  protected val escapedIdentifier = "`([^`]+)`".r
+  protected val escapedIdentifier = "`(.+)`".r
   protected val doubleQuotedString = "\"([^\"]+)\"".r
   protected val singleQuotedString = "'([^']+)'".r
 
@@ -633,7 +665,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(nameParts) =>
           UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
-        case other => UnresolvedExtractValue(other, Literal(attr))
+        case other => UnresolvedExtractValue(other, Literal(cleanIdentifier(attr)))
       }
 
     /* Stars (*) */
@@ -641,7 +673,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
     // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", target) :: Nil) if target.nonEmpty =>
-      UnresolvedStar(Some(target.map(_.text)))
+      UnresolvedStar(Some(target.map(x => cleanIdentifier(x.text))))
 
     /* Aggregate Functions */
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) =>
@@ -949,7 +981,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   protected def nodeToGenerate(node: ASTNode, outer: Boolean, child: LogicalPlan): Generate = {
     val Token("TOK_SELECT", Token("TOK_SELEXPR", clauses) :: Nil) = node
 
-    val alias = getClause("TOK_TABALIAS", clauses).children.head.text
+    val alias = cleanIdentifier(getClause("TOK_TABALIAS", clauses).children.head.text)
 
     val generator = clauses.head match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: childNode :: Nil) =>

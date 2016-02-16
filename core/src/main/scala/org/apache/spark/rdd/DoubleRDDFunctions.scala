@@ -103,7 +103,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
-  def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = self.withScope {
+  def histogram(bucketCount: Int): (Array[Double], Array[Long]) = self.withScope {
     // Scala's built-in range has issues. See #SI-8782
     def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
       val span = max - min
@@ -112,7 +112,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     // Compute the minimum and the maximum
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(Double.NegativeInfinity,
-        Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
+        Double.PositiveInfinity)((e: Double, x: (Double, Double)) =>
         (x._1.max(e), x._2.min(e))))
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))

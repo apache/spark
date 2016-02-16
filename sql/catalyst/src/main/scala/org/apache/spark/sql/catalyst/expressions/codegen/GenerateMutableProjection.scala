@@ -88,31 +88,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
 
     val updates = validExpr.zip(index).map {
       case (e, i) =>
-        if (e.nullable) {
-          if (e.dataType.isInstanceOf[DecimalType]) {
-            // Can't call setNullAt on DecimalType, because we need to keep the offset
-            s"""
-              if (this.isNull_$i) {
-                ${ctx.setColumn("mutableRow", e.dataType, i, null)};
-              } else {
-                ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-              }
-            """
-          } else {
-            s"""
-              if (this.isNull_$i) {
-                mutableRow.setNullAt($i);
-              } else {
-                ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-              }
-            """
-          }
-        } else {
-          s"""
-            ${ctx.setColumn("mutableRow", e.dataType, i, s"this.value_$i")};
-          """
-        }
-
+        val ev = ExprCode("", s"this.isNull_$i", s"this.value_$i")
+        ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)

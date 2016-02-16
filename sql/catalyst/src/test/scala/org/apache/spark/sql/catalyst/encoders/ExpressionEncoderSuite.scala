@@ -19,12 +19,9 @@ package org.apache.spark.sql.catalyst.encoders
 
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
-import java.util.concurrent.ConcurrentMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
-
-import com.google.common.collect.MapMaker
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
@@ -78,7 +75,7 @@ class JavaSerializable(val value: Int) extends Serializable {
 }
 
 class ExpressionEncoderSuite extends SparkFunSuite {
-  OuterScopes.outerScopes.put(getClass.getName, this)
+  OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
 

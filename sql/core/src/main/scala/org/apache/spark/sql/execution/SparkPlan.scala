@@ -78,6 +78,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 
   /**
+    * Reset all the metrics.
+    */
+  private[sql] def resetMetrics(): Unit = {
+    metrics.valuesIterator.foreach(_.reset())
+  }
+
+  /**
    * Return a LongSQLMetric according to the name.
    */
   private[sql] def longMetric(name: String): LongSQLMetric =
@@ -200,47 +207,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean = false): () => MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    try {
-      GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate mutable projection, fallback to interpreted", e)
-          () => new InterpretedMutableProjection(expressions, inputSchema)
-        }
-    }
+    GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }
 
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    try {
-      GeneratePredicate.generate(expression, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate predicate, fallback to interpreted", e)
-          InterpretedPredicate.create(expression, inputSchema)
-        }
-    }
+    GeneratePredicate.generate(expression, inputSchema)
   }
 
   protected def newOrdering(
       order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
-    try {
-      GenerateOrdering.generate(order, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate ordering, fallback to interpreted", e)
-          new InterpretedOrdering(order, inputSchema)
-        }
-    }
+    GenerateOrdering.generate(order, inputSchema)
   }
 
   /**

@@ -101,7 +101,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -116,6 +117,7 @@ class GroupedDataset[K, V] private[sql](
       MapGroups(
         f,
         groupingAttributes,
+        dataAttributes,
         logicalPlan))
   }
 
@@ -127,7 +129,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -147,7 +150,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -168,7 +172,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
    * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
-   * key, it is best to use the reduce function or an [[Aggregator]].
+   * key, it is best to use the reduce function or an
+   * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
    * Internally, the implementation will spill to disk if any given group is too large to fit into
    * memory.  However, users must take care to avoid materializing the whole iterator for a group
@@ -310,6 +315,8 @@ class GroupedDataset[K, V] private[sql](
         f,
         this.groupingAttributes,
         other.groupingAttributes,
+        this.dataAttributes,
+        other.dataAttributes,
         this.logicalPlan,
         other.logicalPlan))
   }

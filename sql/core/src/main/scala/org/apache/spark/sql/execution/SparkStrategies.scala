@@ -33,6 +33,31 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
 
+  /**
+   * Plans special cases of limit operators.
+   */
+  object SpecialLimits extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ReturnAnswer(rootPlan) => rootPlan match {
+        case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
+          execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
+        case logical.Limit(
+            IntegerLiteral(limit),
+            logical.Project(projectList, logical.Sort(order, true, child))) =>
+          execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
+        case logical.Limit(IntegerLiteral(limit), child) =>
+          execution.CollectLimit(limit, planLater(child)) :: Nil
+        case other => planLater(other) :: Nil
+      }
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
+        execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
+      case logical.Limit(
+          IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
+        execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
+      case _ => Nil
+    }
+  }
+
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
@@ -264,18 +289,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   protected lazy val singleRowRdd = sparkContext.parallelize(Seq(InternalRow()), 1)
 
-  object TakeOrderedAndProject extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        execution.TakeOrderedAndProject(limit, order, None, planLater(child)) :: Nil
-      case logical.Limit(
-             IntegerLiteral(limit),
-             logical.Project(projectList, logical.Sort(order, true, child))) =>
-        execution.TakeOrderedAndProject(limit, order, Some(projectList), planLater(child)) :: Nil
-      case _ => Nil
-    }
-  }
-
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>
@@ -298,16 +311,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         throw new IllegalStateException(
           "logical distinct operator should have been replaced by aggregate in the optimizer")
+      case logical.Intersect(left, right) =>
+        throw new IllegalStateException(
+          "logical intersect operator should have been replaced by semi-join in the optimizer")
 
       case logical.MapPartitions(f, in, out, child) =>
         execution.MapPartitions(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumns(f, in, out, child) =>
         execution.AppendColumns(f, in, out, planLater(child)) :: Nil
-      case logical.MapGroups(f, key, in, out, grouping, child) =>
-        execution.MapGroups(f, key, in, out, grouping, planLater(child)) :: Nil
-      case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, left, right) =>
+      case logical.MapGroups(f, key, in, out, grouping, data, child) =>
+        execution.MapGroups(f, key, in, out, grouping, data, planLater(child)) :: Nil
+      case logical.CoGroup(f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr, left, right) =>
         execution.CoGroup(
-          f, keyObj, lObj, rObj, out, lGroup, rGroup, planLater(left), planLater(right)) :: Nil
+          f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr,
+          planLater(left), planLater(right)) :: Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
@@ -334,14 +351,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         LocalTableScan(output, data) :: Nil
-      case logical.Limit(IntegerLiteral(limit), child) =>
-        execution.Limit(limit, planLater(child)) :: Nil
+      case logical.LocalLimit(IntegerLiteral(limit), child) =>
+        execution.LocalLimit(limit, planLater(child)) :: Nil
+      case logical.GlobalLimit(IntegerLiteral(limit), child) =>
+        execution.GlobalLimit(limit, planLater(child)) :: Nil
       case logical.Union(unionChildren) =>
         execution.Union(unionChildren.map(planLater)) :: Nil
       case logical.Except(left, right) =>
         execution.Except(planLater(left), planLater(right)) :: Nil
-      case logical.Intersect(left, right) =>
-        execution.Intersect(planLater(left), planLater(right)) :: Nil
       case g @ logical.Generate(generator, join, outer, _, _, child) =>
         execution.Generate(
           generator, join = join, outer = outer, g.output, planLater(child)) :: Nil
@@ -352,8 +369,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         execution.Exchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
-      case e @ EvaluatePython(udf, child, _) =>
-        BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
+      case e @ python.EvaluatePython(udf, child, _) =>
+        python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil

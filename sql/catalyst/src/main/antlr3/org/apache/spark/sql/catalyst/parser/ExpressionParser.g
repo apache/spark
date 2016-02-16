@@ -167,8 +167,8 @@ intervalLiteral
       ((intervalConstant KW_HOUR)=> hour=intervalConstant KW_HOUR)?
       ((intervalConstant KW_MINUTE)=> minute=intervalConstant KW_MINUTE)?
       ((intervalConstant KW_SECOND)=> second=intervalConstant KW_SECOND)?
-      (millisecond=intervalConstant KW_MILLISECOND)?
-      (microsecond=intervalConstant KW_MICROSECOND)?
+      ((intervalConstant KW_MILLISECOND)=> millisecond=intervalConstant KW_MILLISECOND)?
+      ((intervalConstant KW_MICROSECOND)=> microsecond=intervalConstant KW_MICROSECOND)?
       -> ^(TOK_INTERVAL
           ^(TOK_INTERVAL_YEAR_LITERAL $year?)
           ^(TOK_INTERVAL_MONTH_LITERAL $month?)
@@ -493,6 +493,16 @@ descFuncNames
     | functionIdentifier
     ;
 
+//We are allowed to use From and To in CreateTableUsing command's options (actually seems we can use any string as the option key). But we can't simply add them into nonReserved because by doing that we mess other existing rules. So we create a looseIdentifier and looseNonReserved here.
+looseIdentifier
+    :
+    Identifier
+    | looseNonReserved -> Identifier[$looseNonReserved.text]
+    // If it decides to support SQL11 reserved keywords, i.e., useSQL11ReservedKeywordsForIdentifier()=false,
+    // the sql11keywords in existing q tests will NOT be added back.
+    | {useSQL11ReservedKeywordsForIdentifier()}? sql11ReservedKeywordsUsedAsIdentifier -> Identifier[$sql11ReservedKeywordsUsedAsIdentifier.text]
+    ;
+
 identifier
     :
     Identifier
@@ -505,10 +515,8 @@ identifier
 functionIdentifier
 @init { gParent.pushMsg("function identifier", state); }
 @after { gParent.popMsg(state); }
-    : db=identifier DOT fn=identifier
-    -> Identifier[$db.text + "." + $fn.text]
-    |
-    identifier
+    :
+    identifier (DOT identifier)? -> identifier+
     ;
 
 principalIdentifier
@@ -516,6 +524,10 @@ principalIdentifier
 @after { gParent.popMsg(state); }
     : identifier
     | QuotedIdentifier
+    ;
+
+looseNonReserved
+    : nonReserved | KW_FROM | KW_TO
     ;
 
 //The new version of nonReserved + sql11ReservedKeywordsUsedAsIdentifier = old version of nonReserved
@@ -553,6 +565,8 @@ nonReserved
     | KW_SNAPSHOT
     | KW_AUTOCOMMIT
     | KW_ANTI
+    | KW_WEEK | KW_MILLISECOND | KW_MICROSECOND
+    | KW_CLEAR | KW_LAZY | KW_CACHE | KW_UNCACHE | KW_DFS
 ;
 
 //The following SQL2011 reserved keywords are used as cast function name only, but not as identifiers.

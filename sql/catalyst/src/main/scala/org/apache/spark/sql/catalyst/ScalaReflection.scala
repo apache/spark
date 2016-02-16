@@ -249,6 +249,8 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
+
+        // TODO: add runtime null check for primitive array
         val primitiveMethod = elementType match {
           case t if t <:< definitions.IntTpe => Some("toIntArray")
           case t if t <:< definitions.LongTpe => Some("toLongArray")
@@ -276,22 +278,29 @@ object ScalaReflection extends ScalaReflection {
 
       case t if t <:< localTypeOf[Seq[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
+        val Schema(dataType, nullable) = schemaFor(elementType)
         val className = getClassNameFromType(elementType)
         val newTypePath = s"""- array element class: "$className"""" +: walkedTypePath
-        val arrayData =
-          Invoke(
-            MapObjects(
-              p => constructorFor(elementType, Some(p), newTypePath),
-              getPath,
-              schemaFor(elementType).dataType),
-            "array",
-            ObjectType(classOf[Array[Any]]))
+
+        val mapFunction: Expression => Expression = p => {
+          val converter = constructorFor(elementType, Some(p), newTypePath)
+          if (nullable) {
+            converter
+          } else {
+            AssertNotNull(converter, newTypePath)
+          }
+        }
+
+        val array = Invoke(
+          MapObjects(mapFunction, getPath, dataType),
+          "array",
+          ObjectType(classOf[Array[Any]]))
 
         StaticInvoke(
           scala.collection.mutable.WrappedArray.getClass,
           ObjectType(classOf[Seq[_]]),
           "make",
-          arrayData :: Nil)
+          array :: Nil)
 
       case t if t <:< localTypeOf[Map[_, _]] =>
         // TODO: add walked type path for map
@@ -343,7 +352,7 @@ object ScalaReflection extends ScalaReflection {
               newTypePath)
 
             if (!nullable) {
-              AssertNotNull(constructor, t.toString, fieldName, fieldType.toString)
+              AssertNotNull(constructor, newTypePath)
             } else {
               constructor
             }
@@ -601,6 +610,20 @@ object ScalaReflection extends ScalaReflection {
     getConstructorParameters(t)
   }
 
+  /**
+   * Returns the parameter names for the primary constructor of this class.
+   *
+   * Logically we should call `getConstructorParameters` and throw away the parameter types to get
+   * parameter names, however there are some weird scala reflection problems and this method is a
+   * workaround to avoid getting parameter types.
+   */
+  def getConstructorParameterNames(cls: Class[_]): Seq[String] = {
+    val m = runtimeMirror(cls.getClassLoader)
+    val classSymbol = m.staticClass(cls.getName)
+    val t = classSymbol.selfType
+    constructParams(t).map(_.name.toString)
+  }
+
   def getClassFromType(tpe: Type): Class[_] = mirror.runtimeClass(tpe.erasure.typeSymbol.asClass)
 }
 
@@ -745,6 +768,12 @@ trait ScalaReflection {
   def getConstructorParameters(tpe: Type): Seq[(String, Type)] = {
     val formalTypeArgs = tpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = tpe
+    constructParams(tpe).map { p =>
+      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+    }
+  }
+
+  protected def constructParams(tpe: Type): Seq[Symbol] = {
     val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramss
@@ -758,9 +787,6 @@ trait ScalaReflection {
         primaryConstructorSymbol.get.asMethod.paramss
       }
     }
-
-    params.flatten.map { p =>
-      p.name.toString -> p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-    }
+    params.flatten
   }
 }

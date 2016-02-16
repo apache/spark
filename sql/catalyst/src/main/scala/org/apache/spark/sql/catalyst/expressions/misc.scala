@@ -143,11 +143,11 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
+    UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
     )
   }
 }
@@ -322,39 +322,52 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
-
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
-    val childrenHash = children.zipWithIndex.map {
-      case (child, dt) =>
-        val childGen = child.gen(ctx)
-        val childHash = computeHash(childGen.value, child.dataType, ev.value, ctx)
-        s"""
-          ${childGen.code}
-          if (!${childGen.isNull}) {
-            ${childHash.code}
-            ${ev.value} = ${childHash.value};
-          }
-        """
+    val childrenHash = children.map { child =>
+      val childGen = child.gen(ctx)
+      childGen.code + ctx.nullSafeExec(child.nullable, childGen.isNull) {
+        computeHash(childGen.value, child.dataType, ev.value, ctx)
+      }
     }.mkString("\n")
+
     s"""
       int ${ev.value} = $seed;
       $childrenHash
     """
   }
 
+  private def nullSafeElementHash(
+      input: String,
+      index: String,
+      nullable: Boolean,
+      elementType: DataType,
+      result: String,
+      ctx: CodegenContext): String = {
+    val element = ctx.freshName("element")
+
+    ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
+      s"""
+        final ${ctx.javaType(elementType)} $element = ${ctx.getValue(input, elementType, index)};
+        ${computeHash(element, elementType, result, ctx)}
+      """
+    }
+  }
+
   private def computeHash(
       input: String,
       dataType: DataType,
-      seed: String,
-      ctx: CodegenContext): ExprCode = {
+      result: String,
+      ctx: CodegenContext): String = {
     val hasher = classOf[Murmur3_x86_32].getName
-    def hashInt(i: String): ExprCode = inlineValue(s"$hasher.hashInt($i, $seed)")
-    def hashLong(l: String): ExprCode = inlineValue(s"$hasher.hashLong($l, $seed)")
-    def inlineValue(v: String): ExprCode = ExprCode(code = "", isNull = "false", value = v)
+
+    def hashInt(i: String): String = s"$result = $hasher.hashInt($i, $result);"
+    def hashLong(l: String): String = s"$result = $hasher.hashLong($l, $result);"
+    def hashBytes(b: String): String =
+      s"$result = $hasher.hashUnsafeBytes($b, Platform.BYTE_ARRAY_OFFSET, $b.length, $result);"
 
     dataType match {
-      case NullType => inlineValue(seed)
+      case NullType => ""
       case BooleanType => hashInt(s"$input ? 1 : 0")
       case ByteType | ShortType | IntegerType | DateType => hashInt(input)
       case LongType | TimestampType => hashLong(input)
@@ -365,91 +378,66 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
           hashLong(s"$input.toUnscaledLong()")
         } else {
           val bytes = ctx.freshName("bytes")
-          val code = s"byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();"
-          val offset = "Platform.BYTE_ARRAY_OFFSET"
-          val result = s"$hasher.hashUnsafeBytes($bytes, $offset, $bytes.length, $seed)"
-          ExprCode(code, "false", result)
+          s"""
+            final byte[] $bytes = $input.toJavaBigDecimal().unscaledValue().toByteArray();
+            ${hashBytes(bytes)}
+          """
         }
       case CalendarIntervalType =>
-        val microsecondsHash = s"$hasher.hashLong($input.microseconds, $seed)"
-        val monthsHash = s"$hasher.hashInt($input.months, $microsecondsHash)"
-        inlineValue(monthsHash)
-      case BinaryType =>
-        val offset = "Platform.BYTE_ARRAY_OFFSET"
-        inlineValue(s"$hasher.hashUnsafeBytes($input, $offset, $input.length, $seed)")
+        val microsecondsHash = s"$hasher.hashLong($input.microseconds, $result)"
+        s"$result = $hasher.hashInt($input.months, $microsecondsHash);"
+      case BinaryType => hashBytes(input)
       case StringType =>
         val baseObject = s"$input.getBaseObject()"
         val baseOffset = s"$input.getBaseOffset()"
         val numBytes = s"$input.numBytes()"
-        inlineValue(s"$hasher.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $seed)")
+        s"$result = $hasher.hashUnsafeBytes($baseObject, $baseOffset, $numBytes, $result);"
 
-      case ArrayType(et, _) =>
-        val result = ctx.freshName("result")
+      case ArrayType(et, containsNull) =>
         val index = ctx.freshName("index")
-        val element = ctx.freshName("element")
-        val elementHash = computeHash(element, et, result, ctx)
-        val code =
-          s"""
-            int $result = $seed;
-            for (int $index = 0; $index < $input.numElements(); $index++) {
-              if (!$input.isNullAt($index)) {
-                final ${ctx.javaType(et)} $element = ${ctx.getValue(input, et, index)};
-                ${elementHash.code}
-                $result = ${elementHash.value};
-              }
-            }
-          """
-        ExprCode(code, "false", result)
+        s"""
+          for (int $index = 0; $index < $input.numElements(); $index++) {
+            ${nullSafeElementHash(input, index, containsNull, et, result, ctx)}
+          }
+        """
 
-      case MapType(kt, vt, _) =>
-        val result = ctx.freshName("result")
+      case MapType(kt, vt, valueContainsNull) =>
         val index = ctx.freshName("index")
         val keys = ctx.freshName("keys")
         val values = ctx.freshName("values")
-        val key = ctx.freshName("key")
-        val value = ctx.freshName("value")
-        val keyHash = computeHash(key, kt, result, ctx)
-        val valueHash = computeHash(value, vt, result, ctx)
-        val code =
-          s"""
-            int $result = $seed;
-            final ArrayData $keys = $input.keyArray();
-            final ArrayData $values = $input.valueArray();
-            for (int $index = 0; $index < $input.numElements(); $index++) {
-              final ${ctx.javaType(kt)} $key = ${ctx.getValue(keys, kt, index)};
-              ${keyHash.code}
-              $result = ${keyHash.value};
-              if (!$values.isNullAt($index)) {
-                final ${ctx.javaType(vt)} $value = ${ctx.getValue(values, vt, index)};
-                ${valueHash.code}
-                $result = ${valueHash.value};
-              }
-            }
-          """
-        ExprCode(code, "false", result)
+        s"""
+          final ArrayData $keys = $input.keyArray();
+          final ArrayData $values = $input.valueArray();
+          for (int $index = 0; $index < $input.numElements(); $index++) {
+            ${nullSafeElementHash(keys, index, false, kt, result, ctx)}
+            ${nullSafeElementHash(values, index, valueContainsNull, vt, result, ctx)}
+          }
+        """
 
       case StructType(fields) =>
-        val result = ctx.freshName("result")
-        val fieldsHash = fields.map(_.dataType).zipWithIndex.map {
-          case (dt, index) =>
-            val field = ctx.freshName("field")
-            val fieldHash = computeHash(field, dt, result, ctx)
-            s"""
-              if (!$input.isNullAt($index)) {
-                final ${ctx.javaType(dt)} $field = ${ctx.getValue(input, dt, index.toString)};
-                ${fieldHash.code}
-                $result = ${fieldHash.value};
-              }
-            """
+        fields.zipWithIndex.map { case (field, index) =>
+          nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
         }.mkString("\n")
-        val code =
-          s"""
-            int $result = $seed;
-            $fieldsHash
-          """
-        ExprCode(code, "false", result)
 
-      case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, seed, ctx)
+      case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
     }
+  }
+}
+
+/**
+  * Print the result of an expression to stderr (used for debugging codegen).
+  */
+case class PrintToStderr(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+
+  protected override def nullSafeEval(input: Any): Any = input
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         | System.err.println("Result of ${child.simpleString} is " + $c);
+         | ${ev.value} = $c;
+       """.stripMargin)
   }
 }

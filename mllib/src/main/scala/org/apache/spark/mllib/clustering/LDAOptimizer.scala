@@ -95,7 +95,9 @@ final class EMLDAOptimizer extends LDAOptimizer {
   /**
    * Compute bipartite term/doc graph.
    */
-  override private[clustering] def initialize(docs: RDD[(Long, Vector)], lda: LDA): LDAOptimizer = {
+  override private[clustering] def initialize(
+      docs: RDD[(Long, Vector)],
+      lda: LDA): EMLDAOptimizer = {
     // EMLDAOptimizer currently only supports symmetric document-topic priors
     val docConcentration = lda.getDocConcentration
 

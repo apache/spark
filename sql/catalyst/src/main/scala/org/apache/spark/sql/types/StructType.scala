@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.util.{DataTypeParser, LegacyTypeStringParse
  * Example:
  * {{{
  * import org.apache.spark.sql._
+ * import org.apache.spark.sql.types._
  *
  * val struct =
  *   StructType(
@@ -334,6 +335,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
 object StructType extends AbstractDataType {
 
+  private[sql] val metadataKeyForOptionalField = "_OPTIONAL_"
+
   override private[sql] def defaultConcreteType: DataType = new StructType
 
   override private[sql] def acceptsType(other: DataType): Boolean = {
@@ -359,6 +362,18 @@ object StructType extends AbstractDataType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
 
+  def removeMetadata(key: String, dt: DataType): DataType =
+    dt match {
+      case StructType(fields) =>
+        val newFields = fields.map { f =>
+          val mb = new MetadataBuilder()
+          f.copy(dataType = removeMetadata(key, f.dataType),
+            metadata = mb.withMetadata(f.metadata).remove(key).build())
+        }
+        StructType(newFields)
+      case _ => dt
+    }
+
   private[sql] def merge(left: DataType, right: DataType): DataType =
     (left, right) match {
       case (ArrayType(leftElementType, leftContainsNull),
@@ -376,24 +391,32 @@ object StructType extends AbstractDataType {
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]
+        // This metadata will record the fields that only exist in one of two StructTypes
+        val optionalMeta = new MetadataBuilder()
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
               .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-              leftField.copy(
-                dataType = merge(leftType, rightType),
-                nullable = leftNullable || rightNullable)
-            }
-              .orElse(Some(leftField))
+                leftField.copy(
+                  dataType = merge(leftType, rightType),
+                  nullable = leftNullable || rightNullable)
+              }
+              .orElse {
+                optionalMeta.putBoolean(metadataKeyForOptionalField, true)
+                Some(leftField.copy(metadata = optionalMeta.build()))
+              }
               .foreach(newFields += _)
         }
 
         val leftMapped = fieldsMap(leftFields)
         rightFields
           .filterNot(f => leftMapped.get(f.name).nonEmpty)
-          .foreach(newFields += _)
+          .foreach { f =>
+            optionalMeta.putBoolean(metadataKeyForOptionalField, true)
+            newFields += f.copy(metadata = optionalMeta.build())
+          }
 
         StructType(newFields)
 
@@ -402,13 +425,13 @@ object StructType extends AbstractDataType {
         if ((leftPrecision == rightPrecision) && (leftScale == rightScale)) {
           DecimalType(leftPrecision, leftScale)
         } else if ((leftPrecision != rightPrecision) && (leftScale != rightScale)) {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"precision $leftPrecision and $rightPrecision & scale $leftScale and $rightScale")
         } else if (leftPrecision != rightPrecision) {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"precision $leftPrecision and $rightPrecision")
         } else {
-          throw new SparkException("Failed to merge Decimal Tpes with incompatible " +
+          throw new SparkException("Failed to merge decimal types with incompatible " +
             s"scala $leftScale and $rightScale")
         }
 
