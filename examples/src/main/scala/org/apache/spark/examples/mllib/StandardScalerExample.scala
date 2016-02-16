@@ -30,7 +30,7 @@ object StandardScalerExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("StandardScalerExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("StandardScalerExample")
     val sc = new SparkContext(conf)
 
     // $example on$

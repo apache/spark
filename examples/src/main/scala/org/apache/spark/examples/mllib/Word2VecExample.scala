@@ -28,7 +28,7 @@ object Word2VecExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("Word2VecExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("Word2VecExample")
     val sc = new SparkContext(conf)
 
     // $example on$

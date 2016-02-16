@@ -31,7 +31,7 @@ object ChiSqSelectorExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("ChiSqSelectorExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("ChiSqSelectorExample")
     val sc = new SparkContext(conf)
 
     // $example on$

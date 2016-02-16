@@ -29,7 +29,7 @@ object NormalizerExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("NormalizerExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("NormalizerExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -43,7 +43,6 @@ object NormalizerExample {
 
     // Each sample in data2 will be normalized using $L^\infty$ norm.
     val data2 = data.map(x => (x.label, normalizer2.transform(x.features)))
-
     // $example off$
 
     sc.stop()

@@ -29,7 +29,7 @@ object ElementwiseProductExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("ElementwiseProductExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("ElementwiseProductExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -42,7 +42,6 @@ object ElementwiseProductExample {
     // Batch transform and per-row transform give the same results:
     val transformedData = transformer.transform(data)
     val transformedData2 = data.map(x => transformer.transform(x))
-
     // $example off$
 
     sc.stop()
