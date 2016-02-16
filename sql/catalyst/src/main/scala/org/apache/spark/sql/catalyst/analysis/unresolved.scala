@@ -144,10 +144,7 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
-  override def sql: String = {
-    s"$name(${children.map(_.sql).mkString(", ")})"
-  }
-
+  override def prettyName: String = name
   override def toString: String = s"'$name(${children.mkString(", ")})"
 }
 

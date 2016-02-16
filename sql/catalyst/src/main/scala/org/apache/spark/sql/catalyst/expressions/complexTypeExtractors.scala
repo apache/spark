@@ -93,7 +93,7 @@ object ExtractValue {
   }
 }
 
-trait ExtractValue { this: Expression => }
+trait ExtractValue extends Expression
 
 /**
  * Returns the value of fields in the Struct `child`.
@@ -143,7 +143,8 @@ case class PrettyGetStructField(child: Expression, name: String, dataType: DataT
 }
 
 /**
- * Returns the array of value of fields in the Array of Struct `child`.
+ * For a child whose data type is an array of structs, extracts the `ordinal`-th fields of all array
+ * elements, and returns them as a new array.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
  */
@@ -155,8 +156,8 @@ case class GetArrayStructFields(
     containsNull: Boolean) extends UnaryExpression with ExtractValue {
 
   override def dataType: DataType = ArrayType(field.dataType, containsNull)
-  override def toString: String = s"$child[$ordinal].${field.name}"
-  override def sql: String = s"${child.sql}[$ordinal].${quoteIdentifier(field.name)}"
+  override def toString: String = s"$child.${field.name}"
+  override def sql: String = s"${child.sql}.${quoteIdentifier(field.name)}"
 
   protected override def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData]
@@ -211,7 +212,7 @@ case class PrettyGetArrayStructFields(
     child: Expression, ordinal: Int, name: String, dataType: DataType)
   extends UnaryExpression with Unevaluable {
 
-  override def sql: String = s"${child.sql}[$ordinal].$name"
+  override def sql: String = s"${child.sql}.$name"
 }
 
 /**

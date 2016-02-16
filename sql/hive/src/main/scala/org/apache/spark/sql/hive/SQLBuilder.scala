@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * supported by this builder (yet).
  */
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
-  require(logicalPlan.resolved, "SQLBuilder only supports reslved logical query plans")
+  require(logicalPlan.resolved, "SQLBuilder only supports resloved logical query plans")
 
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 

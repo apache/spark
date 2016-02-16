@@ -312,9 +312,8 @@ case class AttributeReference(
  * expression id or the unresolved indicator.
  */
 case class PrettyAttribute(
-                            name: String,
-                            dataType: DataType = NullType,
-                            override val foldable: Boolean = false)
+    name: String,
+    dataType: DataType = NullType)
   extends Attribute with Unevaluable {
 
   def this(attribute: Attribute) = this(attribute.name, attribute match {
