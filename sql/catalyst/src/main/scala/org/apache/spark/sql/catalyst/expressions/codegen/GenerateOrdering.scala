@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.io.ObjectInputStream
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Inherits some default implementation for Java from `Ordering[Row]`
@@ -136,5 +139,39 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     logDebug(s"Generated Ordering: ${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
+  }
+}
+
+/**
+ * A lazily generated row ordering comparator.
+ */
+class LazilyGeneratedOrdering(val ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+
+  def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
+    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+
+  @transient
+  private[this] var generatedOrdering = GenerateOrdering.generate(ordering)
+
+  def compare(a: InternalRow, b: InternalRow): Int = {
+    generatedOrdering.compare(a, b)
+  }
+
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    in.defaultReadObject()
+    generatedOrdering = GenerateOrdering.generate(ordering)
+  }
+}
+
+object LazilyGeneratedOrdering {
+
+  /**
+   * Creates a [[LazilyGeneratedOrdering]] for the given schema, in natural ascending order.
+   */
+  def forSchema(schema: StructType): LazilyGeneratedOrdering = {
+    new LazilyGeneratedOrdering(schema.zipWithIndex.map {
+      case (field, ordinal) =>
+        SortOrder(BoundReference(ordinal, field.dataType, nullable = true), Ascending)
+    })
   }
 }
