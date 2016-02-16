@@ -210,9 +210,26 @@ class DirectKafkaInputDStream[
       val leaders = KafkaCluster.checkErrors(kc.findLeaders(topics))
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-         generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
-           context.sparkContext, kafkaParams, b.map(OffsetRange(_)), leaders, messageHandler)
+        logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+        val recoverOffsets = b.map(OffsetRange(_))
+        val rdd = new KafkaRDD[K, V, U, T, R](
+          context.sparkContext, kafkaParams, recoverOffsets, leaders, messageHandler)
+
+        val description = recoverOffsets.filter { offsetRange =>
+          // Don't display empty ranges.
+          offsetRange.fromOffset != offsetRange.untilOffset
+        }.map { offsetRange =>
+          s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+            s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+        }.mkString("\n")
+
+        // Copy offsetRanges to immutable.List to prevent from being modified by the user
+        val metadata = Map(
+          "offsets" -> recoverOffsets.toList,
+          StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+        val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+        ssc.scheduler.inputInfoTracker.reportInfo(t, inputInfo)
+        generatedRDDs += t -> rdd
       }
     }
   }

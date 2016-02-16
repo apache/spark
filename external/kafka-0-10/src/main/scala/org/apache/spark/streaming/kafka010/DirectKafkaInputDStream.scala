@@ -313,16 +313,32 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     override def restore(): Unit = {
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
-         logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-         generatedRDDs += t -> new KafkaRDD[K, V](
-           context.sparkContext,
-           executorKafkaParams,
-           b.map(OffsetRange(_)),
-           getPreferredHosts,
-           // during restore, it's possible same partition will be consumed from multiple
-           // threads, so dont use cache
-           false
-         )
+        logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+        val recoverOffsets = b.map(OffsetRange(_))
+        val rdd = new KafkaRDD[K, V](
+          context.sparkContext,
+          executorKafkaParams,
+          recoverOffsets,
+          getPreferredHosts,
+          // during restore, it's possible same partition will be consumed from multiple
+          // threads, so dont use cache
+          false
+        )
+        // Report the record number and metadata of this batch interval to InputInfoTracker.
+        val description = recoverOffsets.filter { offsetRange =>
+          // Don't display empty ranges.
+          offsetRange.fromOffset != offsetRange.untilOffset
+        }.map { offsetRange =>
+          s"topic: ${offsetRange.topic}\tpartition: ${offsetRange.partition}\t" +
+            s"offsets: ${offsetRange.fromOffset} to ${offsetRange.untilOffset}"
+        }.mkString("\n")
+        // Copy offsetRanges to immutable.List to prevent from being modified by the user
+        val metadata = Map(
+          "offsets" -> recoverOffsets.toList,
+          StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
+        val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+        ssc.scheduler.inputInfoTracker.reportInfo(t, inputInfo)
+        generatedRDDs += t -> rdd
       }
     }
   }

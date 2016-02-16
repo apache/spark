@@ -155,7 +155,6 @@ class StreamingContext private[streaming] (
   private[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
       _cp.graph.setContext(this)
-      _cp.graph.restoreCheckpointData()
       _cp.graph
     } else {
       require(_batchDur != null, "Batch duration for StreamingContext cannot be null")
@@ -181,6 +180,11 @@ class StreamingContext private[streaming] (
   }
 
   private[streaming] val scheduler = new JobScheduler(this)
+  // restore data has to report info to inputInfoTracker,
+  // so it need to be initialzed after JobScheduler
+  if (isCheckpointPresent) {
+    graph.restoreCheckpointData()
+  }
 
   private[streaming] val waiter = new ContextWaiter
 

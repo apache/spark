@@ -59,7 +59,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   // eventLoop not being null means the scheduler has been started and not stopped
   var receiverTracker: ReceiverTracker = null
   // A tracker to track all the input stream information as well as processed record number
-  var inputInfoTracker: InputInfoTracker = null
+  var inputInfoTracker: InputInfoTracker = new InputInfoTracker(ssc)
 
   private var executorAllocationManager: Option[ExecutorAllocationManager] = None
 
@@ -84,7 +84,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
     listenerBus.start()
     receiverTracker = new ReceiverTracker(ssc)
-    inputInfoTracker = new InputInfoTracker(ssc)
 
     val executorAllocClient: ExecutorAllocationClient = ssc.sparkContext.schedulerBackend match {
       case b: ExecutorAllocationClient => b.asInstanceOf[ExecutorAllocationClient]
