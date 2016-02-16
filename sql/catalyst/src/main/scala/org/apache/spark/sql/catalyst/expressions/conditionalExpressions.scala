@@ -176,12 +176,12 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
       val code = s"""
         public boolean ${name}(InternalRow ${ctx.INPUT_ROW}) {
           ${body}
-        }""".stripMargin
+        }"""
       ctx.addNewFunction(name, code)
       name
     }
 
-    val cases = branches.zipWithIndex.map { case ((condExpr, valueExpr), index) =>
+    val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.gen(ctx)
       val res = valueExpr.gen(ctx)
       s"""
