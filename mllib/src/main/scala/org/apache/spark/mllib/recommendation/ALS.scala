@@ -218,7 +218,7 @@ class ALS private (
   }
 
   /**
-   * Run ALS with the configured parameters on an input RDD of (user, product, rating) triples.
+   * Run ALS with the configured parameters on an input RDD of [[Rating]] objects.
    * Returns a MatrixFactorizationModel with feature vectors for each user and product.
    */
   @Since("0.8.0")
@@ -279,18 +279,17 @@ class ALS private (
 @Since("0.8.0")
 object ALS {
   /**
-   * Train a matrix factorization model given an RDD of ratings given by users to some products,
-   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-   * product of two lower-rank matrices of a given rank (number of features). To solve for these
-   * features, we run a given number of iterations of ALS. This is done using a level of
-   * parallelism given by `blocks`.
+   * Train a matrix factorization model given an RDD of ratings by users for a subset of products.
+   * The ratings matrix is approximated as the product of two lower-rank matrices of a given rank
+   * (number of features). To solve for these features, ALS is run iteratively with a configurable
+   * level of parallelism.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @param seed       random seed
+   * @param seed       random seed for initial matrix factorization model
    */
   @Since("0.9.1")
   def train(
@@ -305,13 +304,12 @@ object ALS {
   }
 
   /**
-   * Train a matrix factorization model given an RDD of ratings given by users to some products,
-   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-   * product of two lower-rank matrices of a given rank (number of features). To solve for these
-   * features, we run a given number of iterations of ALS. This is done using a level of
-   * parallelism given by `blocks`.
+   * Train a matrix factorization model given an RDD of ratings by users for a subset of products.
+   * The ratings matrix is approximated as the product of two lower-rank matrices of a given rank
+   * (number of features). To solve for these features, ALS is run iteratively with a configurable
+   * level of parallelism.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
@@ -329,13 +327,12 @@ object ALS {
   }
 
   /**
-   * Train a matrix factorization model given an RDD of ratings given by users to some products,
-   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-   * product of two lower-rank matrices of a given rank (number of features). To solve for these
-   * features, we run a given number of iterations of ALS. The level of parallelism is determined
-   * automatically based on the number of partitions in `ratings`.
+   * Train a matrix factorization model given an RDD of ratings by users for a subset of products.
+   * The ratings matrix is approximated as the product of two lower-rank matrices of a given rank
+   * (number of features). To solve for these features, ALS is run iteratively with a level of
+   * parallelism automatically based on the number of partitions in `ratings`.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
@@ -347,13 +344,12 @@ object ALS {
   }
 
   /**
-   * Train a matrix factorization model given an RDD of ratings given by users to some products,
-   * in the form of (userID, productID, rating) pairs. We approximate the ratings matrix as the
-   * product of two lower-rank matrices of a given rank (number of features). To solve for these
-   * features, we run a given number of iterations of ALS. The level of parallelism is determined
-   * automatically based on the number of partitions in `ratings`.
+   * Train a matrix factorization model given an RDD of ratings by users for a subset of products.
+   * The ratings matrix is approximated as the product of two lower-rank matrices of a given rank
+   * (number of features). To solve for these features, ALS is run iteratively with a level of
+   * parallelism automatically based on the number of partitions in `ratings`.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */
@@ -376,7 +372,7 @@ object ALS {
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
-   * @param seed       random seed
+   * @param seed       random seed for initial matrix factorization model
    */
   @Since("0.8.1")
   def trainImplicit(
@@ -392,13 +388,12 @@ object ALS {
   }
 
   /**
-   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users
-   * to some products, in the form of (userID, productID, preference) pairs. We approximate the
-   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
-   * To solve for these features, we run a given number of iterations of ALS. This is done using
-   * a level of parallelism given by `blocks`.
+   * Train a matrix factorization model given an RDD of 'implicit preferences' of users for a
+   * subset of products. The ratings matrix is approximated as the product of two lower-rank
+   * matrices of a given rank (number of features). To solve for these features, ALS is run
+   * iteratively with a configurable level of parallelism.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
@@ -418,13 +413,13 @@ object ALS {
   }
 
   /**
-   * Train a matrix factorization model given an RDD of 'implicit preferences' given by users to
-   * some products, in the form of (userID, productID, preference) pairs. We approximate the
-   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
-   * To solve for these features, we run a given number of iterations of ALS. The level of
-   * parallelism is determined automatically based on the number of partitions in `ratings`.
+   * Train a matrix factorization model given an RDD of 'implicit preferences' of users for a
+   * subset of products. The ratings matrix is approximated as the product of two lower-rank
+   * matrices of a given rank (number of features). To solve for these features, ALS is run
+   * iteratively with a level of parallelism determined automatically based on the number of
+   * partitions in `ratings`.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
@@ -437,14 +432,13 @@ object ALS {
   }
 
   /**
-   * Train a matrix factorization model given an RDD of 'implicit preferences' ratings given by
-   * users to some products, in the form of (userID, productID, rating) pairs. We approximate the
-   * ratings matrix as the product of two lower-rank matrices of a given rank (number of features).
-   * To solve for these features, we run a given number of iterations of ALS. The level of
-   * parallelism is determined automatically based on the number of partitions in `ratings`.
-   * Model parameters `alpha` and `lambda` are set to reasonable default values
+   * Train a matrix factorization model given an RDD of 'implicit preferences' of users for a
+   * subset of products. The ratings matrix is approximated as the product of two lower-rank
+   * matrices of a given rank (number of features). To solve for these features, ALS is run
+   * iteratively with a level of parallelism determined automatically based on the number of
+   * partitions in `ratings`.
    *
-   * @param ratings    RDD of (userID, productID, rating) pairs
+   * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    */

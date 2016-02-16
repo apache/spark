@@ -59,7 +59,7 @@ class FPGrowthModel[Item: ClassTag] @Since("1.3.0") (
  * [[http://dx.doi.org/10.1145/335191.335372 Han et al., Mining frequent patterns without candidate
  *  generation]].
  *
- * @param minSupport the minimal support level of the frequent pattern, any pattern appears
+ * @param minSupport the minimal support level of the frequent pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
  * @param numPartitions number of partitions used by parallel FP-growth
  *

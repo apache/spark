@@ -74,7 +74,7 @@ class FPGrowth(object):
           (default: 0.3)
         :param numPartitions:
           The number of partitions used by parallel FP-growth. A value
-          of -1 will use the same number of as input data.
+          of -1 will use the same number as input data.
           (default: -1)
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
@@ -139,12 +139,12 @@ class PrefixSpan(object):
           itemsets.
         :param minSupport:
           The minimal support level of the sequential pattern, any
-          pattern appears more than (minSupport * size-of-the-dataset)
-          times will be output.
+          pattern that appears more than (minSupport *
+          size-of-the-dataset) times will be output.
           (default: 0.1)
         :param maxPatternLength:
           The maximal length of the sequential pattern, any pattern
-          appears less than maxPatternLength will be output.
+          that appears less than maxPatternLength will be output.
           (default: 10)
         :param maxLocalProjDBSize:
           The maximum number of items (including delimiters used in the
