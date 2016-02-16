@@ -65,7 +65,7 @@ public class MessageWithHeaderSuite {
     assertEquals(42, result.readLong());
     assertEquals(84, result.readLong());
 
-    msg.deallocate();
+    assert(msg.release());
     assertEquals(0, bodyPassedToNettyManagedBuffer.refCnt());
     assertEquals(0, header.refCnt());
   }
