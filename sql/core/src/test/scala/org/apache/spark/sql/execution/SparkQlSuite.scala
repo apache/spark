@@ -67,7 +67,7 @@ class SparkQlSuite extends PlanTest {
   }
 
   test("alter table: rename table") {
-    val sql ="ALTER TABLE table_name RENAME TO new_table_name"
+    val sql = "ALTER TABLE table_name RENAME TO new_table_name"
     val parsed = parser.parsePlan(sql)
     val expected = AlterTableRename(
       TableIdentifier("table_name", None),
