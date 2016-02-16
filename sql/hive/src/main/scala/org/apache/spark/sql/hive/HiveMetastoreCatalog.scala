@@ -25,7 +25,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.Warehouse
+import org.apache.hadoop.hive.metastore.{TableType => HiveTableType, Warehouse}
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable, _}
 import org.apache.hadoop.hive.ql.plan.TableDesc
@@ -782,7 +782,12 @@ private[hive] case class MetastoreRelation(
     tTable.setParameters(tableParameters)
     table.properties.foreach { case (k, v) => tableParameters.put(k, v) }
 
-    tTable.setTableType(table.tableType.toString)
+    tTable.setTableType(table.tableType match {
+      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE.toString
+      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE.toString
+      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE.toString
+      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW.toString
+    })
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
     tTable.setSd(sd)
