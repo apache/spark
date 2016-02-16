@@ -34,6 +34,10 @@ class PolynomialExpansionSuite
     ParamsSuite.checkParams(new PolynomialExpansion)
   }
 
+  test("Polynomial expansion validation with one degree") {
+    ParamsSuite.checkParams(new PolynomialExpansion().setDegree(1))
+  }
+
   test("Polynomial expansion with default parameter") {
     val data = Array(
       Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
