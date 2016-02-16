@@ -105,6 +105,23 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     assertValues(result, l1Normalized)
   }
 
+  test("Normalization should throw adequate exception on input type mismatch") {
+    val data = Seq(Tuple1("string value"))
+
+    val df = sqlContext.createDataFrame(data).toDF("features")
+
+    val normalizer = new Normalizer()
+      .setInputCol("features")
+      .setOutputCol("polyFeatures")
+
+    val thrown = intercept[IllegalArgumentException] {
+      normalizer.transform(df).collect()
+    }
+    assert(thrown.getClass === classOf[IllegalArgumentException])
+    assert(
+      thrown.getMessage == "requirement failed: Input type must be VectorUDT but got StringType.")
+  }
+
   test("read/write") {
     val t = new Normalizer()
       .setInputCol("myInputCol")

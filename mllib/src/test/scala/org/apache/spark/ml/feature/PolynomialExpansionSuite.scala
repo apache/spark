@@ -109,6 +109,23 @@ class PolynomialExpansionSuite
     }
   }
 
+  test("Polynomial expansion should throw adequate exception on input type mismatch") {
+    val data = Seq(Tuple1("string value"))
+
+    val df = sqlContext.createDataFrame(data).toDF("features")
+
+    val polynomialExpansion = new PolynomialExpansion()
+      .setInputCol("features")
+      .setOutputCol("polyFeatures")
+
+    val thrown = intercept[IllegalArgumentException] {
+      polynomialExpansion.transform(df)
+    }
+    assert(thrown.getClass === classOf[IllegalArgumentException])
+    assert(
+      thrown.getMessage == "requirement failed: Input type must be VectorUDT but got StringType.")
+  }
+
   test("read/write") {
     val t = new PolynomialExpansion()
       .setInputCol("myInputCol")

@@ -60,6 +60,10 @@ class PolynomialExpansion(override val uid: String)
     PolynomialExpansion.expand(v, $(degree))
   }
 
+  override protected def validateInputType(inputType: DataType): Unit = {
+    require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
+  }
+
   override protected def outputDataType: DataType = new VectorUDT()
 
   override def copy(extra: ParamMap): PolynomialExpansion = defaultCopy(extra)
