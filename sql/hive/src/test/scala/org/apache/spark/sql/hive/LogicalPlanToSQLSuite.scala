@@ -175,7 +175,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     intercept[UnsupportedOperationException](new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL)
   }
 
-  test("no back-ticks or double quotes in column names") {
+  test("named expression in column names shouldn't be quoted") {
     def checkColumnNames(query: String, expectedColNames: String*): Unit = {
       checkHiveQl(query)
       assert(sql(query).columns === expectedColNames)
