@@ -29,7 +29,6 @@ object HypothesisTestingKolmogorovSmirnovTestExample {
   def main(args: Array[String]) {
 
     val conf = new SparkConf().setAppName("HypothesisTestingKolmogorovSmirnovTestExample")
-      .setMaster("local[*]")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -45,7 +44,6 @@ object HypothesisTestingKolmogorovSmirnovTestExample {
     val myCDF = Map(0.1 -> 0.2, 0.15 -> 0.6, 0.2 -> 0.05, 0.3 -> 0.05, 0.25 -> 0.1)
     val testResult2 = Statistics.kolmogorovSmirnovTest(data, myCDF)
     println(testResult2)
-
     // $example off$
 
     sc.stop()

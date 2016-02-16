@@ -31,7 +31,7 @@ object HypothesisTestingExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("HypothesisTestingExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("HypothesisTestingExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -65,7 +65,6 @@ object HypothesisTestingExample {
       println(s"Column $i:\n$result")
       i += 1
     } // summary of the test
-
     // $example off$
 
     sc.stop()

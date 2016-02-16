@@ -18,7 +18,6 @@
 package org.apache.spark.examples.mllib;
 
 // $example on$
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
 import static org.apache.spark.mllib.random.RandomRDDs.*;
@@ -28,46 +27,39 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.mllib.linalg.Vectors;
-import java.util.Arrays;
-
-
 
 public class JavaRandomDataGenerationExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaRandomDataGenerationExample").setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
+    SparkConf conf = new SparkConf().setAppName("JavaRandomDataGenerationExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        // $example on$
-        // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
-        // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
-        JavaDoubleRDD u = normalJavaRDD(jsc, 1000L, 10);
-        // Apply a transform to get a random double RDD following `N(1, 4)`.
-        JavaRDD v = u.map(
-                new Function<Double, Double>() {
-                    public Double call(Double x) {
-                        return 1.0 + 2.0 * x;
-                    }
-                });
+    // $example on$
+    // Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+    // standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+    JavaDoubleRDD u = normalJavaRDD(jsc, 1000L, 10);
+    // Apply a transform to get a random double RDD following `N(1, 4)`.
+    JavaRDD v = u.map(
+            new Function<Double, Double>() {
+                public Double call(Double x) {
+                    return 1.0 + 2.0 * x;
+                }
+            });
+    // $example off$
 
-        // $example off$
+    u.foreach(new VoidFunction<Double>() {
+        public void call(Double d) throws Exception {
+            System.out.println(d);
+        }
+    });
 
-        u.foreach(new VoidFunction<Double>() {
-            public void call(Double d) throws Exception {
-                System.out.println(d);
-            }
-        });
+    v.foreach(new VoidFunction<Double>() {
+        public void call(Double d) throws Exception {
+            System.out.println(d);
+        }
+    });
 
-        v.foreach(new VoidFunction<Double>() {
-            public void call(Double d) throws Exception {
-                System.out.println(d);
-            }
-        });
-
-        jsc.stop();
-    }
+    jsc.stop();
+  }
 }
 

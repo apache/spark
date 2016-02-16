@@ -27,7 +27,7 @@ object RandomDataGenerationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("RandomDataGenerationExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("RandomDataGenerationExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -36,7 +36,6 @@ object RandomDataGenerationExample {
     val u = normalRDD(sc, 1000L, 10)
     // Apply a transform to get a random double RDD following `N(1, 4)`.
     val v = u.map(x => 1.0 + 2.0 * x)
-
     // $example off$
     u.foreach(print)
     v.foreach(print)

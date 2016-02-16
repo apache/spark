@@ -24,38 +24,32 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.stat.KernelDensity;
 import org.apache.spark.rdd.RDD;
 // $example off$
-
 import org.apache.spark.SparkConf;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
-
 public class JavaKernelDensityEstimationExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaKernelDensityEstimationExample").setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
+    SparkConf conf = new SparkConf().setAppName("JavaKernelDensityEstimationExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        // $example on$
-        JavaRDD<Double> data = jsc.parallelize(
-                Arrays.asList(1.0,1.0,1.0,2.0,3.0,4.0,5.0,5.0,6.0,7.0,8.0,9.0,9.0)); // an RDD of sample data
+    // $example on$
+    JavaRDD<Double> data = jsc.parallelize(
+            Arrays.asList(1.0,1.0,1.0,2.0,3.0,4.0,5.0,5.0,6.0,7.0,8.0,9.0,9.0)); // an RDD of sample data
 
-        // Construct the density estimator with the sample data and a standard deviation for the Gaussian
-        // kernels
-        KernelDensity kd = new KernelDensity()
-                .setSample(data)
-                .setBandwidth(3.0);
+    // Construct the density estimator with the sample data and a standard deviation for the Gaussian
+    // kernels
+    KernelDensity kd = new KernelDensity()
+            .setSample(data)
+            .setBandwidth(3.0);
 
-        // Find density estimates for the given values
-        double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
+    // Find density estimates for the given values
+    double[] densities = kd.estimate(new double[] {-1.0, 2.0, 5.0});
+    // $example off$
 
-        // $example off$
+    System.out.println(Arrays.toString(densities));
 
-        System.out.println(Arrays.toString(densities));
-
-        jsc.stop();
-    }
+    jsc.stop();
+  }
 }
 

@@ -28,7 +28,7 @@ object KernelDensityEstimationExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("KernelDensityEstimationExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("KernelDensityEstimationExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -43,7 +43,6 @@ object KernelDensityEstimationExample {
 
     // Find density estimates for the given values
     val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
-
     // $example off$
 
     densities.foreach(print)

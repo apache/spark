@@ -25,29 +25,24 @@ import org.apache.spark.mllib.stat.test.KolmogorovSmirnovTestResult;
 // $example off$
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
 public class JavaHypothesisTestingKolmogorovSmirnovTestExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample")
-                .setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
+    SparkConf conf = new SparkConf().setAppName("JavaHypothesisTestingKolmogorovSmirnovTestExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        // $example on$
-        JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.1, 0.15, 0.2, 0.3, 0.25));
-        KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
-        // summary of the test including the p-value, test statistic,
-        // and null hypothesis
-        // if our p-value indicates significance, we can reject the null hypothesis
-        System.out.println(testResult);
+    // $example on$
+    JavaDoubleRDD data = jsc.parallelizeDoubles(Arrays.asList(0.1, 0.15, 0.2, 0.3, 0.25));
+    KolmogorovSmirnovTestResult testResult = Statistics.kolmogorovSmirnovTest(data, "norm", 0.0, 1.0);
+    // summary of the test including the p-value, test statistic,
+    // and null hypothesis
+    // if our p-value indicates significance, we can reject the null hypothesis
+    System.out.println(testResult);
+    // $example off$
 
-        // $example off$
-
-        jsc.stop();
-    }
+    jsc.stop();
+  }
 }
 
