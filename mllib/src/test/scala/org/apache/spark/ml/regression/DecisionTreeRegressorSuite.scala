@@ -73,7 +73,6 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     MLTestingUtils.checkCopy(model)
   }
 
-<<<<<<< HEAD
   test("predictVariance") {
     val dt = new DecisionTreeRegressor()
       .setImpurity("variance")
@@ -95,7 +94,8 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       assert(variance === expectedVariance,
         s"Expected variance $expectedVariance but got $variance.")
     }
-=======
+  }
+
   test("Feature importance with toy data") {
     val dt = new DecisionTreeRegressor()
       .setImpurity("variance")
@@ -114,7 +114,6 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
     val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
->>>>>>> adding feature importance to decision trees
   }
 
   /////////////////////////////////////////////////////////////////////////////

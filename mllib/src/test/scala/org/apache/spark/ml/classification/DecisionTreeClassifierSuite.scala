@@ -307,6 +307,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
             assert(s.leftCategories === Array(1.0))
         }
     }
+  }
 
   test("Feature importance with toy data") {
     val dt = new DecisionTreeClassifier()
