@@ -26,18 +26,17 @@ import org.apache.spark.api.java.JavaRDD;
 // $example off$
 
 public class JavaLabeledPointSparseDataExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaLabeledPointSparseDataExample")
-                .setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
+    SparkConf conf = new SparkConf().setAppName("JavaLabeledPointSparseDataExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        // $example on$
-        JavaRDD<LabeledPoint> examples =
-                MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
-        // $example off$
+    // $example on$
+    JavaRDD<LabeledPoint> examples =
+            MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+    // $example off$
 
-        jsc.stop();
+      jsc.stop();
 
-    }
+  }
 }

@@ -28,7 +28,7 @@ object CoordinateMatrixExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("CoordinateMatrixExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("CoordinateMatrixExample")
     val sc = new SparkContext(conf)
 
     val me1 = MatrixEntry(0, 0, 1.2)

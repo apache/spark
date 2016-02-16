@@ -28,7 +28,7 @@ object BlockMatrixExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("BlockMatrixExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("BlockMatrixExample")
     val sc = new SparkContext(conf)
 
     val me1 = MatrixEntry(0, 0, 1.2)

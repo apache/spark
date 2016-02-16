@@ -29,7 +29,7 @@ object LabeledPointSparseDataExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("LabeledPointSparseDataExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("LabeledPointSparseDataExample")
     val sc = new SparkContext(conf)
 
     // $example on$

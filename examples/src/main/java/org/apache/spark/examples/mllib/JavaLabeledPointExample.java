@@ -23,17 +23,14 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 // $example off$
 
 public class JavaLabeledPointExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
+    // $example on$
+    // Create a labeled point with a positive label and a dense feature vector.
+    LabeledPoint pos = new LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0));
 
-        // $example on$
-        // Create a labeled point with a positive label and a dense feature vector.
-        LabeledPoint pos = new LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0));
-
-        // Create a labeled point with a negative label and a sparse feature vector.
-        LabeledPoint neg = new LabeledPoint(
-                0.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
-
-        // $example off$
-
-    }
+    // Create a labeled point with a negative label and a sparse feature vector.
+    LabeledPoint neg = new LabeledPoint(
+            0.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
+    // $example off$
+  }
 }

@@ -31,31 +31,31 @@ import org.apache.spark.mllib.linalg.Matrix;
 import java.util.Arrays;
 
 public class JavaRowMatrixExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaRowMatrixExample").setMaster("local[*]");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
+    SparkConf conf = new SparkConf().setAppName("JavaRowMatrixExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
 
-        Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
-        Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
-        Vector v3 = Vectors.dense(5.0, 33.0, 366.0);
+    Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
+    Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
+    Vector v3 = Vectors.dense(5.0, 33.0, 366.0);
 
-        // $example on$
-        // a JavaRDD of local vectors
-        JavaRDD<Vector> rows = jsc.parallelize(Arrays.asList(v1, v2, v3));
+    // $example on$
+    // a JavaRDD of local vectors
+    JavaRDD<Vector> rows = jsc.parallelize(Arrays.asList(v1, v2, v3));
 
-        // Create a RowMatrix from an JavaRDD<Vector>.
-        RowMatrix mat = new RowMatrix(rows.rdd());
+    // Create a RowMatrix from an JavaRDD<Vector>.
+    RowMatrix mat = new RowMatrix(rows.rdd());
 
-        // Get its size.
-        long m = mat.numRows();
-        long n = mat.numCols();
+    // Get its size.
+    long m = mat.numRows();
+    long n = mat.numCols();
 
-        // QR decomposition
-        QRDecomposition<RowMatrix, Matrix> result = mat.tallSkinnyQR(true);
-        // $example off$
+    // QR decomposition
+    QRDecomposition<RowMatrix, Matrix> result = mat.tallSkinnyQR(true);
+    // $example off$
 
-        jsc.stop();
+    jsc.stop();
 
-    }
+  }
 }

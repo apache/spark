@@ -29,7 +29,7 @@ object IndexedRowMatrixExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("IndexedRowMatrixExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("IndexedRowMatrixExample")
     val sc = new SparkContext(conf)
 
     val r1 = IndexedRow(1, Vectors.dense(1.0, 10.0, 100.0))
