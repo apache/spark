@@ -153,26 +153,6 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkNaNWithoutCodegen(optimizedPlan.expressions.head, inputRow)
   }
 
-  test("pow") {
-    testBinary(Pow, (d: Decimal, n: Byte) => d.pow(n),
-      (-5 to 5).map(v => (Decimal(v * 1.0), v.toByte)))
-    testBinary(Pow, (d: Decimal, n: Short) => d.pow(n),
-      (-5 to 5).map(v => (Decimal(v * 1.0), v.toShort)))
-    testBinary(Pow, (d: Decimal, n: Int) => d.pow(n),
-      (-5 to 5).map(v => (Decimal(v * 1.0), v)))
-    testBinary(Pow, (d1: Decimal, d2: Float) => math.pow(d1.toDouble, d2),
-      (-5 to 5).map(v => (Decimal(v * 1.0), (v * 1.0).toFloat)))
-    testBinary(Pow, (d1: Decimal, d2: Double) => math.pow(d1.toDouble, d2),
-      (-5 to 5).map(v => (Decimal(v * 1.0), v * 1.0)))
-    testBinary(Pow, (d1: Decimal, d2: Decimal) => math.pow(d1.toDouble, d2.toDouble),
-      (-5 to 5).map(v => (Decimal(v * 1.0), Decimal(v * 1.0))))
-    testBinary(Pow, (d1: Decimal, d2: Double) => math.pow(d1.toDouble, d2),
-      Seq((Decimal("-1.0"), 0.9)), expectNaN = true)
-    testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
-    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
-    checkConsistencyBetweenInterpretedAndCodegen(Pow, DoubleType, DoubleType)
-  }
-
   test("conv") {
     checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
@@ -367,6 +347,26 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkNaN(Sqrt(Literal(-1.0)), EmptyRow)
     checkNaN(Sqrt(Literal(-1.5)), EmptyRow)
     checkConsistencyBetweenInterpretedAndCodegen(Sqrt, DoubleType)
+  }
+
+  test("pow") {
+    testBinary(Pow, (d: Decimal, n: Byte) => d.pow(n),
+      (-5 to 5).map(v => (Decimal(v * 1.0), v.toByte)))
+    testBinary(Pow, (d: Decimal, n: Short) => d.pow(n),
+      (-5 to 5).map(v => (Decimal(v * 1.0), v.toShort)))
+    testBinary(Pow, (d: Decimal, n: Int) => d.pow(n),
+      (-5 to 5).map(v => (Decimal(v * 1.0), v)))
+    testBinary(Pow, (d1: Decimal, d2: Float) => math.pow(d1.toDouble, d2),
+      (-5 to 5).map(v => (Decimal(v * 1.0), (v * 1.0).toFloat)))
+    testBinary(Pow, (d1: Decimal, d2: Double) => math.pow(d1.toDouble, d2),
+      (-5 to 5).map(v => (Decimal(v * 1.0), v * 1.0)))
+    testBinary(Pow, (d1: Decimal, d2: Decimal) => math.pow(d1.toDouble, d2.toDouble),
+      (-5 to 5).map(v => (Decimal(v * 1.0), Decimal(v * 1.0))))
+    testBinary(Pow, (d1: Decimal, d2: Double) => math.pow(d1.toDouble, d2),
+      Seq((Decimal("-1.0"), 0.9)), expectNaN = true)
+    testBinary(Pow, math.pow, (-5 to 5).map(v => (v * 1.0, v * 1.0)))
+    testBinary(Pow, math.pow, Seq((-1.0, 0.9), (-2.2, 1.7), (-2.2, -1.7)), expectNaN = true)
+    checkConsistencyBetweenInterpretedAndCodegen(Pow, DoubleType, DoubleType)
   }
 
   test("shift left") {
