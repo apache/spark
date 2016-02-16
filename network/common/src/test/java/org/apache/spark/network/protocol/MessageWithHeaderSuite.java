@@ -26,9 +26,13 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.FileRegion;
 import io.netty.util.AbstractReferenceCounted;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
+import org.apache.spark.network.TestManagedBuffer;
+import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 
 public class MessageWithHeaderSuite {
@@ -46,20 +50,43 @@ public class MessageWithHeaderSuite {
   @Test
   public void testByteBufBody() throws Exception {
     ByteBuf header = Unpooled.copyLong(42);
-    ByteBuf body = Unpooled.copyLong(84);
-    MessageWithHeader msg = new MessageWithHeader(header, body, body.readableBytes());
+    ByteBuf bodyPassedToNettyManagedBuffer = Unpooled.copyLong(84);
+    assertEquals(1, header.refCnt());
+    assertEquals(1, bodyPassedToNettyManagedBuffer.refCnt());
+    ManagedBuffer managedBuf = new NettyManagedBuffer(bodyPassedToNettyManagedBuffer);
 
+    Object body = managedBuf.convertToNetty();
+    assertEquals(2, bodyPassedToNettyManagedBuffer.refCnt());
+    assertEquals(1, header.refCnt());
+
+    MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, managedBuf.size());
     ByteBuf result = doWrite(msg, 1);
     assertEquals(msg.count(), result.readableBytes());
     assertEquals(42, result.readLong());
     assertEquals(84, result.readLong());
+
+    assert(msg.release());
+    assertEquals(0, bodyPassedToNettyManagedBuffer.refCnt());
+    assertEquals(0, header.refCnt());
+  }
+
+  @Test
+  public void testDeallocateReleasesManagedBuffer() throws Exception {
+    ByteBuf header = Unpooled.copyLong(42);
+    ManagedBuffer managedBuf = Mockito.spy(new TestManagedBuffer(84));
+    ByteBuf body = (ByteBuf) managedBuf.convertToNetty();
+    assertEquals(2, body.refCnt());
+    MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, body.readableBytes());
+    assert(msg.release());
+    Mockito.verify(managedBuf, Mockito.times(1)).release();
+    assertEquals(0, body.refCnt());
   }
 
   private void testFileRegionBody(int totalWrites, int writesPerCall) throws Exception {
     ByteBuf header = Unpooled.copyLong(42);
     int headerLength = header.readableBytes();
     TestFileRegion region = new TestFileRegion(totalWrites, writesPerCall);
-    MessageWithHeader msg = new MessageWithHeader(header, region, region.count());
+    MessageWithHeader msg = new MessageWithHeader(null, header, region, region.count());
 
     ByteBuf result = doWrite(msg, totalWrites / writesPerCall);
     assertEquals(headerLength + region.count(), result.readableBytes());
@@ -67,6 +94,7 @@ public class MessageWithHeaderSuite {
     for (long i = 0; i < 8; i++) {
       assertEquals(i, result.readLong());
     }
+    assert(msg.release());
   }
 
   private ByteBuf doWrite(MessageWithHeader msg, int minExpectedWrites) throws Exception {
