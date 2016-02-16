@@ -194,10 +194,11 @@ object JdbcUtils extends Logging {
                 case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
                 case t: DecimalType => stmt.setBigDecimal(i + 1, row.getDecimal(i))
                 case ArrayType(et, _) =>
-                  val typeName = getJdbcType(et, dialect).databaseTypeDefinition.toLowerCase
+                  // remove type length parameters from end of type name
+                  val typeName = getJdbcType(et, dialect).databaseTypeDefinition
+                    .toLowerCase.split("\\(")(0)
                   val array = conn.createArrayOf(
-                    // remove type length parameters from end of type name
-                    typeName.split("\\(")(0),
+                    typeName,
                     row.getSeq[AnyRef](i).toArray)
                   stmt.setArray(i + 1, array)
                 case _ => throw new IllegalArgumentException(

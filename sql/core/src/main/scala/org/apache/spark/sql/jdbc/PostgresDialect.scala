@@ -40,10 +40,10 @@ private object PostgresDialect extends JdbcDialect {
     } else None
   }
 
-  // TODO: support more type names.
-  private def toCatalystType(typeName: String,
-                             precision: Int,
-                             scale: Int): Option[DataType] = typeName match {
+  private def toCatalystType(
+      typeName: String,
+      precision: Int,
+      scale: Int): Option[DataType] = typeName match {
     case "bool" => Some(BooleanType)
     case "bit" => Some(BinaryType)
     case "int2" => Some(ShortType)
@@ -66,7 +66,7 @@ private object PostgresDialect extends JdbcDialect {
     case BooleanType => Some(JdbcType("BOOLEAN", Types.BOOLEAN))
     case FloatType => Some(JdbcType("FLOAT4", Types.FLOAT))
     case DoubleType => Some(JdbcType("FLOAT8", Types.DOUBLE))
-    case t: DecimalType => Option(
+    case t: DecimalType => Some(
       JdbcType(s"NUMERIC(${t.precision},${t.scale})", java.sql.Types.NUMERIC))
     case ArrayType(et, _) if et.isInstanceOf[AtomicType] =>
       getJDBCType(et).map(_.databaseTypeDefinition)
