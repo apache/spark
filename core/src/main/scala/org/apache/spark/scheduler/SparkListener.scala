@@ -61,6 +61,7 @@ case class SparkListenerTaskEnd(
     taskType: String,
     reason: TaskEndReason,
     taskInfo: TaskInfo,
+    // may be null if the task has failed
     @Nullable taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 
@@ -270,7 +271,7 @@ class StatsReportListener extends SparkListener with Logging {
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     implicit val sc = stageCompleted
-    this.logInfo("Finished stage: " + stageCompleted.stageInfo)
+    this.logInfo(s"Finished stage: ${getStatusDetail(stageCompleted.stageInfo)}")
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration), taskInfoMetrics)
 
     // Shuffle write
@@ -295,6 +296,17 @@ class StatsReportListener extends SparkListener with Logging {
       Distribution(runtimePcts.flatMap(_.fetchPct.map(_ * 100))), "%2.0f %%")
     showDistribution("other time pct: ", Distribution(runtimePcts.map(_.other * 100)), "%2.0f %%")
     taskInfoMetrics.clear()
+  }
+
+  private def getStatusDetail(info: StageInfo): String = {
+    val failureReason = info.failureReason.map("(" + _ + ")").getOrElse("")
+    val timeTaken = info.submissionTime.map(
+      x => info.completionTime.getOrElse(System.currentTimeMillis()) - x
+    ).getOrElse("-")
+
+    s"Stage(${info.stageId}, ${info.attemptId}); Name: '${info.name}'; " +
+    s"Status: ${info.getStatusString}$failureReason; numTasks: ${info.numTasks}; " +
+    s"Took: $timeTaken msec"
   }
 
 }

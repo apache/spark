@@ -181,6 +181,8 @@ class SQLContext private[sql](
   @transient
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
+  protected[sql] lazy val continuousQueryManager = new ContinuousQueryManager(this)
+
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
 
@@ -191,7 +193,7 @@ class SQLContext private[sql](
   protected[sql] lazy val analyzer: Analyzer =
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        ExtractPythonUDFs ::
+        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
@@ -579,10 +581,9 @@ class SQLContext private[sql](
     DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
-
   /**
    * :: Experimental ::
-   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")
@@ -719,7 +720,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(TableIdentifier(tableName), df.logicalPlan)
+    catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -837,6 +838,16 @@ class SQLContext private[sql](
   }
 
   /**
+   * Returns a [[ContinuousQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   *
+   * @since 2.0.0
+   */
+  def streams: ContinuousQueryManager = {
+    continuousQueryManager
+  }
+
+  /**
    * Returns the names of tables in the current database as an array.
    *
    * @group ddl_ops
@@ -904,7 +915,7 @@ class SQLContext private[sql](
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
 
-    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
+    val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 

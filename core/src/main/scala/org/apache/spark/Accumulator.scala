@@ -60,19 +60,20 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * @tparam T result type
  */
 class Accumulator[T] private[spark] (
-    @transient private[spark] val initialValue: T,
+    // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
+    @transient private val initialValue: T,
     param: AccumulatorParam[T],
     name: Option[String],
     internal: Boolean,
-    override val countFailedValues: Boolean = false)
+    private[spark] override val countFailedValues: Boolean = false)
   extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
 
   def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
-    this(initialValue, param, name, false)
+    this(initialValue, param, name, false /* internal */)
   }
 
   def this(initialValue: T, param: AccumulatorParam[T]) = {
-    this(initialValue, param, None, false)
+    this(initialValue, param, None, false /* internal */)
   }
 }
 
@@ -84,7 +85,7 @@ private[spark] object Accumulators extends Logging {
    * This global map holds the original accumulator objects that are created on the driver.
    * It keeps weak references to these objects so that accumulators can be garbage-collected
    * once the RDDs and user-code that reference them are cleaned up.
-   * TODO: Don't use a global map; these should be tied to a SparkContext at the very least.
+   * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
    */
   @GuardedBy("Accumulators")
   val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
