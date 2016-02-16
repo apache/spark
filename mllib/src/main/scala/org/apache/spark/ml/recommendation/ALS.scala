@@ -496,7 +496,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     }
 
     /**
-     * Solves a nonnegative least squares problem with L2 regularizatin:
+     * Solves a nonnegative least squares problem with L2 regularization:
      *
      *   min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
      *   subject to x >= 0
