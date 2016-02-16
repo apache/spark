@@ -691,7 +691,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.13.0</version>
+        <version>1.12.5</version> <!-- 1.13.0 appears incompatible with scalatest 2.2.6 -->
         <scope>test</scope>
       </dependency>
       <dependency>
