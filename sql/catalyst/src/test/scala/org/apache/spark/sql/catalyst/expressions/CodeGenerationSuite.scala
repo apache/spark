@@ -61,11 +61,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-13242: split when clauses") {
     val cases = 50
-    val conditionClauses = 20
+    val clauses = 20
 
     // Generate an individual case
     def generateCase(n: Int): (Expression, Expression) = {
-      val condition = (1 to conditionClauses)
+      val condition = (1 to clauses)
           .map(c => EqualTo(BoundReference(0, StringType, false), Literal(s"$c:$n")))
           .reduceLeft[Expression]((l, r) => Or(l, r))
       (condition, Literal(n))
@@ -73,6 +73,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val expression = CaseWhen((1 to cases).map(generateCase(_)))
     val plan = GenerateMutableProjection.generate(Seq(expression))()
+    val input = new GenericMutableRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val actual = plan(input).toSeq(Seq(expression.dataType))
+
+    assert(actual(0) == cases)
   }
 
   test("test generated safe and unsafe projection") {
