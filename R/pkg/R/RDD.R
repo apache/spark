@@ -632,10 +632,10 @@ setMethod("Filter",
 #' Reduce across elements of an RDD.
 #'
 #' This function reduces the elements of this RDD using the
-#' specified commutative and associative binary operator.
+#' specified commutative and associative and commutative binary operator.
 #'
 #' @param x The RDD to reduce
-#' @param func Commutative and associative function to apply on elements
+#' @param func Commutative and associative and commutative function to apply on elements
 #'             of the RDD.
 #' @examples
 #'\dontrun{

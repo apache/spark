@@ -353,8 +353,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Reduces the elements of this RDD using the specified commutative and associative binary
-   * operator.
+   * Reduces the elements of this RDD using the specified commutative and associative and
+   * commutative binary operator.
    */
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
 
@@ -373,7 +373,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Aggregate the elements of each partition, and then the results for all the partitions, using a
-   * given associative and commutative function and a neutral "zero value". The function
+   * given associative function and a neutral "zero value". The function
    * op(t1, t2) is allowed to modify t1 and return it as its result value to avoid object
    * allocation; however, it should not modify t2.
    *
