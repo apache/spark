@@ -40,6 +40,10 @@ abstract class Catalog {
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
+  /**
+   * Alter a database whose name matches the one specified in `dbDefinition`,
+   * assuming the database exists.
+   */
   def alterDatabase(dbDefinition: CatalogDatabase): Unit
 
   def getDatabase(db: String): CatalogDatabase
@@ -60,6 +64,10 @@ abstract class Catalog {
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
+  /**
+   * Alter a table whose name that matches the one specified in `tableDefinition`,
+   * assuming the table exists.
+   */
   def alterTable(db: String, tableDefinition: CatalogTable): Unit
 
   def getTable(db: String, table: String): CatalogTable
@@ -94,6 +102,10 @@ abstract class Catalog {
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit
 
+  /**
+   * Alter one or many table partitions whose specs that match those specified in `parts`,
+   * assuming the partitions exist.
+   */
   def alterPartitions(
       db: String,
       table: String,
@@ -114,6 +126,10 @@ abstract class Catalog {
 
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
+  /**
+   * Alter a function whose name that matches the one specified in `funcDefinition`,
+   * assuming the function exists.
+   */
   def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
 
   def getFunction(db: String, funcName: String): CatalogFunction

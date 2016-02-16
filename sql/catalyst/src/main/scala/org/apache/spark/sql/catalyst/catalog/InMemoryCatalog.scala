@@ -48,39 +48,39 @@ class InMemoryCatalog extends Catalog {
   }
 
   private def existsFunction(db: String, funcName: String): Boolean = {
-    assertDbExists(db)
+    requireDbExists(db)
     catalog(db).functions.contains(funcName)
   }
 
   private def existsTable(db: String, table: String): Boolean = {
-    assertDbExists(db)
+    requireDbExists(db)
     catalog(db).tables.contains(table)
   }
 
   private def existsPartition(db: String, table: String, spec: TablePartitionSpec): Boolean = {
-    assertTableExists(db, table)
+    requireTableExists(db, table)
     catalog(db).tables(table).partitions.contains(spec)
   }
 
-  private def assertDbExists(db: String): Unit = {
+  private def requireDbExists(db: String): Unit = {
     if (!catalog.contains(db)) {
       throw new AnalysisException(s"Database $db does not exist")
     }
   }
 
-  private def assertFunctionExists(db: String, funcName: String): Unit = {
+  private def requireFunctionExists(db: String, funcName: String): Unit = {
     if (!existsFunction(db, funcName)) {
       throw new AnalysisException(s"Function $funcName does not exist in $db database")
     }
   }
 
-  private def assertTableExists(db: String, table: String): Unit = {
+  private def requireTableExists(db: String, table: String): Unit = {
     if (!existsTable(db, table)) {
       throw new AnalysisException(s"Table $table does not exist in $db database")
     }
   }
 
-  private def assertPartitionExists(db: String, table: String, spec: TablePartitionSpec): Unit = {
+  private def requirePartitionExists(db: String, table: String, spec: TablePartitionSpec): Unit = {
     if (!existsPartition(db, table, spec)) {
       throw new AnalysisException(s"Partition does not exist in database $db table $table: $spec")
     }
@@ -126,12 +126,12 @@ class InMemoryCatalog extends Catalog {
   }
 
   override def alterDatabase(dbDefinition: CatalogDatabase): Unit = synchronized {
-    assertDbExists(dbDefinition.name)
+    requireDbExists(dbDefinition.name)
     catalog(dbDefinition.name).db = dbDefinition
   }
 
   override def getDatabase(db: String): CatalogDatabase = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     catalog(db).db
   }
 
@@ -155,7 +155,7 @@ class InMemoryCatalog extends Catalog {
       db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     if (existsTable(db, tableDefinition.name)) {
       if (!ignoreIfExists) {
         throw new AnalysisException(s"Table ${tableDefinition.name} already exists in $db database")
@@ -169,7 +169,7 @@ class InMemoryCatalog extends Catalog {
       db: String,
       table: String,
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     if (existsTable(db, table)) {
       catalog(db).tables.remove(table)
     } else {
@@ -180,7 +180,7 @@ class InMemoryCatalog extends Catalog {
   }
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
-    assertTableExists(db, oldName)
+    requireTableExists(db, oldName)
     val oldDesc = catalog(db).tables(oldName)
     oldDesc.table = oldDesc.table.copy(name = newName)
     catalog(db).tables.put(newName, oldDesc)
@@ -188,22 +188,22 @@ class InMemoryCatalog extends Catalog {
   }
 
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
-    assertTableExists(db, tableDefinition.name)
+    requireTableExists(db, tableDefinition.name)
     catalog(db).tables(tableDefinition.name).table = tableDefinition
   }
 
   override def getTable(db: String, table: String): CatalogTable = synchronized {
-    assertTableExists(db, table)
+    requireTableExists(db, table)
     catalog(db).tables(table).table
   }
 
   override def listTables(db: String): Seq[String] = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     catalog(db).tables.keySet.toSeq
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     filterPattern(listTables(db), pattern)
   }
 
@@ -216,7 +216,7 @@ class InMemoryCatalog extends Catalog {
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = synchronized {
-    assertTableExists(db, table)
+    requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfExists) {
       val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
@@ -234,7 +234,7 @@ class InMemoryCatalog extends Catalog {
       table: String,
       partSpecs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = synchronized {
-    assertTableExists(db, table)
+    requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
     if (!ignoreIfNotExists) {
       val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
@@ -252,7 +252,7 @@ class InMemoryCatalog extends Catalog {
       table: String,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
-    assert(specs.size == newSpecs.size, "number of old and new partition specs differ")
+    require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val newPart = getPartition(db, table, oldSpec).copy(spec = newSpec)
       val existingParts = catalog(db).tables(table).partitions
@@ -266,7 +266,7 @@ class InMemoryCatalog extends Catalog {
       table: String,
       parts: Seq[CatalogTablePartition]): Unit = synchronized {
     parts.foreach { p =>
-      assertPartitionExists(db, table, p.spec)
+      requirePartitionExists(db, table, p.spec)
       catalog(db).tables(table).partitions.put(p.spec, p)
     }
   }
@@ -275,14 +275,14 @@ class InMemoryCatalog extends Catalog {
       db: String,
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = synchronized {
-    assertPartitionExists(db, table, spec)
+    requirePartitionExists(db, table, spec)
     catalog(db).tables(table).partitions(spec)
   }
 
   override def listPartitions(
       db: String,
       table: String): Seq[CatalogTablePartition] = synchronized {
-    assertTableExists(db, table)
+    requireTableExists(db, table)
     catalog(db).tables(table).partitions.values.toSeq
   }
 
@@ -291,7 +291,7 @@ class InMemoryCatalog extends Catalog {
   // --------------------------------------------------------------------------
 
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     if (existsFunction(db, func.name)) {
       throw new AnalysisException(s"Function $func already exists in $db database")
     } else {
@@ -300,29 +300,29 @@ class InMemoryCatalog extends Catalog {
   }
 
   override def dropFunction(db: String, funcName: String): Unit = synchronized {
-    assertFunctionExists(db, funcName)
+    requireFunctionExists(db, funcName)
     catalog(db).functions.remove(funcName)
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = synchronized {
-    assertFunctionExists(db, oldName)
+    requireFunctionExists(db, oldName)
     val newFunc = getFunction(db, oldName).copy(name = newName)
     catalog(db).functions.remove(oldName)
     catalog(db).functions.put(newName, newFunc)
   }
 
   override def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = synchronized {
-    assertFunctionExists(db, funcDefinition.name)
+    requireFunctionExists(db, funcDefinition.name)
     catalog(db).functions.put(funcDefinition.name, funcDefinition)
   }
 
   override def getFunction(db: String, funcName: String): CatalogFunction = synchronized {
-    assertFunctionExists(db, funcName)
+    requireFunctionExists(db, funcName)
     catalog(db).functions(funcName)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = synchronized {
-    assertDbExists(db)
+    requireDbExists(db)
     filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
 

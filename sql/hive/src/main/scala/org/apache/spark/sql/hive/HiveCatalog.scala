@@ -32,8 +32,8 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
   /**
    * Assert that the provided database matches the one specified in the table.
    */
-  private def assertDbMatches(db: String, table: CatalogTable): Unit = {
-    assert(table.specifiedDatabase == Some(db),
+  private def requireDbMatches(db: String, table: CatalogTable): Unit = {
+    require(table.specifiedDatabase == Some(db),
       "provided database does not much the one specified in the table definition")
   }
 
@@ -82,7 +82,7 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
       db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = synchronized {
-    assertDbMatches(db, tableDefinition)
+    requireDbMatches(db, tableDefinition)
     client.createTable(tableDefinition, ignoreIfExists)
   }
 
@@ -95,12 +95,11 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog {
 
   override def renameTable(db: String, oldName: String, newName: String): Unit = synchronized {
     val newTable = client.getTable(db, oldName).copy(name = newName)
-    assertDbMatches(db, newTable)
     client.alterTable(oldName, newTable)
   }
 
   override def alterTable(db: String, tableDefinition: CatalogTable): Unit = synchronized {
-    assertDbMatches(db, tableDefinition)
+    requireDbMatches(db, tableDefinition)
     client.alterTable(tableDefinition)
   }
 

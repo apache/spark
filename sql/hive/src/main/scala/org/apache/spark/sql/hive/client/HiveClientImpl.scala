@@ -338,6 +338,7 @@ private[hive] class HiveClientImpl(
 
   override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
     val hiveTable = toHiveTable(table)
+    // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     client.alterTable(qualifiedTableName, hiveTable)
   }
@@ -372,7 +373,7 @@ private[hive] class HiveClientImpl(
       table: String,
       specs: Seq[Catalog.TablePartitionSpec],
       newSpecs: Seq[Catalog.TablePartitionSpec]): Unit = withHiveState {
-    assert(specs.size == newSpecs.size, "number of old and new partition specs differ")
+    require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable)
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>

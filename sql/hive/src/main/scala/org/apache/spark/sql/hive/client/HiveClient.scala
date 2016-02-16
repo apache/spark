@@ -90,10 +90,8 @@ private[hive] trait HiveClient {
   /** Drop the specified table. */
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean): Unit
 
-  /** Updates the given table with new metadata. */
-  final def alterTable(table: CatalogTable): Unit = {
-    alterTable(table.qualifiedName, table)
-  }
+  /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
+  final def alterTable(table: CatalogTable): Unit = alterTable(table.name, table)
 
   /** Updates the given table with new metadata, optionally renaming the table. */
   def alterTable(tableName: String, table: CatalogTable): Unit
@@ -111,7 +109,7 @@ private[hive] trait HiveClient {
   def dropDatabase(name: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
   /**
-   * Alter an existing database.
+   * Alter a database whose name matches the one specified in `database`, assuming it exists.
    */
   def alterDatabase(database: CatalogDatabase): Unit
 
@@ -143,7 +141,8 @@ private[hive] trait HiveClient {
       newSpecs: Seq[Catalog.TablePartitionSpec]): Unit
 
   /**
-   * Alter one or many existing table partitions, assuming they exist.
+   * Alter one or more table partitions whose specs match the ones specified in `newParts`,
+   * assuming the partitions exist.
    */
   def alterPartitions(
       db: String,
@@ -220,7 +219,7 @@ private[hive] trait HiveClient {
   /** Rename an existing function in the database. */
   def renameFunction(db: String, oldName: String, newName: String): Unit
 
-  /** Alter an existing function in the database. */
+  /** Alter a function whose name matches the one specified in `func`, assuming it exists. */
   def alterFunction(db: String, func: CatalogFunction): Unit
 
   /** Return an existing function in the database, assuming it exists. */

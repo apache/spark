@@ -311,7 +311,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       assert(partitionColumns.isEmpty)
       assert(relation.partitionColumns.isEmpty)
 
-      // TODO We need to place the SQL string in the view text here.
+      // TODO: We need to place the SQL string in the view text here.
       CatalogTable(
         specifiedDatabase = Option(dbName),
         name = tblName,
