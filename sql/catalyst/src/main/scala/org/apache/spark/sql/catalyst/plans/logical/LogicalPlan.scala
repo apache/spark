@@ -318,8 +318,10 @@ abstract class UnaryNode extends LogicalPlan {
   override protected def validConstraints: Set[Expression] = child.constraints
 
   override def statistics: Statistics = {
-    val childRowSize = child.output.map(_.dataType.defaultSize).sum
-    val outputRowSize = output.map(_.dataType.defaultSize).sum
+    // There should be some overhead in Row object, the size should not be zero when there is
+    // no columns, this help to prevent divide-by-zero error.
+    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
+    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
     // Assume there will be the same number of rows as child has.
     var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
     if (sizeInBytes == 0) {
