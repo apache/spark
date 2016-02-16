@@ -118,18 +118,18 @@ case class BroadcastHashJoin(
           hashJoin(streamedIter, hashTable, numOutputRows)
 
         case LeftOuter =>
-          streamedIter.flatMap(currentRow => {
+          streamedIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
             joinedRow.withLeft(currentRow)
             leftOuterIterator(rowKey, joinedRow, hashTable.get(rowKey), resultProj, numOutputRows)
-          })
+          }
 
         case RightOuter =>
-          streamedIter.flatMap(currentRow => {
+          streamedIter.flatMap { currentRow =>
             val rowKey = keyGenerator(currentRow)
             joinedRow.withRight(currentRow)
             rightOuterIterator(rowKey, hashTable.get(rowKey), joinedRow, resultProj, numOutputRows)
-          })
+          }
 
         case x =>
           throw new IllegalArgumentException(
@@ -155,6 +155,9 @@ case class BroadcastHashJoin(
     }
   }
 
+  /**
+    * Returns a tuple of Broadcast of HashedRelation and the variable name for it.
+    */
   private def prepareBroadcast(ctx: CodegenContext): (Broadcast[HashedRelation], String) = {
     // create a name for HashedRelation
     val broadcastRelation = Await.result(broadcastFuture, timeout)
@@ -169,7 +172,13 @@ case class BroadcastHashJoin(
     (broadcastRelation, relationTerm)
   }
 
-  private def genJoinKey(ctx: CodegenContext, input: Seq[ExprCode]): (ExprCode, String) = {
+  /**
+    * Returns the code for generating join key for stream side, and expression of whether the key
+    * has any null in it or not.
+    */
+  private def genStreamSideJoinKey(
+      ctx: CodegenContext,
+      input: Seq[ExprCode]): (ExprCode, String) = {
     ctx.currentVars = input
     if (canJoinKeyFitWithinLong) {
       // generate the join key as Long
@@ -184,6 +193,9 @@ case class BroadcastHashJoin(
     }
   }
 
+  /**
+    * Generates the code for variable of build side.
+    */
   private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
     ctx.currentVars = null
     ctx.INPUT_ROW = matched
@@ -209,9 +221,12 @@ case class BroadcastHashJoin(
     }
   }
 
+  /**
+    * Generates the code for Inner join.
+    */
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    val (keyEv, anyNull) = genJoinKey(ctx, input)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val resultVars = buildSide match {
@@ -240,7 +255,7 @@ case class BroadcastHashJoin(
 
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
       s"""
-         |// generate join key
+         |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
@@ -256,7 +271,7 @@ case class BroadcastHashJoin(
       val i = ctx.freshName("i")
       val size = ctx.freshName("size")
       s"""
-         |// generate join key
+         |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
          |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
@@ -273,9 +288,12 @@ case class BroadcastHashJoin(
   }
 
 
+  /**
+    * Generates the code for left or right outer join.
+    */
   private def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    val (keyEv, anyNull) = genJoinKey(ctx, input)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val resultVars = buildSide match {
@@ -302,7 +320,7 @@ case class BroadcastHashJoin(
 
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
       s"""
-         |// generate join key
+         |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
@@ -323,12 +341,13 @@ case class BroadcastHashJoin(
       val size = ctx.freshName("size")
       val found = ctx.freshName("found")
       s"""
-         |// generate join key
+         |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
          |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
          |int $size = $matches != null ? $matches.size() : 0;
          |boolean $found = false;
+         |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |for (int $i = 0; $i <= $size; $i++) {
          |  UnsafeRow $matched = $i < $size ? (UnsafeRow) $matches.apply($i) : null;
          |  ${buildVars.map(_.code).mkString("\n")}
