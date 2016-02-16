@@ -59,7 +59,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
 
-  test("split complex single column expressions") {
+  test("SPARK-13242: split when clauses") {
     val cases = 50
     val conditionClauses = 20
 
@@ -72,9 +72,6 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val expression = CaseWhen((1 to cases).map(generateCase(_)))
-
-    // Currently this throws a java.util.concurrent.ExecutionException wrapping a
-    // org.codehaus.janino.JaninoRuntimeException: Code of method XXX of class YYY grows beyond 64 KB
     val plan = GenerateMutableProjection.generate(Seq(expression))()
   }
 
