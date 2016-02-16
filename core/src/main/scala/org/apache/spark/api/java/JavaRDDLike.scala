@@ -353,8 +353,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
-   * Reduces the elements of this RDD using the specified commutative and associative and
-   * commutative binary operator.
+   * Reduces the elements of this RDD using the specified commutative and associative binary
+   * operator.
    */
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
 
