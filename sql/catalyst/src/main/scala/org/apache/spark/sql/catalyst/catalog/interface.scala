@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import javax.annotation.Nullable
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.DataType
 
@@ -164,7 +166,7 @@ case class CatalogStorageFormat(
  */
 case class CatalogColumn(
     name: String,
-    dataType: DataType,
+    @Nullable dataType: DataType, // may be null when used to create views
     nullable: Boolean = true,
     comment: Option[String] = None)
 
