@@ -401,8 +401,8 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
         tableDesc = tableDesc.withNewStorage(
           inputFormat = hiveSerDe.inputFormat.orElse(tableDesc.storage.inputFormat),
-          outputFormat = hiveSerDe.inputFormat.orElse(tableDesc.storage.outputFormat),
-          serde = hiveSerDe.inputFormat.orElse(tableDesc.storage.serde))
+          outputFormat = hiveSerDe.outputFormat.orElse(tableDesc.storage.outputFormat),
+          serde = hiveSerDe.serde.orElse(tableDesc.storage.serde))
 
         children.collect {
           case list @ Token("TOK_TABCOLLIST", _) =>
