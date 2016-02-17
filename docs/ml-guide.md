@@ -265,7 +265,7 @@ method in each of these evaluators.
 The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
 `CrossValidator` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-The following example demonstrates using `CrossValidator` to select from a grid of parameters.
+The following example demonstrates using `CrossValidator` to selewct from a grid of parameters.
 To help construct the parameter grid, we use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridBuilder) utility.
 
 Note that cross-validation over a grid of parameters is expensive.
@@ -287,72 +287,6 @@ However, it is also a well-established method for choosing parameters which is m
 <div data-lang="python">
 {% include_example python/ml/cross_validator.py %}
 </div>
-
-
-<div data-lang="python">
-{% highlight python %}
-from pyspark.ml import Pipeline
-from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.evaluation import BinaryClassificationEvaluator
-from pyspark.ml.feature import HashingTF
-from pyspark.ml.feature import Tokenizer
-from pyspark.ml.tuning import ParamGridBuilder
-from pyspark.ml.tuning import CrossValidator
-from pyspark.mllib.linalg import Vector
-from pyspark.sql import Row
-
-# Prepare training data from a list of (id, text, label) tuples.
-training = sqlContext.createDataFrame([
-    (0L, "a b c d e spark", 1.0),
-    (1L, "b d", 0.0),
-    (2L, "spark f g h", 1.0),
-    (3L, "hadoop mapreduce", 0.0),
-    (4L, "b spark who", 1.0),
-    (5L, "g d a y", 0.0),
-    (6L, "spark fly", 1.0),
-    (7L, "was mapreduce", 0.0),
-    (8L, "e spark program", 1.0),
-    (9L, "a e c l", 0.0),
-    (10L, "spark compile", 1.0),
-    (11L, "hadoop software", 0.0)], ["id", "text", "label"])
-
-# Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
-tokenizer = Tokenizer().setInputCol("text").setOutputCol("words")
-hashingTF = HashingTF().setInputCol(tokenizer.getOutputCol()).setOutputCol("features")
-lr = LogisticRegression().setMaxIter(10)
-pipeline = Pipeline().setStages((tokenizer, hashingTF, lr))
-
-# We use a ParamGridBuilder to construct a grid of parameters to search over.
-# With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
-# this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
-
-paramGrid = ParamGridBuilder().addGrid(hashingTF.numFeatures, (10, 100, 1000)).addGrid(lr.regParam, (0.1, 0.01)).build()
-
-# We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
-# This will allow us to jointly choose parameters for all Pipeline stages.
-# A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-# Note that the evaluator here is a BinaryClassificationEvaluator and its default metric
-# is areaUnderROC.
-evaluator = BinaryClassificationEvaluator()
-cv = CrossValidator(estimator=pipeline, numFolds=2, evaluator=evaluator).setEstimatorParamMaps(paramGrid)
-
-# Prepare test documents, which are unlabeled (id, text) tuples.
-test = sqlContext.createDataFrame([
-    (4L, "spark i j k"),
-    (5L, "l m n"),
-    (6L, "mapreduce spark"),
-    (7L, "apache hadoop")], ["id", "text"])
-
-cvModel =  cv.fit(training)
-result = cvModel.transform(test)
-selected = result.select("id", "text", "probability", "prediction")
-for row in selected.collect():
-    print row
-
-{% endhighlight %}
-</div>
-
-
 
 
 
