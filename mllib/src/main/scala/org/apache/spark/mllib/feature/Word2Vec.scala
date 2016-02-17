@@ -308,13 +308,8 @@ class Word2Vec extends Serializable with Logging {
       sentenceIter.flatMap { sentence =>
         // Sentence of words, some of which map to a word index
         val wordIndexes = sentence.flatMap(bcVocabHash.value.get)
-        if (wordIndexes.nonEmpty) {
-          // break wordIndexes into trunks of maxSentenceLength when has more
-          val sentenceSplit = wordIndexes.grouped(maxSentenceLength)
-          sentenceSplit.map(_.toArray)
-        } else {
-          None
-        }
+        // break wordIndexes into trunks of maxSentenceLength when has more
+        wordIndexes.grouped(maxSentenceLength).map(_.toArray)
       }
     }
 
