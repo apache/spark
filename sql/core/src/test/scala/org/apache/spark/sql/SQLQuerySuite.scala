@@ -23,6 +23,7 @@ import java.sql.Timestamp
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
@@ -460,6 +461,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("literal in agg grouping expressions") {
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT * FROM testData2 GROUP BY -1").collect()
+    }
+
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT * FROM testData2 GROUP BY 3").collect()
+    }
+
     checkAnswer(
       sql("SELECT SUM(a) FROM testData2 GROUP BY 2"),
       Seq(Row(6), Row(6)))
@@ -512,6 +521,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("order by number index")  {
     intercept[UnresolvedException[SortOrder]] {
       sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC").collect()
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC").collect()
     }
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
