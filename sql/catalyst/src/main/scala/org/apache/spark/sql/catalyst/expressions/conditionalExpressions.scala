@@ -186,8 +186,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     // Methods that are too long cannot be compiled, so fall back to interpreting
     if (generatedCode.length > 64 * 1000) {
       super.genCode(ctx, ev)
-    }
-    else {
+    } else {
       s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
