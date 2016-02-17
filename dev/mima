@@ -43,8 +43,8 @@ generate_mima_ignore() {
       org.apache.spark.tools.GenerateMIMAIgnore
 }
 
-generate_mima_ignore "$(build/sbt "export assembly/fullClasspath" | tail -n1)"
-generate_mima_ignore "$(build/sbt "export oldDeps/fullClasspath" | tail -n1)"
+generate_mima_ignore "$(build/sbt "export assembly/managedClasspath" | tail -n1)"
+generate_mima_ignore "$(build/sbt "export oldDeps/managedClasspath" | tail -n1)"
 
 echo -e "q\n" | build/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?

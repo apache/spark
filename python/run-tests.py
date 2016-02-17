@@ -54,10 +54,30 @@ FAILURE_REPORTING_LOCK = Lock()
 LOGGER = logging.getLogger()
 
 
+def get_spark_dist_classpath():
+    original_working_dir = os.getcwd()
+    os.chdir(SPARK_HOME)
+    cp = subprocess_check_output(
+        ["./build/sbt", "export assembly/managedClasspath"], universal_newlines=True)
+    cp = cp.strip().split("\n")[-1]
+    os.chdir(original_working_dir)
+    return cp
+
+
+SPARK_DIST_CLASSPATH = get_spark_dist_classpath()
+
+
 def run_individual_python_test(test_name, pyspark_python):
     env = dict(os.environ)
-    env.update({'SPARK_TESTING': '1', 'PYSPARK_PYTHON': which(pyspark_python),
-                'PYSPARK_DRIVER_PYTHON': which(pyspark_python)})
+    env.update({
+        # Setting SPARK_DIST_CLASSPATH is a simple way to make sure that any child processes
+        # launched by the tests have access to the correct test-time classpath.
+        'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
+        'SPARK_TESTING': '1',
+        'SPARK_PREPEND_CLASSES': '1',
+        'PYSPARK_PYTHON': which(pyspark_python),
+        'PYSPARK_DRIVER_PYTHON': which(pyspark_python),
+    })
     LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
