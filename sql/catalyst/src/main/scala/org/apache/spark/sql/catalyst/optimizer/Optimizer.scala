@@ -57,7 +57,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", FixedPoint(100),
       RemoveLiteralFromGroupExpressions) ::
-    Batch("", FixedPoint(100),
+    Batch("Join", Once,
       AddFilterOfNullForInnerJoin) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
@@ -139,20 +139,26 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
-      val leftConditions = leftKeys.map { l =>
-        Not(EqualTo(l, Literal(null)))
+      val leftConditions = leftKeys.distinct.map { l =>
+        IsNotNull(l)
       }.reduceLeft(And)
 
-      val rightConditions = rightKeys.map { r =>
-        Not(EqualTo(r, Literal(null)))
+      val rightConditions = rightKeys.distinct.map { r =>
+        IsNotNull(r)
       }.reduceLeft(And)
 
       val keysConditions = leftKeys.zip(rightKeys).map { lr =>
-        EqualTo(lr._1, lr._2)
+        EqualTo(lr._2, lr._1)
       }.reduceLeft(And)
 
+      val finalConditions = if (condition.isDefined) {
+        And(keysConditions, condition.get)
+      } else {
+        keysConditions
+      }
+
       Join(Filter(leftConditions, left), Filter(rightConditions, right),
-        Inner, Some(And(keysConditions, condition.getOrElse(Literal(true)))))
+        Inner, Some(finalConditions))
   }
 }
 
