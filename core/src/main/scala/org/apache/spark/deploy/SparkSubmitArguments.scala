@@ -211,7 +211,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     master = Option(master).getOrElse("local[*]")
 
     // In YARN mode, app name can be set via SPARK_YARN_APP_NAME (see SPARK-5222)
-    if (master.startsWith("yarn")) {
+    if (master == "yarn") {
       name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME")).orNull
     }
 
@@ -248,7 +248,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       SparkSubmit.printErrorAndExit("--py-files given but primary resource is not a Python script")
     }
 
-    if (master.startsWith("yarn")) {
+    if (master == "yarn") {
       val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
       if (!hasHadoopEnv && !Utils.isTesting) {
         throw new Exception(s"When running with master '$master' " +

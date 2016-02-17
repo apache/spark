@@ -358,7 +358,8 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     sysProps("spark.executor.memory") should be ("5g")
-    sysProps("spark.master") should be ("yarn-cluster")
+    sysProps("spark.master") should be ("yarn")
+    sysProps("spark.submit.deployMode") should be ("cluster")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
@@ -566,6 +567,16 @@ class SparkSubmitSuite
       assert(appArgs.propertiesFile.startsWith(path))
       appArgs.executorMemory should be ("2.3g")
     }
+  }
+
+  test("Deprecate master yarn-[client|cluster] mode") {
+    val errorMessage = "Master %s is deprecated since 2.0. " +
+      "Please use master 'yarn' with specified deploy mode instead"
+    val testCases = Seq(
+      (Array("--master", "yarn-client"), errorMessage.format("yarn-client")),
+      (Array("--master", "yarn-cluster"), errorMessage.format("yarn-cluster")))
+
+    testCases.foreach { case (args, err) => testPrematureExit(args, err) }
   }
   // scalastyle:on println
 
