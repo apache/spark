@@ -262,12 +262,15 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.Graph.mapReduceTriplets$default$3"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets")
       ) ++ Seq(
-          // SPARK-13426 Remove the support of SIMR
-          ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkMasterRegex.SIMR_REGEX")
+        // SPARK-13426 Remove the support of SIMR
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkMasterRegex.SIMR_REGEX")
       ) ++ Seq(
         // SPARK-13413 Remove SparkContext.metricsSystem/schedulerBackend_ setter
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.metricsSystem"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.schedulerBackend_=")
+      ) ++ Seq(
+        // SPARK-13220 Deprecate yarn-client and yarn-cluster mode
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
       )
     case v if v.startsWith("1.6") =>
       Seq(
