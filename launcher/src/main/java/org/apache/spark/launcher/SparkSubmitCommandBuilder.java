@@ -295,7 +295,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
     String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
     // Default master is "local[*]", so assume client mode in that case
-    return userMaster == null || "client".equals(userDeployMode);
+    return userMaster == null || "client".equals(userDeployMode) || userDeployMode == null;
   }
 
   /**
