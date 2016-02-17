@@ -328,7 +328,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          execution.Exchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+          execution.ShuffleExchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
         } else {
           execution.Coalesce(numPartitions, planLater(child)) :: Nil
         }
@@ -367,7 +367,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r @ logical.Range(start, end, step, numSlices, output) =>
         execution.Range(start, step, numSlices, r.numElements, output) :: Nil
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
-        execution.Exchange(HashPartitioning(
+        execution.ShuffleExchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
       case e @ python.EvaluatePython(udf, child, _) =>
         python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil

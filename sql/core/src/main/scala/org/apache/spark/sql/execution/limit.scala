@@ -37,7 +37,8 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   protected override def doExecute(): RDD[InternalRow] = {
     val shuffled = new ShuffledRowRDD(
-      Exchange.prepareShuffleDependency(child.execute(), child.output, SinglePartition, serializer))
+      ShuffleExchange.prepareShuffleDependency(
+        child.execute(), child.output, SinglePartition, serializer))
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -111,7 +112,8 @@ case class TakeOrderedAndProject(
       }
     }
     val shuffled = new ShuffledRowRDD(
-      Exchange.prepareShuffleDependency(localTopK, child.output, SinglePartition, serializer))
+      ShuffleExchange.prepareShuffleDependency(
+        localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList.isDefined) {

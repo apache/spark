@@ -19,6 +19,9 @@ package org.apache.spark.sql.execution
 
 import java.util.Random
 
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
@@ -30,12 +33,13 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.util.MutablePair
+import org.apache.spark.util.{MutablePair, ThreadUtils}
+
 
 /**
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-case class Exchange(
+case class ShuffleExchange(
     var newPartitioning: Partitioning,
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends UnaryNode {
@@ -80,7 +84,8 @@ case class Exchange(
    * the returned ShuffleDependency will be the input of shuffle.
    */
   private[sql] def prepareShuffleDependency(): ShuffleDependency[Int, InternalRow, InternalRow] = {
-    Exchange.prepareShuffleDependency(child.execute(), child.output, newPartitioning, serializer)
+    ShuffleExchange.prepareShuffleDependency(
+      child.execute(), child.output, newPartitioning, serializer)
   }
 
   /**
@@ -115,9 +120,9 @@ case class Exchange(
   }
 }
 
-object Exchange {
-  def apply(newPartitioning: Partitioning, child: SparkPlan): Exchange = {
-    Exchange(newPartitioning, child, coordinator = None: Option[ExchangeCoordinator])
+object ShuffleExchange {
+  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchange = {
+    ShuffleExchange(newPartitioning, child, coordinator = None: Option[ExchangeCoordinator])
   }
 
   /**
@@ -263,10 +268,71 @@ object Exchange {
 }
 
 /**
+ * A [[BroadcastExchange]] collects, transforms and finally broadcasts the result of a transformed
+ * SparkPlan.
+ */
+case class BroadcastExchange(
+    mode: BroadcastMode,
+    child: SparkPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output
+
+  override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
+
+  val timeout: Duration = {
+    val timeoutValue = sqlContext.conf.broadcastTimeout
+    if (timeoutValue < 0) {
+      Duration.Inf
+    } else {
+      timeoutValue.seconds
+    }
+  }
+
+  @transient
+  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+    // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    Future {
+      // This will run in another thread. Set the execution id so that we can connect these jobs
+      // with the correct execution.
+      SQLExecution.withExecutionId(sparkContext, executionId) {
+        // Note that we use .execute().collect() because we don't want to convert data to Scala
+        // types
+        val input: Array[InternalRow] = child.execute().map { row =>
+          row.copy()
+        }.collect()
+
+        // Construct and broadcast the relation.
+        sparkContext.broadcast(mode.transform(input))
+      }
+    }(BroadcastExchange.executionContext)
+  }
+
+  override protected def doPrepare(): Unit = {
+    // Materialize the future.
+    relationFuture
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException("Broadcast does not support the execute() code path.")
+  }
+
+  override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    val result = Await.result(relationFuture, timeout)
+    result.asInstanceOf[broadcast.Broadcast[T]]
+  }
+}
+
+object BroadcastExchange {
+  private[execution] val executionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("broadcast-exchange", 128))
+}
+
+/**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
  * of input data meets the
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
- * each operator by inserting [[Exchange]] Operators where required.  Also ensure that the
+ * each operator by inserting [[ShuffleExchange]] Operators where required.  Also ensure that the
  * input partition ordering requirements are met.
  */
 private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[SparkPlan] {
@@ -296,17 +362,17 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   }
 
   /**
-   * Adds [[ExchangeCoordinator]] to [[Exchange]]s if adaptive query execution is enabled
-   * and partitioning schemes of these [[Exchange]]s support [[ExchangeCoordinator]].
+   * Adds [[ExchangeCoordinator]] to [[ShuffleExchange]]s if adaptive query execution is enabled
+   * and partitioning schemes of these [[ShuffleExchange]]s support [[ExchangeCoordinator]].
    */
   private def withExchangeCoordinator(
       children: Seq[SparkPlan],
       requiredChildDistributions: Seq[Distribution]): Seq[SparkPlan] = {
     val supportsCoordinator =
-      if (children.exists(_.isInstanceOf[Exchange])) {
+      if (children.exists(_.isInstanceOf[ShuffleExchange])) {
         // Right now, ExchangeCoordinator only support HashPartitionings.
         children.forall {
-          case e @ Exchange(hash: HashPartitioning, _, _) => true
+          case e @ ShuffleExchange(hash: HashPartitioning, _, _) => true
           case child =>
             child.outputPartitioning match {
               case hash: HashPartitioning => true
@@ -333,7 +399,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             targetPostShuffleInputSize,
             minNumPostShufflePartitions)
         children.zip(requiredChildDistributions).map {
-          case (e: Exchange, _) =>
+          case (e: ShuffleExchange, _) =>
             // This child is an Exchange, we need to add the coordinator.
             e.copy(coordinator = Some(coordinator))
           case (child, distribution) =>
@@ -377,7 +443,7 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
             val targetPartitioning =
               createPartitioning(distribution, defaultNumPreShufflePartitions)
             assert(targetPartitioning.isInstanceOf[HashPartitioning])
-            Exchange(targetPartitioning, child, Some(coordinator))
+            ShuffleExchange(targetPartitioning, child, Some(coordinator))
         }
       } else {
         // If we do not need ExchangeCoordinator, the original children are returned.
@@ -399,9 +465,9 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
       case (child, BroadcastDistribution(mode)) =>
-        Broadcast(mode, child)
+        BroadcastExchange(mode, child)
       case (child, distribution) =>
-        Exchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
+        ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
     }
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),
@@ -456,8 +522,8 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
               child match {
                 // If child is an exchange, we replace it with
                 // a new one having targetPartitioning.
-                case Exchange(_, c, _) => Exchange(targetPartitioning, c)
-                case _ => Exchange(targetPartitioning, child)
+                case ShuffleExchange(_, c, _) => ShuffleExchange(targetPartitioning, c)
+                case _ => ShuffleExchange(targetPartitioning, child)
               }
             }
           }
@@ -492,9 +558,9 @@ private[sql] case class EnsureRequirements(sqlContext: SQLContext) extends Rule[
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case operator @ Exchange(partitioning, child, _) =>
+    case operator @ ShuffleExchange(partitioning, child, _) =>
       child.children match {
-        case Exchange(childPartitioning, baseChild, _)::Nil =>
+        case ShuffleExchange(childPartitioning, baseChild, _)::Nil =>
           if (childPartitioning.guarantees(partitioning)) child else operator
         case _ => operator
       }

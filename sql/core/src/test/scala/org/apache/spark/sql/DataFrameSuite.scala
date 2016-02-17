@@ -26,7 +26,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
-import org.apache.spark.sql.execution.Exchange
+import org.apache.spark.sql.execution.ShuffleExchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -1119,7 +1119,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         }
         atFirstAgg = true
       }
-      case e: Exchange => atFirstAgg = false
+      case e: ShuffleExchange => atFirstAgg = false
       case _ =>
     }
   }
