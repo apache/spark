@@ -812,12 +812,12 @@ private[spark] class BlockManager(
           }
         }
       } finally {
-        // If we failed in putting the block to memory/disk, notify other possible readers
-        // that it has failed, and then remove it from the block info map.
         if (!blockWasSuccessfullyStored) {
-          // Note that the remove must happen before markFailure otherwise another thread
-          // could've inserted a new BlockInfo before we remove it.
-          blockInfoManager.remove(blockId)
+          // Guard against the fact that MemoryStore might have already removed the block if the
+          // put() failed and the block could not be dropped to disk.
+          if (blockInfoManager.getAndLockForWriting(blockId, blocking = false).isDefined) {
+            blockInfoManager.remove(blockId)
+          }
           logWarning(s"Putting block $blockId failed")
         }
       }
