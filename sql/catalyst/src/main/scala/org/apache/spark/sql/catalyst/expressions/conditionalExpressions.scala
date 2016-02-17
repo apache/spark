@@ -183,7 +183,8 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
     generatedCode += "}\n" * cases.size
 
-    if (generatedCode.size > 64 * 1000) {
+    // Methods that are too long cannot be compiled, so fall back to interpreting
+    if (generatedCode.length > 64 * 1000) {
       super.genCode(ctx, ev)
     }
     else {
