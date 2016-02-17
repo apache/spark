@@ -184,7 +184,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     generatedCode += "}\n" * cases.size
 
     // Methods that are too long cannot be compiled, so fall back to interpreting
-    if (generatedCode.length > 10 * 1000) {
+    if (generatedCode.length > 1000) {
       super.genCode(ctx, ev)
     } else {
       s"""
