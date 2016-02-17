@@ -36,8 +36,8 @@ if __name__ == "__main__":
 
     # output parameters of model
     for i in range(2):
-        print ("weight = ", gmm.weights[i], "mu = ", gmm.gaussians[i].mu,
-               "sigma = ", gmm.gaussians[i].sigma.toArray())
+        print("weight = ", gmm.weights[i], "mu = ", gmm.gaussians[i].mu,
+              "sigma = ", gmm.gaussians[i].sigma.toArray())
 
     # $example off$
 
