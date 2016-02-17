@@ -18,7 +18,7 @@
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
-from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame, PipelinedDataFrame
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -27,7 +27,7 @@ __all__ = ["GroupedData"]
 def dfapi(f):
     def _api(self):
         name = f.__name__
-        jdf = getattr(self._jdf, name)()
+        jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -37,7 +37,7 @@ def dfapi(f):
 def df_varargs_api(f):
     def _api(self, *args):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, args))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -54,9 +54,33 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
+    def __init__(self, jgd, sql_ctx, key_func=None):
+        self._jgd = jgd
         self.sql_ctx = sql_ctx
+        if key_func is None:
+            self.key_func = lambda key: key
+        else:
+            self.key_func = key_func
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def flatMapGroups(self, func):
+        """ TODO """
+        import itertools
+        key_func = self.key_func
+
+        def process(iterator):
+            first = iterator.next()
+            key = key_func(first)
+            return func(key, itertools.chain([first], iterator))
+
+        return PipelinedDataFrame(self, process)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def mapGroups(self, func):
+        """ TODO """
+        return self.flatMapGroups(lambda key, values: iter([func(key, values)]))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -83,11 +107,11 @@ class GroupedData(object):
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -187,9 +211,9 @@ class GroupedData(object):
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
-            jgd = self._jdf.pivot(pivot_col)
+            jgd = self._jgd.pivot(pivot_col)
         else:
-            jgd = self._jdf.pivot(pivot_col, values)
+            jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self.sql_ctx)
 
 
@@ -212,6 +236,13 @@ def _test():
                                    Row(course="dotNET", year=2012, earnings=5000),
                                    Row(course="dotNET", year=2013, earnings=48000),
                                    Row(course="Java",   year=2013, earnings=30000)]).toDF()
+
+    ds = globs['sqlContext'].createDataFrame([(i, i) for i in range(100)], ("key", "value"))
+    grouped = ds.groupByKey(lambda row: row.key % 5, IntegerType())
+    value_sum = lambda rows: sum(map(lambda row: row.value, rows))
+    agged = grouped.mapGroups(lambda key, values: str(key) + ":" + str(value_sum(values)))
+    result = agged.applySchema(StringType()).collect()
+    raise ValueError(result[0][0])
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,

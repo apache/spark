@@ -1761,12 +1761,48 @@ class DataFrame private[sql](
     }
   }
 
+  protected[sql] def pythonMapPartitions(func: PythonFunction): DataFrame = withPlan {
+    PythonMapPartitions(func, EvaluatePython.schemaOfPickled.toAttributes, logicalPlan)
+  }
+
   protected[sql] def pythonMapPartitions(
       func: PythonFunction,
       schemaJson: String): DataFrame = withPlan {
     val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
     PythonMapPartitions(func, schema.toAttributes, logicalPlan)
   }
+
+  protected[sql] def pythonGroupBy(
+      func: PythonFunction,
+      keyTypeJson: String): GroupedPythonDataset = {
+    val keyType = DataType.fromJson(keyTypeJson)
+    val isFlat = !keyType.isInstanceOf[StructType]
+    val keyAttributes = if (isFlat) {
+      Seq(AttributeReference("key", keyType)())
+    } else {
+      keyType.asInstanceOf[StructType].toAttributes
+    }
+
+    val inputPlan = queryExecution.analyzed
+    val withGroupingKey = PythonAppendColumns(func, keyAttributes, isFlat, inputPlan)
+    val executed = sqlContext.executePlan(withGroupingKey)
+
+    new GroupedPythonDataset(
+      executed,
+      withGroupingKey.newColumns,
+      inputPlan.output,
+      GroupedData.GroupByType)
+  }
+
+  protected[sql] def pythonGroupBy(cols: Column*): GroupedPythonDataset = {
+    new GroupedPythonDataset(
+      queryExecution,
+      cols.map(_.expr),
+      queryExecution.analyzed.output,
+      GroupedData.GroupByType)
+  }
+
+  protected[sql] def isPickled(): Boolean = EvaluatePython.isPickled(schema)
 
   /**
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with

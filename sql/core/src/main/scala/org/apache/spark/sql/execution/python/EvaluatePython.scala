@@ -248,6 +248,17 @@ object EvaluatePython {
     }
   }
 
+  val schemaOfPickled = {
+    val metaPickled = new MetadataBuilder().putBoolean("pickled", true).build()
+    new StructType().add("value", BinaryType, nullable = false, metadata = metaPickled)
+  }
+
+  def isPickled(schema: StructType): Boolean = schema.length == 1 && {
+    val field = schema.head
+    field.dataType == BinaryType &&
+      field.metadata.contains("pickled") && field.metadata.getBoolean("pickled")
+  }
+
   /**
    * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
    * PySpark.

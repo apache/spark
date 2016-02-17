@@ -21,7 +21,7 @@ import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{ObjectType, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
 
 /**
  * A trait for logical operators that apply user defined functions to domain objects.
@@ -132,6 +132,17 @@ case class AppendColumns(
   override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
 }
 
+case class PythonAppendColumns(
+    func: PythonFunction,
+    newColumns: Seq[Attribute],
+    isFlat: Boolean,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output ++ newColumns
+
+  override def expressions: Seq[Expression] = Nil
+}
+
 /** Factory for constructing new `MapGroups` nodes. */
 object MapGroups {
   def apply[K : Encoder, T : Encoder, U : Encoder](
@@ -170,6 +181,15 @@ case class MapGroups(
 
   override def deserializers: Seq[(Expression, Seq[Attribute])] =
     Seq(keyDeserializer -> groupingAttributes, valueDeserializer -> dataAttributes)
+}
+
+case class PythonMapGroups(
+    func: PythonFunction,
+    groupingExprs: Seq[Expression],
+    dataAttributes: Seq[Attribute],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def expressions: Seq[Expression] = groupingExprs
 }
 
 /** Factory for constructing new `CoGroup` nodes. */

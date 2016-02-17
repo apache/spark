@@ -85,18 +85,23 @@ case class PythonMapPartitions(
     val inputRDD = child.execute().map(_.copy())
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    val isChildPickled = EvaluatePython.isPickled(child.schema)
+    val isOutputPickled = EvaluatePython.isPickled(schema)
 
     inputRDD.mapPartitions { iter =>
-      EvaluatePython.registerPicklers()  // register pickler for Row
-      val pickle = new Pickler
+      val inputIterator = if (isChildPickled) {
+        iter.map(_.getBinary(0))
+      } else {
+        EvaluatePython.registerPicklers()  // register pickler for Row
+        val pickle = new Pickler
 
-      // Input iterator to Python: input rows are grouped so we send them in batches to Python.
-      // For each row, add it to the queue.
-      val inputIterator = iter.grouped(100).map { inputRows =>
-        val toBePickled = inputRows.map { row =>
-          EvaluatePython.toJava(row, child.schema)
-        }.toArray
-        pickle.dumps(toBePickled)
+        // Input iterator to Python: input rows are grouped so we send them in batches to Python.
+        iter.grouped(100).map { inputRows =>
+          val toBePickled = inputRows.map { row =>
+            EvaluatePython.toJava(row, child.schema)
+          }.toArray
+          pickle.dumps(toBePickled)
+        }
       }
 
       val context = TaskContext.get()
@@ -115,14 +120,22 @@ case class PythonMapPartitions(
           reuseWorker
         ).compute(inputIterator, context.partitionId(), context)
 
-      val unpickle = new Unpickler
       val toUnsafe = UnsafeProjection.create(output, output)
 
-      outputIterator.flatMap { pickedResult =>
-        val unpickledBatch = unpickle.loads(pickedResult)
-        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
-      }.map { result =>
-        toUnsafe(EvaluatePython.fromJava(result, schema).asInstanceOf[InternalRow])
+      if (isOutputPickled) {
+        val row = new GenericMutableRow(1)
+        outputIterator.map { bytes =>
+          row(0) = bytes
+          toUnsafe(row)
+        }
+      } else {
+        val unpickle = new Unpickler
+        outputIterator.flatMap { pickedResult =>
+          val unpickledBatch = unpickle.loads(pickedResult)
+          unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+        }.map { result =>
+          toUnsafe(EvaluatePython.fromJava(result, schema).asInstanceOf[InternalRow])
+        }
       }
     }
   }
@@ -152,6 +165,92 @@ case class AppendColumns(
 
         // This operates on the assumption that we always serialize the result...
         combiner.join(row.asInstanceOf[UnsafeRow], newColumns.asInstanceOf[UnsafeRow]): InternalRow
+      }
+    }
+  }
+}
+
+case class PythonAppendColumns(
+    func: PythonFunction,
+    newColumns: Seq[Attribute],
+    isFlat: Boolean,
+    child: SparkPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output ++ newColumns
+
+  override def expressions: Seq[Expression] = Nil
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val inputRDD = child.execute().map(_.copy())
+    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
+    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    val newColumnSchema = newColumns.toStructType
+    val isChildPickled = EvaluatePython.isPickled(child.schema)
+
+    inputRDD.mapPartitionsInternal { iter =>
+      // The queue used to buffer input rows so we can drain it to
+      // combine input with output from Python.
+      val queue = new java.util.LinkedList[InternalRow]()
+
+      val inputIterator = if (isChildPickled) {
+        iter.map { row =>
+          queue.add(row)
+          row.getBinary(0)
+        }
+      } else {
+        EvaluatePython.registerPicklers()  // register pickler for Row
+        val pickle = new Pickler
+
+        // Input iterator to Python: input rows are grouped so we send them in batches to Python.
+        // For each row, add it to the queue.
+        iter.grouped(100).map { inputRows =>
+          val toBePickled = inputRows.map { row =>
+            queue.add(row)
+            EvaluatePython.toJava(row, child.schema)
+          }.toArray
+          pickle.dumps(toBePickled)
+        }
+      }
+
+      val context = TaskContext.get()
+
+      // Output iterator for results from Python.
+      val outputIterator =
+        new PythonRunner(
+          func.command,
+          func.envVars,
+          func.pythonIncludes,
+          func.pythonExec,
+          func.pythonVer,
+          func.broadcastVars,
+          func.accumulator,
+          bufferSize,
+          reuseWorker
+        ).compute(inputIterator, context.partitionId(), context)
+
+      val unpickle = new Unpickler
+      val toUnsafe = UnsafeProjection.create(newColumns, newColumns)
+      val combiner = GenerateUnsafeRowJoiner.create(child.schema, newColumnSchema)
+
+      val newData = outputIterator.flatMap { pickedResult =>
+        val unpickledBatch = unpickle.loads(pickedResult)
+        unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+      }
+
+      val newRows = if (isFlat) {
+        val row = new GenericMutableRow(1)
+        newData.map { key =>
+          row(0) = EvaluatePython.fromJava(key, newColumns.head.dataType)
+          toUnsafe(row)
+        }
+      } else {
+        newData.map { key =>
+          toUnsafe(EvaluatePython.fromJava(key, newColumnSchema).asInstanceOf[InternalRow])
+        }
+      }
+
+      newRows.map { newRow =>
+        combiner.join(queue.poll().asInstanceOf[UnsafeRow], newRow)
       }
     }
   }
@@ -192,6 +291,90 @@ case class MapGroups(
           getKey(key),
           rowIter.map(getValue))
         result.map(outputObject)
+      }
+    }
+  }
+}
+
+case class PythonMapGroups(
+    func: PythonFunction,
+    groupingExprs: Seq[Expression],
+    dataAttributes: Seq[Attribute],
+    output: Seq[Attribute],
+    child: SparkPlan) extends UnaryNode {
+
+  override def expressions: Seq[Expression] = groupingExprs
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(groupingExprs) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingExprs.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val inputRDD = child.execute().map(_.copy())
+    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
+    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    val isValuePickled = EvaluatePython.isPickled(dataAttributes.toStructType)
+    val isOutputPickled = EvaluatePython.isPickled(schema)
+
+    inputRDD.mapPartitionsInternal { iter =>
+      EvaluatePython.registerPicklers()  // register pickler for Row
+      val pickle = new Pickler
+      val unpickle = new Unpickler
+      val grouped = GroupedIterator(iter, groupingExprs, child.output)
+
+      grouped.flatMap { case (_, values) =>
+        val inputIterator = if (isValuePickled) {
+          iter.map(_.getBinary(0))
+        } else {
+          val getValue: InternalRow => InternalRow = if (dataAttributes == child.output) {
+            identity
+          } else {
+            UnsafeProjection.create(dataAttributes, child.output)
+          }
+
+          // Input iterator to Python: input rows are grouped so we send them in batches to Python.
+          iter.grouped(100).map { inputRows =>
+            val toBePickled = inputRows.map { row =>
+              EvaluatePython.toJava(getValue(row), child.schema)
+            }.toArray
+            pickle.dumps(toBePickled)
+          }
+        }
+
+        val context = TaskContext.get()
+
+        // Output iterator for results from Python.
+        val outputIterator =
+          new PythonRunner(
+            func.command,
+            func.envVars,
+            func.pythonIncludes,
+            func.pythonExec,
+            func.pythonVer,
+            func.broadcastVars,
+            func.accumulator,
+            bufferSize,
+            reuseWorker
+          ).compute(inputIterator, context.partitionId(), context)
+
+        val toUnsafe = UnsafeProjection.create(output, output)
+
+        if (isOutputPickled) {
+          val row = new GenericMutableRow(1)
+          outputIterator.map { bytes =>
+            row(0) = bytes
+            toUnsafe(row)
+          }
+        } else {
+          outputIterator.flatMap { pickedResult =>
+            val unpickledBatch = unpickle.loads(pickedResult)
+            unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
+          }.map { result =>
+            toUnsafe(EvaluatePython.fromJava(result, schema).asInstanceOf[InternalRow])
+          }
+        }
       }
     }
   }

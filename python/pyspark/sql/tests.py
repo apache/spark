@@ -1154,35 +1154,49 @@ class SQLTests(ReusedPySparkTestCase):
         broadcast(df1)._jdf.queryExecution().executedPlan()
 
     def test_dataset(self):
-        ds = self.sqlCtx.createDataFrame([(1, "1"), (2, "2")], ("key", "value"))
+        ds = self.sqlCtx.createDataFrame([(i, str(i)) for i in range(100)], ("key", "value"))
 
-        func = lambda row: {"key": row.key + 1, "value": row.value}  # convert row to python dict
-        ds2 = ds.mapPartitions2(lambda iterator: map(func, iterator))
+        # convert row to python dict
+        ds2 = ds.map2(lambda row: {"key": row.key + 1, "value": row.value})
         schema = StructType().add("key", IntegerType()).add("value", StringType())
-        ds3 = ds2.schema(schema)
+        ds3 = ds2.applySchema(schema)
         result = ds3.select("key").collect()
-        self.assertEqual(result[0][0], 2)
+        # test first 2 elements
+        self.assertEqual(result[0][0], 1)
+        self.assertEqual(result[1][0], 2)
+
+        # use a different but compatible schema
+        schema = StructType().add("value", StringType())
+        result = ds2.applySchema(schema).collect()
+        self.assertEqual(result[0][0], "0")
+        self.assertEqual(result[1][0], "1")
+
+        # use a flat schema
+        ds2 = ds.map2(lambda row: row.key * 3)
+        result = ds2.applySchema(IntegerType()).collect()
+        self.assertEqual(result[0][0], 0)
         self.assertEqual(result[1][0], 3)
 
-        schema = StructType().add("value", StringType())  # use a different but compatible schema
-        ds3 = ds2.schema(schema)
-        result = ds3.collect()
-        self.assertEqual(result[0][0], "1")
-        self.assertEqual(result[1][0], "2")
+        # schema can be inferred automatically
+        result = ds2.applySchema().collect()
+        self.assertEqual(result[0][0], 0)
+        self.assertEqual(result[1][0], 3)
 
-        func = lambda row: row.key * 3
-        ds2 = ds.mapPartitions2(lambda iterator: map(func, iterator))
-        ds3 = ds2.schema(IntegerType())  # use a flat schema
-        result = ds3.collect()
-        self.assertEqual(result[0][0], 3)
-        self.assertEqual(result[1][0], 6)
-
-        result = ds2.collect()  # schema can be inferred automatically
-        self.assertEqual(result[0][0], 3)
-        self.assertEqual(result[1][0], 6)
+        # If no schema is given, by default it's a single binary field struct type.
+        from pyspark.sql.functions import length
+        result = ds2.select(length("value")).collect()
+        self.assertTrue(result[0][0] > 0)
+        self.assertTrue(result[1][0] > 0)
 
         # row count should be corrected even no schema is specified.
-        self.assertEqual(ds2.count(), 2)
+        self.assertEqual(ds2.count(), 100)
+
+        # typed operation still works on cached Dataset.
+        ds3 = ds2.cache().map2(lambda key: key / 3)
+        self.assertEqual(ds3.count(), 100)
+        result = ds3.applySchema(IntegerType()).collect()
+        self.assertEqual(result[0][0], 0)
+        self.assertEqual(result[1][0], 3)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

@@ -373,6 +373,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         python.BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case logical.PythonMapPartitions(func, output, child) =>
         execution.PythonMapPartitions(func, output, planLater(child)) :: Nil
+      case logical.PythonAppendColumns(func, newColumns, isFlat, child) =>
+        execution.PythonAppendColumns(func, newColumns, isFlat, planLater(child)) :: Nil
+      case logical.PythonMapGroups(func, grouping, data, output, child) =>
+        execution.PythonMapGroups(func, grouping, data, output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd, "ExistingRDD") :: Nil
       case BroadcastHint(child) => planLater(child) :: Nil
       case _ => Nil

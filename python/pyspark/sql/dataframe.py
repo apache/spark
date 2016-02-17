@@ -280,9 +280,27 @@ class DataFrame(object):
 
     @ignore_unicode_prefix
     @since(2.0)
+    def applySchema(self, schema=None):
+        """ TODO """
+        if schema is None:
+            from pyspark.sql.types import _infer_type, _merge_type
+            # If no schema is specified, infer it from the whole data set.
+            jrdd = self._prev_jdf.javaToPython()
+            rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+            schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
+        return PipelinedDataFrame(self, output_schema=schema)
+
+    @ignore_unicode_prefix
+    @since(2.0)
     def mapPartitions2(self, func):
         """ TODO """
         return PipelinedDataFrame(self, func)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def map2(self, func):
+        """ TODO """
+        return self.mapPartitions2(lambda iterator: map(func, iterator))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -896,9 +914,19 @@ class DataFrame(object):
         >>> sorted(df.groupBy(['name', df.age]).count().collect())
         [Row(name=u'Alice', age=2, count=1), Row(name=u'Bob', age=5, count=1)]
         """
-        jgd = self._jdf.groupBy(self._jcols(*cols))
+        jgd = self._jdf.pythonGroupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
         return GroupedData(jgd, self.sql_ctx)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def groupByKey(self, key_func, key_type):
+        """ TODO """
+        f = lambda iterator: map(key_func, iterator)
+        wraped_func = _wrap_func(self._sc, self._jdf, f, False)
+        jgd = self._jdf.pythonGroupBy(wraped_func, key_type.json())
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx, key_func)
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1364,68 +1392,87 @@ class PipelinedDataFrame(DataFrame):
 
     """ TODO """
 
-    def __init__(self, prev, func, output_schema=None):
-        self.output_schema = output_schema
-        self._schema = None
+    def __init__(self, prev, func=None, output_schema=None):
+        from pyspark.sql.group import GroupedData
+
+        if output_schema is None:
+            self._schema = StructType().add("binary", BinaryType(), False, {"pickled": True})
+        else:
+            self._schema = output_schema
+
+        self._output_schema = output_schema
+        self._jdf_val = None
         self.is_cached = False
         self.sql_ctx = prev.sql_ctx
         self._sc = self.sql_ctx and self.sql_ctx._sc
-        self._jdf_val = None
         self._lazy_rdd = None
 
-        if output_schema is not None:
-            # This transformation is adding schema, just copy member variables from prev.
-            self.func = func
-            self._prev_jdf = prev._prev_jdf
-        elif not isinstance(prev, PipelinedDataFrame) or not prev.is_cached:
+        if isinstance(prev, GroupedData):
+            # prev is GroupedData, set the grouped flag to true and use jgd as jdf.
+            self._grouped = True
+            self._func = func
+            self._prev_jdf = prev._jgd
+        elif not isinstance(prev, PipelinedDataFrame) or prev.is_cached:
             # This transformation is the first in its stage:
-            self.func = func
+            self._func = func
             self._prev_jdf = prev._jdf
+            self._grouped = False
         else:
-            self.func = _pipeline_func(prev.func, func)
-            self._prev_jdf = prev._prev_jdf  # maintain the pipeline
-
-    def schema(self, schema):
-        return PipelinedDataFrame(self, self.func, schema)
+            if func is None:
+                # This transformation is applying schema, no need to pipeline the function.
+                self._func = prev._func
+            else:
+                self._func = _pipeline_func(prev._func, func)
+            # maintain the pipeline.
+            self._prev_jdf = prev._prev_jdf
+            self._grouped = prev._grouped
 
     @property
     def _jdf(self):
-        from pyspark.sql.types import _infer_type, _merge_type
-
         if self._jdf_val is None:
-            if self.output_schema is None:
-                # If no schema is specified, infer it from the whole data set.
-                jrdd = self._prev_jdf.javaToPython()
-                rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
-                func = self.func  # assign to a local varible to avoid referencing self in closure.
-                self.output_schema = rdd.mapPartitions(func).map(_infer_type).reduce(_merge_type)
-
-            if isinstance(self.output_schema, StructType):
-                schema = self.output_schema
+            if self._output_schema is None:
+                self._jdf_val = self._create_jdf(self._func)
+            elif isinstance(self._output_schema, StructType):
+                schema = self._output_schema
                 to_row = lambda iterator: map(schema.toInternal, iterator)
-                final_func = _pipeline_func(self.func, to_row)
+                self._jdf_val = self._create_jdf(_pipeline_func(self._func, to_row), schema)
             else:
-                data_type = self.output_schema
+                data_type = self._output_schema
                 schema = StructType().add("value", data_type)
                 converter = lambda obj: (data_type.toInternal(obj), )
                 to_row = lambda iterator: map(converter, iterator)
-                final_func = _pipeline_func(self.func, to_row)
-
-            wrapped_func = self._wrap_function(final_func)
-            self._jdf_val = self._prev_jdf.pythonMapPartitions(wrapped_func, schema.json())
+                self._jdf_val = self._create_jdf(_pipeline_func(self._func, to_row), schema)
 
         return self._jdf_val
 
-    def _wrap_function(self, f):
-        from pyspark.rdd import _prepare_for_python_RDD
-        from pyspark.serializers import AutoBatchedSerializer
+    def _create_jdf(self, func, schema=None):
+        wrapped_func = _wrap_func(self._sc, self._prev_jdf, func, schema is None)
+        if schema is None:
+            if self._grouped:
+                return self._prev_jdf.flatMapGroups(wrapped_func)
+            else:
+                return self._prev_jdf.pythonMapPartitions(wrapped_func)
+        else:
+            schema_string = schema.json()
+            if self._grouped:
+                return self._prev_jdf.flatMapGroups(wrapped_func, schema_string)
+            else:
+                return self._prev_jdf.pythonMapPartitions(wrapped_func, schema_string)
 
-        ser = AutoBatchedSerializer(PickleSerializer())
-        command = (lambda _, iterator: f(iterator), None, ser, ser)
-        sc = self._sc
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
-        return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
-                                      sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+def _wrap_func(sc, jdf, func, output_binary):
+    if jdf.isPickled():
+        deserializer = PickleSerializer()
+    else:
+        deserializer = None  # the framework will provide a default one
+
+    if output_binary:
+        serializer = PickleSerializer()
+    else:
+        serializer = None  # the framework will provide a default one
+
+    from pyspark.rdd import _wrap_function
+    return _wrap_function(sc, lambda _, iterator: func(iterator), deserializer, serializer)
 
 
 def _pipeline_func(prev_func, next_func):

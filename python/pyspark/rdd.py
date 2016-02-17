@@ -2330,6 +2330,17 @@ def _prepare_for_python_RDD(sc, command, obj=None):
     return pickled_command, broadcast_vars, env, includes
 
 
+def _wrap_function(sc, func, deserializer=None, serializer=None, profiler=None):
+    if deserializer is None:
+        deserializer = AutoBatchedSerializer(PickleSerializer())
+    if serializer is None:
+        serializer = AutoBatchedSerializer(PickleSerializer())
+    command = (func, profiler, deserializer, serializer)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+
 class PipelinedRDD(RDD):
 
     """
