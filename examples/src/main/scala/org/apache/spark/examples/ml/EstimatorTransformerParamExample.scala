@@ -18,10 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{ SparkConf, SparkContext }
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.mllib.linalg.{ Vector, Vectors }
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SQLContext
 

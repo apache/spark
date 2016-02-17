@@ -22,10 +22,9 @@ import java.io.Serializable;
 /**
  * Unlabeled instance type, Spark SQL can infer schema from Java Beans.
  */
+@SuppressWarnings("serial")
 public class JavaDocument implements Serializable {
 
-  /** Serializable version identifier */
-  private static final long serialVersionUID = 7090547542135729169L;
   private long id;
   private String text;
 
@@ -38,15 +37,7 @@ public class JavaDocument implements Serializable {
     return this.id;
   }
 
-  public void setId(long id) {
-    this.id = id;
-  }
-
   public String getText() {
     return this.text;
-  }
-
-  public void setText(String text) {
-    this.text = text;
   }
 }
