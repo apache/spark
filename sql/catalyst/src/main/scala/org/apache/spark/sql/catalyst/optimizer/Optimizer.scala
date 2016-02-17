@@ -198,7 +198,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
- * safe to pushdown Filters and Projections through it. Once we add UNION DISTINCT,
+ * safe to pushdown Join, Filters and Projections through it. Once we add UNION DISTINCT,
  * we will not be able to pushdown Projections.
  *
  * Except:
@@ -223,7 +223,7 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    */
   private def pushToRight[A <: Expression](e: A, rewrites: AttributeMap[Attribute]) = {
     val result = e transform {
-      case a: Attribute => rewrites(a)
+      case a: Attribute if rewrites.contains(a) => rewrites(a)
     }
 
     // We must promise the compiler that we did not discard the names in the case of project
@@ -247,6 +247,27 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // Push down deterministic join predicate through UNION ALL
+    case j @ Join(u @ Union(uLeft, uRight), jRight, joinType, condition) =>
+      if (condition.forall(_.deterministic)) {
+        val rewrites = buildRewrites(u)
+        Union(
+          Join(uLeft, jRight, joinType, condition),
+          Join(uRight, jRight, joinType, condition.map(pushToRight(_, rewrites))))
+      } else {
+        j
+      }
+
+    case j @ Join(jLeft, u @ Union(uLeft, uRight), joinType, condition) =>
+      if (condition.forall(_.deterministic)) {
+        val rewrites = buildRewrites(u)
+        Union(
+          Join(jLeft, uLeft, joinType, condition),
+          Join(jLeft, uRight, joinType, condition.map(pushToRight(_, rewrites))))
+      } else {
+        j
+      }
 
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, Union(children)) =>
