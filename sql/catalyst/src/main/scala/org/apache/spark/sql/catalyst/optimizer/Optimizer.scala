@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
+import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -57,6 +57,8 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", FixedPoint(100),
       RemoveLiteralFromGroupExpressions) ::
+    Batch("", FixedPoint(100),
+      AddFilterOfNullForInnerJoin) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -127,6 +129,26 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       m.copy(
         deserializer = childWithoutSerialization.output.head,
         child = childWithoutSerialization)
+  }
+}
+
+object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
+      val leftConditions = leftKeys.map { l =>
+        Not(EqualTo(l, Literal(null)))
+      }.reduceLeft(And)
+
+      val rightConditions = rightKeys.map { r =>
+        Not(EqualTo(r, Literal(null)))
+      }.reduceLeft(And)
+
+      val keysConditions = leftKeys.zip(rightKeys).map { lr =>
+        EqualTo(lr._1, lr._2)
+      }.reduceLeft(And)
+
+      Join(Filter(leftConditions, left), Filter(rightConditions, right),
+        Inner, Some(And(keysConditions, condition.getOrElse(Literal(true)))))
   }
 }
 
