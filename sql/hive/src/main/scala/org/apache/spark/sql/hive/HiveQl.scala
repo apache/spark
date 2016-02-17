@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.AnalysisException
@@ -688,12 +687,9 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     node.children.map(_.children).collect {
       case Token(rawColName, Nil) :: colTypeNode :: comment =>
         val colName = if (!lowerCase) rawColName else rawColName.toLowerCase
-        val typeString = Option(nodeToTypeString(colTypeNode))
-          .map(HiveMetastoreTypes.toDataType)
-          .orNull
         CatalogColumn(
           name = cleanIdentifier(colName),
-          dataType = typeString,
+          dataType = nodeToTypeString(colTypeNode),
           nullable = true,
           comment.headOption.map(n => unescapeSQLString(n.text)))
     }

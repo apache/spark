@@ -316,7 +316,9 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         specifiedDatabase = Option(dbName),
         name = tblName,
         tableType = tableType,
-        schema = relation.schema.map { f => CatalogColumn(f.name, f.dataType) },
+        schema = relation.schema.map { f =>
+          CatalogColumn(f.name, HiveMetastoreTypes.toMetastoreType(f.dataType))
+        },
         storage = CatalogStorageFormat(
           locationUri = Some(relation.paths.head),
           inputFormat = serde.inputFormat,
@@ -605,7 +607,9 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val schema = if (table.schema.nonEmpty) {
           table.schema
         } else {
-          child.output.map { attr => CatalogColumn(attr.name, attr.dataType, attr.nullable) }
+          child.output.map { a =>
+            CatalogColumn(a.name, HiveMetastoreTypes.toMetastoreType(a.dataType), a.nullable)
+          }
         }
 
         val desc = table.copy(schema = schema)
@@ -768,7 +772,7 @@ private[hive] case class MetastoreRelation(
   override protected def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
-    new FieldSchema(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment.orNull)
+    new FieldSchema(c.name, c.dataType, c.comment.orNull)
   }
 
   @transient val hiveQlTable: HiveTable = {
@@ -889,7 +893,7 @@ private[hive] case class MetastoreRelation(
   implicit class SchemaAttribute(f: CatalogColumn) {
     def toAttribute: AttributeReference = AttributeReference(
       f.name,
-      f.dataType,
+      HiveMetastoreTypes.toDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))

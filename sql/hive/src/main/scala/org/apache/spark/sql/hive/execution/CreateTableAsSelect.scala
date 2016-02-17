@@ -62,7 +62,9 @@ case class CreateTableAsSelect(
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS
         // However we don't think SparkSQL should follow that.
-        tableDesc.copy(schema = query.output.map { c => CatalogColumn(c.name, c.dataType) })
+        tableDesc.copy(schema = query.output.map { c =>
+          CatalogColumn(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType))
+        })
       } else {
         withFormat
       }

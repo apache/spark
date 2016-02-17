@@ -127,7 +127,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           specifiedDatabase = Option("default"),
           name = "src",
           tableType = CatalogTableType.MANAGED_TABLE,
-          schema = Seq(CatalogColumn("key", IntegerType)),
+          schema = Seq(CatalogColumn("key", "int")),
           storage = CatalogStorageFormat(
             locationUri = None,
             inputFormat = Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),

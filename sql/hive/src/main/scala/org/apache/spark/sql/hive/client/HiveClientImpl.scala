@@ -616,13 +616,13 @@ private[hive] class HiveClientImpl(
   }
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
-    new FieldSchema(c.name, HiveMetastoreTypes.toMetastoreType(c.dataType), c.comment.orNull)
+    new FieldSchema(c.name, c.dataType, c.comment.orNull)
   }
 
   private def fromHiveColumn(hc: FieldSchema): CatalogColumn = {
     new CatalogColumn(
       name = hc.getName,
-      dataType = HiveMetastoreTypes.toDataType(hc.getType),
+      dataType = hc.getType,
       nullable = true,
       comment = Option(hc.getComment))
   }

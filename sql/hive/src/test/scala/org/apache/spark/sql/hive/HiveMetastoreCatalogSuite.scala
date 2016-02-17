@@ -92,8 +92,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
         val columns = hiveTable.schema
         assert(columns.map(_.name) === Seq("d1", "d2"))
-        assert(columns.map { a => HiveMetastoreTypes.toMetastoreType(a.dataType) } ===
-          Seq("decimal(10,3)", "string"))
+        assert(columns.map(_.dataType) === Seq("decimal(10,3)", "string"))
 
         checkAnswer(table("t"), testDF)
         assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
@@ -125,8 +124,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))
-          assert(columns.map { a => HiveMetastoreTypes.toMetastoreType(a.dataType) } ===
-            Seq("decimal(10,3)", "string"))
+          assert(columns.map(_.dataType) === Seq("decimal(10,3)", "string"))
 
           checkAnswer(table("t"), testDF)
           assert(runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
@@ -155,8 +153,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
           val columns = hiveTable.schema
           assert(columns.map(_.name) === Seq("d1", "d2"))
-          assert(columns.map { a => HiveMetastoreTypes.toMetastoreType(a.dataType) } ===
-            Seq("int", "string"))
+          assert(columns.map(_.dataType) === Seq("int", "string"))
 
           checkAnswer(table("t"), Row(1, "val_1"))
           assert(runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))

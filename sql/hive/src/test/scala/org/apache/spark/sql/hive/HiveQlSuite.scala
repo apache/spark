@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, Catal
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.catalyst.plans.logical.Generate
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
   val parser = new HiveQl(SimpleParserConf())
@@ -60,17 +59,17 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
-      CatalogColumn("viewtime", IntegerType) ::
-      CatalogColumn("userid", LongType) ::
-      CatalogColumn("page_url", StringType) ::
-      CatalogColumn("referrer_url", StringType) ::
-      CatalogColumn("ip", StringType, comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", StringType, comment = Some("country of origination")) :: Nil)
+      CatalogColumn("viewtime", "int") ::
+      CatalogColumn("userid", "bigint") ::
+      CatalogColumn("page_url", "string") ::
+      CatalogColumn("referrer_url", "string") ::
+      CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
+      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
     assert(desc.partitionColumns ==
-      CatalogColumn("dt", StringType, comment = Some("date type")) ::
-      CatalogColumn("hour", StringType, comment = Some("hour of the day")) :: Nil)
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     assert(desc.storage.serdeProperties ==
       Map((serdeConstants.SERIALIZATION_FORMAT, "\054"), (serdeConstants.FIELD_DELIM, "\054")))
     assert(desc.storage.inputFormat == Option("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
@@ -106,17 +105,17 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(desc.tableType == CatalogTableType.EXTERNAL_TABLE)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
     assert(desc.schema ==
-      CatalogColumn("viewtime", IntegerType) ::
-      CatalogColumn("userid", LongType) ::
-      CatalogColumn("page_url", StringType) ::
-      CatalogColumn("referrer_url", StringType) ::
-      CatalogColumn("ip", StringType, comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", StringType, comment = Some("country of origination")) :: Nil)
+      CatalogColumn("viewtime", "int") ::
+      CatalogColumn("userid", "bigint") ::
+      CatalogColumn("page_url", "string") ::
+      CatalogColumn("referrer_url", "string") ::
+      CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
+      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.viewText == Option("This is the staging page view table"))
     assert(desc.partitionColumns ==
-      CatalogColumn("dt", StringType, comment = Some("date type")) ::
-      CatalogColumn("hour", StringType, comment = Some("hour of the day")) :: Nil)
+      CatalogColumn("dt", "string", comment = Some("date type")) ::
+      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Option("parquet.hive.DeprecatedParquetInputFormat"))
     assert(desc.storage.outputFormat == Option("parquet.hive.DeprecatedParquetOutputFormat"))

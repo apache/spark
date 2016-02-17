@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.catalog
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.types.DataType
 
 
 /**
@@ -166,7 +165,9 @@ case class CatalogStorageFormat(
  */
 case class CatalogColumn(
     name: String,
-    @Nullable dataType: DataType, // may be null when used to create views
+    // This may be null when used to create views. TODO: make this type-safe; this is left
+    // as a string due to issues in converting Hive varchars to and from SparkSQL strings.
+    @Nullable dataType: String,
     nullable: Boolean = true,
     comment: Option[String] = None)
 
