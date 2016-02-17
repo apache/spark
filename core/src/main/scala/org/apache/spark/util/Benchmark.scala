@@ -93,7 +93,8 @@ private[spark] object Benchmark {
     if (SystemUtils.IS_OS_MAC_OSX) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
     } else if (SystemUtils.IS_OS_LINUX) {
-      Utils.executeAndGetOutput(Seq("/usr/bin/grep", "-m", "1", "\"model name\"", "/proc/cpuinfo"))
+      val grepPath = Utils.executeAndGetOutput(Seq("which", "grep"))
+      Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
     }
