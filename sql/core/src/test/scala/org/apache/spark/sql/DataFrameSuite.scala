@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
-import org.apache.spark.sql.test.SQLTestData.TestData2
+import org.apache.spark.sql.test.SQLTestData.{TestData, TestData2}
 import org.apache.spark.sql.types._
 
 class DataFrameSuite extends QueryTest with SharedSQLContext {
@@ -39,7 +39,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("analysis error should be eagerly reported") {
     // Eager analysis.
     withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {
-      intercept[Exception] { testData.select('nonExistentName) }
+      intercept[Exception] { testData.as[TestData].select('nonExistentName) }
       intercept[Exception] {
         testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
       }
