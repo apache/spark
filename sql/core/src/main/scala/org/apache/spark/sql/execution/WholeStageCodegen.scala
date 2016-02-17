@@ -27,7 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, LongSQLMetricValue, SQLMetric}
 
 /**
   * An interface for those physical operators that support codegen.
@@ -37,7 +38,21 @@ trait CodegenSupport extends SparkPlan {
   /** Prefix used in the current operator's variable names. */
   private def variablePrefix: String = this match {
     case _: TungstenAggregate => "agg"
+    case _: BroadcastHashJoin => "bhj"
     case _ => nodeName.toLowerCase
+  }
+
+  /**
+    * Creates a metric using the specified name.
+    *
+    * @return name of the variable representing the metric
+    */
+  def metricTerm(ctx: CodegenContext, name: String): String = {
+    val metric = ctx.addReferenceObj(name, longMetric(name))
+    val value = ctx.freshName("metricValue")
+    val cls = classOf[LongSQLMetricValue].getName
+    ctx.addMutableState(cls, value, s"$value = ($cls) $metric.localValue();")
+    value
   }
 
   /**
@@ -172,6 +187,9 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
        |   InternalRow $row = (InternalRow) input.next();
        |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
+       |   if (shouldStop()) {
+       |     return;
+       |   }
        | }
      """.stripMargin
   }
@@ -232,6 +250,9 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         return new GeneratedIterator(references);
       }
 
+      /** Codegened pipeline for:
+        * ${plan.treeString.trim}
+        */
       class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
@@ -251,8 +272,9 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
       """
 
     // try to compile, helpful for debug
-    // println(s"${CodeFormatter.format(source)}")
-    CodeGenerator.compile(source)
+    val cleanedSource = CodeFormatter.stripExtraNewLines(source)
+    // println(s"${CodeFormatter.format(cleanedSource)}")
+    CodeGenerator.compile(cleanedSource)
 
     plan.upstream().mapPartitions { iter =>
 
@@ -283,8 +305,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRow = $row;
-         | return;
+         | currentRows.add($row.copy());
        """.stripMargin
     } else {
       assert(input != null)
@@ -297,17 +318,19 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
            | ${code.code.trim}
-           | currentRow = ${code.value};
-           | return;
+           | currentRows.add(${code.value}.copy());
          """.stripMargin
       } else {
         // There is no columns
         s"""
-           | currentRow = unsafeRow;
-           | return;
+           | currentRows.add(unsafeRow);
          """.stripMargin
       }
     }
+  }
+
+  private[sql] override def resetMetrics(): Unit = {
+    plan.foreach(_.resetMetrics())
   }
 
   override def generateTreeString(
@@ -364,13 +387,14 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
   def apply(plan: SparkPlan): SparkPlan = {
     if (sqlContext.conf.wholeStageEnabled) {
       plan.transform {
-        case plan: CodegenSupport if supportCodegen(plan) &&
-          // Whole stage codegen is only useful when there are at least two levels of operators that
-          // support it (save at least one projection/iterator).
-          (Utils.isTesting || plan.children.exists(supportCodegen)) =>
-
+        case plan: CodegenSupport if supportCodegen(plan) =>
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
+            // The build side can't be compiled together
+            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
+              b.copy(left = apply(left))
+            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
+              b.copy(right = apply(right))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input

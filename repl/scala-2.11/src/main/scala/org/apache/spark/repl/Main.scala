@@ -19,7 +19,7 @@ package org.apache.spark.repl
 
 import java.io.File
 
-import scala.tools.nsc.Settings
+import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark.util.Utils
 import org.apache.spark._
@@ -56,7 +56,7 @@ object Main extends Logging {
       "-classpath", getAddedJars.mkString(File.pathSeparator)
     ) ++ args.toList
 
-    val settings = new Settings(scalaOptionError)
+    val settings = new GenericRunnerSettings(scalaOptionError)
     settings.processArguments(interpArguments, true)
 
     if (!hasErrors) {

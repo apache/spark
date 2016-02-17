@@ -15,16 +15,12 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.expressions
 
-import java.util.{List => JList, Map => JMap}
-
-import org.apache.spark.Accumulator
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.execution.PythonUDF
+import org.apache.spark.sql.catalyst.expressions.ScalaUDF
+import org.apache.spark.sql.Column
+import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -48,32 +44,5 @@ case class UserDefinedFunction protected[sql] (
 
   def apply(exprs: Column*): Column = {
     Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
-  }
-}
-
-/**
- * A user-defined Python function. To create one, use the `pythonUDF` functions in [[functions]].
- * This is used by Python API.
- */
-private[sql] case class UserDefinedPythonFunction(
-    name: String,
-    command: Array[Byte],
-    envVars: JMap[String, String],
-    pythonIncludes: JList[String],
-    pythonExec: String,
-    pythonVer: String,
-    broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: Accumulator[JList[Array[Byte]]],
-    dataType: DataType) {
-
-  def builder(e: Seq[Expression]): PythonUDF = {
-    PythonUDF(name, command, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars,
-      accumulator, dataType, e)
-  }
-
-  /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
-  def apply(exprs: Column*): Column = {
-    val udf = builder(exprs.map(_.expr))
-    Column(udf)
   }
 }

@@ -20,4 +20,4 @@ rem
 rem This is the entry point for running a Spark example. To avoid polluting
 rem the environment, it just launches a new cmd to do the real work.
 
-cmd /V /E /C %~dp0run-example2.cmd %*
+cmd /V /E /C "%~dp0run-example2.cmd" %*

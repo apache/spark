@@ -465,7 +465,7 @@ class HiveContext private[hive](
         catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        ExtractPythonUDFs ::
+        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
@@ -559,7 +559,7 @@ class HiveContext private[hive](
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,
-      TakeOrderedAndProject,
+      SpecialLimits,
       InMemoryScans,
       HiveTableScans,
       DataSinks,

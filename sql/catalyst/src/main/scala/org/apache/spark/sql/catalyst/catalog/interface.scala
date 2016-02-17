@@ -29,18 +29,19 @@ import org.apache.spark.sql.AnalysisException
  * Implementations should throw [[AnalysisException]] when table or database don't exist.
  */
 abstract class Catalog {
+  import Catalog._
 
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
 
-  def createDatabase(dbDefinition: Database, ifNotExists: Boolean): Unit
+  def createDatabase(dbDefinition: Database, ignoreIfExists: Boolean): Unit
 
-  def dropDatabase(
-    db: String,
-    ignoreIfNotExists: Boolean,
-    cascade: Boolean): Unit
+  def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit
 
+  /**
+   * Alter an existing database. This operation does not support renaming.
+   */
   def alterDatabase(db: String, dbDefinition: Database): Unit
 
   def getDatabase(db: String): Database
@@ -59,6 +60,9 @@ abstract class Catalog {
 
   def renameTable(db: String, oldName: String, newName: String): Unit
 
+  /**
+   * Alter an existing table. This operation does not support renaming.
+   */
   def alterTable(db: String, table: String, tableDefinition: Table): Unit
 
   def getTable(db: String, table: String): Table
@@ -71,11 +75,31 @@ abstract class Catalog {
   // Partitions
   // --------------------------------------------------------------------------
 
-  // TODO: need more functions for partitioning.
+  def createPartitions(
+      db: String,
+      table: String,
+      parts: Seq[TablePartition],
+      ignoreIfExists: Boolean): Unit
 
-  def alterPartition(db: String, table: String, part: TablePartition): Unit
+  def dropPartitions(
+      db: String,
+      table: String,
+      parts: Seq[PartitionSpec],
+      ignoreIfNotExists: Boolean): Unit
 
-  def alterPartitions(db: String, table: String, parts: Seq[TablePartition]): Unit
+  /**
+   * Alter an existing table partition and optionally override its spec.
+   */
+  def alterPartition(
+      db: String,
+      table: String,
+      spec: PartitionSpec,
+      newPart: TablePartition): Unit
+
+  def getPartition(db: String, table: String, spec: PartitionSpec): TablePartition
+
+  // TODO: support listing by pattern
+  def listPartitions(db: String, table: String): Seq[TablePartition]
 
   // --------------------------------------------------------------------------
   // Functions
@@ -85,6 +109,9 @@ abstract class Catalog {
 
   def dropFunction(db: String, funcName: String): Unit
 
+  /**
+   * Alter an existing function and optionally override its name.
+   */
   def alterFunction(db: String, funcName: String, funcDefinition: Function): Unit
 
   def getFunction(db: String, funcName: String): Function
@@ -132,11 +159,11 @@ case class Column(
 /**
  * A partition (Hive style) defined in the catalog.
  *
- * @param values values for the partition columns
+ * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  */
 case class TablePartition(
-  values: Seq[String],
+  spec: Catalog.PartitionSpec,
   storage: StorageFormat
 )
 
@@ -176,3 +203,11 @@ case class Database(
   locationUri: String,
   properties: Map[String, String]
 )
+
+
+object Catalog {
+  /**
+   * Specifications of a table partition indexed by column name.
+   */
+  type PartitionSpec = Map[String, String]
+}

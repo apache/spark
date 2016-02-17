@@ -21,6 +21,7 @@ import java.io.{File, IOException}
 import java.nio.charset.Charset
 import java.util.UUID
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -215,8 +216,8 @@ object MasterFailureTest extends Logging {
 
     while(!isLastOutputGenerated && !isTimedOut) {
       // Get the output buffer
-      val outputBuffer = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
-      def output = outputBuffer.flatMap(x => x)
+      val outputQueue = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[T]].output
+      def output = outputQueue.asScala.flatten
 
       // Start the thread to kill the streaming after some time
       killed = false
@@ -241,6 +242,8 @@ object MasterFailureTest extends Logging {
         }
       } catch {
         case e: Exception => logError("Error running streaming context", e)
+      } finally {
+        ssc.stop()
       }
       if (killingThread.isAlive) {
         killingThread.interrupt()
@@ -249,7 +252,6 @@ object MasterFailureTest extends Logging {
         // to null after the next test creates the new SparkContext and fail the test.
         killingThread.join()
       }
-      ssc.stop()
 
       logInfo("Has been killed = " + killed)
       logInfo("Is last output generated = " + isLastOutputGenerated)
@@ -257,9 +259,9 @@ object MasterFailureTest extends Logging {
 
       // Verify whether the output of each batch has only one element or no element
       // and then merge the new output with all the earlier output
-      mergedOutput ++= output
+      mergedOutput ++= output.toSeq
       totalTimeRan += timeRan
-      logInfo("New output = " + output)
+      logInfo("New output = " + output.toSeq)
       logInfo("Merged output = " + mergedOutput)
       logInfo("Time ran = " + timeRan)
       logInfo("Total time ran = " + totalTimeRan)
