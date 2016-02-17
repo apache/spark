@@ -324,13 +324,22 @@ private[storage] class BlockInfoManager extends Logging {
   /**
    * Removes the given block and automatically drops all locks on it.
    *
-   * TODO: document validity conditions.
+   * This can only be called while holding a write lock on the given block.
    */
   def remove(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to remove block $blockId")
-    // TODO: Should probably have safety checks here
-    infos.remove(blockId).foreach { info =>
-      info.removed = true
+    infos.get(blockId) match {
+      case Some(blockInfo) =>
+        if (blockInfo.writerTask != currentTaskAttemptId) {
+          throw new IllegalStateException(
+            s"Task $currentTaskAttemptId called remove() on block $blockId without a write lock")
+        } else {
+          infos.remove(blockId)
+          blockInfo.removed = true
+        }
+      case None =>
+        throw new IllegalArgumentException(
+          s"Task $currentTaskAttemptId called remove() on non-existent block $blockId")
     }
     notifyAll()
   }

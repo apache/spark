@@ -193,6 +193,35 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(Await.result(write2Future, 1.seconds).isDefined)
   }
 
+  test("removing a non-existent block throws IllegalArgumentException") {
+    withTaskId(0) {
+      intercept[IllegalArgumentException] {
+        blockInfoManager.remove("non-existent-block")
+      }
+    }
+  }
+
+  test("removing a block without holding any locks throws IllegalStateException") {
+    withTaskId(0) {
+      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      blockInfoManager.releaseLock("block")
+      intercept[IllegalStateException] {
+        blockInfoManager.remove("block")
+      }
+    }
+  }
+
+  test("removing a block while holding only a read lock throws IllegalStateException") {
+    withTaskId(0) {
+      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      blockInfoManager.releaseLock("block")
+      assert(blockInfoManager.getAndLockForReading("block").isDefined)
+      intercept[IllegalStateException] {
+        blockInfoManager.remove("block")
+      }
+    }
+  }
+
   test("removing a block causes blocked callers to receive None") {
     withTaskId(0) {
       assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
