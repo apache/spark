@@ -82,7 +82,7 @@ private[sql] object StatFunctions extends Logging {
 
     private def getConstant(): Double = 2 * epsilon * count
 
-    def insert(x: Double): this.type = {
+    def insert(x: Double): QuantileSummaries = {
       var idx = sampled.indexWhere(_.value > x)
       if (idx == -1) {
         idx = sampled.size
@@ -102,11 +102,11 @@ private[sql] object StatFunctions extends Logging {
       this
     }
 
-    def compress(): Unit = {
+    def compress(): QuantileSummaries = {
       val compressed = compressImmut(sampled)
       sampled.clear()
       sampled.appendAll(compressed)
-      return
+      return this
       var i = 0
       while (i < sampled.size - 1) {
         val sample1 = sampled(i)
@@ -117,6 +117,7 @@ private[sql] object StatFunctions extends Logging {
         }
         i += 1
       }
+      this
     }
 
     def printBuffer(buff: Seq[Stats]): String = {

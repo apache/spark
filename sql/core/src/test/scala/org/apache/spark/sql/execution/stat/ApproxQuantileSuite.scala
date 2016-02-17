@@ -18,8 +18,8 @@ class ApproxQuantileSuite extends SparkFunSuite {
       data: Seq[Double],
       epsi: Double,
       threshold: Int): QuantileSummaries = {
-    val summary = new QuantileSummaries(threshold, epsi)
-    data.foreach(summary.insert)
+    var summary = new QuantileSummaries(threshold, epsi)
+    data.foreach(x => summary = summary.insert(x))
     summary
   }
 
