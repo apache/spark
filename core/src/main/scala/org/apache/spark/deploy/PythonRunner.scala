@@ -85,6 +85,7 @@ object PythonRunner {
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
+    env.put("PYTHONHASHSEED", "0")
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()

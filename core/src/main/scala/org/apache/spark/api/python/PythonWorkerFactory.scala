@@ -117,6 +117,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
+      workerEnv.put("PYTHONHASHSEED", "0")
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
@@ -160,6 +161,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         workerEnv.put("PYTHONPATH", pythonPath)
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
+        workerEnv.put("PYTHONHASHSEED", "0")
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)
