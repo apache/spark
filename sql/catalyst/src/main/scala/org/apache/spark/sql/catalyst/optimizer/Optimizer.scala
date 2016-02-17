@@ -132,6 +132,10 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Add Filter to left and right of an inner Join to filter out rows with null keys.
+ * So we don't need to check nullability of keys while joining.
+ */
 object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
