@@ -140,6 +140,17 @@ object IntegerLiteral {
 }
 
 /**
+  * Extractor for retrieving Boolean literals.
+  */
+object BooleanLiteral {
+  def unapply(a: Any): Option[Boolean] = a match {
+    case Literal(a: Int, IntegerType) if a == 0 => Some(false)
+    case Literal(a: Int, IntegerType) => Some(true)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for and other utility methods for decimal literals.
  */
 object DecimalLiteral {

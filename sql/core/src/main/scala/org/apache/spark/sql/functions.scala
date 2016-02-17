@@ -1052,10 +1052,22 @@ object functions extends LegacyFunctions {
   /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
+   * When deterministic is set to true, the result is deterministic.
+   *
+   * @group normal_funcs
+   * @since 2.0.0
+   */
+  def rand(seed: Long, deterministic: Boolean): Column = withExpr { Rand(seed, deterministic) }
+
+  /**
+   * Generate a random column with i.i.d. samples from U[0.0, 1.0].
+   *
+   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
-  def rand(seed: Long): Column = withExpr { Rand(seed) }
+  def rand(seed: Long): Column = rand(seed, deterministic = false)
 
   /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
@@ -1068,10 +1080,23 @@ object functions extends LegacyFunctions {
   /**
    * Generate a column with i.i.d. samples from the standard normal distribution.
    *
+   * When deterministic is set to true, the result is deterministic.
+   *
+   * @group normal_funcs
+   * @since 2.0.0
+   */
+  def randn(seed: Long, deterministic: Boolean): Column =
+    withExpr { Randn(seed, deterministic) }
+
+  /**
+   * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * Note that this is indeterministic because it depends on data partitioning and task scheduling.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
-  def randn(seed: Long): Column = withExpr { Randn(seed) }
+  def randn(seed: Long): Column = randn(seed, deterministic = false)
 
   /**
    * Generate a column with i.i.d. samples from the standard normal distribution.
