@@ -265,7 +265,7 @@ method in each of these evaluators.
 The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
 `CrossValidator` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
-The following example demonstrates using `CrossValidator` to selewct from a grid of parameters.
+The following example demonstrates using `CrossValidator` to select from a grid of parameters.
 To help construct the parameter grid, we use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridBuilder) utility.
 
 Note that cross-validation over a grid of parameters is expensive.
