@@ -843,6 +843,11 @@ for (Row r: predictions.select("id", "text", "probability", "prediction").collec
 {% endhighlight %}
 </div>
 
+<div data-lang="python">
+
+{% include_example python/ml/cross_validator.py %}
+</div>
+
 </div>
 
 ## Example: model selection via train validation split
