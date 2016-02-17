@@ -46,7 +46,7 @@ public class JavaTrainValidationSplitExample {
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
     // $example on$
-    DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_linear_regression_data.txt");
 
     // Prepare training and test data.
     DataFrame[] splits = data.randomSplit(new double [] {0.9, 0.1}, 12345);
