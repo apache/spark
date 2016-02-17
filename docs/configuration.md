@@ -1673,7 +1673,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
