@@ -40,26 +40,29 @@ public class JavaSVDExample {
     SparkContext sc = new SparkContext(conf);
 
     // $example on$
-    double[][] array = { { 1.12, 2.05, 3.12 }, { 5.56, 6.28, 8.94 },
-      { 10.2, 8.0, 20.5 } };
+    double[][] array = { { 1.12, 2.05, 3.12 }, { 5.56, 6.28, 8.94 }, { 10.2, 8.0, 20.5 } };
     LinkedList<Vector> rowsList = new LinkedList<Vector>();
     for (int i = 0; i < array.length; i++) {
       Vector currentRow = Vectors.dense(array[i]);
       rowsList.add(currentRow);
     }
-    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(
-      rowsList);
+    JavaRDD<Vector> rows = JavaSparkContext.fromSparkContext(sc).parallelize(rowsList);
 
     // Create a RowMatrix from JavaRDD<Vector>.
     RowMatrix mat = new RowMatrix(rows.rdd());
 
-    // Compute the top 4 singular values and corresponding singular vectors.
-    SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(4, true,
-      1.0E-9d);
+    // Compute the top 3 singular values and corresponding singular vectors.
+    SingularValueDecomposition<RowMatrix, Matrix> svd = mat.computeSVD(3, true, 1.0E-9d);
     RowMatrix U = svd.U();
     Vector s = svd.s();
     Matrix V = svd.V();
-
+    Vector[] collectPartitions = (Vector[]) U.rows().collect();
+    System.out.println("U factor is:");
+    for (Vector vector : collectPartitions) {
+      System.out.println("\t" + vector);
+    }
+    System.out.println("Singular values are: " + s);
+    System.out.println("V factor is:\n" + V);
     // $example off$
   }
 }

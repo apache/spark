@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
+// $example on$
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
+// $example off$
 
 object PCAOnRowMatrixExample {
 
@@ -40,13 +43,16 @@ object PCAOnRowMatrixExample {
 
     val mat: RowMatrix = new RowMatrix(dataRDD)
 
-    // Compute the top 10 principal components.
+    // Compute the top 4 principal components.
     // Principal components are stored in a local dense matrix.
-    val pc: Matrix = mat.computePrincipalComponents(10)
+    val pc: Matrix = mat.computePrincipalComponents(4)
 
-    // Project the rows to the linear space spanned by the top 10 principal components.
+    // Project the rows to the linear space spanned by the top 4 principal components.
     val projected: RowMatrix = mat.multiply(pc)
-
+    val collect = projected.rows.collect
+    println("Projected Row Matrix of principal component:")
+    collect.foreach { vector => println(vector) }
     // $example off$
   }
 }
+// scalastyle:on println
