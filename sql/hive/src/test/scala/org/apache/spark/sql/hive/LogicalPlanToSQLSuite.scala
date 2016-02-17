@@ -214,7 +214,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     // Complex type extractors
     checkColumnNames(
       """SELECT
-        |  a.f1, b[0].f1, c["foo"], d[0]
+        |  a.f1, b[0].f1, b.f1, c["foo"], d[0]
         |FROM (
         |  SELECT
         |    NAMED_STRUCT("f1", 1, "f2", "foo") AS a,
@@ -223,7 +223,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |    ARRAY(1) AS d
         |) s
       """.stripMargin,
-      "f1", "b[0].f1", "c[foo]", "d[0]"
+      "f1", "b[0].f1", "f1", "c[foo]", "d[0]"
     )
   }
 }
