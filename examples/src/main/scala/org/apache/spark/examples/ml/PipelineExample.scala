@@ -39,7 +39,8 @@ object PipelineExample {
       (0L, "a b c d e spark", 1.0),
       (1L, "b d", 0.0),
       (2L, "spark f g h", 1.0),
-      (3L, "hadoop mapreduce", 0.0))).toDF("id", "text", "label")
+      (3L, "hadoop mapreduce", 0.0)
+    )).toDF("id", "text", "label")
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     val tokenizer = new Tokenizer()
@@ -72,15 +73,15 @@ object PipelineExample {
       (4L, "spark i j k"),
       (5L, "l m n"),
       (6L, "mapreduce spark"),
-      (7L, "apache hadoop"))).toDF("id", "text")
+      (7L, "apache hadoop")
+    )).toDF("id", "text")
 
     // Make predictions on test documents.
     model.transform(test)
       .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach {
-        case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-          println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+        println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
     // $example off$
 

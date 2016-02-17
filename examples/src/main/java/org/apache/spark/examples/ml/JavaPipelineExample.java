@@ -31,7 +31,6 @@ import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-
 //$example off$
 
 /**
@@ -46,35 +45,42 @@ public class JavaPipelineExample {
     // $example on$
     // Prepare training documents, which are labeled.
     DataFrame training = sqlContext.createDataFrame(Arrays.asList(
-      new JavaLabeledDocument(0L, "a b c d e spark", 1.0), new JavaLabeledDocument(1L,
-        "b d", 0.0), new JavaLabeledDocument(2L, "spark f g h", 1.0),
-      new JavaLabeledDocument(3L, "hadoop mapreduce", 0.0)), JavaLabeledDocument.class);
+      new JavaLabeledDocument(0L, "a b c d e spark", 1.0),
+      new JavaLabeledDocument(1L, "b d", 0.0),
+      new JavaLabeledDocument(2L, "spark f g h", 1.0),
+      new JavaLabeledDocument(3L, "hadoop mapreduce", 0.0)
+    ), JavaLabeledDocument.class);
 
-    // Configure an ML pipeline, which consists of three stages: tokenizer,
-    // hashingTF, and lr.
-    Tokenizer tokenizer = new Tokenizer().setInputCol("text").setOutputCol(
-      "words");
-    HashingTF hashingTF = new HashingTF().setNumFeatures(1000)
-      .setInputCol(tokenizer.getOutputCol()).setOutputCol("features");
-    LogisticRegression lr = new LogisticRegression().setMaxIter(10)
+    // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
+    Tokenizer tokenizer = new Tokenizer()
+      .setInputCol("text")
+      .setOutputCol("words");
+    HashingTF hashingTF = new HashingTF()
+      .setNumFeatures(1000)
+      .setInputCol(tokenizer.getOutputCol())
+      .setOutputCol("features");
+    LogisticRegression lr = new LogisticRegression()
+      .setMaxIter(10)
       .setRegParam(0.01);
-    Pipeline pipeline = new Pipeline().setStages(new PipelineStage[] {
-      tokenizer, hashingTF, lr });
+    Pipeline pipeline = new Pipeline()
+      .setStages(new PipelineStage[] { tokenizer, hashingTF, lr });
 
     // Fit the pipeline to training documents.
     PipelineModel model = pipeline.fit(training);
 
     // Prepare test documents, which are unlabeled.
-    DataFrame test = sqlContext.createDataFrame(Arrays.asList(new JavaDocument(4L,
-      "spark i j k"), new JavaDocument(5L, "l m n"), new JavaDocument(6L,
-      "mapreduce spark"), new JavaDocument(7L, "apache hadoop")), JavaDocument.class);
+    DataFrame test = sqlContext.createDataFrame(Arrays.asList(
+      new JavaDocument(4L, "spark i j k"),
+      new JavaDocument(5L, "l m n"),
+      new JavaDocument(6L, "mapreduce spark"),
+      new JavaDocument(7L, "apache hadoop")
+    ), JavaDocument.class);
 
     // Make predictions on test documents.
     DataFrame predictions = model.transform(test);
-    for (Row r : predictions.select("id", "text", "probability", "prediction")
-      .collect()) {
-      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob="
-        + r.get(2) + ", prediction=" + r.get(3));
+    for (Row r : predictions.select("id", "text", "probability", "prediction").collect()) {
+      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
+        + ", prediction=" + r.get(3));
     }
     // $example off$
 

@@ -49,7 +49,8 @@ object ModelSelectionViaCrossValidationExample {
       (8L, "e spark program", 1.0),
       (9L, "a e c l", 0.0),
       (10L, "spark compile", 1.0),
-      (11L, "hadoop software", 0.0))).toDF("id", "text", "label")
+      (11L, "hadoop software", 0.0)
+    )).toDF("id", "text", "label")
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     val tokenizer = new Tokenizer()
@@ -90,15 +91,15 @@ object ModelSelectionViaCrossValidationExample {
       (4L, "spark i j k"),
       (5L, "l m n"),
       (6L, "mapreduce spark"),
-      (7L, "apache hadoop"))).toDF("id", "text")
+      (7L, "apache hadoop")
+    )).toDF("id", "text")
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     cvModel.transform(test)
       .select("id", "text", "probability", "prediction")
       .collect()
-      .foreach {
-        case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-          println(s"($id, $text) --> prob=$prob, prediction=$prediction")
+      .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
+        println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
     // $example off$
 
