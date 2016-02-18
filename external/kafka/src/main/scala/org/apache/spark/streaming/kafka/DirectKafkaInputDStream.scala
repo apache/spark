@@ -91,7 +91,7 @@ class DirectKafkaInputDStream[
       "spark.streaming.kafka.maxRatePerPartition", 0)
 
   protected[streaming] def maxMessagesPerPartition(
-    offsets: Map[TopicAndPartition, Long]): Option[Map[TopicAndPartition, Long]] = {
+      offsets: Map[TopicAndPartition, Long]): Option[Map[TopicAndPartition, Long]] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
 
     // calculate a per-partition rate limit based on current lag

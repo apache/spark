@@ -355,11 +355,7 @@ class DirectKafkaStreamSuite
 
   test("maxMessagesPerPartition with backpressure disabled") {
     val topic = "maxMessagesPerPartition"
-    def getRateController(
-      stream: DirectKafkaInputDStream[String, String, StringDecoder,
-                                      StringDecoder, (String, String)]
-    ): Option[RateController] = None
-    val kafkaStream = getDirectKafkaStream(topic, getRateController)
+    val kafkaStream = getDirectKafkaStream(topic, None)
 
     val input = Map(TopicAndPartition(topic, 0) -> 50L, TopicAndPartition(topic, 1) -> 50L)
     assert(kafkaStream.maxMessagesPerPartition(input).get ==
@@ -368,13 +364,8 @@ class DirectKafkaStreamSuite
 
   test("maxMessagesPerPartition with no lag") {
     val topic = "maxMessagesPerPartition"
-    def getRateController(
-      stream: DirectKafkaInputDStream[String, String, StringDecoder,
-                                      StringDecoder, (String, String)]
-    ): Option[RateController] = {
-      Some(new ConstantRateController(0, new ConstantEstimator(100), 100))
-    }
-    val kafkaStream = getDirectKafkaStream(topic, getRateController)
+    val rateController = Some(new ConstantRateController(0, new ConstantEstimator(100), 100))
+    val kafkaStream = getDirectKafkaStream(topic, rateController)
 
     val input = Map(TopicAndPartition(topic, 0) -> 0L, TopicAndPartition(topic, 1) -> 0L)
     assert(kafkaStream.maxMessagesPerPartition(input).isEmpty)
@@ -382,13 +373,8 @@ class DirectKafkaStreamSuite
 
   test("maxMessagesPerPartition respects max rate") {
     val topic = "maxMessagesPerPartition"
-    def getRateController(
-      stream: DirectKafkaInputDStream[String, String, StringDecoder,
-                                      StringDecoder, (String, String)]
-    ): Option[RateController] = {
-      Some(new ConstantRateController(0, new ConstantEstimator(100), 1000))
-    }
-    val kafkaStream = getDirectKafkaStream(topic, getRateController)
+    val rateController = Some(new ConstantRateController(0, new ConstantEstimator(100), 1000))
+    val kafkaStream = getDirectKafkaStream(topic, rateController)
 
     val input = Map(TopicAndPartition(topic, 0) -> 1000L, TopicAndPartition(topic, 1) -> 1000L)
     assert(kafkaStream.maxMessagesPerPartition(input).get ==
@@ -472,11 +458,7 @@ class DirectKafkaStreamSuite
     }.toSeq.sortBy { _._1 }
   }
 
-  private def getDirectKafkaStream(
-      topic: String,
-      getRateController: DirectKafkaInputDStream[String, String, StringDecoder,
-                                                 StringDecoder, (String, String)]
-        => Option[RateController]) = {
+  private def getDirectKafkaStream(topic: String, mockRateController: Option[RateController]) = {
     val batchIntervalMilliseconds = 100
 
     val sparkConf = new SparkConf()
@@ -491,10 +473,9 @@ class DirectKafkaStreamSuite
 
     val earliestOffsets = Map(TopicAndPartition(topic, 0) -> 0L, TopicAndPartition(topic, 1) -> 0L)
     val messageHandler = (mmd: MessageAndMetadata[String, String]) => (mmd.key, mmd.message)
-    new DirectKafkaInputDStream[String, String, StringDecoder,
-                                StringDecoder, (String, String)](
+    new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
       ssc, Map[String, String](), earliestOffsets, messageHandler) {
-      override protected[streaming] val rateController = getRateController(this)
+      override protected[streaming] val rateController = mockRateController
     }
   }
 }
