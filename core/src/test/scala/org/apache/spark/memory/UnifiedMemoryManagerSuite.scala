@@ -227,7 +227,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val exception = intercept[IllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
-    assert(exception.getMessage.contains("increase driver memory"))
+    assert(exception.getMessage.contains("increase heap size"))
   }
 
   test("insufficient executor memory") {
