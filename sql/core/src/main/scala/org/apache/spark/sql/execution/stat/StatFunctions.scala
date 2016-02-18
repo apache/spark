@@ -32,16 +32,83 @@ private[sql] object StatFunctions extends Logging {
 
   import QuantileSummaries.Stats
 
-  /** Calculate the approximate quantile for the given column */
+  /**
+   * Calculates the approximate quantile for the given column.
+   *
+   * If you need to compute multiple quantiles at once, you should use [[multipleApproxQuantiles]]
+   *
+   * Note on the target error.
+   *
+   * The result of this algorithm has the following deterministic bound: if the DataFrame has N elements and if we
+   * request the quantile `phi` up to error `epsi`, then the algorithm will return a sample `x` from the DataFrame so
+   * that the *exact* rank of `x` close to (phi * N). More precisely:
+   *
+   *   floor((phi - epsi) * N) <= rank(x) <= ceil((phi + epsi) * N)
+   *
+   * Note on the algorithm used.
+   *
+   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed optimizations). The
+   * algorithm was first present in the following article:
+   * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
+   * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
+   *
+   * The performance optimizations are detailed in the comments of the implementation.
+   *
+   * @param df the dataframe to estimate quantiles on
+   * @param col the name of the column
+   * @param quantile the target quantile of interest
+   * @param epsilon the target error. Should be >= 0.
+   * */
   def approxQuantile(
       df: DataFrame,
       col: String,
       quantile: Double,
       epsilon: Double = QuantileSummaries.defaultEpsilon): Double = {
-    // TODO: allow the extrema, they are stored in the statistics
-    require(quantile > 0.0 && quantile < 1.0, "Quantile must be in the range of (0.0, 1.0).")
+    require(quantile >= 0.0 && quantile <= 1.0, "Quantile must be in the range of (0.0, 1.0).")
     val summaries = collectQuantileSummaries(df, col, epsilon)
     summaries.query(quantile)
+  }
+
+  /**
+   * Runs multiple quantile computations in a single pass, with the same target error.
+   *
+   * See [[approxQuantile)]] for more details on the approximation guarantees.
+   *
+   * @param df the dataframe
+   * @param cols columns of the dataframe
+   * @param quantiles target quantiles to compute
+   * @param epsilon the precision to achieve
+   * @return for each column, returns the requested approximations
+   */
+  def multipleApproxQuantiles(
+      df: DataFrame,
+      cols: Seq[String],
+      quantiles: Seq[Double],
+      epsilon: Double): Seq[Seq[Double]] = {
+    val columns: Seq[Column] = cols.map { colName =>
+      val field = df.schema(colName)
+      require(field.dataType.isInstanceOf[NumericType],
+        s"Quantile calculation for column $colName with data type ${field.dataType} is not supported.")
+      Column(Cast(Column(colName).expr, DoubleType))
+    }
+    val emptySummaries = Array.fill(cols.size)(
+      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))
+
+    def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
+      var i = 0
+      while (i < summaries.length) {
+        summaries(i) = summaries(i).insert(row.getDouble(i))
+        i += 1
+      }
+      summaries
+    }
+
+    def merge(sum1: Array[QuantileSummaries], sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
+      sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
+    }
+    val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
+
+    summaries.map { summary => quantiles.map(summary.query) }
   }
 
   private def collectQuantileSummaries(
@@ -51,7 +118,7 @@ private[sql] object StatFunctions extends Logging {
     val data = df.schema.fields.find(_.name == col)
     require(data.nonEmpty, s"Couldn't find column with name $col")
     require(data.get.dataType.isInstanceOf[NumericType], "Quantile calculation for column " +
-        s"with dataType ${data.get.dataType} not supported.")
+      s"with dataType ${data.get.dataType} not supported.")
 
     val column = Column(Cast(Column(col).expr, DoubleType))
     df.select(column).rdd.aggregate(new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))(
@@ -60,7 +127,7 @@ private[sql] object StatFunctions extends Logging {
       },
       combOp = (baseSummaries, other) => {
         baseSummaries.merge(other)
-    })
+      })
   }
 
   /**
@@ -68,7 +135,17 @@ private[sql] object StatFunctions extends Logging {
    * This implementation is based on the algorithm proposed in the paper:
    * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
    * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
-   * 
+   *
+   * In order to optimize for speed, it maintains an internal buffer of the last seen samples, and only inserts them
+   * after crossing a certain size threshold. This guarantees a near-constant runtime complexity compared to the
+   * original algorithm.
+   *
+   * @param compressThreshold the compression threshold: after the internal buffer of statistics crosses this size, it
+   *                          attempts to compress the statistics together
+   * @param epsilon the target precision
+   * @param sampled a buffer of quantile statistics. See the G-K article for more details
+   * @param count the count of all the elements *inserted in the sampled buffer* (excluding the head buffer)
+   * @param headSampled a buffer of latest samples seen so far
    */
   class QuantileSummaries(
       val compressThreshold: Int,
@@ -78,34 +155,13 @@ private[sql] object StatFunctions extends Logging {
       val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
     import QuantileSummaries._
-//
-//    val sampled = new ArrayBuffer[Stats]() // sampled examples
-//    var count = 0L // count of observed examples
 
     private def getConstant(): Double = 2 * epsilon * count
 
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
       if (headSampled.size >= defaultHeadSize) {
-        return this.withHeadInserted
-      } else {
-        return this
-      }
-      var idx = sampled.indexWhere(_.value > x)
-      if (idx == -1) {
-        idx = sampled.size
-      } 
-      val delta = if (idx == 0 || idx == sampled.size) {
-        0
-      } else {
-        math.floor(getConstant()).toInt
-      } 
-      val tuple = Stats(x, 1, delta)
-      sampled.insert(idx, tuple)
-      count += 1
-
-      if (sampled.size > compressThreshold) {
-        compress()
+        this.withHeadInserted
       } else {
         this
       }
@@ -119,12 +175,10 @@ private[sql] object StatFunctions extends Logging {
      *
      * @return a new quantile summary object.
      */
-    def withHeadInserted: QuantileSummaries = {
+    private def withHeadInserted: QuantileSummaries = {
       if (headSampled.isEmpty) {
         return this
       }
-      println(s"insertBatch: samples before = ${printBuffer(sampled)}")
-      println(s"insertBatch: head before = ${headSampled}")
       var currentCount = count
       val sorted = headSampled.toArray.sorted
       val newSamples: ArrayBuffer[Stats] = new ArrayBuffer[Stats]()
@@ -157,20 +211,17 @@ private[sql] object StatFunctions extends Logging {
         newSamples.append(sampled(sampleIdx))
         sampleIdx += 1
       }
-
-
-      println(s"insertBatch: samples after = ${printBuffer(newSamples)}")
       new QuantileSummaries(compressThreshold, epsilon, newSamples, currentCount)
     }
 
     def compress(): QuantileSummaries = {
       // Inserts all the elements first
       val inserted = this.withHeadInserted
-      println(s"compress: inserted samples = ${printBuffer(inserted.sampled)}")
+//      println(s"compress: inserted samples = ${printBuffer(inserted.sampled)}")
       assert(inserted.headSampled.isEmpty)
       assert(inserted.count == count + headSampled.size)
       val compressed = compressImmut(inserted.sampled, mergeThreshold = 2 * epsilon * inserted.count)
-      println(s"compress: compressed samples = ${printBuffer(compressed)}")
+//      println(s"compress: compressed samples = ${printBuffer(compressed)}")
       return new QuantileSummaries(compressThreshold, epsilon, compressed, inserted.count)
       sampled.clear()
       sampled.appendAll(compressed)
@@ -294,7 +345,7 @@ private[sql] object StatFunctions extends Logging {
       // Target rank
       val rank = math.ceil(quantile * count).toInt
       val targetError = math.ceil(epsilon * count)
-      println(s"query: quantile=$quantile, rank=$rank, targetError=$targetError")
+//      println(s"query: quantile=$quantile, rank=$rank, targetError=$targetError")
       // Minimum rank at current sample
       var minRank = 0
       var i = 1
@@ -302,7 +353,7 @@ private[sql] object StatFunctions extends Logging {
         val curSample = sampled(i)
         minRank += curSample.g
         val maxRank = minRank + curSample.delta
-        println(s"bracket $i: minRank=$minRank maxRank=$maxRank")
+//        println(s"bracket $i: minRank=$minRank maxRank=$maxRank")
         if (maxRank - targetError <= rank && rank <= minRank + targetError) {
           return curSample.value
         }
@@ -347,6 +398,9 @@ private[sql] object StatFunctions extends Logging {
 
     def compressImmut(currentSamples: IndexedSeq[Stats], mergeThreshold: Double): ArrayBuffer[Stats] = {
       val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+      if (currentSamples.isEmpty) {
+        return res
+      }
 //      val mergeThreshold = 2 * epsilon * count
       // Start for the last element, which is always part of the set.
       // The head contains the current new head, that may be merged with the current element.
@@ -370,7 +424,7 @@ private[sql] object StatFunctions extends Logging {
       res.prepend(head)
       // If necessary, add the minimum element:
       res.prepend(currentSamples.head)
-      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
+//      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
       res
     }
 
