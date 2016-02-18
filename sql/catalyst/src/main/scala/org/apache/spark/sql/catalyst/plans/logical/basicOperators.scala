@@ -348,7 +348,7 @@ case class WithWindowDefinition(
  */
 case class Sort(
     order: Seq[SortOrder],
-    ndowglobal: Boolean,
+    global: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows

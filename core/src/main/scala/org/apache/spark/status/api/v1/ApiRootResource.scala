@@ -20,12 +20,11 @@ import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
-import javax.ws.rs.ext.Provider
 
-import org.glassfish.jersey.server.{ServerProperties, ResourceConfig}
-import org.glassfish.jersey.servlet.ServletContainer
 import org.eclipse.jetty.server.handler.ContextHandler
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
+import org.glassfish.jersey.server.ServerProperties
+import org.glassfish.jersey.servlet.ServletContainer
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.ui.SparkUI
