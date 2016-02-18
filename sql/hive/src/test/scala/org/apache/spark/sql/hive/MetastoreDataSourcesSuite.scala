@@ -921,7 +921,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
     // each column of the table is of native type StringType.
     assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
-      .forall(_.dataType == StringType))
+      .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == StringType))
 
     catalog.createDataSourceTable(
       tableIdent = TableIdentifier("skip_hive_metadata"),
@@ -935,6 +935,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
     // the table has a column type as array of StringType.
     assert(catalog.client.getTable("default", "skip_hive_metadata").schema
-      .forall(_.dataType == ArrayType(StringType)))
+      .forall(column => HiveMetastoreTypes.toDataType(column.dataType) == ArrayType(StringType)))
   }
 }
