@@ -412,7 +412,7 @@ class DirectKafkaStreamSuite
         .fold(e => Map.empty[TopicAndPartition, Long], m => m.mapValues(lo => lo.offset))
 
       new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
-        ssc, kafkaParams, m, messageHandler) {
+          ssc, kafkaParams, m, messageHandler) {
         override protected[streaming] val rateController =
           Some(new DirectKafkaRateController(id, estimator))
       }
