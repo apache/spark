@@ -300,6 +300,16 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  */
 object ColumnPruning extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case a @ Aggregate(_, _, e @ Expand(projects, output, child))
+      if (e.outputSet -- a.references).nonEmpty =>
+      val newOutput = output.filter(a.references.contains(_))
+      val newProjects = projects.map { proj =>
+        proj.zip(output).filter { case (e, a) =>
+          newOutput.contains(a)
+        }.unzip._1
+      }
+      a.copy(child = Expand(newProjects, newOutput, child))
+
     case a @ Aggregate(_, _, e @ Expand(_, _, child))
       if (child.outputSet -- e.references -- a.references).nonEmpty =>
       a.copy(child = e.copy(child = prunedChild(child, e.references ++ a.references)))
