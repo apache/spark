@@ -445,7 +445,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           val pair = iterator.next()
           val blockId = pair.getKey
           if (blockIsEvictable(blockId)) {
-            if (blockManager.blockInfoManager.getAndLockForWriting(blockId, false).isDefined) {
+            if (blockManager.blockInfoManager.lockForWriting(blockId, false).isDefined) {
               selectedBlocks += blockId
               freedMemory += pair.getValue.size
             }

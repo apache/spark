@@ -65,20 +65,20 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("get non-existent block") {
     assert(blockInfoManager.get("non-existent-block").isEmpty)
-    assert(blockInfoManager.getAndLockForReading("non-existent-block").isEmpty)
-    assert(blockInfoManager.getAndLockForWriting("non-existent-block").isEmpty)
+    assert(blockInfoManager.lockForReading("non-existent-block").isEmpty)
+    assert(blockInfoManager.lockForWriting("non-existent-block").isEmpty)
   }
 
   test("basic putAndLockForWritingIfAbsent") {
     val blockInfo = newBlockInfo()
     withTaskId(1) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", blockInfo))
+      assert(blockInfoManager.lockNewBlockForWriting("block", blockInfo))
       assert(blockInfoManager.get("block").get eq blockInfo)
-      assert(!blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      assert(!blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       assert(blockInfoManager.get("block").get eq blockInfo)
       assert(blockInfo.readerCount === 0)
       assert(blockInfo.writerTask === 1)
-      blockInfoManager.releaseLock("block")
+      blockInfoManager.unlock("block")
       assert(blockInfo.readerCount === 0)
       assert(blockInfo.writerTask === -1)
     }
@@ -88,53 +88,53 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("read locks are reentrant") {
     withTaskId(1) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
-      blockInfoManager.releaseLock("block")
-      assert(blockInfoManager.getAndLockForReading("block").isDefined)
-      assert(blockInfoManager.getAndLockForReading("block").isDefined)
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
+      assert(blockInfoManager.lockForReading("block").isDefined)
+      assert(blockInfoManager.lockForReading("block").isDefined)
       assert(blockInfoManager.get("block").get.readerCount === 2)
       assert(blockInfoManager.get("block").get.writerTask === -1)
-      blockInfoManager.releaseLock("block")
+      blockInfoManager.unlock("block")
       assert(blockInfoManager.get("block").get.readerCount === 1)
-      blockInfoManager.releaseLock("block")
+      blockInfoManager.unlock("block")
       assert(blockInfoManager.get("block").get.readerCount === 0)
     }
   }
 
   test("multiple tasks can hold read locks") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
-      blockInfoManager.releaseLock("block")
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
     }
-    withTaskId(1) { assert(blockInfoManager.getAndLockForReading("block").isDefined) }
-    withTaskId(2) { assert(blockInfoManager.getAndLockForReading("block").isDefined) }
-    withTaskId(3) { assert(blockInfoManager.getAndLockForReading("block").isDefined) }
-    withTaskId(4) { assert(blockInfoManager.getAndLockForReading("block").isDefined) }
+    withTaskId(1) { assert(blockInfoManager.lockForReading("block").isDefined) }
+    withTaskId(2) { assert(blockInfoManager.lockForReading("block").isDefined) }
+    withTaskId(3) { assert(blockInfoManager.lockForReading("block").isDefined) }
+    withTaskId(4) { assert(blockInfoManager.lockForReading("block").isDefined) }
     assert(blockInfoManager.get("block").get.readerCount === 4)
   }
 
   test("single task can hold write lock") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
-      blockInfoManager.releaseLock("block")
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
     }
     withTaskId(1) {
-      assert(blockInfoManager.getAndLockForWriting("block").isDefined)
+      assert(blockInfoManager.lockForWriting("block").isDefined)
       assert(blockInfoManager.get("block").get.writerTask === 1)
     }
     withTaskId(2) {
-      assert(blockInfoManager.getAndLockForWriting("block", blocking = false).isEmpty)
+      assert(blockInfoManager.lockForWriting("block", blocking = false).isEmpty)
       assert(blockInfoManager.get("block").get.writerTask === 1)
     }
   }
 
   test("downgrade lock") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       blockInfoManager.downgradeLock("block")
     }
     withTaskId(1) {
-      assert(blockInfoManager.getAndLockForReading("block").isDefined)
+      assert(blockInfoManager.lockForReading("block").isDefined)
     }
     assert(blockInfoManager.get("block").get.readerCount === 2)
     assert(blockInfoManager.get("block").get.writerTask === -1)
@@ -142,21 +142,21 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("write lock will block readers") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
     val get1Future = Future {
       withTaskId(1) {
-        blockInfoManager.getAndLockForReading("block")
+        blockInfoManager.lockForReading("block")
       }
     }
     val get2Future = Future {
       withTaskId(2) {
-        blockInfoManager.getAndLockForReading("block")
+        blockInfoManager.lockForReading("block")
       }
     }
     Thread.sleep(300)  // Hack to try to ensure that both future tasks are waiting
     withTaskId(0) {
-      blockInfoManager.releaseLock("block")
+      blockInfoManager.unlock("block")
     }
     assert(Await.result(get1Future, 1.seconds).isDefined)
     assert(Await.result(get2Future, 1.seconds).isDefined)
@@ -165,29 +165,29 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("read locks will block writer") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
-      blockInfoManager.releaseLock("block")
-      blockInfoManager.getAndLockForReading("block")
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
+      blockInfoManager.lockForReading("block")
     }
     val write1Future = Future {
       withTaskId(1) {
-        blockInfoManager.getAndLockForWriting("block")
+        blockInfoManager.lockForWriting("block")
       }
     }
     val write2Future = Future {
       withTaskId(2) {
-        blockInfoManager.getAndLockForWriting("block")
+        blockInfoManager.lockForWriting("block")
       }
     }
     Thread.sleep(300)  // Hack to try to ensure that both future tasks are waiting
     withTaskId(0) {
-      blockInfoManager.releaseLock("block")
+      blockInfoManager.unlock("block")
     }
     assert(
       Await.result(Future.firstCompletedOf(Seq(write1Future, write2Future)), 1.seconds).isDefined)
     val firstWriteWinner = if (write1Future.isCompleted) 1 else 2
     withTaskId(firstWriteWinner) {
-      blockInfoManager.releaseLock("block")
+      blockInfoManager.unlock("block")
     }
     assert(Await.result(write1Future, 1.seconds).isDefined)
     assert(Await.result(write2Future, 1.seconds).isDefined)
@@ -196,49 +196,49 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("removing a non-existent block throws IllegalArgumentException") {
     withTaskId(0) {
       intercept[IllegalArgumentException] {
-        blockInfoManager.remove("non-existent-block")
+        blockInfoManager.removeBlock("non-existent-block")
       }
     }
   }
 
   test("removing a block without holding any locks throws IllegalStateException") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
-      blockInfoManager.releaseLock("block")
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
       intercept[IllegalStateException] {
-        blockInfoManager.remove("block")
+        blockInfoManager.removeBlock("block")
       }
     }
   }
 
   test("removing a block while holding only a read lock throws IllegalStateException") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
-      blockInfoManager.releaseLock("block")
-      assert(blockInfoManager.getAndLockForReading("block").isDefined)
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
+      assert(blockInfoManager.lockForReading("block").isDefined)
       intercept[IllegalStateException] {
-        blockInfoManager.remove("block")
+        blockInfoManager.removeBlock("block")
       }
     }
   }
 
   test("removing a block causes blocked callers to receive None") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
     val getFuture = Future {
       withTaskId(1) {
-        blockInfoManager.getAndLockForReading("block")
+        blockInfoManager.lockForReading("block")
       }
     }
     val writeFuture = Future {
       withTaskId(2) {
-        blockInfoManager.getAndLockForWriting("block")
+        blockInfoManager.lockForWriting("block")
       }
     }
     Thread.sleep(300)  // Hack to try to ensure that both future tasks are waiting
     withTaskId(0) {
-      blockInfoManager.remove("block")
+      blockInfoManager.removeBlock("block")
     }
     assert(Await.result(getFuture, 1.seconds).isEmpty)
     assert(Await.result(writeFuture, 1.seconds).isEmpty)
@@ -246,10 +246,10 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   test("releaseAllLocksForTask releases write locks") {
     withTaskId(0) {
-      assert(blockInfoManager.putAndLockForWritingIfAbsent("block", newBlockInfo()))
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
     assert(blockInfoManager.getNumberOfMapEntries === 3)
-    blockInfoManager.releaseAllLocksForTask(0)
+    blockInfoManager.unlockAllLocksForTask(0)
     assert(blockInfoManager.getNumberOfMapEntries === 1)
   }
 }

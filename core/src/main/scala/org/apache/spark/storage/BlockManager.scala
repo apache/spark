@@ -427,7 +427,7 @@ private[spark] class BlockManager(
   }
 
   private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
-    blockInfoManager.getAndLockForReading(blockId) match {
+    blockInfoManager.lockForReading(blockId) match {
       case None =>
         logDebug(s"Block $blockId was not found")
         None
@@ -615,7 +615,7 @@ private[spark] class BlockManager(
    * Release a lock on the given block.
    */
   def releaseLock(blockId: BlockId): Unit = {
-    blockInfoManager.releaseLock(blockId)
+    blockInfoManager.unlock(blockId)
   }
 
   /**
@@ -624,7 +624,7 @@ private[spark] class BlockManager(
    * @return the blocks whose locks were released.
    */
   def releaseAllLocksForTask(taskAttemptId: Long): Seq[BlockId] = {
-    blockInfoManager.releaseAllLocksForTask(taskAttemptId)
+    blockInfoManager.unlockAllLocksForTask(taskAttemptId)
   }
 
   /**
@@ -718,17 +718,14 @@ private[spark] class BlockManager(
      * to be dropped right after it got put into memory. Note, however, that other threads will
      * not be able to get() this block until we call markReady on its BlockInfo. */
     val putBlockInfo = {
-      // TODO(josh): if an existing put is in progress, do we block to see if it's done / succeeds?
       val newInfo = new BlockInfo(level, tellMaster)
-      if (blockInfoManager.putAndLockForWritingIfAbsent(blockId, newInfo)) {
+      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
         newInfo
       } else {
         logWarning(s"Block $blockId already exists on this machine; not re-adding it")
         return false
       }
     }
-
-    // TODO: release write lock and split up this code.
 
     val startTimeMs = System.currentTimeMillis
 
@@ -820,8 +817,8 @@ private[spark] class BlockManager(
         if (!blockWasSuccessfullyStored) {
           // Guard against the fact that MemoryStore might have already removed the block if the
           // put() failed and the block could not be dropped to disk.
-          if (blockInfoManager.getAndLockForWriting(blockId, blocking = false).isDefined) {
-            blockInfoManager.remove(blockId)
+          if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
+            blockInfoManager.removeBlock(blockId)
           }
           logWarning(s"Putting block $blockId failed")
         }
@@ -1006,7 +1003,7 @@ private[spark] class BlockManager(
       data: () => Either[Array[Any], ByteBuffer]): Unit = {
 
     logInfo(s"Dropping block $blockId from memory")
-    blockInfoManager.getAndLockForWriting(blockId) match {
+    blockInfoManager.lockForWriting(blockId) match {
       case None =>
         logDebug(s"Block $blockId has already been dropped")
       case Some(info) =>
@@ -1041,9 +1038,9 @@ private[spark] class BlockManager(
         }
         if (!level.useDisk) {
           // The block is completely gone from this node; forget it so we can put() it again later.
-          blockInfoManager.remove(blockId)
+          blockInfoManager.removeBlock(blockId)
         } else {
-          blockInfoManager.releaseLock(blockId)
+          blockInfoManager.unlock(blockId)
         }
         if (blockIsUpdated) {
           Option(TaskContext.get()).foreach { c =>
@@ -1083,7 +1080,7 @@ private[spark] class BlockManager(
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
     logDebug(s"Removing block $blockId")
-    blockInfoManager.getAndLockForWriting(blockId) match {
+    blockInfoManager.lockForWriting(blockId) match {
       case None =>
         // The block has already been removed; do nothing.
         logWarning(s"Asked to remove block $blockId, which does not exist")
@@ -1095,7 +1092,7 @@ private[spark] class BlockManager(
           logWarning(s"Block $blockId could not be removed as it was not found in either " +
             "the disk, memory, or external block store")
         }
-        blockInfoManager.remove(blockId)
+        blockInfoManager.removeBlock(blockId)
         if (tellMaster && info.tellMaster) {
           val status = getCurrentBlockStatus(blockId, info)
           reportBlockStatus(blockId, info, status)

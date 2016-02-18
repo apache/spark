@@ -88,8 +88,8 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Used to look up metadata for individual blocks. Entries are added to this map via an atomic
-   * set-if-not-exists operation ([[putAndLockForWritingIfAbsent()]]) and are removed
-   * by [[remove()]].
+   * set-if-not-exists operation ([[lockNewBlockForWriting()]]) and are removed
+   * by [[removeBlock()]].
    */
   @GuardedBy("this")
   private[this] val infos = new mutable.HashMap[BlockId, BlockInfo]
@@ -139,7 +139,7 @@ private[storage] class BlockInfoManager extends Logging {
    * @return None if the block did not exist or was removed (in which case no lock is held), or
    *         Some(BlockInfo) (in which case the block is locked for reading).
    */
-  def getAndLockForReading(
+  def lockForReading(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to acquire read lock for $blockId")
@@ -161,7 +161,7 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * If this is called by a task which already holds the block's exclusive write lock, then this
    * will return success but will not further increment any lock counts (so both write-lock
-   * acquisitions will be freed by the same [[releaseLock()]] or [[downgradeLock()]] call.
+   * acquisitions will be freed by the same [[unlock()]] or [[downgradeLock()]] call.
    *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
@@ -169,7 +169,7 @@ private[storage] class BlockInfoManager extends Logging {
    * @return None if the block did not exist or was removed (in which case no lock is held), or
    *         Some(BlockInfo) (in which case the block is locked for writing).
    */
-  def getAndLockForWriting(
+  def lockForWriting(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to acquire write lock for $blockId")
@@ -203,15 +203,15 @@ private[storage] class BlockInfoManager extends Logging {
     val info = get(blockId).get
     require(info.writerTask == currentTaskAttemptId,
       s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold")
-    releaseLock(blockId)
-    getAndLockForReading(blockId, blocking = false)
+    unlock(blockId)
+    lockForReading(blockId, blocking = false)
     notifyAll()
   }
 
   /**
    * Release a lock on the given block.
    */
-  def releaseLock(blockId: BlockId): Unit = synchronized {
+  def unlock(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
     val info = get(blockId).getOrElse {
       throw new IllegalStateException(s"Block $blockId not found")
@@ -233,13 +233,13 @@ private[storage] class BlockInfoManager extends Logging {
   /**
    * Atomically create metadata for a non-existent block.
    *
-   * TODO: clarify locking semantics when this returns false.
-   *
    * @param blockId the block id.
    * @param newBlockInfo the block info for the new block.
-   * @return true if the block did not already exist, false otherwise.
+   * @return true if the block did not already exist, false otherwise. If this returns false, then
+   *         no new locks are acquired. If this returns true, a write lock on the new block will
+   *         be held.
    */
-  def putAndLockForWritingIfAbsent(
+  def lockNewBlockForWriting(
       blockId: BlockId,
       newBlockInfo: BlockInfo): Boolean = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to put $blockId")
@@ -260,7 +260,7 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * @return the ids of blocks whose pins were released
    */
-  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
+  def unlockAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
     synchronized {
       writeLocksByTask.remove(taskAttemptId).foreach { locks =>
@@ -326,7 +326,7 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * This can only be called while holding a write lock on the given block.
    */
-  def remove(blockId: BlockId): Unit = synchronized {
+  def removeBlock(blockId: BlockId): Unit = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to remove block $blockId")
     infos.get(blockId) match {
       case Some(blockInfo) =>
