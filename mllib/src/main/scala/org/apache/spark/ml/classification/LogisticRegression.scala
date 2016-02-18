@@ -327,7 +327,7 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
         val costFun = new LogisticCostFun(instances, numClasses, $(fitIntercept),
-          $(standardization), featuresStd, featuresMean, regParamL2)
+          $(standardization), featuresStd, featuresMean, $(regParam), regParamL2)
 
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -417,9 +417,11 @@ class LogisticRegression @Since("1.2.0") (
          */
         val rawCoefficients = state.x.toArray.clone()
         var i = 0
-        while (i < numFeatures) {
-          rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
-          i += 1
+        if ($(standardization) || $(regParam) != 0.0) {
+          while (i < numFeatures) {
+            rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
+            i += 1
+          }
         }
 
         if ($(fitIntercept)) {
@@ -924,15 +926,19 @@ class BinaryLogisticRegressionSummary private[classification] (
  * @param numClasses the number of possible outcomes for k classes classification problem in
  *                   Multinomial Logistic Regression.
  * @param fitIntercept Whether to fit an intercept term.
+ * @param standardization Whether to standardize the training features before fitting the model.
  * @param featuresStd The standard deviation values of the features.
  * @param featuresMean The mean values of the features.
+ * @param regParam The regularization parameter.
  */
 private class LogisticAggregator(
     coefficients: Vector,
     numClasses: Int,
     fitIntercept: Boolean,
+    standardization: Boolean,
     featuresStd: Array[Double],
-    featuresMean: Array[Double]) extends Serializable {
+    featuresMean: Array[Double],
+    regParam: Double) extends Serializable {
 
   private var weightSum = 0.0
   private var lossSum = 0.0
@@ -971,9 +977,17 @@ private class LogisticAggregator(
           // For Binary Logistic Regression.
           val margin = - {
             var sum = 0.0
-            features.foreachActive { (index, value) =>
-              if (featuresStd(index) != 0.0 && value != 0.0) {
-                sum += localCoefficientsArray(index) * (value / featuresStd(index))
+            if (!standardization && regParam == 0.0) {
+              features.foreachActive { (index, value) =>
+                if (value != 0.0) {
+                  sum += localCoefficientsArray(index) * value
+                }
+              }
+            } else {
+              features.foreachActive { (index, value) =>
+                if (featuresStd(index) != 0.0 && value != 0.0) {
+                  sum += localCoefficientsArray(index) * (value / featuresStd(index))
+                }
               }
             }
             sum + {
@@ -983,9 +997,17 @@ private class LogisticAggregator(
 
           val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
-          features.foreachActive { (index, value) =>
-            if (featuresStd(index) != 0.0 && value != 0.0) {
-              localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+          if (!standardization && regParam == 0.0) {
+            features.foreachActive { (index, value) =>
+              if (value != 0.0) {
+                localGradientSumArray(index) += multiplier * value
+              }
+            }
+          } else {
+            features.foreachActive { (index, value) =>
+              if (featuresStd(index) != 0.0 && value != 0.0) {
+                localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+              }
             }
           }
 
@@ -1064,6 +1086,7 @@ private class LogisticCostFun(
     standardization: Boolean,
     featuresStd: Array[Double],
     featuresMean: Array[Double],
+    regParam: Double,
     regParamL2: Double) extends DiffFunction[BDV[Double]] {
 
   override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
@@ -1074,8 +1097,8 @@ private class LogisticCostFun(
       val seqOp = (c: LogisticAggregator, instance: Instance) => c.add(instance)
       val combOp = (c1: LogisticAggregator, c2: LogisticAggregator) => c1.merge(c2)
 
-      instances.treeAggregate(
-        new LogisticAggregator(coeffs, numClasses, fitIntercept, featuresStd, featuresMean)
+      instances.treeAggregate(new LogisticAggregator(coeffs, numClasses, fitIntercept,
+          standardization, featuresStd, featuresMean, regParam)
       )(seqOp, combOp)
     }
 
