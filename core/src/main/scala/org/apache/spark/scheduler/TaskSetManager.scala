@@ -338,7 +338,7 @@ private[spark] class TaskSetManager(
       if (TaskLocality.isAllowed(locality, TaskLocality.RACK_LOCAL)) {
         for (rack <- sched.getRackForHost(host)) {
           for (index <- speculatableTasks if canRunOnHost(index)) {
-            val racks = tasks(index).preferredLocations.map(_.host).map(sched.getRackForHost)
+            val racks = tasks(index).preferredLocations.map(_.host).flatMap(sched.getRackForHost)
             if (racks.contains(rack)) {
               speculatableTasks -= index
               return Some((index, TaskLocality.RACK_LOCAL))
