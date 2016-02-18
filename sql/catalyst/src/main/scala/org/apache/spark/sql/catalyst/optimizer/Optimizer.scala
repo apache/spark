@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueri
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.planning._
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -157,8 +157,17 @@ object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
         keysConditions
       }
 
-      Join(Filter(leftConditions, left), Filter(rightConditions, right),
-        Inner, Some(finalConditions))
+      val newLeft = left match {
+        case BroadcastHint(p) => BroadcastHint(Filter(leftConditions, p))
+        case _ => Filter(leftConditions, left)
+      }
+
+      val newRight = right match {
+        case BroadcastHint(p) => BroadcastHint(Filter(rightConditions, p))
+        case _ => Filter(rightConditions, right)
+      }
+
+      Join(newLeft, newRight, Inner, Some(finalConditions))
   }
 }
 

@@ -139,14 +139,14 @@ case class BroadcastHashJoin(
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // generate the key as UnsafeRow or Long
     ctx.currentVars = input
-    val (keyVal, anyNull) = if (canJoinKeyFitWithinLong) {
+    val keyVal = if (canJoinKeyFitWithinLong) {
       val expr = rewriteKeyExpr(streamedKeys).head
       val ev = BindReferences.bindReference(expr, streamedPlan.output).gen(ctx)
-      (ev, ev.isNull)
+      ev
     } else {
       val keyExpr = streamedKeys.map(BindReferences.bindReference(_, streamedPlan.output))
       val ev = GenerateUnsafeProjection.createCode(ctx, keyExpr)
-      (ev, s"${ev.value}.anyNull()")
+      ev
     }
 
     // find the matches from HashedRelation
@@ -187,7 +187,7 @@ case class BroadcastHashJoin(
          | // generate join key
          | ${keyVal.code}
          | // find matches from HashedRelation
-         | UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyVal.value});
+         | UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyVal.value});
          | if ($matched != null) {
          |   ${buildColumns.map(_.code).mkString("\n")}
          |   $outputCode
@@ -203,8 +203,7 @@ case class BroadcastHashJoin(
          | // generate join key
          | ${keyVal.code}
          | // find matches from HashRelation
-         | $bufferType $matches = ${anyNull} ? null :
-         |  ($bufferType) $relationTerm.get(${keyVal.value});
+         | $bufferType $matches = ($bufferType) $relationTerm.get(${keyVal.value});
          | if ($matches != null) {
          |   int $size = $matches.size();
          |   for (int $i = 0; $i < $size; $i++) {
