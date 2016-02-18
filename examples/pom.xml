@@ -249,7 +249,7 @@
     <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>algebird-core_${scala.binary.version}</artifactId>
-      <version>0.9.0</version>
+      <version>0.11.0</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -259,7 +259,7 @@
     <dependency>
       <groupId>org.apache.cassandra</groupId>
       <artifactId>cassandra-all</artifactId>
-      <version>1.2.6</version>
+      <version>1.2.19</version>
       <exclusions>
         <exclusion>
           <groupId>com.google.guava</groupId>
@@ -318,7 +318,7 @@
     <dependency>
       <groupId>com.github.scopt</groupId>
       <artifactId>scopt_${scala.binary.version}</artifactId>
-      <version>3.2.0</version>
+      <version>3.3.0</version>
     </dependency>
 
     <!--
