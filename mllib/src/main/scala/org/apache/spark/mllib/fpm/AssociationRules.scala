@@ -84,7 +84,6 @@ class AssociationRules private[fpm](
     val freqItemIndices = freqItemsets.mapPartitions {
       it =>
         val itemToRank = freqItems.zipWithIndex.toMap
-
         it.map {
           itemset =>
             val indices = itemset.items.flatMap(itemToRank.get).sorted.toSeq
