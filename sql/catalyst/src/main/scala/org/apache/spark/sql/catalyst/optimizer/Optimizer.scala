@@ -957,7 +957,6 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def buildNewJoin(filter: Filter, join: Join): Join = {
-
     val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
     val leftConditions = splitConjunctiveConditions
       .filter(_.references.subsetOf(join.left.outputSet))
