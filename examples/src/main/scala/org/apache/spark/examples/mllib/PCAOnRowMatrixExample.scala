@@ -18,9 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-// $example on$
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+// $example on$
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
@@ -30,7 +30,7 @@ object PCAOnRowMatrixExample {
 
   def main(args: Array[String]): Unit = {
 
-    val conf = new SparkConf().setAppName("SVDExample")
+    val conf = new SparkConf().setAppName("PCAOnRowMatrixExample")
     val sc = new SparkContext(conf)
 
     // $example on$
@@ -49,10 +49,10 @@ object PCAOnRowMatrixExample {
 
     // Project the rows to the linear space spanned by the top 4 principal components.
     val projected: RowMatrix = mat.multiply(pc)
-    val collect = projected.rows.collect
+    // $example off$
+    val collect = projected.rows.collect()
     println("Projected Row Matrix of principal component:")
     collect.foreach { vector => println(vector) }
-    // $example off$
   }
 }
 // scalastyle:on println

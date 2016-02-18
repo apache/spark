@@ -18,9 +18,9 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-// $example on$
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+// $example on$
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 import org.apache.spark.mllib.linalg.Vector
@@ -47,15 +47,15 @@ object SVDExample {
 
     // Compute the top 5 singular values and corresponding singular vectors.
     val svd: SingularValueDecomposition[RowMatrix, Matrix] = mat.computeSVD(5, computeU = true)
-    val U: RowMatrix = svd.U // The U factor is a RowMatrix.
-    val s: Vector = svd.s // The singular values are stored in a local dense vector.
-    val V: Matrix = svd.V // The V factor is a local dense matrix.
+    val U: RowMatrix = svd.U  // The U factor is a RowMatrix.
+    val s: Vector = svd.s  // The singular values are stored in a local dense vector.
+    val V: Matrix = svd.V  // The V factor is a local dense matrix.
     val collect = U.rows.collect()
+    // $example off$
     println("U factor is:")
     collect.foreach { vector => println(vector) }
     println(s"Singular values are: $s")
     println(s"V factor is: $V")
-    // $example off$
   }
 }
 // scalastyle:on println

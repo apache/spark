@@ -17,9 +17,9 @@
 
 package org.apache.spark.examples.mllib
 
-// $example on$
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+// $example on$
 import org.apache.spark.mllib.feature.PCA
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
