@@ -52,7 +52,6 @@ private[sql] class CatalystQl(val conf: ParserConf = SimpleParserConf()) extends
       case e: MatchError => throw e
       case e: AnalysisException => throw e
       case e: Exception =>
-        // TODO: don't swallow original stack trace
         throw new AnalysisException(e.getMessage)
       case e: NotImplementedError =>
         throw new AnalysisException(

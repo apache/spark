@@ -61,7 +61,7 @@ private[hive] trait HiveClient {
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
   final def getDatabase(name: String): CatalogDatabase = {
-    getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException)
+    getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException(name))
   }
 
   /** Returns the metadata for a given database, or None if it doesn't exist. */
@@ -72,7 +72,7 @@ private[hive] trait HiveClient {
 
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
-    getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException)
+    getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
   }
 
   /** Returns the metadata for the specified table or None if it doens't exist. */
@@ -124,12 +124,15 @@ private[hive] trait HiveClient {
 
   /**
    * Drop one or many partitions in the given table.
+   *
+   * Note: Unfortunately, Hive does not currently provide a way to ignore this call if the
+   * partitions do not already exist. The seemingly relevant flag `ifExists` in
+   * [[org.apache.hadoop.hive.metastore.PartitionDropOptions]] is not read anywhere.
    */
   def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit
+      specs: Seq[Catalog.TablePartitionSpec]): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.
@@ -154,7 +157,9 @@ private[hive] trait HiveClient {
       dbName: String,
       tableName: String,
       spec: Catalog.TablePartitionSpec): CatalogTablePartition = {
-    getPartitionOption(dbName, tableName, spec).getOrElse(throw new NoSuchPartitionException)
+    getPartitionOption(dbName, tableName, spec).getOrElse {
+      throw new NoSuchPartitionException(dbName, tableName, spec)
+    }
   }
 
   /** Returns the specified partition or None if it does not exist. */
@@ -224,7 +229,7 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, assuming it exists. */
   final def getFunction(db: String, name: String): CatalogFunction = {
-    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException)
+    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException(db, name))
   }
 
   /** Return an existing function in the database, or None if it doesn't exist. */

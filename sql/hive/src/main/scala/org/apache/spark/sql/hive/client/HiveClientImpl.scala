@@ -24,9 +24,9 @@ import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
+import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase,
-  FieldSchema, Function => HiveFunction, ResourceUri}
+  FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPa
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveMetastoreTypes
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -237,7 +236,7 @@ private[hive] class HiveClientImpl(
     if (getDatabaseOption(databaseName).isDefined) {
       state.setCurrentDatabase(databaseName)
     } else {
-      throw new NoSuchDatabaseException
+      throw new NoSuchDatabaseException(databaseName)
     }
   }
 
@@ -358,14 +357,9 @@ private[hive] class HiveClientImpl(
   override def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec],
-      ignoreIfNotExists: Boolean): Unit = withHiveState {
+      specs: Seq[Catalog.TablePartitionSpec]): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
-    specs.foreach { s =>
-      val dropOptions = new PartitionDropOptions
-      dropOptions.ifExists = ignoreIfNotExists
-      client.dropPartition(db, table, s.values.toList.asJava, dropOptions)
-    }
+    specs.foreach { s => client.dropPartition(db, table, s.values.toList.asJava, true) }
   }
 
   override def renamePartitions(
@@ -379,7 +373,7 @@ private[hive] class HiveClientImpl(
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val hivePart = getPartitionOption(catalogTable, oldSpec)
         .map { p => toHivePartition(p.copy(spec = newSpec), hiveTable) }
-        .getOrElse { throw new NoSuchPartitionException }
+        .getOrElse { throw new NoSuchPartitionException(db, table, oldSpec) }
       client.renamePartition(hiveTable, oldSpec.asJava, hivePart)
     }
   }
@@ -608,7 +602,15 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
-    new HiveFunction(f.name, db, f.className, null, null, -1, null, List.empty[ResourceUri].asJava)
+    new HiveFunction(
+      f.name,
+      db,
+      f.className,
+      null,
+      PrincipalType.USER,
+      (System.currentTimeMillis / 1000).toInt,
+      FunctionType.JAVA,
+      List.empty[ResourceUri].asJava)
   }
 
   private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {

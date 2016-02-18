@@ -33,6 +33,12 @@ import org.apache.spark.sql.AnalysisException
 abstract class Catalog {
   import Catalog._
 
+  protected def requireDbExists(db: String): Unit = {
+    if (!databaseExists(db)) {
+      throw new AnalysisException(s"Database $db does not exist")
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -44,6 +50,9 @@ abstract class Catalog {
   /**
    * Alter a database whose name matches the one specified in `dbDefinition`,
    * assuming the database exists.
+   *
+   * Note: If the underlying implementation does not support altering a certain field,
+   * this becomes a no-op.
    */
   def alterDatabase(dbDefinition: CatalogDatabase): Unit
 
@@ -68,6 +77,9 @@ abstract class Catalog {
   /**
    * Alter a table whose name that matches the one specified in `tableDefinition`,
    * assuming the table exists.
+   *
+   * Note: If the underlying implementation does not support altering a certain field,
+   * this becomes a no-op.
    */
   def alterTable(db: String, tableDefinition: CatalogTable): Unit
 
@@ -106,6 +118,9 @@ abstract class Catalog {
   /**
    * Alter one or many table partitions whose specs that match those specified in `parts`,
    * assuming the partitions exist.
+   *
+   * Note: If the underlying implementation does not support altering a certain field,
+   * this becomes a no-op.
    */
   def alterPartitions(
       db: String,
@@ -130,6 +145,9 @@ abstract class Catalog {
   /**
    * Alter a function whose name that matches the one specified in `funcDefinition`,
    * assuming the function exists.
+   *
+   * Note: If the underlying implementation does not support altering a certain field,
+   * this becomes a no-op.
    */
   def alterFunction(db: String, funcDefinition: CatalogFunction): Unit
 

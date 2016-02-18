@@ -27,18 +27,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 
 
 /**
- * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the
- * exception as an [[AnalysisException]] with the correct position information.
- */
-abstract class NoSuchItemException extends Exception
-
-class NoSuchFunctionException extends NoSuchItemException
-class NoSuchPartitionException extends NoSuchItemException
-class NoSuchTableException extends NoSuchItemException
-class NoSuchDatabaseException extends NoSuchItemException
-
-
-/**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {

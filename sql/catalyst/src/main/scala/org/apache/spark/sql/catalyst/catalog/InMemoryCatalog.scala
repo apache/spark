@@ -62,12 +62,6 @@ class InMemoryCatalog extends Catalog {
     catalog(db).tables(table).partitions.contains(spec)
   }
 
-  private def requireDbExists(db: String): Unit = {
-    if (!catalog.contains(db)) {
-      throw new AnalysisException(s"Database $db does not exist")
-    }
-  }
-
   private def requireFunctionExists(db: String, funcName: String): Unit = {
     if (!existsFunction(db, funcName)) {
       throw new AnalysisException(s"Function $funcName does not exist in $db database")
