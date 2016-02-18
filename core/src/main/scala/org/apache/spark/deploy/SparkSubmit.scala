@@ -263,7 +263,7 @@ object SparkSubmit {
           printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
         case (_, mode) =>
           args.master = "yarn"
-        }
+      }
 
       // Make sure YARN is included in our build if we're trying to use it
       if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
