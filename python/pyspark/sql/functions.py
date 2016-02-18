@@ -1052,6 +1052,7 @@ def hash(*cols):
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(2.0)
 def aes_encrypt(input, key):
     """
@@ -1063,15 +1064,13 @@ def aes_encrypt(input, key):
     >>> df = sqlContext.createDataFrame([('ABC','1234567890123456')], ['input','key'])
     >>> df.select(base64(aes_encrypt(df.input, df.key)).alias('aes')).collect()
     [Row(aes=u'y6Ss+zCYObpCbgfWfyNWTw==')]
-    >>> sqlContext.sql("SELECT base64(aes_encrypt('ABC', '1234567890123456')) AS aes").collect() \
-    == df.select(base64(aes_encrypt(df.input, df.key)).alias('aes')).collect()
-    True
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.aes_encrypt(_to_java_column(input), _to_java_column(key))
     return Column(jc)
 
 
+@ignore_unicode_prefix
 @since(2.0)
 def aes_decrypt(input, key):
     """
@@ -1084,10 +1083,6 @@ def aes_decrypt(input, key):
     ['input','key'])
     >>> df.select(aes_decrypt(unbase64(df.input), df.key).alias('aes')).collect()
     [Row(aes=u'ABC')]
-    >>> sqlContext.sql("SELECT aes_decrypt(unbase64('y6Ss+zCYObpCbgfWfyNWTw=='), " + \
-    "'1234567890123456') AS aes").collect() == df.select(aes_decrypt(unbase64(df.input), \
-    df.key).alias('aes')).collect()
-    True
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.aes_decrypt(_to_java_column(input), _to_java_column(key))
