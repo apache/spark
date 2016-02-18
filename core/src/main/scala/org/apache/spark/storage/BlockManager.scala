@@ -518,6 +518,8 @@ private[spark] class BlockManager(
 
   /**
    * Get block from remote block managers.
+   *
+   * This does not acquire a local lock on this block.
    */
   def getRemote(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
@@ -584,6 +586,9 @@ private[spark] class BlockManager(
 
   /**
    * Get a block from the block manager (either local or remote).
+   *
+   * This acquires a read lock on the block if the block was stored locally and does not acquire
+   * any locks if the block was fetched from a remote block manager.
    */
   def get(blockId: BlockId): Option[BlockResult] = {
     val local = getLocal(blockId)

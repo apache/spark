@@ -19,6 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable
 
+import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
@@ -47,9 +48,14 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
         existingMetrics.incBytesReadInternal(blockResult.bytes)
 
-        val iter = CompletionIterator[T, Iterator[T]](
-          blockResult.data.asInstanceOf[Iterator[T]],
-          blockManager.releaseLock(key))
+        val iter = {
+          val dataIter = blockResult.data.asInstanceOf[Iterator[T]]
+          if (blockResult.readMethod != DataReadMethod.Network) {
+            CompletionIterator[T, Iterator[T]](dataIter, blockManager.releaseLock(key))
+          } else {
+            dataIter
+          }
+        }
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsReadInternal(1)
@@ -142,9 +148,12 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
       blockManager.get(key) match {
         case Some(v) =>
-          CompletionIterator[T, Iterator[T]](
-            v.data.asInstanceOf[Iterator[T]],
-            blockManager.releaseLock(key))
+          val iter = v.data.asInstanceOf[Iterator[T]]
+          if (v.readMethod != DataReadMethod.Network) {
+            CompletionIterator[T, Iterator[T]](iter, blockManager.releaseLock(key))
+          } else {
+            iter
+          }
         case None =>
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")
