@@ -19,11 +19,13 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.Row
+// $example off$
 import org.apache.spark.sql.SQLContext
 
 object PipelineExample {
@@ -59,13 +61,13 @@ object PipelineExample {
     // Fit the pipeline to training documents.
     val model = pipeline.fit(training)
 
-    // now we can optionally save the fitted pipeline to disk
+    // Now we can optionally save the fitted pipeline to disk
     model.save("/tmp/spark-logistic-regression-model")
 
-    // we can also save this unfit pipeline to disk
+    // We can also save this unfit pipeline to disk
     pipeline.save("/tmp/unfit-lr-model")
 
-    // and load it back in during production
+    // And load it back in during production
     val sameModel = PipelineModel.load("/tmp/spark-logistic-regression-model")
 
     // Prepare test documents, which are unlabeled (id, text) tuples.

@@ -19,10 +19,12 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.sql.Row
+// $example off$
 import org.apache.spark.sql.SQLContext
 
 object EstimatorTransformerParamExample {
@@ -61,11 +63,11 @@ object EstimatorTransformerParamExample {
     // We may alternatively specify parameters using a ParamMap,
     // which supports several methods for specifying parameters.
     val paramMap = ParamMap(lr.maxIter -> 20)
-      .put(lr.maxIter, 30) // Specify 1 Param.  This overwrites the original maxIter.
-      .put(lr.regParam -> 0.1, lr.threshold -> 0.55) // Specify multiple Params.
+      .put(lr.maxIter, 30)  // Specify 1 Param.  This overwrites the original maxIter.
+      .put(lr.regParam -> 0.1, lr.threshold -> 0.55)  // Specify multiple Params.
 
     // One can also combine ParamMaps.
-    val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name
+    val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability")  // Change output column name
     val paramMapCombined = paramMap ++ paramMap2
 
     // Now learn a new model using the paramMapCombined parameters.

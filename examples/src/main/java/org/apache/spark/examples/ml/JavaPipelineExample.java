@@ -17,11 +17,13 @@
 
 package org.apache.spark.examples.ml;
 
-//$example on$
+// $example on$
 import java.util.Arrays;
+// $example off$
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+// $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
@@ -30,8 +32,8 @@ import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
+// $example off$
 import org.apache.spark.sql.SQLContext;
-//$example off$
 
 /**
  * Java example for simple text document 'Pipeline'.
@@ -63,7 +65,7 @@ public class JavaPipelineExample {
       .setMaxIter(10)
       .setRegParam(0.01);
     Pipeline pipeline = new Pipeline()
-      .setStages(new PipelineStage[] { tokenizer, hashingTF, lr });
+      .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
 
     // Fit the pipeline to training documents.
     PipelineModel model = pipeline.fit(training);

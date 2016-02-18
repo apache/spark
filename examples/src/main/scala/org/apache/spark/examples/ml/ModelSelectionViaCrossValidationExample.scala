@@ -19,6 +19,7 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
+// $example on$
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -26,6 +27,7 @@ import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.Row
+// $example off$
 import org.apache.spark.sql.SQLContext
 
 object ModelSelectionViaCrossValidationExample {
@@ -81,7 +83,7 @@ object ModelSelectionViaCrossValidationExample {
       .setEstimator(pipeline)
       .setEvaluator(new BinaryClassificationEvaluator)
       .setEstimatorParamMaps(paramGrid)
-      .setNumFolds(2) // Use 3+ in practice
+      .setNumFolds(2)  // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
     val cvModel = cv.fit(training)

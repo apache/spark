@@ -17,11 +17,13 @@
 
 package org.apache.spark.examples.ml;
 
-//$example on$
+// $example on$
 import java.util.Arrays;
+// $example off$
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+// $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.classification.LogisticRegression;
@@ -34,8 +36,8 @@ import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
+// $example off$
 import org.apache.spark.sql.SQLContext;
-//$example off$
 
 /**
  * Java example for Model Selection via Cross Validation.
@@ -76,14 +78,14 @@ public class JavaModelSelectionViaCrossValidationExample {
       .setMaxIter(10)
       .setRegParam(0.01);
     Pipeline pipeline = new Pipeline()
-      .setStages(new PipelineStage[] { tokenizer, hashingTF, lr });
+      .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
 
     // We use a ParamGridBuilder to construct a grid of parameters to search over.
     // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
     // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
     ParamMap[] paramGrid = new ParamGridBuilder()
-      .addGrid(hashingTF.numFeatures(), new int[] { 10, 100, 1000 })
-      .addGrid(lr.regParam(), new double[] { 0.1, 0.01 })
+      .addGrid(hashingTF.numFeatures(), new int[] {10, 100, 1000})
+      .addGrid(lr.regParam(), new double[] {0.1, 0.01})
       .build();
 
     // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.

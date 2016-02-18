@@ -17,9 +17,9 @@
 
 package org.apache.spark.examples.ml;
 
-//$example on$
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+// $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.regression.LinearRegression;
@@ -27,8 +27,8 @@ import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.ml.tuning.TrainValidationSplit;
 import org.apache.spark.ml.tuning.TrainValidationSplitModel;
 import org.apache.spark.sql.DataFrame;
+// $example off$
 import org.apache.spark.sql.SQLContext;
-//$example off$
 
 /**
  * Java example for Model Selection via Train Validation Split.
@@ -41,10 +41,10 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     SQLContext jsql = new SQLContext(sc);
 
     // $example on$
-    DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    DataFrame data = jsql.read().format("libsvm").load("data/mllib/sample_linear_regression_data.txt");
 
     // Prepare training and test data.
-    DataFrame[] splits = data.randomSplit(new double[] { 0.9, 0.1 }, 12345);
+    DataFrame[] splits = data.randomSplit(new double[] {0.9, 0.1}, 12345);
     DataFrame training = splits[0];
     DataFrame test = splits[1];
 
@@ -54,9 +54,9 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
     // TrainValidationSplit will try all combinations of values and determine best model using
     // the evaluator.
     ParamMap[] paramGrid = new ParamGridBuilder()
-      .addGrid(lr.regParam(), new double[] { 0.1, 0.01 })
+      .addGrid(lr.regParam(), new double[] {0.1, 0.01})
       .addGrid(lr.fitIntercept())
-      .addGrid(lr.elasticNetParam(), new double[] { 0.0, 0.5, 1.0 })
+      .addGrid(lr.elasticNetParam(), new double[] {0.0, 0.5, 1.0})
       .build();
 
     // In this case the estimator is simply the linear regression.

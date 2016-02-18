@@ -17,11 +17,13 @@
 
 package org.apache.spark.examples.ml;
 
-//$example on$
+// $example on$
 import java.util.Arrays;
+// $example off$
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+// $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.param.ParamMap;
@@ -29,8 +31,8 @@ import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
+// $example off$
 import org.apache.spark.sql.SQLContext;
-//$example off$
 
 /**
  * Java example for Estimator, Transformer, and Param.

@@ -23,7 +23,6 @@ from pyspark.mllib.linalg import Vectors
 # $example on$
 from pyspark.ml.classification import LogisticRegression
 # $example off$
-from pyspark.ml.param import Param, Params
 
 if __name__ == "__main__":
 
@@ -48,28 +47,23 @@ if __name__ == "__main__":
 
     # Since model1 is a Model (i.e., a transformer produced by an Estimator),
     # we can view the parameters it used during fit().
-    # This prints the parameter (name: value) pairs, where names are unique
-    # IDs for this LogisticRegression instance.
+    # This prints the parameter (name: value) pairs, where names are unique IDs for this
+    # LogisticRegression instance.
     print "Model 1 was fit using parameters: "
     print model1.extractParamMap()
 
-    # We may alternatively specify parameters using a Python dictionary
-    # as a paramMap
+    # We may alternatively specify parameters using a Python dictionary as a paramMap
     paramMap = {lr.maxIter: 20}
-    # Specify 1 Param, overwriting the original maxIter.
-    paramMap[lr.maxIter] = 30
-    # Specify multiple Params.
-    paramMap.update({lr.regParam: 0.1, lr.threshold: 0.55})
+    paramMap[lr.maxIter] = 30  # Specify 1 Param, overwriting the original maxIter.
+    paramMap.update({lr.regParam: 0.1, lr.threshold: 0.55})  # Specify multiple Params.
 
     # You can combine paramMaps, which are python dictionaries.
-    # Change output column name
-    paramMap2 = {lr.probabilityCol: "myProbability"}
+    paramMap2 = {lr.probabilityCol: "myProbability"}  # Change output column name
     paramMapCombined = paramMap.copy()
     paramMapCombined.update(paramMap2)
 
     # Now learn a new model using the paramMapCombined parameters.
-    # paramMapCombined overrides all parameters set earlier via
-    # lr.set* methods.
+    # paramMapCombined overrides all parameters set earlier via lr.set* methods.
     model2 = lr.fit(training, paramMapCombined)
     print "Model 2 was fit using parameters: "
     print model2.extractParamMap()
@@ -82,12 +76,10 @@ if __name__ == "__main__":
 
     # Make predictions on test data using the Transformer.transform() method.
     # LogisticRegression.transform will only use the 'features' column.
-    # Note that model2.transform() outputs a "myProbability" column instead
-    # of the usual 'probability' column since we renamed the lr.probabilityCol
-    # parameter previously.
+    # Note that model2.transform() outputs a "myProbability" column instead of the usual
+    # 'probability' column since we renamed the lr.probabilityCol parameter previously.
     prediction = model2.transform(test)
-    selected = prediction.select(
-        "features", "label", "myProbability", "prediction")
+    selected = prediction.select("features", "label", "myProbability", "prediction")
     for row in selected.collect():
         print row
     # $example off$
