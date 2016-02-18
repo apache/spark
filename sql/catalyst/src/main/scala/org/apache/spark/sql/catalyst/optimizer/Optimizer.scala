@@ -947,6 +947,32 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
     (leftEvaluateCondition, rightEvaluateCondition, commonCondition)
   }
 
+  /**
+    * Returns whether the expression returns null or false when all inputs are nulls.
+    */
+  private def canFilterOutNull(e: Expression): Boolean = {
+    val attributes = e.references.toSeq
+    val emptyRow = new GenericInternalRow(attributes.length)
+    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    v == null || v == false
+  }
+
+  /**
+    * Returns whether the join could be inner join or not.
+    *
+    * If a left/right outer join followed by a filter with a condition that could filter out rows
+    * with null from right/left, the left/right outer join has the same result as inner join,
+    * should be rewritten as inner join.
+    */
+  private def isInnerJoin(
+      joinType: JoinType,
+      leftCond: Seq[Expression],
+      rightCond: Seq[Expression]): Boolean = {
+    joinType == Inner ||
+      joinType == RightOuter && leftCond.exists(canFilterOutNull) ||
+      joinType == LeftOuter && rightCond.exists(canFilterOutNull)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // push the where condition down into join filter
     case f @ Filter(filterCondition, Join(left, right, joinType, joinCondition)) =>
@@ -954,7 +980,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         split(splitConjunctivePredicates(filterCondition), left, right)
 
       joinType match {
-        case Inner =>
+        case _ if isInnerJoin(joinType, leftFilterConditions, rightFilterConditions) =>
           // push down the single side `where` condition into respective sides
           val newLeft = leftFilterConditions.
             reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
@@ -963,6 +989,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
           val newJoinCond = (commonFilterCondition ++ joinCondition).reduceLeftOption(And)
 
           Join(newLeft, newRight, Inner, newJoinCond)
+
         case RightOuter =>
           // push down the right side only `where` condition
           val newLeft = left
@@ -973,6 +1000,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
           (leftFilterConditions ++ commonFilterCondition).
             reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+
         case _ @ (LeftOuter | LeftSemi) =>
           // push down the left side only `where` condition
           val newLeft = leftFilterConditions.
@@ -1080,7 +1108,7 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
  * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
  */
 object DecimalAggregates extends Rule[LogicalPlan] {
-  import Decimal.MAX_LONG_DIGITS
+  import org.apache.spark.sql.types.Decimal.MAX_LONG_DIGITS
 
   /** Maximum number of decimal digits representable precisely in a Double */
   private val MAX_DOUBLE_DIGITS = 15
