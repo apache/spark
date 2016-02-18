@@ -77,6 +77,7 @@ private[sql] object StatFunctions extends Logging {
       private var count: Long = 0L,
       val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
+    import QuantileSummaries._
 //
 //    val sampled = new ArrayBuffer[Stats]() // sampled examples
 //    var count = 0L // count of observed examples
@@ -85,6 +86,9 @@ private[sql] object StatFunctions extends Logging {
 
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
+      if (headSampled.size >= defaultHeadSize) {
+        return insertBatch(headSampled.toArray)
+      }
       var idx = sampled.indexWhere(_.value > x)
       if (idx == -1) {
         idx = sampled.size
@@ -299,6 +303,11 @@ private[sql] object StatFunctions extends Logging {
      * The default value for the compression threshold.
      */
     val defaultCompressThreshold: Int = 1000
+
+    /**
+     * The size of the head buffer.
+     */
+    val defaultHeadSize: Int = 50
 
     /**
      * The default value for epsilon.
