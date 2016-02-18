@@ -24,7 +24,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent._
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -174,7 +174,7 @@ private[streaming] abstract class ReceiverSupervisor(
       }
     } catch {
       case NonFatal(t) =>
-        logError("Error stopping receiver " + streamId + t.getStackTraceString)
+        logError(s"Error stopping receiver $streamId ${Utils.exceptionString(t)}")
     }
   }
 

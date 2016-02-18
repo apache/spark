@@ -57,12 +57,18 @@ private[streaming] class FileBasedWriteAheadLog(
   import FileBasedWriteAheadLog._
 
   private val pastLogs = new ArrayBuffer[LogInfo]
-  private val callerNameTag = getCallerName.map(c => s" for $c").getOrElse("")
+  private val callerName = getCallerName
 
-  private val threadpoolName = s"WriteAheadLogManager $callerNameTag"
+  private val threadpoolName = {
+    "WriteAheadLogManager" + callerName.map(c => s" for $c").getOrElse("")
+  }
   private val threadpool = ThreadUtils.newDaemonCachedThreadPool(threadpoolName, 20)
   private val executionContext = ExecutionContext.fromExecutorService(threadpool)
-  override protected val logName = s"WriteAheadLogManager $callerNameTag"
+
+  override protected def logName = {
+    getClass.getName.stripSuffix("$") +
+      callerName.map("_" + _).getOrElse("").replaceAll("[ ]", "_")
+  }
 
   private var currentLogPath: Option[String] = None
   private var currentLogWriter: FileBasedWriteAheadLogWriter = null
@@ -253,8 +259,12 @@ private[streaming] object FileBasedWriteAheadLog {
   }
 
   def getCallerName(): Option[String] = {
-    val stackTraceClasses = Thread.currentThread.getStackTrace().map(_.getClassName)
-    stackTraceClasses.find(!_.contains("WriteAheadLog")).flatMap(_.split("\\.").lastOption)
+    val blacklist = Seq("WriteAheadLog", "Logging", "java.lang", "scala.")
+    Thread.currentThread.getStackTrace()
+      .map(_.getClassName)
+      .find { c => !blacklist.exists(c.contains) }
+      .flatMap(_.split("\\.").lastOption)
+      .flatMap(_.split("\\$\\$").headOption)
   }
 
   /** Convert a sequence of files to a sequence of sorted LogInfo objects */
