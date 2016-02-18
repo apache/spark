@@ -394,6 +394,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
     lrA.optimizer.setNumIterations(numIteration)
     val lrB = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(false)
     lrB.optimizer.setNumIterations(numIteration)
+    lrB.optimizer.setRegParam(0.001)
 
     val modelA1 = lrA.run(testRDD1, initialWeights)
     val modelA2 = lrA.run(testRDD2, initialWeights)
