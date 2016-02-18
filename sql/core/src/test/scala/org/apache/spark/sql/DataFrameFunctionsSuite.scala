@@ -206,6 +206,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(2743272264L, 2180413220L))
   }
 
+  test("misc aes encrypt function") {
+    val df = Seq(("ABC", "1234567890123456")).toDF("input", "key")
+    checkAnswer(
+      df.select(base64(aes_encrypt($"input", $"key"))),
+      Row("y6Ss+zCYObpCbgfWfyNWTw==")
+    )
+    checkAnswer(
+      sql("SELECT base64(aes_encrypt('', '1234567890123456'))"),
+      Row("BQGHoM3lqYcsurCRq3PlUw==")
+    )
+  }
+
+  test("misc aes decrypt function") {
+    val df = Seq(("y6Ss+zCYObpCbgfWfyNWTw==", "1234567890123456")).toDF("input", "key")
+    checkAnswer(
+      df.select((aes_decrypt(unbase64($"input"), $"key"))),
+      Row("ABC")
+    )
+    checkAnswer(
+      sql("SELECT aes_decrypt(unbase64('BQGHoM3lqYcsurCRq3PlUw=='), '1234567890123456')"),
+      Row("")
+    )
+  }
+
   test("string function find_in_set") {
     val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
 
