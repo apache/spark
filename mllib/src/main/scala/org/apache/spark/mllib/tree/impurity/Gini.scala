@@ -23,7 +23,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
  * :: Experimental ::
  * Class for calculating the
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
- * during binary classification.
+ * during multiclass classification.
  */
 @Since("1.0.0")
 @Experimental
