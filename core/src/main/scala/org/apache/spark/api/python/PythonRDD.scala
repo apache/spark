@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
+import scala.language.postfixOps
 import scala.util.control.NonFatal
 
 import com.google.common.base.Charsets.UTF_8
@@ -41,7 +42,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
-
 
 private[spark] class PythonRDD(
     parent: RDD[_],
@@ -868,6 +868,18 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
     }
   }
 }
+/**
+ * Create a class that extends PhantomReference.
+ */
+
+private[spark] class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
+  extends PhantomReference(f, q){
+
+  private def cleanup()
+  {
+    f.delete()
+  }
+}
 
 /**
  * An Wrapper for Python Broadcast, which is written into disk by Python. It also will
@@ -915,9 +927,13 @@ private[spark] class PhantomThread( threadName: String, queue: ReferenceQueue[Fi
 private[spark] class PythonBroadcast(@transient var path: String) extends Serializable
   with Logging {
 
+  val queue = new ReferenceQueue[File]()
+  val phantomReferences = new ListBuffer[FilePhantomReference]()
+  val threadName = "WeakReference"
+
   /**
-   * Read data from disks, then copy it to `out`
-   */
+ * Read data from disks, then copy it to `out`
+ */
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     val in = new FileInputStream(new File(path))
     try {
@@ -933,12 +949,16 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
     val file = File.createTempFile("broadcast", "", dir)
+<<<<<<< HEAD
     val queue = new ReferenceQueue[File]()
     val exitWhenFinished=false
     val phantomReferences = new ListBuffer[FilePhantomReference]()
     val threadName = "WeakReference"
     val phantomThread=new PhantomThread(threadName,queue,phantomReferences)
     
+=======
+    phantomReferences += new FilePhantomReference(file, queue)
+>>>>>>> 44b16af2b803a9d9eea2dcbfcd631b5899f9314d
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
     phantomReferences += new FilePhantomReference(file, queue)
@@ -948,9 +968,27 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     Utils.tryWithSafeFinally {
       Utils.copyStream(in, out)
     } {
-      out.close()
+       out.close();
     }
   }
 
+<<<<<<< HEAD
+=======
+  /** Create a seperate daemon thread
+   *  to remove phantomreferences from queue and invoke cleanup
+   */
+    val referenceThread = new Thread(threadName){
+    setDaemon(true)
+      override def run() {
+      try {
+        val ref = queue.remove().asInstanceOf[FilePhantomReference]
+        phantomReferences -= ref
+      } catch {
+          case e: Exception =>
+            logError(s"Error removing reference", e)
+      }
+      }
+    }.start()
+>>>>>>> 44b16af2b803a9d9eea2dcbfcd631b5899f9314d
 }
 // scalastyle:on no.finalize
