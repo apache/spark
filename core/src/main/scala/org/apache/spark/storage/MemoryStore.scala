@@ -208,27 +208,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
-    // This method is called from two different places:
-    //
-    //   1. When removing a block in BlockManager.removeBlock(). This is called by ContextCleaner
-    //      cleanup code (e.g. when removing blocks from RDDs which are have fallen out of scope on
-    //      the driver) or when a user explicitly unpersists an RDD or deletes a broadcast variable.
-    //
-    //   2. When dropping a block memory in BlockManager.dropFromMemory(), which is called by the
-    //      MemoryStore when dropping blocks to free up space. The MemoryStore will never evict a
-    //      pinned block.
-    //
-    // As a result, the only situation where `pinCount != 0` in this block is if the user performed
-    // an unsafe manual block eviction (which currently has undefined semantics), so in that case
-    // we choose to fail the user-initiated eviction rather than possibly crash running tasks by
-    // deleting data that they're using.
-    //
-    // Regarding thread-safety:
-    //
-    //   - We want to avoid a race where we see that the pin count is zero, begin removing a block,
-    //     then have a new read which re-pins the block right as we start removing it here.
-    //   - In the code below, we synchronize on `entries` before checking the pin count.
-    //   - In order for a
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
