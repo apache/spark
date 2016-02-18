@@ -34,8 +34,10 @@ private[spark] class ResultStage(
     val partitions: Array[Int],
     parents: List[Stage],
     firstJobId: Int,
+    maxConsecutiveFetchFailure: Int,
     callSite: CallSite)
-  extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite) {
+  extends Stage(id, rdd, partitions.length, parents, firstJobId, maxConsecutiveFetchFailure,
+    callSite) {
 
   /**
    * The active job for this result stage. Will be empty if the job has already finished

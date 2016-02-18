@@ -39,9 +39,10 @@ private[spark] class ShuffleMapStage(
     numTasks: Int,
     parents: List[Stage],
     firstJobId: Int,
+    maxConsecutiveFetchFailure: Int,
     callSite: CallSite,
     val shuffleDep: ShuffleDependency[_, _, _])
-  extends Stage(id, rdd, numTasks, parents, firstJobId, callSite) {
+  extends Stage(id, rdd, numTasks, parents, firstJobId, maxConsecutiveFetchFailure, callSite) {
 
   private[this] var _mapStageJobs: List[ActiveJob] = Nil
 

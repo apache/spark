@@ -58,6 +58,7 @@ private[scheduler] abstract class Stage(
     val numTasks: Int,
     val parents: List[Stage],
     val firstJobId: Int,
+    val maxConsecutiveFetchFailure: Int,
     val callSite: CallSite)
   extends Logging {
 
@@ -118,7 +119,7 @@ private[scheduler] abstract class Stage(
    */
   private[scheduler] def failedOnFetchAndShouldAbort(stageAttemptId: Int): Boolean = {
     fetchFailedAttemptIds.add(stageAttemptId)
-    fetchFailedAttemptIds.size >= Stage.MAX_CONSECUTIVE_FETCH_FAILURES
+    fetchFailedAttemptIds.size >= maxConsecutiveFetchFailure
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
@@ -145,6 +146,6 @@ private[scheduler] abstract class Stage(
 }
 
 private[scheduler] object Stage {
-  // The number of consecutive failures allowed before a stage is aborted
-  val MAX_CONSECUTIVE_FETCH_FAILURES = 4
+  // The number of consecutive fetch failures allowed before a stage is aborted
+  val DEFAULT_MAX_CONSECUTIVE_FETCH_FAILURES = 4
 }

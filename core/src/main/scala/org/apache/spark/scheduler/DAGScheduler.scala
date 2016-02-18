@@ -180,6 +180,11 @@ class DAGScheduler(
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
+  /** Number of consecutive fetch failures allowed before a stage is aborted */
+  private[scheduler] val maxConsecutiveFetchFailuresPerStage =
+    sc.getConf.getInt("spark.max.fetch.failures.per.stage",
+      Stage.DEFAULT_MAX_CONSECUTIVE_FETCH_FAILURES)
+
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
 
@@ -317,7 +322,7 @@ class DAGScheduler(
       callSite: CallSite): ShuffleMapStage = {
     val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, firstJobId)
     val stage: ShuffleMapStage = new ShuffleMapStage(id, rdd, numTasks, parentStages,
-      firstJobId, callSite, shuffleDep)
+      firstJobId, maxConsecutiveFetchFailuresPerStage, callSite, shuffleDep)
 
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(firstJobId, stage)
@@ -334,7 +339,8 @@ class DAGScheduler(
       jobId: Int,
       callSite: CallSite): ResultStage = {
     val (parentStages: List[Stage], id: Int) = getParentStagesAndId(rdd, jobId)
-    val stage = new ResultStage(id, rdd, func, partitions, parentStages, jobId, callSite)
+    val stage = new ResultStage(id, rdd, func, partitions, parentStages, jobId,
+      maxConsecutiveFetchFailuresPerStage, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
     stage
@@ -1277,7 +1283,7 @@ class DAGScheduler(
           } else if (failedStage.failedOnFetchAndShouldAbort(task.stageAttemptId)) {
             abortStage(failedStage, s"$failedStage (${failedStage.name}) " +
               s"has failed the maximum allowable number of " +
-              s"times: ${Stage.MAX_CONSECUTIVE_FETCH_FAILURES}. " +
+              s"times: $maxConsecutiveFetchFailuresPerStage. " +
               s"Most recent failure reason: ${failureMessage}", None)
           } else if (failedStages.isEmpty) {
             // Don't schedule an event to resubmit failed stages if failed isn't empty, because

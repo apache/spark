@@ -1157,6 +1157,13 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
+<tr>
+  <td><code>spark.max.fetch.failures.per.stage</code></td>
+  <td>4</td>
+  <td>
+    Number of consecutive fetch failures allowed before a stage is aborted.
+  </td>
+</tr>
 </table>
 
 #### Dynamic Allocation
