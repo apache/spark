@@ -74,7 +74,8 @@ private[sql] object StatFunctions extends Logging {
       val compressThreshold: Int,
       val epsilon: Double,
       val sampled: ArrayBuffer[Stats] = ArrayBuffer.empty,
-      private var count: Long = 0L) extends Serializable {
+      private var count: Long = 0L,
+      val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
 //
 //    val sampled = new ArrayBuffer[Stats]() // sampled examples
@@ -83,6 +84,7 @@ private[sql] object StatFunctions extends Logging {
     private def getConstant(): Double = 2 * epsilon * count
 
     def insert(x: Double): QuantileSummaries = {
+      headSampled.append(x)
       var idx = sampled.indexWhere(_.value > x)
       if (idx == -1) {
         idx = sampled.size
@@ -98,12 +100,51 @@ private[sql] object StatFunctions extends Logging {
 
       if (sampled.size > compressThreshold) {
         compress()
+      } else {
+        this
       }
-      this
+    }
+
+    /**
+     * Inserts an array of (unsorted samples) in a batch, sorting the array first to traverse the summary statistics in
+     * a single batch.
+     * @param array
+     * @return a new quantile summary object.
+     */
+    def insertBatch(array: Array[Double]): QuantileSummaries = {
+      var currentCount = count
+      val sorted = array.sorted
+      val newSamples: ArrayBuffer[Stats] = new ArrayBuffer[Stats]()
+      // The index of the next element to insert
+      var sampleIdx = 0
+      // The index of the sample currently being inserted.
+      var opsIdx: Int = 0
+      while(opsIdx < sorted.length) {
+        val currentSample = sorted(opsIdx)
+        // Add all the samples before the next observation.
+        while(sampleIdx < sampled.size && sampled(sampleIdx).value <= currentSample) {
+          newSamples.append(sampled(sampleIdx))
+          sampleIdx += 1
+        }
+
+        // If it is the first one to insert, of if it is the last one
+        currentCount += 1
+        val delta = if (newSamples.isEmpty || (sampleIdx == sampled.size && opsIdx == sorted.length - 1)) {
+          0
+        } else {
+          math.floor(2 * epsilon * currentCount).toInt
+        }
+        val tuple = Stats(currentSample, 1, delta)
+        newSamples.append(tuple)
+
+        opsIdx += 1
+      }
+      new QuantileSummaries(compressThreshold, epsilon, newSamples, currentCount)
     }
 
     def compress(): QuantileSummaries = {
       val compressed = compressImmut(sampled)
+      return new QuantileSummaries(compressThreshold, epsilon, compressed, count)
       sampled.clear()
       sampled.appendAll(compressed)
       return this
