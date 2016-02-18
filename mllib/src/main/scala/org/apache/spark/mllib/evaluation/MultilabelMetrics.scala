@@ -19,7 +19,6 @@ package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 import org.apache.spark.sql.DataFrame
 
 /**
@@ -35,7 +34,9 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * @param predictionAndLabels a DataFrame with two double array columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.map(r => (r.getSeq[Double](0).toArray, r.getSeq[Double](1).toArray)))
+    this(predictionAndLabels.mapRows {
+      r => (r.getSeq[Double](0).toArray, r.getSeq[Double](1).toArray)
+    })
 
   private lazy val numDocs: Long = predictionAndLabels.count()
 

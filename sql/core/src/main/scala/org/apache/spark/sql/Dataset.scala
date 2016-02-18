@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.Queryable
@@ -79,6 +79,17 @@ class Dataset[T] private[sql](
 
   import sqlContext.implicits._
 
+  @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
+    // For various commands (like DDL) and queries with side effects, we force query optimization to
+    // happen right away to let these side effects take place eagerly.
+    case _: logical.Command |
+         _: logical.InsertIntoTable |
+         _: CreateTableUsingAsSelect =>
+      LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
+    case _ =>
+      queryExecution.analyzed
+  }
+
   /**
    * An unresolved version of the internal encoder for the type of this [[Dataset]].  This one is
    * marked implicit so that we can use it when constructing new [[Dataset]] objects that have the
@@ -97,7 +108,9 @@ class Dataset[T] private[sql](
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
-  private implicit def classTag = unresolvedTEncoder.clsTag
+  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+
+  private implicit def classTag = resolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
@@ -227,7 +240,7 @@ class Dataset[T] private[sql](
    */
   def count(): Long = {
     asRowDataset.withCallback("count", groupBy().count().map(_._2)) { ds =>
-      ds.collect(needCallback = false).head.getLong(0)
+      ds.collect(needCallback = false).head
     }
   }
 
@@ -1372,6 +1385,7 @@ class Dataset[T] private[sql](
           val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
           Alias(Coalesce(Seq(leftCol, rightCol)), col)()
         }
+      case NaturalJoin(_) => sys.error("NaturalJoin with using clause is not supported.")
     }
     // The nullability of output of joined could be different than original column,
     // so we can only compare them by exprId
@@ -1477,7 +1491,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def head(n: Int): Array[Row] = withCallback("head", limit(n)) { ds =>
+  def head(n: Int): Array[T] = withCallback("head", limit(n)) { ds =>
     ds.collect(needCallback = false)
   }
 
@@ -1486,7 +1500,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def head(): Row = head(1).head
+  def head(): T = head(1).head
 
   /**
    * Returns the first element in this [[Dataset]].
@@ -1503,15 +1517,11 @@ class Dataset[T] private[sql](
    * For Java API, use [[collectAsList]].
    * @since 1.6.0
    */
-  def collect(): Array[T] = {
-    // This is different from Dataset.rdd in that it collects Rows, and then runs the encoders
-    // to convert the rows into objects of type T.
-    queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
-  }
+  def collect(): Array[T] = collect(needCallback = false)
 
-  private def collect(needCallback: Boolean): Array[Row] = {
-    def execute(): Array[Row] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollectPublic()
+  protected def collect(needCallback: Boolean): Array[T] = {
+    def execute(): Array[T] = withNewExecutionId {
+      queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
     }
 
     if (needCallback) {
@@ -1799,17 +1809,6 @@ class Dataset[T] private[sql](
    *  Internal Functions  *
    * ******************** */
 
-  @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
-    // For various commands (like DDL) and queries with side effects, we force query optimization to
-    // happen right away to let these side effects take place eagerly.
-    case _: logical.Command |
-         _: logical.InsertIntoTable |
-         _: CreateTableUsingAsSelect =>
-      LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
-    case _ =>
-      queryExecution.analyzed
-  }
-
   private[sql] def withPlan(plan: LogicalPlan): Dataset[T] = withPlan(_ => plan)
 
   private[sql] def withPlan(f: LogicalPlan => LogicalPlan): Dataset[T] =
@@ -1822,7 +1821,7 @@ class Dataset[T] private[sql](
 
   private[sql] def asRowDataset: Dataset[Row] = as[Row](RowEncoder(schema))
 
-  private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
+  protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
@@ -1873,7 +1872,9 @@ class Dataset[T] private[sql](
    * Wrap a DataFrame action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def withCallback[A: Encoder, B](name: String, ds: Dataset[A])(action: Dataset[A] => B) = {
+  protected def withCallback[A: Encoder, B](
+      name: String, ds: Dataset[A])(
+      action: Dataset[A] => B) = {
     try {
       ds.queryExecution.executedPlan.foreach { plan =>
         plan.metrics.valuesIterator.foreach(_.reset())

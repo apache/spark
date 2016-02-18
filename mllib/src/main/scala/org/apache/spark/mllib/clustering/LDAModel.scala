@@ -896,11 +896,11 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       Loader.checkSchema[EdgeData](edgeDataFrame.schema)
       val globalTopicTotals: LDA.TopicCounts =
         dataFrame.first().getAs[Vector](0).toBreeze.toDenseVector
-      val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.map {
+      val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.mapRows {
         case Row(ind: Long, vec: Vector) => (ind, vec.toBreeze.toDenseVector)
       }
 
-      val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.map {
+      val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.mapRows {
         case Row(srcId: Long, dstId: Long, prop: Double) => Edge(srcId, dstId, prop)
       }
       val graph: Graph[LDA.TopicCounts, LDA.TokenCount] = Graph(vertices, edges)

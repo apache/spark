@@ -221,7 +221,7 @@ object LDAExample {
     val model = pipeline.fit(df)
     val documents = model.transform(df)
       .select("features")
-      .map { case Row(features: Vector) => features }
+      .mapRows { case Row(features: Vector) => features }
       .zipWithIndex()
       .map(_.swap)
 
