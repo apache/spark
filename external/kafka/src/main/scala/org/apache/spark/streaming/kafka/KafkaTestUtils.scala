@@ -158,6 +158,9 @@ private[kafka] class KafkaTestUtils extends Logging {
     (0 until partitions).foreach { p => waitUntilMetadataIsPropagated(topic, p) }
   }
 
+  /** Single-argument version for backwards compatibility */
+  def createTopic(topic: String): Unit = createTopic(topic, 1)
+
   /** Java-friendly function for sending messages to the Kafka broker */
   def sendMessages(topic: String, messageToFreq: JMap[String, JInt]): Unit = {
     sendMessages(topic, Map(messageToFreq.asScala.mapValues(_.intValue()).toSeq: _*))
