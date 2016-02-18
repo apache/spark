@@ -27,7 +27,7 @@ import scala.language.existentials
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -138,8 +138,13 @@ object CatalystTypeConverters {
 
   private case class UDTConverter(
       udt: UserDefinedType[_]) extends CatalystTypeConverter[Any, Any, Any] {
+    // toCatalyst (it calls toCatalystImpl) will do null check.
     override def toCatalystImpl(scalaValue: Any): Any = udt.serialize(scalaValue)
-    override def toScala(catalystValue: Any): Any = udt.deserialize(catalystValue)
+
+    override def toScala(catalystValue: Any): Any = {
+      if (catalystValue == null) null else udt.deserialize(catalystValue)
+    }
+
     override def toScalaImpl(row: InternalRow, column: Int): Any =
       toScala(row.get(column, udt.sqlType))
   }

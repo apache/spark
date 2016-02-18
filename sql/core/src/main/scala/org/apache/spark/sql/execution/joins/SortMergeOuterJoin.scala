@@ -19,21 +19,18 @@ package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.plans.{FullOuter, JoinType, LeftOuter, RightOuter}
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
 /**
- * :: DeveloperApi ::
  * Performs an sort merge outer join of two child relations.
  */
-@DeveloperApi
 case class SortMergeOuterJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
@@ -43,8 +40,6 @@ case class SortMergeOuterJoin(
     right: SparkPlan) extends BinaryNode {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = {
@@ -92,36 +87,13 @@ case class SortMergeOuterJoin(
     keys.map(SortOrder(_, Ascending))
   }
 
-  private def isUnsafeMode: Boolean = {
-    (codegenEnabled && unsafeEnabled
-      && UnsafeProjection.canSupport(leftKeys)
-      && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(schema))
-  }
+  private def createLeftKeyGenerator(): Projection =
+    UnsafeProjection.create(leftKeys, left.output)
 
-  override def outputsUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessSafeRows: Boolean = !isUnsafeMode
-
-  private def createLeftKeyGenerator(): Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(leftKeys, left.output)
-    } else {
-      newProjection(leftKeys, left.output)
-    }
-  }
-
-  private def createRightKeyGenerator(): Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(rightKeys, right.output)
-    } else {
-      newProjection(rightKeys, right.output)
-    }
-  }
+  private def createRightKeyGenerator(): Projection =
+    UnsafeProjection.create(rightKeys, right.output)
 
   override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
@@ -134,13 +106,7 @@ case class SortMergeOuterJoin(
           (r: InternalRow) => true
         }
       }
-      val resultProj: InternalRow => InternalRow = {
-        if (isUnsafeMode) {
-          UnsafeProjection.create(schema)
-        } else {
-          identity[InternalRow]
-        }
-      }
+      val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
         case LeftOuter =>
@@ -149,9 +115,7 @@ case class SortMergeOuterJoin(
             bufferedKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
             streamedIter = RowIterator.fromScala(leftIter),
-            numLeftRows,
-            bufferedIter = RowIterator.fromScala(rightIter),
-            numRightRows
+            bufferedIter = RowIterator.fromScala(rightIter)
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
@@ -163,9 +127,7 @@ case class SortMergeOuterJoin(
             bufferedKeyGenerator = createLeftKeyGenerator(),
             keyOrdering,
             streamedIter = RowIterator.fromScala(rightIter),
-            numRightRows,
-            bufferedIter = RowIterator.fromScala(leftIter),
-            numLeftRows
+            bufferedIter = RowIterator.fromScala(leftIter)
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
@@ -179,9 +141,7 @@ case class SortMergeOuterJoin(
             rightKeyGenerator = createRightKeyGenerator(),
             keyOrdering,
             leftIter = RowIterator.fromScala(leftIter),
-            numLeftRows,
             rightIter = RowIterator.fromScala(rightIter),
-            numRightRows,
             boundCondition,
             leftNullRow,
             rightNullRow)
@@ -319,9 +279,7 @@ private class SortMergeFullOuterJoinScanner(
     rightKeyGenerator: Projection,
     keyOrdering: Ordering[InternalRow],
     leftIter: RowIterator,
-    numLeftRows: LongSQLMetric,
     rightIter: RowIterator,
-    numRightRows: LongSQLMetric,
     boundCondition: InternalRow => Boolean,
     leftNullRow: InternalRow,
     rightNullRow: InternalRow)  {
@@ -351,7 +309,6 @@ private class SortMergeFullOuterJoinScanner(
     if (leftIter.advanceNext()) {
       leftRow = leftIter.getRow
       leftRowKey = leftKeyGenerator(leftRow)
-      numLeftRows += 1
       true
     } else {
       leftRow = null
@@ -368,7 +325,6 @@ private class SortMergeFullOuterJoinScanner(
     if (rightIter.advanceNext()) {
       rightRow = rightIter.getRow
       rightRowKey = rightKeyGenerator(rightRow)
-      numRightRows += 1
       true
     } else {
       rightRow = null

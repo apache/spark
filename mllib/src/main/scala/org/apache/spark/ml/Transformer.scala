@@ -103,6 +103,7 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
   protected def validateInputType(inputType: DataType): Unit = {}
 
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val inputType = schema($(inputCol)).dataType
     validateInputType(inputType)
     if (schema.fieldNames.contains($(outputCol))) {
@@ -115,8 +116,8 @@ abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
 
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    dataset.withColumn($(outputCol),
-      callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
+    val transformUDF = udf(this.createTransformFunc, outputDataType)
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 
   override def copy(extra: ParamMap): T = defaultCopy(extra)

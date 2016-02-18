@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import com.google.common.math.LongMath
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateProjection, GenerateMutableProjection}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types._
@@ -244,13 +244,23 @@ class MathFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ceil") {
-    testUnary(Ceil, math.ceil)
+    testUnary(Ceil, (d: Double) => math.ceil(d).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
+
+    testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
+    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
+    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
+    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
   }
 
   test("floor") {
-    testUnary(Floor, math.floor)
+    testUnary(Floor, (d: Double) => math.floor(d).toLong)
     checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
+
+    testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
+    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
+    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
+    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
   }
 
   test("factorial") {

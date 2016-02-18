@@ -19,10 +19,9 @@ package org.apache.spark.graphx.impl
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
-
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
+import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 
 /** Stores vertex attributes to ship to an edge partition. */
 private[graphx]
@@ -103,8 +102,8 @@ class ShippableVertexPartition[VD: ClassTag](
   extends VertexPartitionBase[VD] {
 
   /** Return a new ShippableVertexPartition with the specified routing table. */
-  def withRoutingTable(routingTable_ : RoutingTablePartition): ShippableVertexPartition[VD] = {
-    new ShippableVertexPartition(index, values, mask, routingTable_)
+  def withRoutingTable(_routingTable: RoutingTablePartition): ShippableVertexPartition[VD] = {
+    new ShippableVertexPartition(index, values, mask, _routingTable)
   }
 
   /**

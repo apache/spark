@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Linear Methods - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Linear Methods
+title: Linear Methods - spark.mllib
+displayTitle: Linear Methods - spark.mllib
 ---
 
 * Table of contents
@@ -41,7 +41,7 @@ the objective function is of the form
 Here the vectors `$\x_i\in\R^d$` are the training data examples, for `$1\le i\le n$`, and
 `$y_i\in\R$` are their corresponding labels, which we want to predict.
 We call the method *linear* if $L(\wv; \x, y)$ can be expressed as a function of $\wv^T x$ and $y$.
-Several of MLlib's classification and regression algorithms fall into this category,
+Several of `spark.mllib`'s classification and regression algorithms fall into this category,
 and are discussed here.
 
 The objective function `$f$` has two parts:
@@ -55,7 +55,7 @@ training error) and minimizing model complexity (i.e., to avoid overfitting).
 ### Loss functions
 
 The following table summarizes the loss functions and their gradients or sub-gradients for the
-methods MLlib supports:
+methods `spark.mllib` supports:
 
 <table class="table">
   <thead>
@@ -83,7 +83,7 @@ methods MLlib supports:
 The purpose of the
 [regularizer](http://en.wikipedia.org/wiki/Regularization_(mathematics)) is to
 encourage simple models and avoid overfitting.  We support the following
-regularizers in MLlib:
+regularizers in `spark.mllib`:
 
 <table class="table">
   <thead>
@@ -115,27 +115,30 @@ especially when the number of training examples is small.
 
 ### Optimization
 
-Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+Under the hood, linear methods use convex optimization methods to optimize the objective functions.
+`spark.mllib` uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).
+Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS.
+Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
 
 ## Classification
 
 [Classification](http://en.wikipedia.org/wiki/Statistical_classification) aims to divide items into
 categories.
 The most common classification type is
-[binary classificaion](http://en.wikipedia.org/wiki/Binary_classification), where there are two
+[binary classification](http://en.wikipedia.org/wiki/Binary_classification), where there are two
 categories, usually named positive and negative.
 If there are more than two categories, it is called
 [multiclass classification](http://en.wikipedia.org/wiki/Multiclass_classification).
-MLlib supports two linear methods for classification: linear Support Vector Machines (SVMs)
+`spark.mllib` supports two linear methods for classification: linear Support Vector Machines (SVMs)
 and logistic regression.
 Linear SVMs supports only binary classification, while logistic regression supports both binary and
 multiclass classification problems.
-For both methods, MLlib supports L1 and L2 regularized variants.
+For both methods, `spark.mllib` supports L1 and L2 regularized variants.
 The training data set is represented by an RDD of [LabeledPoint](mllib-data-types.html) in MLlib,
 where labels are class indices starting from zero: $0, 1, 2, \ldots$.
 Note that, in the mathematical formulation in this guide, a binary label $y$ is denoted as either
 $+1$ (positive) or $-1$ (negative), which is convenient for the formulation.
-*However*, the negative label is represented by $0$ in MLlib instead of $-1$, to be consistent with
+*However*, the negative label is represented by $0$ in `spark.mllib` instead of $-1$, to be consistent with
 multiclass labeling.
 
 ### Linear Support Vector Machines (SVMs)
@@ -164,6 +167,8 @@ The following code snippet illustrates how to load a sample dataset, execute a
 training algorithm on this training data using a static method in the algorithm
 object, and make predictions with the resulting model to compute the training
 error.
+
+Refer to the [`SVMWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.SVMWithSGD) and [`SVMModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.SVMModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.mllib.classification.{SVMModel, SVMWithSGD}
@@ -205,7 +210,7 @@ val sameModel = SVMModel.load(sc, "myModelPath")
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
 regularization parameter set to 1.0. If we want to configure this algorithm, we
 can customize `SVMWithSGD` further by creating a new object directly and
-calling setter methods. All other MLlib algorithms support customization in
+calling setter methods. All other `spark.mllib` algorithms support customization in
 this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
@@ -228,7 +233,9 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. A self-contained application example
-that is equivalent to the provided example in Scala is given bellow:
+that is equivalent to the provided example in Scala is given below:
+
+Refer to the [`SVMWithSGD` Java docs](api/java/org/apache/spark/mllib/classification/SVMWithSGD.html) and [`SVMModel` Java docs](api/java/org/apache/spark/mllib/classification/SVMModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -289,7 +296,7 @@ public class SVMClassifier {
 The `SVMWithSGD.train()` method by default performs L2 regularization with the
 regularization parameter set to 1.0. If we want to configure this algorithm, we
 can customize `SVMWithSGD` further by creating a new object directly and
-calling setter methods. All other MLlib algorithms support customization in
+calling setter methods. All other `spark.mllib` algorithms support customization in
 this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
@@ -315,6 +322,8 @@ a dependency.
 <div data-lang="python" markdown="1">
 The following example shows how to load a sample dataset, build SVM model,
 and make predictions with the resulting model to compute the training error.
+
+Refer to the [`SVMWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.SVMWithSGD) and [`SVMModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.SVMModel) for more details on the API.
 
 {% highlight python %}
 from pyspark.mllib.classification import SVMWithSGD, SVMModel
@@ -369,7 +378,7 @@ Binary logistic regression can be generalized into
 train and predict multiclass classification problems.
 For example, for $K$ possible outcomes, one of the outcomes can be chosen as a "pivot", and the
 other $K - 1$ outcomes can be separately regressed against the pivot outcome.
-In MLlib, the first class $0$ is chosen as the "pivot" class.
+In `spark.mllib`, the first class $0$ is chosen as the "pivot" class.
 See Section 4.4 of
 [The Elements of Statistical Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
 references.
@@ -394,6 +403,8 @@ test, and use
 [LogisticRegressionWithLBFGS](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS)
 to fit a logistic regression model.
 Then the model is evaluated against the test dataset and saved to disk.
+
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`LogisticRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionModel) for details on the API.
 
 {% highlight scala %}
 import org.apache.spark.SparkContext
@@ -440,6 +451,8 @@ test, and use
 [LogisticRegressionWithLBFGS](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html)
 to fit a logistic regression model.
 Then the model is evaluated against the test dataset and saved to disk.
+
+Refer to the [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) and [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -501,6 +514,8 @@ and make predictions with the resulting model to compute the training error.
 Note that the Python API does not yet support multiclass classification and model save/load but
 will in the future.
 
+Refer to the [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) and [`LogisticRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
 from pyspark.mllib.regression import LabeledPoint
@@ -558,6 +573,8 @@ The example then uses LinearRegressionWithSGD to build a simple linear model to 
 values. We compute the mean squared error at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
+Refer to the [`LinearRegressionWithSGD` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Scala docs](api/scala/index.html#org.apache.spark.mllib.regression.LinearRegressionModel) for details on the API.
+
 {% highlight scala %}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.regression.LinearRegressionModel
@@ -573,7 +590,8 @@ val parsedData = data.map { line =>
 
 // Building the model
 val numIterations = 100
-val model = LinearRegressionWithSGD.train(parsedData, numIterations)
+val stepSize = 0.00000001
+val model = LinearRegressionWithSGD.train(parsedData, numIterations, stepSize)
 
 // Evaluate model on training examples and compute training error
 val valuesAndPreds = parsedData.map { point =>
@@ -598,7 +616,9 @@ All of MLlib's methods use Java-friendly types, so you can import and call them 
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
 calling `.rdd()` on your `JavaRDD` object. The corresponding Java example to
-the Scala snippet provided, is presented bellow:
+the Scala snippet provided, is presented below:
+
+Refer to the [`LinearRegressionWithSGD` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionWithSGD.html) and [`LinearRegressionModel` Java docs](api/java/org/apache/spark/mllib/regression/LinearRegressionModel.html) for details on the API.
 
 {% highlight java %}
 import scala.Tuple2;
@@ -636,8 +656,9 @@ public class LinearRegression {
 
     // Building the model
     int numIterations = 100;
+    double stepSize = 0.00000001;
     final LinearRegressionModel model =
-      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
+      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations, stepSize);
 
     // Evaluate model on training examples and compute training error
     JavaRDD<Tuple2<Double, Double>> valuesAndPreds = parsedData.map(
@@ -673,6 +694,8 @@ values. We compute the mean squared error at the end to evaluate
 
 Note that the Python API does not yet support model save/load but will in the future.
 
+Refer to the [`LinearRegressionWithSGD` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionWithSGD) and [`LinearRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.LinearRegressionModel) for more details on the API.
+
 {% highlight python %}
 from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD, LinearRegressionModel
 
@@ -685,7 +708,7 @@ data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 parsedData = data.map(parsePoint)
 
 # Build the model
-model = LinearRegressionWithSGD.train(parsedData)
+model = LinearRegressionWithSGD.train(parsedData, iterations=100, step=0.00000001)
 
 # Evaluate the model on training data
 valuesAndPreds = parsedData.map(lambda p: (p.label, model.predict(p.features)))
@@ -708,7 +731,7 @@ a dependency.
 ###Streaming linear regression
 
 When data arrive in a streaming fashion, it is useful to fit regression models online,
-updating the parameters of the model as new data arrives. MLlib currently supports
+updating the parameters of the model as new data arrives. `spark.mllib` currently supports
 streaming linear regression using ordinary least squares. The fitting is similar
 to that performed offline, except fitting occurs on each batch of data, so that
 the model continually updates to reflect the data from the stream.
@@ -834,7 +857,7 @@ will get better!
 
 # Implementation (developer)
 
-Behind the scene, MLlib implements a simple distributed version of stochastic gradient descent
+Behind the scene, `spark.mllib` implements a simple distributed version of stochastic gradient descent
 (SGD), building on the underlying gradient descent primitive (as described in the <a
 href="mllib-optimization.html">optimization</a> section).  All provided algorithms take as input a
 regularization parameter (`regParam`) along with various parameters associated with stochastic

@@ -21,12 +21,11 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.HashPartitioner
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl._
 import org.apache.spark.graphx.util.BytecodeUtils
-
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * An implementation of [[org.apache.spark.graphx.Graph]] to support computation on graphs.
@@ -187,31 +186,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   // ///////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   // ///////////////////////////////////////////////////////////////////////////////////////////////
-
-  override def mapReduceTriplets[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      reduceFunc: (A, A) => A,
-      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)]): VertexRDD[A] = {
-
-    def sendMsg(ctx: EdgeContext[VD, ED, A]) {
-      mapFunc(ctx.toEdgeTriplet).foreach { kv =>
-        val id = kv._1
-        val msg = kv._2
-        if (id == ctx.srcId) {
-          ctx.sendToSrc(msg)
-        } else {
-          assert(id == ctx.dstId)
-          ctx.sendToDst(msg)
-        }
-      }
-    }
-
-    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
-    val tripletFields = new TripletFields(mapUsesSrcAttr, mapUsesDstAttr, true)
-
-    aggregateMessagesWithActiveSet(sendMsg, reduceFunc, tripletFields, activeSetOpt)
-  }
 
   override def aggregateMessagesWithActiveSet[A: ClassTag](
       sendMsg: EdgeContext[VD, ED, A] => Unit,

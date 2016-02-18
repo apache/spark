@@ -50,13 +50,7 @@ class ReplSuite extends SparkFunSuite {
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
 
     System.setProperty("spark.master", master)
-    val interp = {
-      new SparkILoop(in, new PrintWriter(out))
-    }
-    org.apache.spark.repl.Main.interp = interp
-    Main.s.processArguments(List("-classpath", classpath), true)
-    Main.main(Array()) // call main
-    org.apache.spark.repl.Main.interp = null
+      Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
 
     if (oldExecutorClasspath != null) {
       System.setProperty(CONF_EXECUTOR_CLASSPATH, oldExecutorClasspath)

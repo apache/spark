@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax, argtopk, normalize, sum}
+import breeze.linalg.{argmax, argtopk, normalize, sum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.{exp, lgamma}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -35,14 +35,11 @@ import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
- * :: Experimental ::
- *
  * Latent Dirichlet Allocation (LDA) model.
  *
  * This abstraction permits for different underlying representations,
  * including local and distributed data structures.
  */
-@Experimental
 @Since("1.3.0")
 abstract class LDAModel private[clustering] extends Saveable {
 
@@ -184,21 +181,17 @@ abstract class LDAModel private[clustering] extends Saveable {
 }
 
 /**
- * :: Experimental ::
- *
  * Local LDA model.
  * This model stores only the inferred topics.
- * It may be used for computing topics for new documents, but it may give less accurate answers
- * than the [[DistributedLDAModel]].
+ *
  * @param topics Inferred topics (vocabSize x k matrix).
  */
-@Experimental
 @Since("1.3.0")
-class LocalLDAModel private[clustering] (
+class LocalLDAModel private[spark] (
     @Since("1.3.0") val topics: Matrix,
     @Since("1.5.0") override val docConcentration: Vector,
     @Since("1.5.0") override val topicConcentration: Double,
-    override protected[clustering] val gammaShape: Double = 100)
+    override protected[spark] val gammaShape: Double = 100)
   extends LDAModel with Serializable {
 
   @Since("1.3.0")
@@ -359,7 +352,7 @@ class LocalLDAModel private[clustering] (
 
     documents.map { case (id: Long, termCounts: Vector) =>
       if (termCounts.numNonzeros == 0) {
-         (id, Vectors.zeros(k))
+        (id, Vectors.zeros(k))
       } else {
         val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts,
@@ -369,6 +362,54 @@ class LocalLDAModel private[clustering] (
           k)
         (id, Vectors.dense(normalize(gamma, 1.0).toArray))
       }
+    }
+  }
+
+  /** Get a method usable as a UDF for [[topicDistributions()]] */
+  private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbetaBc = sc.broadcast(expElogbeta)
+    val docConcentrationBrz = this.docConcentration.toBreeze
+    val gammaShape = this.gammaShape
+    val k = this.k
+
+    (termCounts: Vector) =>
+      if (termCounts.numNonzeros == 0) {
+        Vectors.zeros(k)
+      } else {
+        val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+          termCounts,
+          expElogbetaBc.value,
+          docConcentrationBrz,
+          gammaShape,
+          k)
+        Vectors.dense(normalize(gamma, 1.0).toArray)
+      }
+  }
+
+  /**
+   * Predicts the topic mixture distribution for a document (often called "theta" in the
+   * literature).  Returns a vector of zeros for an empty document.
+   *
+   * Note this means to allow quick query for single document. For batch documents, please refer
+   * to [[topicDistributions()]] to avoid overhead.
+   *
+   * @param document document to predict topic mixture distributions for
+   * @return topic mixture distribution for the document
+   */
+  @Since("2.0.0")
+  def topicDistribution(document: Vector): Vector = {
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    if (document.numNonzeros == 0) {
+      Vectors.zeros(this.k)
+    } else {
+      val (gamma, _) = OnlineLDAOptimizer.variationalTopicInference(
+        document,
+        expElogbeta,
+        this.docConcentration.toBreeze,
+        gammaShape,
+        this.k)
+      Vectors.dense(normalize(gamma, 1.0).toArray)
     }
   }
 
@@ -481,14 +522,9 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 }
 
 /**
- * :: Experimental ::
- *
  * Distributed LDA model.
  * This model stores the inferred topics, the full training dataset, and the topic distributions.
- * When computing topics for new documents, it may give more accurate answers
- * than the [[LocalLDAModel]].
  */
-@Experimental
 @Since("1.3.0")
 class DistributedLDAModel private[clustering] (
     private[clustering] val graph: Graph[LDA.TopicCounts, LDA.TokenCount],

@@ -20,11 +20,11 @@ package org.apache.spark.serializer
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
 
-import com.esotericsoftware.kryo.io.{Output, Input}
-import org.apache.avro.{SchemaBuilder, Schema}
+import com.esotericsoftware.kryo.io.{Input, Output}
+import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.GenericData.Record
 
-import org.apache.spark.{SparkFunSuite, SharedSparkContext}
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
 class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
@@ -76,9 +76,9 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("caches previously seen schemas") {
     val genericSer = new GenericAvroSerializer(conf.getAvroSchema)
     val compressedSchema = genericSer.compress(schema)
-    val decompressedScheam = genericSer.decompress(ByteBuffer.wrap(compressedSchema))
+    val decompressedSchema = genericSer.decompress(ByteBuffer.wrap(compressedSchema))
 
     assert(compressedSchema.eq(genericSer.compress(schema)))
-    assert(decompressedScheam.eq(genericSer.decompress(ByteBuffer.wrap(compressedSchema))))
+    assert(decompressedSchema.eq(genericSer.decompress(ByteBuffer.wrap(compressedSchema))))
   }
 }

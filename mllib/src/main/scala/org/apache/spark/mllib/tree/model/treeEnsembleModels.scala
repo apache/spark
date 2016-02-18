@@ -25,7 +25,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -38,16 +38,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.util.Utils
 
-
 /**
- * :: Experimental ::
  * Represents a random forest model.
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
  * @param trees tree ensembles
  */
 @Since("1.2.0")
-@Experimental
 class RandomForestModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel])
@@ -108,7 +105,6 @@ object RandomForestModel extends Loader[RandomForestModel] {
 }
 
 /**
- * :: Experimental ::
  * Represents a gradient boosted trees model.
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
@@ -116,7 +112,6 @@ object RandomForestModel extends Loader[RandomForestModel] {
  * @param treeWeights tree ensemble weights
  */
 @Since("1.2.0")
-@Experimental
 class GradientBoostedTreesModel @Since("1.2.0") (
     @Since("1.2.0") override val algo: Algo,
     @Since("1.2.0") override val trees: Array[DecisionTreeModel],
@@ -191,6 +186,7 @@ class GradientBoostedTreesModel @Since("1.2.0") (
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   /**
+   * :: DeveloperApi ::
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
    * @param data: training data.
@@ -201,6 +197,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    *         corresponding to every sample.
    */
   @Since("1.4.0")
+  @DeveloperApi
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
@@ -214,6 +211,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   }
 
   /**
+   * :: DeveloperApi ::
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
    * @param data: training data.
@@ -225,6 +223,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    *         corresponding to each sample.
    */
   @Since("1.4.0")
+  @DeveloperApi
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
@@ -413,7 +412,7 @@ private[tree] object TreeEnsembleModel extends Logging {
     case class EnsembleNodeData(treeId: Int, node: NodeData)
 
     def save(sc: SparkContext, path: String, model: TreeEnsembleModel, className: String): Unit = {
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
@@ -473,7 +472,7 @@ private[tree] object TreeEnsembleModel extends Logging {
         path: String,
         treeAlgo: String): Array[DecisionTreeModel] = {
       val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val nodes = sqlContext.read.parquet(datapath).map(NodeData.apply)
       val trees = constructTrees(nodes)
       trees.map(new DecisionTreeModel(_, Algo.fromString(treeAlgo)))

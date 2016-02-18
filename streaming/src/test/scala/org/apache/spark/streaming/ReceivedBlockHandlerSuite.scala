@@ -29,6 +29,7 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.memory.StaticMemoryManager
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
@@ -38,14 +39,15 @@ import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.{ManualClock, Utils}
-import WriteAheadLogBasedBlockHandler._
-import WriteAheadLogSuite._
 
 class ReceivedBlockHandlerSuite
   extends SparkFunSuite
   with BeforeAndAfter
   with Matchers
   with Logging {
+
+  import WriteAheadLogBasedBlockHandler._
+  import WriteAheadLogSuite._
 
   val conf = new SparkConf()
     .set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
@@ -253,12 +255,14 @@ class ReceivedBlockHandlerSuite
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
-    val manager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, maxMem, conf,
-      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
-    manager.initialize("app-id")
-    blockManagerBuffer += manager
-    manager
+    val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, conf,
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    memManager.setMemoryStore(blockManager.memoryStore)
+    blockManager.initialize("app-id")
+    blockManagerBuffer += blockManager
+    blockManager
   }
 
   /**

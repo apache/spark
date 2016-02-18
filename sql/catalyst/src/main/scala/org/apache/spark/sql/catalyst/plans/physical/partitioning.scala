@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.catalyst.expressions.{Unevaluable, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -194,6 +194,22 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   override def guarantees(other: Partitioning): Boolean = false
 }
 
+/**
+ * Represents a partitioning where rows are distributed evenly across output partitions
+ * by starting from a random target partition number and distributing rows in a round-robin
+ * fashion. This partitioning is used when implementing the DataFrame.repartition() operator.
+ */
+case class RoundRobinPartitioning(numPartitions: Int) extends Partitioning {
+  override def satisfies(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
+    case _ => false
+  }
+
+  override def compatibleWith(other: Partitioning): Boolean = false
+
+  override def guarantees(other: Partitioning): Boolean = false
+}
+
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
@@ -219,20 +235,25 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
-      expressions.toSet.subsetOf(requiredClustering.toSet)
+      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => this == o
+    case o: HashPartitioning => this.semanticEquals(o)
     case _ => false
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: HashPartitioning => this == o
+    case o: HashPartitioning => this.semanticEquals(o)
     case _ => false
   }
 
+  /**
+   * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
+   * than numPartitions) based on hashing expressions.
+   */
+  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
 }
 
 /**
@@ -260,17 +281,17 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering) =>
-      ordering.map(_.child).toSet.subsetOf(requiredClustering.toSet)
+      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
 
   override def compatibleWith(other: Partitioning): Boolean = other match {
-    case o: RangePartitioning => this == o
+    case o: RangePartitioning => this.semanticEquals(o)
     case _ => false
   }
 
   override def guarantees(other: Partitioning): Boolean = other match {
-    case o: RangePartitioning => this == o
+    case o: RangePartitioning => this.semanticEquals(o)
     case _ => false
   }
 }

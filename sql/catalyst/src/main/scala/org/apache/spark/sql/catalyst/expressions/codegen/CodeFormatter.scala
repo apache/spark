@@ -25,6 +25,20 @@ package org.apache.spark.sql.catalyst.expressions.codegen
  */
 object CodeFormatter {
   def format(code: String): String = new CodeFormatter().addLines(code).result()
+  def stripExtraNewLines(input: String): String = {
+    val code = new StringBuilder
+    var lastLine: String = "dummy"
+    input.split('\n').foreach { l =>
+      val line = l.trim()
+      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{"))
+      if (!skip) {
+        code.append(line)
+        code.append("\n")
+      }
+      lastLine = line
+    }
+    code.result()
+  }
 }
 
 private class CodeFormatter {
@@ -32,6 +46,7 @@ private class CodeFormatter {
   private var indentLevel = 0
   private val indentSize = 2
   private var indentString = ""
+  private var currentLine = 1
 
   private def addLine(line: String): Unit = {
     val indentChange =
@@ -44,11 +59,13 @@ private class CodeFormatter {
     } else {
       indentString
     }
+    code.append(f"/* ${currentLine}%03d */ ")
     code.append(thisLineIndent)
     code.append(line)
     code.append("\n")
     indentLevel = newIndentLevel
     indentString = " " * (indentSize * newIndentLevel)
+    currentLine += 1
   }
 
   private def addLines(code: String): CodeFormatter = {

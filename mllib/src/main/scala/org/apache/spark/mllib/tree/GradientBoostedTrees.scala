@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.impl.PeriodicRDDCheckpointer
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.impl.TimeTracker
 import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
@@ -31,7 +31,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: Experimental ::
  * A class that implements
  * [[http://en.wikipedia.org/wiki/Gradient_boosting  Stochastic Gradient Boosting]]
  * for regression and binary classification.
@@ -50,7 +49,6 @@ import org.apache.spark.storage.StorageLevel
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */
 @Since("1.2.0")
-@Experimental
 class GradientBoostedTrees @Since("1.2.0") (private val boostingStrategy: BoostingStrategy)
   extends Serializable with Logging {
 
@@ -262,7 +260,8 @@ object GradientBoostedTrees extends Logging {
           validationInput, validatePredError, baseLearnerWeights(m), baseLearners(m), loss)
         validatePredErrorCheckpointer.update(validatePredError)
         val currentValidateError = validatePredError.values.mean()
-        if (bestValidateError - currentValidateError < validationTol) {
+        if (bestValidateError - currentValidateError < validationTol * Math.max(
+          currentValidateError, 0.01)) {
           doneLearning = true
         } else if (currentValidateError < bestValidateError) {
           bestValidateError = currentValidateError

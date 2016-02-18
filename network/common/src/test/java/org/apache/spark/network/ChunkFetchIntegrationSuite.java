@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.io.Closeables;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -78,12 +79,17 @@ public class ChunkFetchIntegrationSuite {
     testFile = File.createTempFile("shuffle-test-file", "txt");
     testFile.deleteOnExit();
     RandomAccessFile fp = new RandomAccessFile(testFile, "rw");
-    byte[] fileContent = new byte[1024];
-    new Random().nextBytes(fileContent);
-    fp.write(fileContent);
-    fp.close();
+    boolean shouldSuppressIOException = true;
+    try {
+      byte[] fileContent = new byte[1024];
+      new Random().nextBytes(fileContent);
+      fp.write(fileContent);
+      shouldSuppressIOException = false;
+    } finally {
+      Closeables.close(fp, shouldSuppressIOException);
+    }
 
-    final TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     fileChunk = new FileSegmentManagedBuffer(conf, testFile, 10, testFile.length() - 25);
 
     streamManager = new StreamManager() {
@@ -101,7 +107,10 @@ public class ChunkFetchIntegrationSuite {
     };
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+      public void receive(
+          TransportClient client,
+          ByteBuffer message,
+          RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
 
@@ -117,6 +126,7 @@ public class ChunkFetchIntegrationSuite {
 
   @AfterClass
   public static void tearDown() {
+    bufferChunk.release();
     server.close();
     clientFactory.close();
     testFile.delete();

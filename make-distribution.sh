@@ -33,9 +33,9 @@ SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
-TACHYON_VERSION="0.7.1"
+TACHYON_VERSION="0.8.2"
 TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
-TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
+TACHYON_URL="http://tachyon-project.org/downloads/files/${TACHYON_VERSION}/${TACHYON_TGZ}"
 
 MAKE_TGZ=false
 NAME=none
@@ -58,7 +58,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-1, hadoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -68,9 +68,6 @@ while (( "$#" )); do
     --with-hive)
       echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
-      ;;
-    --skip-java-test)
-      SKIP_JAVA_TEST=true
       ;;
     --with-tachyon)
       SPARK_TACHYON=true
@@ -121,7 +118,7 @@ if [ $(command -v git) ]; then
 fi
 
 
-if [ ! $(command -v "$MVN") ] ; then
+if [ ! "$(command -v "$MVN")" ] ; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
@@ -162,7 +159,7 @@ fi
 # Build uber fat JAR
 cd "$SPARK_HOME"
 
-export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m}"
 
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
@@ -198,6 +195,7 @@ fi
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE" "$DISTDIR"
+cp -r "$SPARK_HOME/licenses" "$DISTDIR"
 cp "$SPARK_HOME/NOTICE" "$DISTDIR"
 
 if [ -e "$SPARK_HOME"/CHANGES.txt ]; then
@@ -214,11 +212,11 @@ cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
-cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 # Copy SparkR if it exists
 if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
   mkdir -p "$DISTDIR"/R/lib
   cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
+  cp "$SPARK_HOME/R/lib/sparkr.zip" "$DISTDIR"/R/lib
 fi
 
 # Download and copy in tachyon, if requested
@@ -239,10 +237,10 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   fi
 
   tar xzf "${TACHYON_TGZ}"
-  cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
+  cp "tachyon-${TACHYON_VERSION}/assembly/target/tachyon-assemblies-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
-  cp -r "tachyon-${TACHYON_VERSION}"/core/src/main/java/tachyon/web "$DISTDIR/tachyon/src/main/java/tachyon/web"
+  cp -r "tachyon-${TACHYON_VERSION}"/servers/src/main/java/tachyon/web "$DISTDIR/tachyon/src/main/java/tachyon/web"
 
   if [[ `uname -a` == Darwin* ]]; then
     # need to run sed differently on osx

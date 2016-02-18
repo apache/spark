@@ -23,12 +23,12 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, NodeIdCache,
   TimeTracker, TreePoint}
 import org.apache.spark.mllib.tree.impurity.Impurities
@@ -39,7 +39,6 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.random.SamplingUtils
 
 /**
- * :: Experimental ::
  * A class that implements a [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]]
  * learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
@@ -66,7 +65,6 @@ import org.apache.spark.util.random.SamplingUtils
  *                                  to "onethird" for regression.
  * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
-@Experimental
 private class RandomForest (
     private val strategy: Strategy,
     private val numTrees: Int,

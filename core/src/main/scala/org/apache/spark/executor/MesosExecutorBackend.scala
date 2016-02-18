@@ -21,15 +21,15 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
+import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.{Logging, TaskState, SparkConf, SparkEnv}
+import org.apache.spark.{Logging, SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -63,6 +63,11 @@ private[spark] class MesosExecutorBackend
 
     logInfo(s"Registered with Mesos as executor ID $executorId with $cpusPerTask cpus")
     this.driver = driver
+    // Set a context class loader to be picked up by the serializer. Without this call
+    // the serializer would default to the null class loader, and fail to find Spark classes
+    // See SPARK-10986.
+    Thread.currentThread().setContextClassLoader(this.getClass.getClassLoader)
+
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     val conf = new SparkConf(loadDefaults = true).setAll(properties)
@@ -116,7 +121,7 @@ private[spark] class MesosExecutorBackend
  */
 private[spark] object MesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     // Create a new Executor and start it running
     val runner = new MesosExecutorBackend()
     new MesosExecutorDriver(runner).run()

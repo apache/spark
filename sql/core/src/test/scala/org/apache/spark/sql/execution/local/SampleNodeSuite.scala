@@ -17,21 +17,32 @@
 
 package org.apache.spark.sql.execution.local
 
+import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
+
+
 class SampleNodeSuite extends LocalNodeTest {
 
-  import testImplicits._
-
   private def testSample(withReplacement: Boolean): Unit = {
-    test(s"withReplacement: $withReplacement") {
-      val seed = 0L
-      val input = sqlContext.sparkContext.
-        parallelize((1 to 10).map(i => (i, i.toString)), 1). // Should be only 1 partition
-        toDF("key", "value")
-      checkAnswer(
-        input,
-        node => SampleNode(conf, 0.0, 0.3, withReplacement, seed, node),
-        input.sample(withReplacement, 0.3, seed).collect()
-      )
+    val seed = 0L
+    val lowerb = 0.0
+    val upperb = 0.3
+    val maybeOut = if (withReplacement) "" else "out"
+    test(s"with$maybeOut replacement") {
+      val inputData = (1 to 1000).map { i => (i, i) }.toArray
+      val inputNode = new DummyNode(kvIntAttributes, inputData)
+      val sampleNode = new SampleNode(conf, lowerb, upperb, withReplacement, seed, inputNode)
+      val sampler =
+        if (withReplacement) {
+          new PoissonSampler[(Int, Int)](upperb - lowerb, useGapSamplingIfPossible = false)
+        } else {
+          new BernoulliCellSampler[(Int, Int)](lowerb, upperb)
+        }
+      sampler.setSeed(seed)
+      val expectedOutput = sampler.sample(inputData.iterator).toArray
+      val actualOutput = sampleNode.collect().map { case row =>
+        (row.getInt(0), row.getInt(1))
+      }
+      assert(actualOutput === expectedOutput)
     }
   }
 

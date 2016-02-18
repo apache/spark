@@ -203,25 +203,35 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("compute without caching when no partitions fit in memory") {
-    sc = new SparkContext(clusterUrl, "test")
-    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
-    // to only 50 KB (0.0001 of 512 MB), so no partitions should fit in memory
-    val data = sc.parallelize(1 to 4000000, 2).persist(StorageLevel.MEMORY_ONLY_SER)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
+    val size = 10000
+    val conf = new SparkConf()
+      .set("spark.storage.unrollMemoryThreshold", "1024")
+      .set("spark.testing.memory", (size / 2).toString)
+    sc = new SparkContext(clusterUrl, "test", conf)
+    val data = sc.parallelize(1 to size, 2).persist(StorageLevel.MEMORY_ONLY)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    // ensure only a subset of partitions were cached
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    assert(rddBlocks.size === 0, s"expected no RDD blocks, found ${rddBlocks.size}")
   }
 
   test("compute when only some partitions fit in memory") {
-    val conf = new SparkConf().set("spark.storage.memoryFraction", "0.01")
+    val size = 10000
+    val numPartitions = 10
+    val conf = new SparkConf()
+      .set("spark.storage.unrollMemoryThreshold", "1024")
+      .set("spark.testing.memory", (size * numPartitions).toString)
     sc = new SparkContext(clusterUrl, "test", conf)
-    // data will be 4 million * 4 bytes = 16 MB in size, but our memoryFraction set the cache
-    // to only 5 MB (0.01 of 512 MB), so not all of it will fit in memory; we use 20 partitions
-    // to make sure that *some* of them do fit though
-    val data = sc.parallelize(1 to 4000000, 20).persist(StorageLevel.MEMORY_ONLY_SER)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
-    assert(data.count() === 4000000)
+    val data = sc.parallelize(1 to size, numPartitions).persist(StorageLevel.MEMORY_ONLY)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    assert(data.count() === size)
+    // ensure only a subset of partitions were cached
+    val rddBlocks = sc.env.blockManager.master.getMatchingBlockIds(_.isRDD, askSlaves = true)
+    assert(rddBlocks.size > 0, "no RDD blocks found")
+    assert(rddBlocks.size < numPartitions, s"too many RDD blocks found, expected <$numPartitions")
   }
 
   test("passing environment variables to cluster") {

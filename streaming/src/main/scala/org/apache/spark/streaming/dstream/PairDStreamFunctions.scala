@@ -25,8 +25,9 @@ import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
 
@@ -35,8 +36,7 @@ import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf}
  */
 class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
-  extends Serializable
-{
+  extends Serializable {
   private[streaming] def ssc = self.ssc
 
   private[streaming] def sparkContext = self.context.sparkContext
@@ -347,6 +347,41 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     new ReducedWindowedDStream[K, V](
       self, cleanedReduceFunc, cleanedInvReduceFunc, cleanedFilterFunc,
       windowDuration, slideDuration, partitioner
+    )
+  }
+
+  /**
+   * :: Experimental ::
+   * Return a [[MapWithStateDStream]] by applying a function to every key-value element of
+   * `this` stream, while maintaining some state data for each unique key. The mapping function
+   * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
+   * transformation can be specified using [[StateSpec]] class. The state data is accessible in
+   * as a parameter of type [[State]] in the mapping function.
+   *
+   * Example of using `mapWithState`:
+   * {{{
+   *    // A mapping function that maintains an integer state and return a String
+   *    def mappingFunction(key: String, value: Option[Int], state: State[Int]): Option[String] = {
+   *      // Use state.exists(), state.get(), state.update() and state.remove()
+   *      // to manage state, and return the necessary string
+   *    }
+   *
+   *    val spec = StateSpec.function(mappingFunction).numPartitions(10)
+   *
+   *    val mapWithStateDStream = keyValueDStream.mapWithState[StateType, MappedType](spec)
+   * }}}
+   *
+   * @param spec          Specification of this transformation
+   * @tparam StateType    Class type of the state data
+   * @tparam MappedType   Class type of the mapped data
+   */
+  @Experimental
+  def mapWithState[StateType: ClassTag, MappedType: ClassTag](
+      spec: StateSpec[K, V, StateType, MappedType]
+    ): MapWithStateDStream[K, V, StateType, MappedType] = {
+    new MapWithStateDStreamImpl[K, V, StateType, MappedType](
+      self,
+      spec.asInstanceOf[StateSpecImpl[K, V, StateType, MappedType]]
     )
   }
 
@@ -692,7 +727,8 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     val serializableConf = new SerializableJobConf(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, serializableConf.value)
+      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass,
+        new JobConf(serializableConf.value))
     }
     self.foreachRDD(saveFunc)
   }

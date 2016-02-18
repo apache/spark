@@ -20,21 +20,20 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.util.concurrent.TimeoutException
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import org.apache.hadoop.mapred.{JobConf, OutputCommitter, TaskAttemptContext, TaskAttemptID}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
-import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
-
 import org.apache.spark._
-import org.apache.spark.rdd.{RDD, FakeOutputCommitter}
+import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.util.Utils
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.language.postfixOps
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -63,6 +62,9 @@ import scala.language.postfixOps
  * was not in SparkHadoopWriter, the tests would still pass because only one of the
  * increments would be captured even though the commit in both tasks was executed
  * erroneously.
+ *
+ * See also: [[OutputCommitCoordinatorIntegrationSuite]] for integration tests that do
+ * not use mocks.
  */
 class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -84,7 +86,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
         outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
-        SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
@@ -164,27 +167,28 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Only authorized committer failures can clear the authorized committer lock (SPARK-6614)") {
     val stage: Int = 1
-    val partition: Long = 2
-    val authorizedCommitter: Long = 3
-    val nonAuthorizedCommitter: Long = 100
-    outputCommitCoordinator.stageStart(stage)
-    assert(outputCommitCoordinator.canCommit(stage, partition, attempt = authorizedCommitter))
-    assert(!outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter))
+    val partition: Int = 2
+    val authorizedCommitter: Int = 3
+    val nonAuthorizedCommitter: Int = 100
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
+
+    assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
+    assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))
     // The non-authorized committer fails
     outputCommitCoordinator.taskCompleted(
-      stage, partition, attempt = nonAuthorizedCommitter, reason = TaskKilled)
+      stage, partition, attemptNumber = nonAuthorizedCommitter, reason = TaskKilled)
     // New tasks should still not be able to commit because the authorized committer has not failed
     assert(
-      !outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter + 1))
+      !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 1))
     // The authorized committer now fails, clearing the lock
     outputCommitCoordinator.taskCompleted(
-      stage, partition, attempt = authorizedCommitter, reason = TaskKilled)
+      stage, partition, attemptNumber = authorizedCommitter, reason = TaskKilled)
     // A new task should now be allowed to become the authorized committer
     assert(
-      outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter + 2))
+      outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 2))
     // There can only be one authorized committer
     assert(
-      !outputCommitCoordinator.canCommit(stage, partition, attempt = nonAuthorizedCommitter + 3))
+      !outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter + 3))
   }
 }
 

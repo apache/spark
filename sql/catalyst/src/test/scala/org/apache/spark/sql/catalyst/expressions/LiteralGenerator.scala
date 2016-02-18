@@ -78,7 +78,18 @@ object LiteralGenerator {
         Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity)
     } yield Literal.create(f, DoubleType)
 
-  // TODO: decimal type
+  // TODO cache the generated data
+  def decimalLiteralGen(precision: Int, scale: Int): Gen[Literal] = {
+    assert(scale >= 0)
+    assert(precision >= scale)
+    Arbitrary.arbBigInt.arbitrary.map { s =>
+      val a = (s % BigInt(10).pow(precision - scale)).toString()
+      val b = (s % BigInt(10).pow(scale)).abs.toString()
+      Literal.create(
+        Decimal(BigDecimal(s"$a.$b"), precision, scale),
+        DecimalType(precision, scale))
+    }
+  }
 
   lazy val stringLiteralGen: Gen[Literal] =
     for { s <- Arbitrary.arbString.arbitrary } yield Literal.create(s, StringType)
@@ -122,6 +133,7 @@ object LiteralGenerator {
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
+      case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }
   }

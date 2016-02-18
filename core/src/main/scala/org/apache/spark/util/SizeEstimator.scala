@@ -25,10 +25,26 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
+import com.google.common.collect.MapMaker
+
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
 
+/**
+ * A trait that allows a class to give [[SizeEstimator]] more accurate size estimation.
+ * When a class extends it, [[SizeEstimator]] will query the `estimatedSize` first.
+ * If `estimatedSize` does not return [[None]], [[SizeEstimator]] will use the returned size
+ * as the size of the object. Otherwise, [[SizeEstimator]] will do the estimation work.
+ * The difference between a [[KnownSizeEstimation]] and
+ * [[org.apache.spark.util.collection.SizeTracker]] is that, a
+ * [[org.apache.spark.util.collection.SizeTracker]] still uses [[SizeEstimator]] to
+ * estimate the size. However, a [[KnownSizeEstimation]] can provide a better estimation without
+ * using [[SizeEstimator]].
+ */
+private[spark] trait KnownSizeEstimation {
+  def estimatedSize: Long
+}
 
 /**
  * :: DeveloperApi ::
@@ -73,7 +89,8 @@ object SizeEstimator extends Logging {
   private val ALIGN_SIZE = 8
 
   // A cache of ClassInfo objects for each class
-  private val classInfos = new ConcurrentHashMap[Class[_], ClassInfo]
+  // We use weakKeys to allow GC of dynamically created classes
+  private val classInfos = new MapMaker().weakKeys().makeMap[Class[_], ClassInfo]()
 
   // Object and pointer sizes are arch dependent
   private var is64bit = false
@@ -197,10 +214,15 @@ object SizeEstimator extends Logging {
       // the size estimator since it references the whole REPL. Do nothing in this case. In
       // general all ClassLoaders and Classes will be shared between objects anyway.
     } else {
-      val classInfo = getClassInfo(cls)
-      state.size += alignSize(classInfo.shellSize)
-      for (field <- classInfo.pointerFields) {
-        state.enqueue(field.get(obj))
+      obj match {
+        case s: KnownSizeEstimation =>
+          state.size += s.estimatedSize
+        case _ =>
+          val classInfo = getClassInfo(cls)
+          state.size += alignSize(classInfo.shellSize)
+          for (field <- classInfo.pointerFields) {
+            state.enqueue(field.get(obj))
+          }
       }
     }
   }

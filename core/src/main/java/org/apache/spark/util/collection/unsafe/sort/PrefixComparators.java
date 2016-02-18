@@ -21,6 +21,7 @@ import com.google.common.primitives.UnsignedLongs;
 
 import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.ByteArray;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.util.Utils;
 
@@ -62,21 +63,7 @@ public class PrefixComparators {
     }
 
     public static long computePrefix(byte[] bytes) {
-      if (bytes == null) {
-        return 0L;
-      } else {
-        /**
-         * TODO: If a wrapper for BinaryType is created (SPARK-8786),
-         * these codes below will be in the wrapper class.
-         */
-        final int minLen = Math.min(bytes.length, 8);
-        long p = 0;
-        for (int i = 0; i < minLen; ++i) {
-          p |= (128L + Platform.getByte(bytes, Platform.BYTE_ARRAY_OFFSET + i))
-              << (56 - 8 * i);
-        }
-        return p;
-      }
+      return ByteArray.getPrefix(bytes);
     }
   }
 

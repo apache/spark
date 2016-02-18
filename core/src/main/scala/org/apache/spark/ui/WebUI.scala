@@ -26,9 +26,9 @@ import scala.xml.Node
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.json4s.JsonAST.{JNothing, JValue}
 
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SSLOptions}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * The top level component of the UI hierarchy that contains the server.
@@ -38,6 +38,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  */
 private[spark] abstract class WebUI(
     val securityManager: SecurityManager,
+    val sslOptions: SSLOptions,
     port: Int,
     conf: SparkConf,
     basePath: String = "",
@@ -76,9 +77,9 @@ private[spark] abstract class WebUI(
   def attachPage(page: WebUIPage) {
     val pagePath = "/" + page.prefix
     val renderHandler = createServletHandler(pagePath,
-      (request: HttpServletRequest) => page.render(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.render(request), securityManager, conf, basePath)
     val renderJsonHandler = createServletHandler(pagePath.stripSuffix("/") + "/json",
-      (request: HttpServletRequest) => page.renderJson(request), securityManager, basePath)
+      (request: HttpServletRequest) => page.renderJson(request), securityManager, conf, basePath)
     attachHandler(renderHandler)
     attachHandler(renderJsonHandler)
     pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
@@ -133,7 +134,7 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
+      serverInfo = Some(startJettyServer("0.0.0.0", port, sslOptions, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
     } catch {
       case e: Exception =>

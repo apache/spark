@@ -23,10 +23,11 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{SessionInfo, ExecutionState, ExecutionInfo}
-import org.apache.spark.ui.UIUtils._
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, ExecutionState, SessionInfo}
 import org.apache.spark.ui._
+import org.apache.spark.ui.UIUtils._
 
 
 /** Page for Spark Web UI that shows statistics of a thrift server */

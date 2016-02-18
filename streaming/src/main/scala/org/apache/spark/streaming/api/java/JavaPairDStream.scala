@@ -17,19 +17,21 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Long => JLong, Iterable => JIterable}
+import java.{lang => jl}
+import java.lang.{Iterable => JIterable}
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+
 import org.apache.spark.Partitioner
-import org.apache.spark.api.java.{JavaPairRDD, JavaUtils}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaUtils, Optional}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
@@ -426,6 +428,42 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     )
   }
 
+  /**
+   * :: Experimental ::
+   * Return a [[JavaMapWithStateDStream]] by applying a function to every key-value element of
+   * `this` stream, while maintaining some state data for each unique key. The mapping function
+   * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
+   * transformation can be specified using [[StateSpec]] class. The state data is accessible in
+   * as a parameter of type [[State]] in the mapping function.
+   *
+   * Example of using `mapWithState`:
+   * {{{
+   *   // A mapping function that maintains an integer state and return a string
+   *   Function3<String, Optional<Integer>, State<Integer>, String> mappingFunction =
+   *       new Function3<String, Optional<Integer>, State<Integer>, String>() {
+   *           @Override
+   *           public Optional<String> call(Optional<Integer> value, State<Integer> state) {
+   *               // Use state.exists(), state.get(), state.update() and state.remove()
+   *               // to manage state, and return the necessary string
+   *           }
+   *       };
+   *
+   *    JavaMapWithStateDStream<String, Integer, Integer, String> mapWithStateDStream =
+   *        keyValueDStream.mapWithState(StateSpec.function(mappingFunc));
+   *}}}
+   *
+   * @param spec          Specification of this transformation
+   * @tparam StateType    Class type of the state data
+   * @tparam MappedType   Class type of the mapped data
+   */
+  @Experimental
+  def mapWithState[StateType, MappedType](spec: StateSpec[K, V, StateType, MappedType]):
+    JavaMapWithStateDStream[K, V, StateType, MappedType] = {
+    new JavaMapWithStateDStream(dstream.mapWithState(spec)(
+      JavaSparkContext.fakeClassTag,
+      JavaSparkContext.fakeClassTag))
+  }
+
   private def convertUpdateStateFunction[S](in: JFunction2[JList[V], Optional[S], Optional[S]]):
   (Seq[V], Option[S]) => Option[S] = {
     val scalaFunc: (Seq[V], Option[S]) => Option[S] = (values, state) => {
@@ -809,7 +847,7 @@ object JavaPairDStream {
   }
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
-  : JavaPairDStream[K, JLong] = {
-    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+  : JavaPairDStream[K, jl.Long] = {
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(jl.Long.valueOf)
   }
 }

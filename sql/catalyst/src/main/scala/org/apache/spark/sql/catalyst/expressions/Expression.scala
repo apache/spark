@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, TypeCheckResult, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -85,19 +86,30 @@ abstract class Expression extends TreeNode[Expression] {
   def eval(input: InternalRow = null): Any
 
   /**
-   * Returns an [[GeneratedExpressionCode]], which contains Java source code that
+   * Returns an [[ExprCode]], which contains Java source code that
    * can be used to generate the result of evaluating the expression on an input row.
    *
-   * @param ctx a [[CodeGenContext]]
-   * @return [[GeneratedExpressionCode]]
+   * @param ctx a [[CodegenContext]]
+   * @return [[ExprCode]]
    */
-  def gen(ctx: CodeGenContext): GeneratedExpressionCode = {
-    val isNull = ctx.freshName("isNull")
-    val primitive = ctx.freshName("primitive")
-    val ve = GeneratedExpressionCode("", isNull, primitive)
-    ve.code = genCode(ctx, ve)
-    // Add `this` in the comment.
-    ve.copy(s"/* $this */\n" + ve.code)
+  def gen(ctx: CodegenContext): ExprCode = {
+    ctx.subExprEliminationExprs.get(this).map { subExprState =>
+      // This expression is repeated meaning the code to evaluated has already been added
+      // as a function and called in advance. Just use it.
+      val code = s"/* ${this.toCommentSafeString} */"
+      ExprCode(code, subExprState.isNull, subExprState.value)
+    }.getOrElse {
+      val isNull = ctx.freshName("isNull")
+      val value = ctx.freshName("value")
+      val ve = ExprCode("", isNull, value)
+      ve.code = genCode(ctx, ve)
+      if (ve.code != "") {
+        // Add `this` in the comment.
+        ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+      } else {
+        ve
+      }
+    }
   }
 
   /**
@@ -105,11 +117,11 @@ abstract class Expression extends TreeNode[Expression] {
    * The default behavior is to call the eval method of the expression. Concrete expression
    * implementations should override this to do actual code generation.
    *
-   * @param ctx a [[CodeGenContext]]
-   * @param ev an [[GeneratedExpressionCode]] with unique terms.
+   * @param ctx a [[CodegenContext]]
+   * @param ev an [[ExprCode]] with unique terms.
    * @return Java source code
    */
-  protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String
+  protected def genCode(ctx: CodegenContext, ev: ExprCode): String
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema
@@ -145,9 +157,35 @@ abstract class Expression extends TreeNode[Expression] {
         case (i1, i2) => i1 == i2
       }
     }
+    // Non-deterministic expressions cannot be semantic equal
+    if (!deterministic || !other.deterministic) return false
     val elements1 = this.productIterator.toSeq
     val elements2 = other.asInstanceOf[Product].productIterator.toSeq
     checkSemantic(elements1, elements2)
+  }
+
+  /**
+   * Returns the hash for this expression. Expressions that compute the same result, even if
+   * they differ cosmetically should return the same hash.
+   */
+  def semanticHash() : Int = {
+    def computeHash(e: Seq[Any]): Int = {
+      // See http://stackoverflow.com/questions/113511/hash-code-implementation
+      var hash: Int = 17
+      e.foreach(i => {
+        val h: Int = i match {
+          case e: Expression => e.semanticHash()
+          case Some(e: Expression) => e.semanticHash()
+          case t: Traversable[_] => computeHash(t.toSeq)
+          case null => 0
+          case other => other.hashCode()
+        }
+        hash = hash * 37 + h
+      })
+      hash
+    }
+
+    computeHash(this.productIterator.toSeq)
   }
 
   /**
@@ -169,12 +207,36 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyString: String = {
     transform {
-      case a: AttributeReference => PrettyAttribute(a.name)
+      case a: AttributeReference => PrettyAttribute(a.name, a.dataType)
       case u: UnresolvedAttribute => PrettyAttribute(u.name)
     }.toString
   }
 
-  override def toString: String = prettyName + children.mkString("(", ",", ")")
+  private def flatArguments = productIterator.flatMap {
+    case t: Traversable[_] => t
+    case single => single :: Nil
+  }
+
+  override def simpleString: String = toString
+
+  override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
+
+  /**
+   * Returns the string representation of this expression that is safe to be put in
+   * code comments of generated code.
+   */
+  protected def toCommentSafeString: String = this.toString
+    .replace("*/", "\\*\\/")
+    .replace("\\u", "\\\\u")
+
+  /**
+   * Returns SQL representation of this expression.  For expressions that don't have a SQL
+   * representation (e.g. `ScalaUDF`), this method should throw an `UnsupportedOperationException`.
+   */
+  @throws[UnsupportedOperationException](cause = "Expression doesn't have a SQL representation")
+  def sql: String = throw new UnsupportedOperationException(
+    s"Cannot map expression $this to its SQL representation"
+  )
 }
 
 
@@ -187,7 +249,7 @@ trait Unevaluable extends Expression {
   final override def eval(input: InternalRow = null): Any =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
-  final override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String =
+  final override protected def genCode(ctx: CodegenContext, ev: ExprCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 }
 
@@ -262,7 +324,7 @@ abstract class UnaryExpression extends Expression {
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
-   * null, and if not not null, use `f` to generate the expression.
+   * null, and if not null, use `f` to generate the expression.
    *
    * As an example, the following does a boolean inversion (i.e. NOT).
    * {{{
@@ -272,35 +334,47 @@ abstract class UnaryExpression extends Expression {
    * @param f function that accepts a variable name and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: String => String): String = {
     nullSafeCodeGen(ctx, ev, eval => {
-      s"${ev.primitive} = ${f(eval)};"
+      s"${ev.value} = ${f(eval)};"
     })
   }
 
   /**
    * Called by unary expressions to generate a code block that returns null if its parent returns
-   * null, and if not not null, use `f` to generate the expression.
+   * null, and if not null, use `f` to generate the expression.
    *
    * @param f function that accepts the non-null evaluation result name of child and returns Java
    *          code to compute the output.
    */
   protected def nullSafeCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: String => String): String = {
-    val eval = child.gen(ctx)
-    val resultCode = f(eval.primitive)
-    eval.code + s"""
-      boolean ${ev.isNull} = ${eval.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
+    val childGen = child.gen(ctx)
+    val resultCode = f(childGen.value)
+
+    if (nullable) {
+      val nullSafeEval = ctx.nullSafeExec(child.nullable, childGen.isNull)(resultCode)
+      s"""
+        ${childGen.code}
+        boolean ${ev.isNull} = ${childGen.isNull};
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $nullSafeEval
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${childGen.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
         $resultCode
-      }
-    """
+      """
+    }
   }
+
+  override def sql: String = s"($prettyName(${child.sql}))"
 }
 
 
@@ -353,11 +427,11 @@ abstract class BinaryExpression extends Expression {
    * @param f accepts two variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: (String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      s"${ev.primitive} = ${f(eval1, eval2)};"
+      s"${ev.value} = ${f(eval1, eval2)};"
     })
   }
 
@@ -370,26 +444,41 @@ abstract class BinaryExpression extends Expression {
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-      ctx: CodeGenContext,
-      ev: GeneratedExpressionCode,
+      ctx: CodegenContext,
+      ev: ExprCode,
       f: (String, String) => String): String = {
-    val eval1 = left.gen(ctx)
-    val eval2 = right.gen(ctx)
-    val resultCode = f(eval1.primitive, eval2.primitive)
-    s"""
-      ${eval1.code}
-      boolean ${ev.isNull} = ${eval1.isNull};
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${ev.isNull}) {
-        ${eval2.code}
-        if (!${eval2.isNull}) {
-          $resultCode
-        } else {
-          ${ev.isNull} = true;
-        }
+    val leftGen = left.gen(ctx)
+    val rightGen = right.gen(ctx)
+    val resultCode = f(leftGen.value, rightGen.value)
+
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(left.nullable, leftGen.isNull) {
+          rightGen.code + ctx.nullSafeExec(right.nullable, rightGen.isNull) {
+            s"""
+              ${ev.isNull} = false; // resultCode could change nullability.
+              $resultCode
+            """
+          }
       }
-    """
+
+      s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $nullSafeEval
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${leftGen.code}
+        ${rightGen.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
+    }
   }
+
+  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
@@ -426,6 +515,8 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
       TypeCheckResult.TypeCheckSuccess
     }
   }
+
+  override def sql: String = s"(${left.sql} $symbol ${right.sql})"
 }
 
 
@@ -445,7 +536,7 @@ abstract class TernaryExpression extends Expression {
 
   /**
    * Default behavior of evaluation according to the default nullability of TernaryExpression.
-   * If subclass of BinaryExpression override nullable, probably should also override this.
+   * If subclass of TernaryExpression override nullable, probably should also override this.
    */
   override def eval(input: InternalRow): Any = {
     val exprs = children
@@ -471,49 +562,70 @@ abstract class TernaryExpression extends Expression {
     sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
 
   /**
-   * Short hand for generating binary evaluation code.
+   * Short hand for generating ternary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
-   * @param f accepts two variable names and returns Java code to compute the output.
+   * @param f accepts three variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
+    ctx: CodegenContext,
+    ev: ExprCode,
     f: (String, String, String) => String): String = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2, eval3) => {
-      s"${ev.primitive} = ${f(eval1, eval2, eval3)};"
+      s"${ev.value} = ${f(eval1, eval2, eval3)};"
     })
   }
 
   /**
-   * Short hand for generating binary evaluation code.
+   * Short hand for generating ternary evaluation code.
    * If either of the sub-expressions is null, the result of this computation
    * is assumed to be null.
    *
-   * @param f function that accepts the 2 non-null evaluation result names of children
+   * @param f function that accepts the 3 non-null evaluation result names of children
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-    ctx: CodeGenContext,
-    ev: GeneratedExpressionCode,
+    ctx: CodegenContext,
+    ev: ExprCode,
     f: (String, String, String) => String): String = {
-    val evals = children.map(_.gen(ctx))
-    val resultCode = f(evals(0).primitive, evals(1).primitive, evals(2).primitive)
-    s"""
-      ${evals(0).code}
-      boolean ${ev.isNull} = true;
-      ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-      if (!${evals(0).isNull}) {
-        ${evals(1).code}
-        if (!${evals(1).isNull}) {
-          ${evals(2).code}
-          if (!${evals(2).isNull}) {
-            ${ev.isNull} = false;  // resultCode could change nullability
-            $resultCode
+    val leftGen = children(0).gen(ctx)
+    val midGen = children(1).gen(ctx)
+    val rightGen = children(2).gen(ctx)
+    val resultCode = f(leftGen.value, midGen.value, rightGen.value)
+
+    if (nullable) {
+      val nullSafeEval =
+        leftGen.code + ctx.nullSafeExec(children(0).nullable, leftGen.isNull) {
+          midGen.code + ctx.nullSafeExec(children(1).nullable, midGen.isNull) {
+            rightGen.code + ctx.nullSafeExec(children(2).nullable, rightGen.isNull) {
+              s"""
+                ${ev.isNull} = false; // resultCode could change nullability.
+                $resultCode
+              """
+            }
           }
-        }
       }
-    """
+
+      s"""
+        boolean ${ev.isNull} = true;
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $nullSafeEval
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${leftGen.code}
+        ${midGen.code}
+        ${rightGen.code}
+        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        $resultCode
+      """
+    }
+  }
+
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql).mkString(", ")
+    s"$prettyName($childrenSQL)"
   }
 }

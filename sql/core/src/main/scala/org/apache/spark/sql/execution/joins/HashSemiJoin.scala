@@ -33,44 +33,23 @@ trait HashSemiJoin {
 
   override def output: Seq[Attribute] = left.output
 
-  protected[this] def supportUnsafe: Boolean = {
-    (self.codegenEnabled && self.unsafeEnabled
-      && UnsafeProjection.canSupport(leftKeys)
-      && UnsafeProjection.canSupport(rightKeys)
-      && UnsafeProjection.canSupport(left.schema)
-      && UnsafeProjection.canSupport(right.schema))
-  }
-
-  override def outputsUnsafeRows: Boolean = supportUnsafe
-  override def canProcessUnsafeRows: Boolean = supportUnsafe
-  override def canProcessSafeRows: Boolean = !supportUnsafe
-
   protected def leftKeyGenerator: Projection =
-    if (supportUnsafe) {
-      UnsafeProjection.create(leftKeys, left.output)
-    } else {
-      newMutableProjection(leftKeys, left.output)()
-    }
+    UnsafeProjection.create(leftKeys, left.output)
 
   protected def rightKeyGenerator: Projection =
-    if (supportUnsafe) {
-      UnsafeProjection.create(rightKeys, right.output)
-    } else {
-      newMutableProjection(rightKeys, right.output)()
-    }
+    UnsafeProjection.create(rightKeys, right.output)
 
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected def buildKeyHashSet(
-      buildIter: Iterator[InternalRow], numBuildRows: LongSQLMetric): java.util.Set[InternalRow] = {
+      buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
     val hashSet = new java.util.HashSet[InternalRow]()
 
     // Create a Hash set of buildKeys
     val rightKey = rightKeyGenerator
     while (buildIter.hasNext) {
       val currentRow = buildIter.next()
-      numBuildRows += 1
       val rowKey = rightKey(currentRow)
       if (!rowKey.anyNull) {
         val keyExists = hashSet.contains(rowKey)
@@ -85,12 +64,10 @@ trait HashSemiJoin {
 
   protected def hashSemiJoin(
     streamIter: Iterator[InternalRow],
-    numStreamRows: LongSQLMetric,
     hashSet: java.util.Set[InternalRow],
     numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val joinKeys = leftKeyGenerator
     streamIter.filter(current => {
-      numStreamRows += 1
       val key = joinKeys(current)
       val r = !key.anyNull && hashSet.contains(key)
       if (r) numOutputRows += 1
@@ -100,13 +77,11 @@ trait HashSemiJoin {
 
   protected def hashSemiJoin(
       streamIter: Iterator[InternalRow],
-      numStreamRows: LongSQLMetric,
       hashedRelation: HashedRelation,
       numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val joinKeys = leftKeyGenerator
     val joinedRow = new JoinedRow
     streamIter.filter { current =>
-      numStreamRows += 1
       val key = joinKeys(current)
       lazy val rowBuffer = hashedRelation.get(key)
       val r = !key.anyNull && rowBuffer != null && rowBuffer.exists {

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
@@ -28,19 +28,7 @@ class AggregateOptimizeSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
-      ReplaceDistinctWithAggregate,
       RemoveLiteralFromGroupExpressions) :: Nil
-  }
-
-  test("replace distinct with aggregate") {
-    val input = LocalRelation('a.int, 'b.int)
-
-    val query = Distinct(input)
-    val optimized = Optimize.execute(query.analyze)
-
-    val correctAnswer = Aggregate(input.output, input.output, input)
-
-    comparePlans(optimized, correctAnswer)
   }
 
   test("remove literals in grouping expression") {

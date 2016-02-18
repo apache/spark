@@ -24,7 +24,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ManualClock
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
@@ -38,9 +37,8 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any],
-      taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics) {
+      accumUpdates: Seq[AccumulableInfo],
+      taskInfo: TaskInfo) {
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
@@ -167,14 +165,15 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+    val accumUpdates = taskSet.tasks.head.initialAccumulators.map { a => a.toInfo(Some(0L), None) }
 
     // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
-    var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
 
     // Tell it the task has finished
-    manager.handleSuccessfulTask(0, createTaskResult(0))
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
     assert(sched.endedTasks(0) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -184,10 +183,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(3)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val accumUpdatesByTask: Array[Seq[AccumulableInfo]] = taskSet.tasks.map { task =>
+      task.initialAccumulators.map { a => a.toInfo(Some(0L), None) }
+    }
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
-      var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
+      val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === "exec1")
@@ -198,14 +200,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", NO_PREF) === None)
 
     // Finish the first two tasks
-    manager.handleSuccessfulTask(0, createTaskResult(0))
-    manager.handleSuccessfulTask(1, createTaskResult(1))
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdatesByTask(0)))
+    manager.handleSuccessfulTask(1, createTaskResult(1, accumUpdatesByTask(1)))
     assert(sched.endedTasks(0) === Success)
     assert(sched.endedTasks(1) === Success)
     assert(!sched.finishedManagers.contains(manager))
 
     // Finish the last task
-    manager.handleSuccessfulTask(2, createTaskResult(2))
+    manager.handleSuccessfulTask(2, createTaskResult(2, accumUpdatesByTask(2)))
     assert(sched.endedTasks(2) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -511,7 +513,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.myLocalityLevels.sameElements(Array(NO_PREF, ANY)))
   }
 
-  test("Executors are added but exit normally while running tasks") {
+  test("Executors exit for reason unrelated to currently running tasks") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc)
     val taskSet = FakeTask.createTaskSet(4,
@@ -526,11 +528,15 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.executorAdded()
     assert(manager.resourceOffer("exec1", "host1", ANY).isDefined)
     sched.removeExecutor("execA")
-    manager.executorLost("execA", "host1", ExecutorExited(143, true, "Normal termination"))
+    manager.executorLost(
+      "execA",
+      "host1",
+      ExecutorExited(143, false, "Terminated for reason unrelated to running tasks"))
     assert(!sched.taskSetsFailed.contains(taskSet.id))
     assert(manager.resourceOffer("execC", "host2", ANY).isDefined)
     sched.removeExecutor("execC")
-    manager.executorLost("execC", "host2", ExecutorExited(1, false, "Abnormal termination"))
+    manager.executorLost(
+      "execC", "host2", ExecutorExited(1, true, "Terminated due to issue with running tasks"))
     assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
@@ -616,7 +622,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // multiple 1k result
     val r = sc.makeRDD(0 until 10, 10).map(genBytes(1024)).collect()
-    assert(10 === r.size )
+    assert(10 === r.size)
 
     // single 10M result
     val thrown = intercept[SparkException] {sc.makeRDD(genBytes(10 << 20)(0), 1).collect()}
@@ -757,11 +763,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Regression test for SPARK-2931
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc,
-        ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+      ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
     val taskSet = FakeTask.createTaskSet(3,
-      Seq(HostTaskLocation("host1")),
-      Seq(HostTaskLocation("host2")),
-      Seq(HDFSCacheTaskLocation("host3")))
+      Seq(TaskLocation("host1")),
+      Seq(TaskLocation("host2")),
+      Seq(TaskLocation("hdfs_cache_host3")))
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
     assert(manager.myLocalityLevels.sameElements(Array(PROCESS_LOCAL, NODE_LOCAL, ANY)))
@@ -776,8 +782,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.myLocalityLevels.sameElements(Array(ANY)))
   }
 
-  def createTaskResult(id: Int): DirectTaskResult[Int] = {
+  test("Test TaskLocation for different host type.") {
+    assert(TaskLocation("host1") === HostTaskLocation("host1"))
+    assert(TaskLocation("hdfs_cache_host1") === HDFSCacheTaskLocation("host1"))
+    assert(TaskLocation("executor_host1_3") === ExecutorCacheTaskLocation("host1", "3"))
+  }
+
+  private def createTaskResult(
+      id: Int,
+      accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo]): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
-    new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, new TaskMetrics)
+    new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
   }
 }

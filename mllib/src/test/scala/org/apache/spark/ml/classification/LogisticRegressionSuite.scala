@@ -17,16 +17,23 @@
 
 package org.apache.spark.ml.classification
 
+import scala.language.existentials
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions.lit
 
-class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class LogisticRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var dataset: DataFrame = _
   @transient var binaryDataset: DataFrame = _
@@ -43,24 +50,24 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
        import org.apache.spark.mllib.classification.LogisticRegressionSuite
        val nPoints = 10000
-       val weights = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
+       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
        val xMean = Array(5.843, 3.057, 3.758, 1.199)
        val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
        val data = sc.parallelize(LogisticRegressionSuite.generateMultinomialLogisticInput(
-         weights, xMean, xVariance, true, nPoints, 42), 1)
+         coefficients, xMean, xVariance, true, nPoints, 42), 1)
        data.map(x=> x.label + ", " + x.features(0) + ", " + x.features(1) + ", "
          + x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
      */
     binaryDataset = {
       val nPoints = 10000
-      val weights = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
+      val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
       val xMean = Array(5.843, 3.057, 3.758, 1.199)
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
 
-      val testData = generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42)
+      val testData =
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
 
-      sqlContext.createDataFrame(
-        generateMultinomialLogisticInput(weights, xMean, xVariance, true, nPoints, 42))
+      sqlContext.createDataFrame(sc.parallelize(testData, 4))
     }
   }
 
@@ -77,6 +84,7 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(lr.getPredictionCol === "prediction")
     assert(lr.getRawPredictionCol === "rawPrediction")
     assert(lr.getProbabilityCol === "probability")
+    assert(lr.getWeightCol === "")
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
     val model = lr.fit(dataset)
@@ -90,6 +98,17 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(model.getProbabilityCol === "probability")
     assert(model.intercept !== 0.0)
     assert(model.hasParent)
+  }
+
+  test("empty probabilityCol") {
+    val lr = new LogisticRegression().setProbabilityCol("")
+    val model = lr.fit(dataset)
+    assert(model.hasSummary)
+    // Validate that we re-insert a probability column for evaluation
+    val fieldNames = model.summary.predictions.schema.fieldNames
+    assert((dataset.schema.fieldNames.toSet).subsetOf(
+      fieldNames.toSet))
+    assert(fieldNames.exists(s => s.startsWith("probability_")))
   }
 
   test("setThreshold, getThreshold") {
@@ -191,6 +210,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = lr.fit(dataset)
     assert(model.numClasses === 2)
+    val numFeatures = dataset.select("features").first().getAs[Vector](0).size
+    assert(model.numFeatures === numFeatures)
 
     val threshold = model.getThreshold
     val results = model.transform(dataset)
@@ -216,41 +237,63 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("MultiClassSummarizer") {
     val summarizer1 = (new MultiClassSummarizer)
       .add(0.0).add(3.0).add(4.0).add(3.0).add(6.0)
-    assert(summarizer1.histogram.zip(Array[Long](1, 0, 0, 2, 1, 0, 1)).forall(x => x._1 === x._2))
+    assert(summarizer1.histogram === Array[Double](1, 0, 0, 2, 1, 0, 1))
     assert(summarizer1.countInvalid === 0)
     assert(summarizer1.numClasses === 7)
 
     val summarizer2 = (new MultiClassSummarizer)
       .add(1.0).add(5.0).add(3.0).add(0.0).add(4.0).add(1.0)
-    assert(summarizer2.histogram.zip(Array[Long](1, 2, 0, 1, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizer2.histogram === Array[Double](1, 2, 0, 1, 1, 1))
     assert(summarizer2.countInvalid === 0)
     assert(summarizer2.numClasses === 6)
 
     val summarizer3 = (new MultiClassSummarizer)
       .add(0.0).add(1.3).add(5.2).add(2.5).add(2.0).add(4.0).add(4.0).add(4.0).add(1.0)
-    assert(summarizer3.histogram.zip(Array[Long](1, 1, 1, 0, 3)).forall(x => x._1 === x._2))
+    assert(summarizer3.histogram === Array[Double](1, 1, 1, 0, 3))
     assert(summarizer3.countInvalid === 3)
     assert(summarizer3.numClasses === 5)
 
     val summarizer4 = (new MultiClassSummarizer)
       .add(3.1).add(4.3).add(2.0).add(1.0).add(3.0)
-    assert(summarizer4.histogram.zip(Array[Long](0, 1, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizer4.histogram === Array[Double](0, 1, 1, 1))
     assert(summarizer4.countInvalid === 2)
     assert(summarizer4.numClasses === 4)
 
     // small map merges large one
     val summarizerA = summarizer1.merge(summarizer2)
     assert(summarizerA.hashCode() === summarizer2.hashCode())
-    assert(summarizerA.histogram.zip(Array[Long](2, 2, 0, 3, 2, 1, 1)).forall(x => x._1 === x._2))
+    assert(summarizerA.histogram === Array[Double](2, 2, 0, 3, 2, 1, 1))
     assert(summarizerA.countInvalid === 0)
     assert(summarizerA.numClasses === 7)
 
     // large map merges small one
     val summarizerB = summarizer3.merge(summarizer4)
     assert(summarizerB.hashCode() === summarizer3.hashCode())
-    assert(summarizerB.histogram.zip(Array[Long](1, 2, 2, 1, 3)).forall(x => x._1 === x._2))
+    assert(summarizerB.histogram === Array[Double](1, 2, 2, 1, 3))
     assert(summarizerB.countInvalid === 5)
     assert(summarizerB.numClasses === 5)
+  }
+
+  test("MultiClassSummarizer with weighted samples") {
+    val summarizer1 = (new MultiClassSummarizer)
+      .add(label = 0.0, weight = 0.2).add(3.0, 0.8).add(4.0, 3.2).add(3.0, 1.3).add(6.0, 3.1)
+    assert(Vectors.dense(summarizer1.histogram) ~==
+      Vectors.dense(Array(0.2, 0, 0, 2.1, 3.2, 0, 3.1)) absTol 1E-10)
+    assert(summarizer1.countInvalid === 0)
+    assert(summarizer1.numClasses === 7)
+
+    val summarizer2 = (new MultiClassSummarizer)
+      .add(1.0, 1.1).add(5.0, 2.3).add(3.0).add(0.0).add(4.0).add(1.0).add(2, 0.0)
+    assert(Vectors.dense(summarizer2.histogram) ~==
+      Vectors.dense(Array[Double](1.0, 2.1, 0.0, 1, 1, 2.3)) absTol 1E-10)
+    assert(summarizer2.countInvalid === 0)
+    assert(summarizer2.numClasses === 6)
+
+    val summarizer = summarizer1.merge(summarizer2)
+    assert(Vectors.dense(summarizer.histogram) ~==
+      Vectors.dense(Array(1.2, 2.1, 0.0, 3.1, 4.2, 2.3, 3.1)) absTol 1E-10)
+    assert(summarizer.countInvalid === 0)
+    assert(summarizer.numClasses === 7)
   }
 
   test("binary logistic regression with intercept without regularization") {
@@ -267,8 +310,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0))
-       weights
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0))
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
@@ -279,14 +322,14 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.7996864
      */
     val interceptR = 2.8366423
-    val weightsR = Vectors.dense(-0.5895848, 0.8931147, -0.3925051, -0.7996864)
+    val coefficientsR = Vectors.dense(-0.5895848, 0.8931147, -0.3925051, -0.7996864)
 
     assert(model1.intercept ~== interceptR relTol 1E-3)
-    assert(model1.weights ~= weightsR relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsR relTol 1E-3)
 
     // Without regularization, with or without standardization will converge to the same solution.
     assert(model2.intercept ~== interceptR relTol 1E-3)
-    assert(model2.weights ~= weightsR relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-3)
   }
 
   test("binary logistic regression without intercept without regularization") {
@@ -303,9 +346,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights =
+       coefficients =
            coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 0, intercept=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
@@ -316,14 +359,14 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.7407946
      */
     val interceptR = 0.0
-    val weightsR = Vectors.dense(-0.3534996, 1.2964482, -0.3571741, -0.7407946)
+    val coefficientsR = Vectors.dense(-0.3534996, 1.2964482, -0.3571741, -0.7407946)
 
     assert(model1.intercept ~== interceptR relTol 1E-3)
-    assert(model1.weights ~= weightsR relTol 1E-2)
+    assert(model1.coefficients ~= coefficientsR relTol 1E-2)
 
     // Without regularization, with or without standardization should converge to the same solution.
     assert(model2.intercept ~== interceptR relTol 1E-3)
-    assert(model2.weights ~= weightsR relTol 1E-2)
+    assert(model2.coefficients ~= coefficientsR relTol 1E-2)
   }
 
   test("binary logistic regression with intercept with L1 regularization") {
@@ -342,8 +385,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12))
-       weights
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12))
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -354,10 +397,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.02481551
      */
     val interceptR1 = -0.05627428
-    val weightsR1 = Vectors.dense(0.0, 0.0, -0.04325749, -0.02481551)
+    val coefficientsR1 = Vectors.dense(0.0, 0.0, -0.04325749, -0.02481551)
 
     assert(model1.intercept ~== interceptR1 relTol 1E-2)
-    assert(model1.weights ~= weightsR1 absTol 2E-2)
+    assert(model1.coefficients ~= coefficientsR1 absTol 2E-2)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -366,9 +409,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
            standardize=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                            s0
@@ -379,10 +422,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5       .
      */
     val interceptR2 = 0.3722152
-    val weightsR2 = Vectors.dense(0.0, 0.0, -0.1665453, 0.0)
+    val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.1665453, 0.0)
 
     assert(model2.intercept ~== interceptR2 relTol 1E-2)
-    assert(model2.weights ~= weightsR2 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
   }
 
   test("binary logistic regression without intercept with L1 regularization") {
@@ -401,9 +444,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
            intercept=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -414,10 +457,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.03891782
      */
     val interceptR1 = 0.0
-    val weightsR1 = Vectors.dense(0.0, 0.0, -0.05189203, -0.03891782)
+    val coefficientsR1 = Vectors.dense(0.0, 0.0, -0.05189203, -0.03891782)
 
     assert(model1.intercept ~== interceptR1 relTol 1E-3)
-    assert(model1.weights ~= weightsR1 absTol 1E-3)
+    assert(model1.coefficients ~= coefficientsR1 absTol 1E-3)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -426,9 +469,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1, lambda = 0.12,
            intercept=FALSE, standardize=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -439,10 +482,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5       .
      */
     val interceptR2 = 0.0
-    val weightsR2 = Vectors.dense(0.0, 0.0, -0.08420782, 0.0)
+    val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.08420782, 0.0)
 
     assert(model2.intercept ~== interceptR2 absTol 1E-3)
-    assert(model2.weights ~= weightsR2 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
   }
 
   test("binary logistic regression with intercept with L2 regularization") {
@@ -461,8 +504,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37))
-       weights
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37))
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -473,10 +516,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.10062872
      */
     val interceptR1 = 0.15021751
-    val weightsR1 = Vectors.dense(-0.07251837, 0.10724191, -0.04865309, -0.10062872)
+    val coefficientsR1 = Vectors.dense(-0.07251837, 0.10724191, -0.04865309, -0.10062872)
 
     assert(model1.intercept ~== interceptR1 relTol 1E-3)
-    assert(model1.weights ~= weightsR1 relTol 1E-3)
+    assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -485,9 +528,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
            standardize=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -498,10 +541,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.06266838
      */
     val interceptR2 = 0.48657516
-    val weightsR2 = Vectors.dense(-0.05155371, 0.02301057, -0.11482896, -0.06266838)
+    val coefficientsR2 = Vectors.dense(-0.05155371, 0.02301057, -0.11482896, -0.06266838)
 
     assert(model2.intercept ~== interceptR2 relTol 1E-3)
-    assert(model2.weights ~= weightsR2 relTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
   }
 
   test("binary logistic regression without intercept with L2 regularization") {
@@ -520,9 +563,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
            intercept=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -533,10 +576,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.09799775
      */
     val interceptR1 = 0.0
-    val weightsR1 = Vectors.dense(-0.06099165, 0.12857058, -0.04708770, -0.09799775)
+    val coefficientsR1 = Vectors.dense(-0.06099165, 0.12857058, -0.04708770, -0.09799775)
 
     assert(model1.intercept ~== interceptR1 absTol 1E-3)
-    assert(model1.weights ~= weightsR1 relTol 1E-2)
+    assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -545,9 +588,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0, lambda = 1.37,
            intercept=FALSE, standardize=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                              s0
@@ -558,10 +601,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.053314311
      */
     val interceptR2 = 0.0
-    val weightsR2 = Vectors.dense(-0.005679651, 0.048967094, -0.093714016, -0.053314311)
+    val coefficientsR2 = Vectors.dense(-0.005679651, 0.048967094, -0.093714016, -0.053314311)
 
     assert(model2.intercept ~== interceptR2 absTol 1E-3)
-    assert(model2.weights ~= weightsR2 relTol 1E-2)
+    assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
   }
 
   test("binary logistic regression with intercept with ElasticNet regularization") {
@@ -580,8 +623,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21))
-       weights
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21))
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -592,10 +635,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.15458796
      */
     val interceptR1 = 0.57734851
-    val weightsR1 = Vectors.dense(-0.05310287, 0.0, -0.08849250, -0.15458796)
+    val coefficientsR1 = Vectors.dense(-0.05310287, 0.0, -0.08849250, -0.15458796)
 
     assert(model1.intercept ~== interceptR1 relTol 6E-3)
-    assert(model1.weights ~== weightsR1 absTol 5E-3)
+    assert(model1.coefficients ~== coefficientsR1 absTol 5E-3)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -604,9 +647,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
            standardize=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -617,10 +660,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.05350074
      */
     val interceptR2 = 0.51555993
-    val weightsR2 = Vectors.dense(0.0, 0.0, -0.18807395, -0.05350074)
+    val coefficientsR2 = Vectors.dense(0.0, 0.0, -0.18807395, -0.05350074)
 
     assert(model2.intercept ~== interceptR2 relTol 6E-3)
-    assert(model2.weights ~= weightsR2 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
   }
 
   test("binary logistic regression without intercept with ElasticNet regularization") {
@@ -639,9 +682,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
            intercept=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -652,10 +695,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5     -0.142534158
      */
     val interceptR1 = 0.0
-    val weightsR1 = Vectors.dense(-0.001005743, 0.072577857, -0.081203769, -0.142534158)
+    val coefficientsR1 = Vectors.dense(-0.001005743, 0.072577857, -0.081203769, -0.142534158)
 
     assert(model1.intercept ~== interceptR1 relTol 1E-3)
-    assert(model1.weights ~= weightsR1 absTol 1E-2)
+    assert(model1.coefficients ~= coefficientsR1 absTol 1E-2)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -664,9 +707,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 0.38, lambda = 0.21,
            intercept=FALSE, standardize=FALSE))
-       weights
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -677,10 +720,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5       .
      */
     val interceptR2 = 0.0
-    val weightsR2 = Vectors.dense(0.0, 0.03345223, -0.11304532, 0.0)
+    val coefficientsR2 = Vectors.dense(0.0, 0.03345223, -0.11304532, 0.0)
 
     assert(model2.intercept ~== interceptR2 absTol 1E-3)
-    assert(model2.weights ~= weightsR2 absTol 1E-3)
+    assert(model2.coefficients ~= coefficientsR2 absTol 1E-3)
   }
 
   test("binary logistic regression with intercept with strong L1 regularization") {
@@ -703,8 +746,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         }).histogram
 
     /*
-       For binary logistic regression with strong L1 regularization, all the weights will be zeros.
-       As a result,
+       For binary logistic regression with strong L1 regularization, all the coefficients
+       will be zeros. As a result,
        {{{
        P(0) = 1 / (1 + \exp(b)), and
        P(1) = \exp(b) / (1 + \exp(b))
@@ -713,14 +756,14 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        b = \log{P(1) / P(0)} = \log{count_1 / count_0}
        }}}
      */
-    val interceptTheory = math.log(histogram(1).toDouble / histogram(0).toDouble)
-    val weightsTheory = Vectors.dense(0.0, 0.0, 0.0, 0.0)
+    val interceptTheory = math.log(histogram(1) / histogram(0))
+    val coefficientsTheory = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptTheory relTol 1E-5)
-    assert(model1.weights ~= weightsTheory absTol 1E-6)
+    assert(model1.coefficients ~= coefficientsTheory absTol 1E-6)
 
     assert(model2.intercept ~== interceptTheory relTol 1E-5)
-    assert(model2.weights ~= weightsTheory absTol 1E-6)
+    assert(model2.coefficients ~= coefficientsTheory absTol 1E-6)
 
     /*
        Using the following R code to load the data and train the model using glmnet package.
@@ -729,8 +772,8 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data <- read.csv("path", header=FALSE)
        label = factor(data$V1)
        features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-       weights = coef(glmnet(features,label, family="binomial", alpha = 1.0, lambda = 6.0))
-       weights
+       coefficients = coef(glmnet(features,label, family="binomial", alpha = 1.0, lambda = 6.0))
+       coefficients
 
        5 x 1 sparse Matrix of class "dgCMatrix"
                             s0
@@ -741,10 +784,10 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
        data.V5       .
      */
     val interceptR = -0.248065
-    val weightsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
+    val coefficientsR = Vectors.dense(0.0, 0.0, 0.0, 0.0)
 
     assert(model1.intercept ~== interceptR relTol 1E-5)
-    assert(model1.weights ~== weightsR absTol 1E-6)
+    assert(model1.coefficients ~== coefficientsR absTol 1E-6)
   }
 
   test("evaluate on test set") {
@@ -781,4 +824,137 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
         .forall(x => x(0) >= x(1)))
 
   }
+
+  test("binary logistic regression with weighted samples") {
+    val (dataset, weightedDataset) = {
+      val nPoints = 1000
+      val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
+      val xMean = Array(5.843, 3.057, 3.758, 1.199)
+      val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
+      val testData =
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
+
+      // Let's over-sample the positive samples twice.
+      val data1 = testData.flatMap { case labeledPoint: LabeledPoint =>
+        if (labeledPoint.label == 1.0) {
+          Iterator(labeledPoint, labeledPoint)
+        } else {
+          Iterator(labeledPoint)
+        }
+      }
+
+      val rnd = new Random(8392)
+      val data2 = testData.flatMap { case LabeledPoint(label: Double, features: Vector) =>
+        if (rnd.nextGaussian() > 0.0) {
+          if (label == 1.0) {
+            Iterator(
+              Instance(label, 1.2, features),
+              Instance(label, 0.8, features),
+              Instance(0.0, 0.0, features))
+          } else {
+            Iterator(
+              Instance(label, 0.3, features),
+              Instance(1.0, 0.0, features),
+              Instance(label, 0.1, features),
+              Instance(label, 0.6, features))
+          }
+        } else {
+          if (label == 1.0) {
+            Iterator(Instance(label, 2.0, features))
+          } else {
+            Iterator(Instance(label, 1.0, features))
+          }
+        }
+      }
+
+      (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
+        sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+    }
+
+    val trainer1a = (new LogisticRegression).setFitIntercept(true)
+      .setRegParam(0.0).setStandardization(true)
+    val trainer1b = (new LogisticRegression).setFitIntercept(true).setWeightCol("weight")
+      .setRegParam(0.0).setStandardization(true)
+    val model1a0 = trainer1a.fit(dataset)
+    val model1a1 = trainer1a.fit(weightedDataset)
+    val model1b = trainer1b.fit(weightedDataset)
+    assert(model1a0.coefficients !~= model1a1.coefficients absTol 1E-3)
+    assert(model1a0.intercept !~= model1a1.intercept absTol 1E-3)
+    assert(model1a0.coefficients ~== model1b.coefficients absTol 1E-3)
+    assert(model1a0.intercept ~== model1b.intercept absTol 1E-3)
+  }
+
+  test("logistic regression with all labels the same") {
+    val sameLabels = dataset
+      .withColumn("zeroLabel", lit(0.0))
+      .withColumn("oneLabel", lit(1.0))
+
+    // fitIntercept=true
+    val lrIntercept = new LogisticRegression()
+      .setFitIntercept(true)
+      .setMaxIter(3)
+
+    val allZeroInterceptModel = lrIntercept
+      .setLabelCol("zeroLabel")
+      .fit(sameLabels)
+    assert(allZeroInterceptModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allZeroInterceptModel.intercept === Double.NegativeInfinity)
+    assert(allZeroInterceptModel.summary.totalIterations === 0)
+
+    val allOneInterceptModel = lrIntercept
+      .setLabelCol("oneLabel")
+      .fit(sameLabels)
+    assert(allOneInterceptModel.coefficients ~== Vectors.dense(0.0) absTol 1E-3)
+    assert(allOneInterceptModel.intercept === Double.PositiveInfinity)
+    assert(allOneInterceptModel.summary.totalIterations === 0)
+
+    // fitIntercept=false
+    val lrNoIntercept = new LogisticRegression()
+      .setFitIntercept(false)
+      .setMaxIter(3)
+
+    val allZeroNoInterceptModel = lrNoIntercept
+      .setLabelCol("zeroLabel")
+      .fit(sameLabels)
+    assert(allZeroNoInterceptModel.intercept === 0.0)
+    assert(allZeroNoInterceptModel.summary.totalIterations > 0)
+
+    val allOneNoInterceptModel = lrNoIntercept
+      .setLabelCol("oneLabel")
+      .fit(sameLabels)
+    assert(allOneNoInterceptModel.intercept === 0.0)
+    assert(allOneNoInterceptModel.summary.totalIterations > 0)
+  }
+
+  test("read/write") {
+    def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
+      assert(model.numClasses === model2.numClasses)
+      assert(model.numFeatures === model2.numFeatures)
+    }
+    val lr = new LogisticRegression()
+    testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
+      checkModelData)
+  }
+}
+
+object LogisticRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = ProbabilisticClassifierSuite.allParamSettings ++ Map(
+    "probabilityCol" -> "myProbability",
+    "thresholds" -> Array(0.4, 0.6),
+    "regParam" -> 0.01,
+    "elasticNetParam" -> 0.1,
+    "maxIter" -> 2,  // intentionally small
+    "fitIntercept" -> true,
+    "tol" -> 0.8,
+    "standardization" -> false,
+    "threshold" -> 0.6
+  )
 }

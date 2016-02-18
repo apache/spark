@@ -18,27 +18,31 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
 import scala.collection.mutable.HashMap
+import scala.reflect.runtime._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{Master, JobConf}
+import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.launcher.YarnCommandBuilderUtils
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 /**
@@ -78,7 +82,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   override def addSecretKeyToUserCredentials(key: String, secret: String) {
     val creds = new Credentials()
-    creds.addSecretKey(new Text(key), secret.getBytes("utf-8"))
+    creds.addSecretKey(new Text(key), secret.getBytes(UTF_8))
     addCurrentUserCredentials(creds)
   }
 
@@ -142,6 +146,125 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
     ConverterUtils.toContainerId(containerIdString)
   }
+
+  /**
+   * Obtains token for the Hive metastore, using the current user as the principal.
+   * Some exceptions are caught and downgraded to a log message.
+   * @param conf hadoop configuration; the Hive configuration will be based on this
+   * @return a token, or `None` if there's no need for a token (no metastore URI or principal
+   *         in the config), or if a binding exception was caught and downgraded.
+   */
+  def obtainTokenForHiveMetastore(conf: Configuration): Option[Token[DelegationTokenIdentifier]] = {
+    try {
+      obtainTokenForHiveMetastoreInner(conf, UserGroupInformation.getCurrentUser().getUserName)
+    } catch {
+      case e: ClassNotFoundException =>
+        logInfo(s"Hive class not found $e")
+        logDebug("Hive class not found", e)
+        None
+    }
+  }
+
+  /**
+   * Inner routine to obtains token for the Hive metastore; exceptions are raised on any problem.
+   * @param conf hadoop configuration; the Hive configuration will be based on this.
+   * @param username the username of the principal requesting the delegating token.
+   * @return a delegation token
+   */
+  private[yarn] def obtainTokenForHiveMetastoreInner(conf: Configuration,
+      username: String): Option[Token[DelegationTokenIdentifier]] = {
+    val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
+
+    // the hive configuration class is a subclass of Hadoop Configuration, so can be cast down
+    // to a Configuration and used without reflection
+    val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
+    // using the (Configuration, Class) constructor allows the current configuratin to be included
+    // in the hive config.
+    val ctor = hiveConfClass.getDeclaredConstructor(classOf[Configuration],
+      classOf[Object].getClass)
+    val hiveConf = ctor.newInstance(conf, hiveConfClass).asInstanceOf[Configuration]
+    val metastoreUri = hiveConf.getTrimmed("hive.metastore.uris", "")
+
+    // Check for local metastore
+    if (metastoreUri.nonEmpty) {
+      require(username.nonEmpty, "Username undefined")
+      val principalKey = "hive.metastore.kerberos.principal"
+      val principal = hiveConf.getTrimmed(principalKey, "")
+      require(principal.nonEmpty, "Hive principal $principalKey undefined")
+      logDebug(s"Getting Hive delegation token for $username against $principal at $metastoreUri")
+      val hiveClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.ql.metadata.Hive")
+      val closeCurrent = hiveClass.getMethod("closeCurrent")
+      try {
+        // get all the instance methods before invoking any
+        val getDelegationToken = hiveClass.getMethod("getDelegationToken",
+          classOf[String], classOf[String])
+        val getHive = hiveClass.getMethod("get", hiveConfClass)
+
+        // invoke
+        val hive = getHive.invoke(null, hiveConf)
+        val tokenStr = getDelegationToken.invoke(hive, username, principal).asInstanceOf[String]
+        val hive2Token = new Token[DelegationTokenIdentifier]()
+        hive2Token.decodeFromUrlString(tokenStr)
+        Some(hive2Token)
+      } finally {
+        Utils.tryLogNonFatalError {
+          closeCurrent.invoke(null)
+        }
+      }
+    } else {
+      logDebug("HiveMetaStore configured in localmode")
+      None
+    }
+  }
+
+  /**
+   * Obtain a security token for HBase.
+   *
+   * Requirements
+   *
+   * 1. `"hbase.security.authentication" == "kerberos"`
+   * 2. The HBase classes `HBaseConfiguration` and `TokenUtil` could be loaded
+   * and invoked.
+   *
+   * @param conf Hadoop configuration; an HBase configuration is created
+   *             from this.
+   * @return a token if the requirements were met, `None` if not.
+   */
+  def obtainTokenForHBase(conf: Configuration): Option[Token[TokenIdentifier]] = {
+    try {
+      obtainTokenForHBaseInner(conf)
+    } catch {
+      case e: ClassNotFoundException =>
+        logInfo(s"HBase class not found $e")
+        logDebug("HBase class not found", e)
+        None
+    }
+  }
+
+  /**
+   * Obtain a security token for HBase if `"hbase.security.authentication" == "kerberos"`
+   *
+   * @param conf Hadoop configuration; an HBase configuration is created
+   *             from this.
+   * @return a token if one was needed
+   */
+  def obtainTokenForHBaseInner(conf: Configuration): Option[Token[TokenIdentifier]] = {
+    val mirror = universe.runtimeMirror(getClass.getClassLoader)
+    val confCreate = mirror.classLoader.
+      loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
+      getMethod("create", classOf[Configuration])
+    val obtainToken = mirror.classLoader.
+      loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
+      getMethod("obtainToken", classOf[Configuration])
+    val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
+    if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
+      logDebug("Attempting to fetch HBase security token.")
+      Some(obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]])
+    } else {
+      None
+    }
+  }
+
 }
 
 object YarnSparkHadoopUtil {
@@ -234,7 +357,7 @@ object YarnSparkHadoopUtil {
    *
    * @return The correct OOM Error handler JVM option, platform dependent.
    */
-  def getOutOfMemoryErrorArgument : String = {
+  def getOutOfMemoryErrorArgument: String = {
     if (Utils.isWindows) {
       escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
@@ -313,6 +436,32 @@ object YarnSparkHadoopUtil {
 
   def getClassPathSeparator(): String = {
     classPathSeparatorField.get(null).asInstanceOf[String]
+  }
+
+  /**
+   * Getting the initial target number of executors depends on whether dynamic allocation is
+   * enabled.
+   * If not using dynamic allocation it gets the number of executors reqeusted by the user.
+   */
+  def getInitialTargetExecutorNumber(
+      conf: SparkConf,
+      numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
+    if (Utils.isDynamicAllocationEnabled(conf)) {
+      val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
+      val initialNumExecutors =
+        conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
+      val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", Int.MaxValue)
+      require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
+        s"initial executor number $initialNumExecutors must between min executor number" +
+          s"$minNumExecutors and max executor number $maxNumExecutors")
+
+      initialNumExecutors
+    } else {
+      val targetNumExecutors =
+        sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(numExecutors)
+      // System property can override environment variable.
+      conf.getInt("spark.executor.instances", targetNumExecutors)
+    }
   }
 }
 
