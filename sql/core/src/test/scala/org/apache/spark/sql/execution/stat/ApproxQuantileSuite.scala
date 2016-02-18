@@ -20,7 +20,6 @@ class ApproxQuantileSuite extends SparkFunSuite {
       threshold: Int): QuantileSummaries = {
     var summary = new QuantileSummaries(threshold, epsi)
     data.foreach { x =>
-      println(s"buildSummary: $x ${summary.hashCode()}")
       summary = summary.insert(x)
     }
     summary.compress()
@@ -39,17 +38,13 @@ class ApproxQuantileSuite extends SparkFunSuite {
   }
 
   for {
-//    (seq_name, data) <- Seq(increasing, decreasing, random)
-//    epsi <- Seq(0.1, 0.0001)
-//    compression <- Seq(1000, 10)
-    (seq_name, data) <- Seq(increasing, decreasing, random).slice(0,3)
-    epsi <- Seq(0.1, 0.0001) //.headOption
-    compression <- Seq(1000, 10) //.drop(1)
+    (seq_name, data) <- Seq(increasing, decreasing, random)
+    epsi <- Seq(0.1, 0.0001)
+    compression <- Seq(1000, 10)
   } {
 
     test(s"Extremas with epsi=$epsi and seq=$seq_name, compression=$compression") {
       val s = buildSummary(data, epsi, compression)
-//      println(s"samples: ${s.sampled}")
       val min_approx = s.query(0.0)
       assert(min_approx == data.min, s"Did not return the min: min=${data.min}, got $min_approx")
       val max_approx = s.query(1.0)
@@ -59,8 +54,6 @@ class ApproxQuantileSuite extends SparkFunSuite {
     test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression") {
       val s = buildSummary(data, epsi, compression)
       assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
-      println(s"samples: ${s.sampled}")
-      println(s"ranks: ${QuantileSummaries.printBuffer(s.sampled)}")
       checkQuantile(0.9999, data, s)
       checkQuantile(0.9, data, s)
       checkQuantile(0.5, data, s)
@@ -74,9 +67,6 @@ class ApproxQuantileSuite extends SparkFunSuite {
     (seq_name, data) <- Seq(increasing, decreasing, random)
     epsi <- Seq(0.1, 0.0001)
     compression <- Seq(1000, 10)
-//    (seq_name, data) <- Seq(increasing, decreasing, random)
-//    epsi <- Seq(0.1, 0.0001)
-//    compression <- Seq(1000, 10)
   } {
 
     val (data1, data2) = {

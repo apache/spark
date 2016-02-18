@@ -65,8 +65,8 @@ private[sql] object StatFunctions extends Logging {
       quantile: Double,
       epsilon: Double = QuantileSummaries.defaultEpsilon): Double = {
     require(quantile >= 0.0 && quantile <= 1.0, "Quantile must be in the range of (0.0, 1.0).")
-    val summaries = collectQuantileSummaries(df, col, epsilon)
-    summaries.query(quantile)
+    val Seq(Seq(res)) = multipleApproxQuantiles(df, Seq(col), Seq(quantile), epsilon)
+    res
   }
 
   /**
@@ -94,6 +94,8 @@ private[sql] object StatFunctions extends Logging {
     val emptySummaries = Array.fill(cols.size)(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))
 
+    // Note that it works more or less by accident as `rdd.aggregate` is not a pure function: this function returns
+    // the same array as given in the input (because `aggregate` reuses the same argument).
     def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
       var i = 0
       while (i < summaries.length) {
@@ -109,25 +111,6 @@ private[sql] object StatFunctions extends Logging {
     val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
 
     summaries.map { summary => quantiles.map(summary.query) }
-  }
-
-  private def collectQuantileSummaries(
-      df: DataFrame,
-      col: String,
-      epsilon: Double): QuantileSummaries = {
-    val data = df.schema.fields.find(_.name == col)
-    require(data.nonEmpty, s"Couldn't find column with name $col")
-    require(data.get.dataType.isInstanceOf[NumericType], "Quantile calculation for column " +
-      s"with dataType ${data.get.dataType} not supported.")
-
-    val column = Column(Cast(Column(col).expr, DoubleType))
-    df.select(column).rdd.aggregate(new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))(
-      seqOp = (summaries, row) => {
-        summaries.insert(row.getDouble(0))
-      },
-      combOp = (baseSummaries, other) => {
-        baseSummaries.merge(other)
-      })
   }
 
   /**
@@ -155,8 +138,6 @@ private[sql] object StatFunctions extends Logging {
       val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
     import QuantileSummaries._
-
-    private def getConstant(): Double = 2 * epsilon * count
 
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
@@ -217,89 +198,13 @@ private[sql] object StatFunctions extends Logging {
     def compress(): QuantileSummaries = {
       // Inserts all the elements first
       val inserted = this.withHeadInserted
-//      println(s"compress: inserted samples = ${printBuffer(inserted.sampled)}")
       assert(inserted.headSampled.isEmpty)
       assert(inserted.count == count + headSampled.size)
       val compressed = compressImmut(inserted.sampled, mergeThreshold = 2 * epsilon * inserted.count)
-//      println(s"compress: compressed samples = ${printBuffer(compressed)}")
-      return new QuantileSummaries(compressThreshold, epsilon, compressed, inserted.count)
-      sampled.clear()
-      sampled.appendAll(compressed)
-      return this
-      var i = 0
-      while (i < sampled.size - 1) {
-        val sample1 = sampled(i)
-        val sample2 = sampled(i + 1)
-        if (sample1.g + sample2.g + sample2.delta < math.floor(getConstant())) {
-          sampled.update(i + 1, Stats(sample2.value, sample1.g + sample2.g, sample2.delta))
-          sampled.remove(i)
-        }
-        i += 1
-      }
-      this
+      new QuantileSummaries(compressThreshold, epsilon, compressed, inserted.count)
     }
-
-//    def compressImmut(currentSamples: IndexedSeq[Stats]): ArrayBuffer[Stats] = {
-//      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
-//      val mergeThreshold = 2 * epsilon * count
-//      // Start for the last element, which is always part of the set.
-//      // The head contains the current new head, that may be merged with the current element.
-//      var head = currentSamples.last
-//      var i = currentSamples.size - 2
-//      // Do not compress the last element
-//      while (i >= 1) {
-//        // The current sample:
-//        val sample1 = currentSamples(i)
-//        // Do we need to compress?
-//        if (sample1.g + head.g + head.delta < mergeThreshold) {
-//          // Do not insert yet, just merge the current element into the head.
-//          head = head.copy(g = head.g + sample1.g)
-//        } else {
-//          // Prepend the current head, and keep the current sample as target for merging.
-//          res.prepend(head)
-//          head = sample1
-//        }
-//        i -= 1
-//      }
-//      res.prepend(head)
-//      // If necessary, add the minimum element:
-//      res.prepend(currentSamples.head)
-//      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
-//      res
-//    }
 
     def merge(other: QuantileSummaries): QuantileSummaries = {
-      return mergeImmutable(other)
-      if (other.count > 0 && count > 0) {
-        other.sampled.foreach { sample =>
-          val idx = sampled.indexWhere(s => s.value > sample.value)
-          if (idx == 0) {
-            val new_sampled = Stats(sampled(0).value, sampled(0).g, sampled(1).delta / 2)
-            sampled.update(0, new_sampled)
-            val new_sample = Stats(sample.value, sample.g, 0)
-            sampled.insert(0, new_sample)
-          } else if (idx == -1) {
-            val new_sampled = Stats(sampled(sampled.size - 1).value, sampled(sampled.size - 1).g,
-              (sampled(sampled.size - 2).delta * 2 * epsilon).toInt)
-            sampled.update(sampled.size - 1, new_sampled)
-            val new_sample = Stats(sample.value, sample.g, 0)
-            sampled.insert(sampled.size, new_sample)
-          } else {
-            val new_sample = Stats(sample.value, sample.g, (sampled(idx - 1).delta + sampled(idx).delta) / 2)
-            sampled.insert(idx, new_sample)
-          }
-        }
-        count += other.count
-        compress()
-        this
-      } else if (other.count > 0) {
-        other
-      } else {
-        this
-      }
-    }
-
-    def mergeImmutable(other: QuantileSummaries): QuantileSummaries = {
       if (other.count == 0) {
         this
       } else if (count == 0) {
@@ -345,7 +250,6 @@ private[sql] object StatFunctions extends Logging {
       // Target rank
       val rank = math.ceil(quantile * count).toInt
       val targetError = math.ceil(epsilon * count)
-//      println(s"query: quantile=$quantile, rank=$rank, targetError=$targetError")
       // Minimum rank at current sample
       var minRank = 0
       var i = 1
@@ -353,7 +257,6 @@ private[sql] object StatFunctions extends Logging {
         val curSample = sampled(i)
         minRank += curSample.g
         val maxRank = minRank + curSample.delta
-//        println(s"bracket $i: minRank=$minRank maxRank=$maxRank")
         if (maxRank - targetError <= rank && rank <= minRank + targetError) {
           return curSample.value
         }
@@ -364,15 +267,17 @@ private[sql] object StatFunctions extends Logging {
   }
 
   object QuantileSummaries {
+    // TODO(tjhunter) more tuning could be done one the constants here, but for now the main cost of the algorithm is
+    // accessing the data in SQL.
     /**
      * The default value for the compression threshold.
      */
-    val defaultCompressThreshold: Int = 1000
+    val defaultCompressThreshold: Int = 10000
 
     /**
      * The size of the head buffer.
      */
-    val defaultHeadSize: Int = 500000
+    val defaultHeadSize: Int = 50000
 
     /**
      * The default value for epsilon.
@@ -387,21 +292,11 @@ private[sql] object StatFunctions extends Logging {
      */
     case class Stats(value: Double, g: Int, delta: Int)
 
-    def printBuffer(buff: Seq[Stats]): String = {
-      var rankMin = 0
-      buff.map { s =>
-        rankMin += s.g
-        //        (s.value, rankMin, rankMin + rankMin + s.delta, s.g, s.delta)
-        s"${s.value}:$rankMin"
-      }.mkString(" ")
-    }
-
-    def compressImmut(currentSamples: IndexedSeq[Stats], mergeThreshold: Double): ArrayBuffer[Stats] = {
+    private def compressImmut(currentSamples: IndexedSeq[Stats], mergeThreshold: Double): ArrayBuffer[Stats] = {
       val res: ArrayBuffer[Stats] = ArrayBuffer.empty
       if (currentSamples.isEmpty) {
         return res
       }
-//      val mergeThreshold = 2 * epsilon * count
       // Start for the last element, which is always part of the set.
       // The head contains the current new head, that may be merged with the current element.
       var head = currentSamples.last
@@ -424,10 +319,8 @@ private[sql] object StatFunctions extends Logging {
       res.prepend(head)
       // If necessary, add the minimum element:
       res.prepend(currentSamples.head)
-//      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
       res
     }
-
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

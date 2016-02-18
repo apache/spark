@@ -89,6 +89,26 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     assert(firstRun == secondRun)
   }
 
+  test("approximate quantile") {
+    val df = Seq.tabulate(1000)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+
+    val expected_1 = 500.0
+    val expected_2 = 1600.0
+
+    val epsilons = List(0.1, 0.05, 0.001)
+
+    for (epsilon <- epsilons) {
+      val result1 = df.stat.approxQuantile("singles", 0.5, epsilon)
+      val result2 = df.stat.approxQuantile("doubles", 0.8, epsilon)
+
+      val error_1 = 2 * 1000 * epsilon
+      val error_2 = 2 * 2000 * epsilon
+
+      assert(math.abs(result1 - expected_1) < error_1)
+      assert(math.abs(result2 - expected_2) < error_2)
+    }
+  }
+
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.stat.corr("a", "b", "pearson")
@@ -123,27 +143,6 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
     val decimalRes = decimalData.stat.cov("a", "b")
     assert(math.abs(decimalRes) < 1e-12)
-  }
-
-  test("approximate quantile") {
-    val df = Seq.tabulate(1000)(i => (i, 2.0 * i)).toDF("singles", "doubles")
-
-    val expected_1 = 500.0
-    val expected_2 = 1600.0
-
-    val epsilons = List(0.1, 0.05, 0.001)
-
-    for (i <- 0 to 2) {
-      val epsilon = epsilons(i)
-      val result1 = df.stat.approxQuantile("singles", 0.5, epsilon)
-      val result2 = df.stat.approxQuantile("doubles", 0.8, epsilon)
-
-      val error_1 = 2 * 1000 * epsilon
-      val error_2 = 2 * 2000 * epsilon
-        
-      assert(math.abs(result1 - expected_1) < error_1)  
-      assert(math.abs(result2 - expected_2) < error_2)  
-    }
   }
 
   test("crosstab") {
@@ -303,6 +302,7 @@ class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Loggin
       // Do some warmup
       logDebug("warmup...")
       for (i <- 1 to 10) {
+        df.count()
         f
       }
       logDebug("execute...")
