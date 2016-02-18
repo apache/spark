@@ -82,7 +82,7 @@ trait RDDCheckpointTester { self: SparkFunSuite =>
     }
 
     // Test whether dependencies have been changed from its earlier parent RDD
-    assert(operatedRDD.dependencies.head.rdd != parentRDD)
+    assert(operatedRDD.dependencies.head != parentRDD)
 
     // Test whether the partitions have been changed from its earlier partitions
     assert(operatedRDD.partitions.toList != partitionsBeforeCheckpoint.toList)
