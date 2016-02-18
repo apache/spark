@@ -220,14 +220,10 @@ case class CatalogTable(
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None) {
 
-  require(
-    tableType == CatalogTableType.EXTERNAL_TABLE ||
-    tableType == CatalogTableType.INDEX_TABLE ||
-    tableType == CatalogTableType.MANAGED_TABLE ||
-    tableType == CatalogTableType.VIRTUAL_VIEW)
-
   /** Return the database this table was specified to belong to, assuming it exists. */
-  def database: String = specifiedDatabase.getOrElse(sys.error("database not resolved"))
+  def database: String = specifiedDatabase.getOrElse {
+    throw new AnalysisException(s"table $name did not specify database")
+  }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
   def qualifiedName: String = s"$database.$name"

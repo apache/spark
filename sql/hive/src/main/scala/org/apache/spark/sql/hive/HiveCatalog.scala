@@ -111,12 +111,11 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
   override def alterDatabase(dbDefinition: CatalogDatabase): Unit = withClient {
     val existingDb = getDatabase(dbDefinition.name)
     if (existingDb.properties == dbDefinition.properties) {
-      logWarning(s"Ignoring request to alter database ${dbDefinition.name} because " +
+      logWarning(s"Request to alter database ${dbDefinition.name} is a no-op because " +
         s"the provided database properties are the same as the old ones. Hive does not " +
         s"currently support altering other database fields.")
-    } else {
-      client.alterDatabase(dbDefinition)
     }
+    client.alterDatabase(dbDefinition)
   }
 
   override def getDatabase(db: String): CatalogDatabase = withClient {
@@ -175,7 +174,6 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
   }
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
-    requireDbExists(db)
     client.getTable(db, table)
   }
 
@@ -235,7 +233,6 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
       table: String,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = withClient {
-    requireTableExists(db, table)
     client.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -243,7 +240,6 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withClient {
-    requireTableExists(db, table)
     client.alterPartitions(db, table, newParts)
   }
 
@@ -251,14 +247,12 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
       db: String,
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = withClient {
-    requireTableExists(db, table)
     client.getPartition(db, table, spec)
   }
 
   override def listPartitions(
       db: String,
       table: String): Seq[CatalogTablePartition] = withClient {
-    requireTableExists(db, table)
     client.getAllPartitions(db, table)
   }
 

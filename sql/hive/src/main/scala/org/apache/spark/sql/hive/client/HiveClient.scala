@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
+
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -75,7 +77,7 @@ private[hive] trait HiveClient {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
   }
 
-  /** Returns the metadata for the specified table or None if it doens't exist. */
+  /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
 
   /** Creates a view with the given metadata. */
@@ -249,4 +251,12 @@ private[hive] trait HiveClient {
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
+
+  // --------------------------- //
+  //  Helper conversion methods  //
+  // --------------------------- //
+
+  def toHiveTable(table: CatalogTable): HiveTable
+
+  def toHivePartition(p: CatalogTablePartition, ht: HiveTable): HivePartition
 }

@@ -100,7 +100,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   private def newFunc(name: String): CatalogFunction = CatalogFunction(name, funcClass)
 
   /**
-   * Whether the catalog's table partitions equals the ones given.
+   * Whether the catalog's table partitions equal the ones given.
    * Note: Hive sets some random serde things, so we just compare the specs here.
    */
   private def catalogPartitionsEqual(

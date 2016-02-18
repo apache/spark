@@ -380,14 +380,14 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
             } else {
               CatalogTableType.MANAGED_TABLE
             },
-          schema = Seq.empty[CatalogColumn],
           storage = CatalogStorageFormat(
             locationUri = None,
             inputFormat = None,
             outputFormat = None,
             serde = None,
             serdeProperties = Map.empty[String, String]
-          ))
+          ),
+          schema = Seq.empty[CatalogColumn])
 
         // default storage type abbreviation (e.g. RCFile, ORC, PARQUET etc.)
         val defaultStorageType = hiveConf.getVar(HiveConf.ConfVars.HIVEDEFAULTFILEFORMAT)
