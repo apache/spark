@@ -29,12 +29,9 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 /**
  * An iterator interface used to pull the output from generated function for multiple operators
  * (whole stage codegen).
- *
- * TODO: replaced it by batched columnar format.
  */
-public class BufferedRowIterator {
+public abstract class BufferedRowIterator {
   protected LinkedList<InternalRow> currentRows = new LinkedList<>();
-  protected Iterator<InternalRow> input;
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
@@ -49,8 +46,16 @@ public class BufferedRowIterator {
     return currentRows.remove();
   }
 
-  public void setInput(Iterator<InternalRow> iter) {
-    input = iter;
+  /**
+   * Initializes from array of iterators of InternalRow.
+   */
+  public abstract void init(Iterator<InternalRow> iters[]);
+
+  /**
+   * Append a row to currentRows.
+   */
+  protected void append(InternalRow row) {
+    currentRows.add(row);
   }
 
   /**
@@ -74,9 +79,5 @@ public class BufferedRowIterator {
    *
    * After it's called, if currentRow is still null, it means no more rows left.
    */
-  protected void processNext() throws IOException {
-    if (input.hasNext()) {
-      currentRows.add(input.next());
-    }
-  }
+  protected abstract void processNext() throws IOException;
 }

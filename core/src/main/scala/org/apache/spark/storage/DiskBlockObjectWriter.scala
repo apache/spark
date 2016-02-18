@@ -97,6 +97,7 @@ private[spark] class DiskBlockObjectWriter(
   override def close() {
     if (initialized) {
       Utils.tryWithSafeFinally {
+        updateBytesWritten()
         if (syncWrites) {
           // Force outstanding writes to disk and track how long it takes
           objOut.flush()
@@ -203,7 +204,7 @@ private[spark] class DiskBlockObjectWriter(
     numRecordsWritten += 1
     writeMetrics.incRecordsWritten(1)
 
-    if (numRecordsWritten % 32 == 0) {
+    if (numRecordsWritten % 1024 == 0) {
       updateBytesWritten()
     }
   }

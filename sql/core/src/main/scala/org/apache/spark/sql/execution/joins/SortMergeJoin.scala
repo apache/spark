@@ -22,9 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryNode, RowIterator, SparkPlan}
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.{BinaryNode, CodegenSupport, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
  * Performs an sort merge join of two child relations.
@@ -34,7 +35,7 @@ case class SortMergeJoin(
     rightKeys: Seq[Expression],
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryNode {
+    right: SparkPlan) extends BinaryNode with CodegenSupport {
 
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -124,6 +125,178 @@ case class SortMergeJoin(
         override def getRow: InternalRow = resultProjection(joinRow)
       }.toScala
     }
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    left.execute() :: right.execute() :: Nil
+  }
+
+  private def createJoinKey(
+      ctx: CodegenContext,
+      row: String,
+      keys: Seq[Expression],
+      input: Seq[Attribute]): Seq[ExprCode] = {
+    ctx.INPUT_ROW = row
+    keys.map(BindReferences.bindReference(_, input).gen(ctx))
+  }
+
+  private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
+    vars.zipWithIndex.map { case (ev, i) =>
+      val value = ctx.freshName("value")
+      ctx.addMutableState(ctx.javaType(leftKeys(i).dataType), value, "")
+      val code =
+        s"""
+           |$value = ${ev.value};
+         """.stripMargin
+      ExprCode(code, "false", value)
+    }
+  }
+
+  private def genComparision(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
+    val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
+      s"""
+         |if (comp == 0) {
+         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
+         |}
+       """.stripMargin.trim
+    }
+    s"""
+       |comp = 0;
+       |${comparisons.mkString("\n")}
+     """.stripMargin
+  }
+
+  /**
+    * Generate a function to scan both left and right to find a match, returns the term for
+    * matched one row from left side and buffered rows from right side.
+    */
+  private def genScanner(ctx: CodegenContext): (String, String) = {
+    // Create class member for next row from both sides.
+    val leftRow = ctx.freshName("leftRow")
+    ctx.addMutableState("InternalRow", leftRow, "")
+    val rightRow = ctx.freshName("rightRow")
+    ctx.addMutableState("InternalRow", rightRow, s"$rightRow = null;")
+
+    // Create variables for join keys from both sides.
+    val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+    val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
+    val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
+    val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
+    // Copy the right key as class members so they could be used in next function call.
+    val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)
+
+    // A list to hold all matched rows from right side.
+    val matches = ctx.freshName("matches")
+    val clsName = classOf[java.util.ArrayList[InternalRow]].getName
+    ctx.addMutableState(clsName, matches, s"$matches = new $clsName();")
+    // Copy the left keys as class members so they could be used in next function call.
+    val matchedKeyVars = copyKeys(ctx, leftKeyVars)
+
+    ctx.addNewFunction("findNextInnerJoinRows",
+      s"""
+         |private boolean findNextInnerJoinRows(
+         |    scala.collection.Iterator leftIter,
+         |    scala.collection.Iterator rightIter) {
+         |  $leftRow = null;
+         |  int comp = 0;
+         |  while ($leftRow == null) {
+         |    if (!leftIter.hasNext()) return false;
+         |    $leftRow = (InternalRow) leftIter.next();
+         |    ${leftKeyVars.map(_.code).mkString("\n")}
+         |    if ($leftAnyNull) {
+         |      $leftRow = null;
+         |      continue;
+         |    }
+         |    if (!$matches.isEmpty()) {
+         |      ${genComparision(ctx, leftKeyVars, matchedKeyVars)}
+         |      if (comp == 0) {
+         |        return true;
+         |      }
+         |      $matches.clear();
+         |    }
+         |
+         |    do {
+         |      if ($rightRow == null) {
+         |        if (!rightIter.hasNext()) {
+         |          ${matchedKeyVars.map(_.code).mkString("\n")}
+         |          return !$matches.isEmpty();
+         |        }
+         |        $rightRow = (InternalRow) rightIter.next();
+         |        ${rightKeyTmpVars.map(_.code).mkString("\n")}
+         |        if ($rightAnyNull) {
+         |          $rightRow = null;
+         |          continue;
+         |        }
+         |        ${rightKeyVars.map(_.code).mkString("\n")}
+         |      }
+         |      ${genComparision(ctx, leftKeyVars, rightKeyVars)}
+         |      if (comp > 0) {
+         |        $rightRow = null;
+         |      } else if (comp < 0) {
+         |        if (!$matches.isEmpty()) {
+         |          ${matchedKeyVars.map(_.code).mkString("\n")}
+         |          return true;
+         |        }
+         |        $leftRow = null;
+         |      } else {
+         |        $matches.add($rightRow.copy());
+         |        $rightRow = null;;
+         |      }
+         |    } while ($leftRow != null);
+         |  }
+         |  return false; // unreachable
+         |}
+       """.stripMargin)
+
+    (leftRow, matches)
+  }
+
+  override def doProduce(ctx: CodegenContext): String = {
+    val leftInput = ctx.freshName("leftInput")
+    ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
+    val rightInput = ctx.freshName("rightInput")
+    ctx.addMutableState("scala.collection.Iterator", rightInput, s"$rightInput = inputs[1];")
+
+    val (leftRow, matches) = genScanner(ctx)
+
+    // Create variables for row from both sides.
+    ctx.INPUT_ROW = leftRow
+    val leftVars = left.output.zipWithIndex.map { case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).gen(ctx)
+    }
+    val rightRow = ctx.freshName("rightRow")
+    ctx.INPUT_ROW = rightRow
+    val rightVars = right.output.zipWithIndex.map { case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).gen(ctx)
+    }
+    val resultVars = leftVars ++ rightVars
+
+    // Check condition
+    ctx.currentVars = resultVars
+    val cond = if (condition.isDefined) {
+      BindReferences.bindReference(condition.get, output).gen(ctx)
+    } else {
+      ExprCode("", "false", "true")
+    }
+
+    val size = ctx.freshName("size")
+    val i = ctx.freshName("i")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    s"""
+       |while (findNextInnerJoinRows($leftInput, $rightInput)) {
+       |  ${leftVars.map(_.code).mkString("\n")}
+       |  int $size = $matches.size();
+       |  for (int $i = 0; $i < $size; $i ++) {
+       |    InternalRow $rightRow = (InternalRow) $matches.get($i);
+       |    ${rightVars.map(_.code).mkString("\n")}
+       |    ${cond.code}
+       |    if (${cond.isNull} || !${cond.value}) continue;
+       |    $numOutput.add(1);
+       |    ${consume(ctx, resultVars)}
+       |  }
+       |  if (shouldStop()) return;
+       |}
+     """.stripMargin
   }
 }
 

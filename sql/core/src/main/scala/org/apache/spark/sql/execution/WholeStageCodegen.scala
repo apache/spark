@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, LongSQLMetricValue, SQLMetric}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight, SortMergeJoin}
+import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 
 /**
   * An interface for those physical operators that support codegen.
@@ -39,6 +39,7 @@ trait CodegenSupport extends SparkPlan {
   private def variablePrefix: String = this match {
     case _: TungstenAggregate => "agg"
     case _: BroadcastHashJoin => "bhj"
+    case _: SortMergeJoin => "smj"
     case _ => nodeName.toLowerCase
   }
 
@@ -66,9 +67,11 @@ trait CodegenSupport extends SparkPlan {
   private var parent: CodegenSupport = null
 
   /**
-    * Returns the RDD of InternalRow which generates the input rows.
+    * Returns all the RDDs of InternalRow which generates the input rows.
+    *
+    * Note: right now we support up to two RDDs.
     */
-  def upstream(): RDD[InternalRow]
+  def upstreams(): Seq[RDD[InternalRow]]
 
   /**
     * Returns Java source code to process the rows from upstream.
@@ -172,19 +175,23 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 
   override def supportCodegen: Boolean = false
 
-  override def upstream(): RDD[InternalRow] = {
-    child.execute()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.execute() :: Nil
   }
 
   override def doProduce(ctx: CodegenContext): String = {
+    val input = ctx.freshName("input")
+    // Right now, Range is only used when there is one upstream.
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       | while (input.hasNext()) {
-       |   InternalRow $row = (InternalRow) input.next();
+       | while ($input.hasNext()) {
+       |   InternalRow $row = (InternalRow) $input.next();
        |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
        |   if (shouldStop()) {
@@ -208,7 +215,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
   *
   * -> execute()
   *     |
-  *  doExecute() --------->   upstream() -------> upstream() ------> execute()
+  *  doExecute() --------->   upstreams() -------> upstreams() ------> execute()
   *     |
   *      ----------------->   produce()
   *                             |
@@ -260,6 +267,9 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
 
         public GeneratedIterator(Object[] references) {
           this.references = references;
+        }
+
+        public void init(scala.collection.Iterator inputs[]) {
           ${ctx.initMutableStates()}
         }
 
@@ -276,19 +286,32 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     // println(s"${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
 
-    plan.upstream().mapPartitions { iter =>
-
-      val clazz = CodeGenerator.compile(source)
-      val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-      buffer.setInput(iter)
-      new Iterator[InternalRow] {
-        override def hasNext: Boolean = buffer.hasNext
-        override def next: InternalRow = buffer.next()
+    val rdds = plan.upstreams()
+    if (rdds.length == 1) {
+      rdds.head.mapPartitions { iter =>
+        val clazz = CodeGenerator.compile(cleanedSource)
+        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+        buffer.init(Array(iter))
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = buffer.hasNext
+          override def next: InternalRow = buffer.next()
+        }
+      }
+    } else {
+      // Right now, we support up to two upstreams.
+      rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
+        val clazz = CodeGenerator.compile(cleanedSource)
+        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+        buffer.init(Array(leftIter, rightIter))
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = buffer.hasNext
+          override def next: InternalRow = buffer.next()
+        }
       }
     }
   }
 
-  override def upstream(): RDD[InternalRow] = {
+  override def upstreams(): Seq[RDD[InternalRow]] = {
     throw new UnsupportedOperationException
   }
 
@@ -305,7 +328,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRows.add($row.copy());
+         |append($row.copy());
        """.stripMargin
     } else {
       assert(input != null)
@@ -317,13 +340,13 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         ctx.currentVars = input
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
-           | ${code.code.trim}
-           | currentRows.add(${code.value}.copy());
+           |${code.code.trim}
+           |append(${code.value}.copy());
          """.stripMargin
       } else {
         // There is no columns
         s"""
-           | currentRows.add(unsafeRow);
+           |append(unsafeRow);
          """.stripMargin
       }
     }
@@ -395,6 +418,9 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
               b.copy(left = apply(left))
             case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
               b.copy(right = apply(right))
+            case j @ SortMergeJoin(_, _, _, left, right) =>
+              // The children of SortMergeJoin should do codegen separately.
+              j.copy(left = apply(left), right = apply(right))
             case p if !supportCodegen(p) =>
               val input = apply(p)  // collapse them recursively
               inputs += input
