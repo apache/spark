@@ -455,7 +455,7 @@ class SparkSubmitSuite
 
     // Test files and archives (Yarn)
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
       "--class", "org.SomeClass",
       "--files", files,
       "--archives", archives,
@@ -513,7 +513,7 @@ class SparkSubmitSuite
     writer2.println("spark.yarn.dist.archives " + archives)
     writer2.close()
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
       "--class", "org.SomeClass",
       "--properties-file", f2.getPath,
       "thejar.jar"
@@ -567,16 +567,6 @@ class SparkSubmitSuite
       assert(appArgs.propertiesFile.startsWith(path))
       appArgs.executorMemory should be ("2.3g")
     }
-  }
-
-  test("Deprecate master yarn-[client|cluster] mode") {
-    val errorMessage = "Master %s is deprecated since 2.0. " +
-      "Please use master 'yarn' with specified deploy mode instead"
-    val testCases = Seq(
-      (Array("--master", "yarn-client"), errorMessage.format("yarn-client")),
-      (Array("--master", "yarn-cluster"), errorMessage.format("yarn-cluster")))
-
-    testCases.foreach { case (args, err) => testPrematureExit(args, err) }
   }
   // scalastyle:on println
 
