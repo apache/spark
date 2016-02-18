@@ -119,10 +119,38 @@ class ColumnPruningSuite extends PlanTest {
             Seq('c, Literal.create(null, StringType), 1),
             Seq('c, 'a, 2)),
           Seq('c, 'aa.int, 'gid.int),
-          Project(Seq('c, 'a),
+          Project(Seq('a, 'c),
             input))).analyze
 
     comparePlans(optimized, expected)
+  }
+
+  test("Column pruning on Filter") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query = Project('a :: Nil, Filter('c > Literal(0.0), input)).analyze
+    val expected =
+      Project('a :: Nil,
+        Filter('c > Literal(0.0),
+          Project(Seq('a, 'c), input))).analyze
+    comparePlans(Optimize.execute(query), expected)
+  }
+
+  test("Column pruning on except/intersect/distinct") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query = Project('a :: Nil, Except(input, input)).analyze
+    comparePlans(Optimize.execute(query), query)
+
+    val query2 = Project('a :: Nil, Intersect(input, input)).analyze
+    comparePlans(Optimize.execute(query2), query2)
+    val query3 = Project('a :: Nil, Distinct(input)).analyze
+    comparePlans(Optimize.execute(query3), query3)
+  }
+
+  test("Column prunign on Project") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query = Project('a :: Nil, Project(Seq('a, 'b), input)).analyze
+    val expected = Project(Seq('a), input).analyze
+    comparePlans(Optimize.execute(query), expected)
   }
 
   // todo: add more tests for column pruning
