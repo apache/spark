@@ -119,8 +119,8 @@ class OuterJoinEliminationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  // Need to enhance constructIsNotNullConstraints to support OR
-  ignore("joins: left to inner with complicated filter predicates") {
+  // evaluating if mixed OR and NOT expressions can eliminate all null-supplying rows
+  test("joins: left to inner with complicated filter predicates #1") {
     val x = testRelation.subquery('x)
     val y = testRelation1.subquery('y)
 
@@ -133,6 +133,62 @@ class OuterJoinEliminationSuite extends PlanTest {
     val right = testRelation1.where(!'e.isNull || ('d.isNotNull && 'f.isNull))
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // eval(emptyRow) of 'e.in(1, 2) will return null instead of false
+  test("joins: left to inner with complicated filter predicates #2") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery =
+      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
+        .where('e.in(1, 2))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation
+    val right = testRelation1.where('e.in(1, 2))
+    val correctAnswer =
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // evaluating if mixed OR and AND expressions can eliminate all null-supplying rows
+  test("joins: left to inner with complicated filter predicates #3") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery =
+      x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
+        .where((!'e.isNull || ('d.isNotNull && 'f.isNull)) && 'e.isNull)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation
+    val right = testRelation1.where((!'e.isNull || ('d.isNotNull && 'f.isNull)) && 'e.isNull)
+    val correctAnswer =
+      left.join(right, Inner, Option("a".attr === "d".attr)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // evaluating if the expressions that have both left and right attributes
+  // can eliminate all null-supplying rows
+  // FULL OUTER => INNER
+  test("joins: left to inner with complicated filter predicates #4") {
+    val x = testRelation.subquery('x)
+    val y = testRelation1.subquery('y)
+
+    val originalQuery =
+      x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
+        .where("x.b".attr + 3 === "y.e".attr)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val left = testRelation
+    val right = testRelation1
+    val correctAnswer =
+      left.join(right, Inner, Option("b".attr + 3 === "e".attr && "a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

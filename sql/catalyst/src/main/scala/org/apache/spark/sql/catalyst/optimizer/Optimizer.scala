@@ -946,12 +946,30 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  */
 object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
+  /**
+   * Returns whether the expression returns null or false when all inputs are nulls.
+   */
+  private def canFilterOutNull(e: Expression): Boolean = {
+    val attributes = e.references.toSeq
+    val emptyRow = new GenericInternalRow(attributes.length)
+    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    v == null || v == false
+  }
+
   private def buildNewJoin(filter: Filter, join: Join): Join = {
 
-    val leftHasNonNullPredicate = filter.constraints.filter(_.isInstanceOf[IsNotNull])
-      .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
-    val rightHasNonNullPredicate = filter.constraints.filter(_.isInstanceOf[IsNotNull])
-      .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
+    val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
+    val leftConditions = splitConjunctiveConditions
+      .filter(_.references.subsetOf(join.left.outputSet))
+    val rightConditions = splitConjunctiveConditions
+      .filter(_.references.subsetOf(join.right.outputSet))
+
+    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull) ||
+      filter.constraints.filter(_.isInstanceOf[IsNotNull])
+        .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
+    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull) ||
+      filter.constraints.filter(_.isInstanceOf[IsNotNull])
+        .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
 
     join.joinType match {
       case RightOuter if leftHasNonNullPredicate =>
