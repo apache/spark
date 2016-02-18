@@ -138,9 +138,11 @@ package object util {
   def usePrettyExpression(e: Expression): Expression = e transform {
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
-    case e @ GetStructField(child, _, Some(name)) => PrettyGetStructField(child, name, e.dataType)
+    case e: GetStructField =>
+      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
+      PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
     case e: GetArrayStructFields =>
-      PrettyGetArrayStructFields(e.child, e.ordinal, e.field.name, e.field.dataType)
+      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
   }
 
   def quoteIdentifier(name: String): String = {

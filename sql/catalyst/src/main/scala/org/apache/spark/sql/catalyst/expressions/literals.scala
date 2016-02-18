@@ -248,27 +248,15 @@ case class Literal protected (value: Any, dataType: DataType)
       // Escapes all backslashes and double quotes.
       "\"" + v.toString.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
-    case (v: Byte, ByteType) =>
-      s"CAST($v AS ${ByteType.simpleString.toUpperCase})"
-
-    case (v: Short, ShortType) =>
-      s"CAST($v AS ${ShortType.simpleString.toUpperCase})"
-
-    case (v: Long, LongType) =>
-      s"CAST($v AS ${LongType.simpleString.toUpperCase})"
-
-    case (v: Float, FloatType) =>
-      s"CAST($v AS ${FloatType.simpleString.toUpperCase})"
-
-    case (v: Decimal, DecimalType.Fixed(precision, scale)) =>
-      s"CAST($v AS ${DecimalType.simpleString.toUpperCase}($precision, $scale))"
-
-    case (v: Int, DateType) =>
-      s"DATE '${DateTimeUtils.toJavaDate(v)}'"
-
-    case (v: Long, TimestampType) =>
-      s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
-
+    case (v: Byte, ByteType) => v + "Y"
+    case (v: Short, ShortType) => v + "S"
+    case (v: Long, LongType) => v + "L"
+    // Float type doesn't have a suffix
+    case (v: Float, FloatType) => s"CAST($v AS ${FloatType.sql})"
+    case (v: Double, DoubleType) => v + "D"
+    case (v: Decimal, t: DecimalType) => s"CAST($v AS ${t.sql}"
+    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
+    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
     case _ => value.toString
   }
 }

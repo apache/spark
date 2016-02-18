@@ -136,12 +136,6 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
   }
 }
 
-case class PrettyGetStructField(child: Expression, name: String, dataType: DataType)
-  extends UnaryExpression with Unevaluable {
-
-  override def sql: String = s"${child.sql}.$name"
-}
-
 /**
  * For a child whose data type is an array of structs, extracts the `ordinal`-th fields of all array
  * elements, and returns them as a new array.
@@ -206,13 +200,6 @@ case class GetArrayStructFields(
       """
     })
   }
-}
-
-case class PrettyGetArrayStructFields(
-    child: Expression, ordinal: Int, name: String, dataType: DataType)
-  extends UnaryExpression with Unevaluable {
-
-  override def sql: String = s"${child.sql}.$name"
 }
 
 /**
