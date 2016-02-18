@@ -251,6 +251,69 @@ case class SortMergeJoin(
     (leftRow, matches)
   }
 
+  /**
+    * Creates variables for left part of result row.
+    *
+    * In order to defer the access after condition and also only access once in the loop,
+    * the variables should be declared separately from accessing the columns, we can't use the
+    * codegen of BoundReference here.
+    */
+  private def createLeftVars(ctx: CodegenContext, leftRow: String): Seq[ExprCode] = {
+    ctx.INPUT_ROW = leftRow
+    left.output.zipWithIndex.map { case (a, i) =>
+      val value = ctx.freshName("value")
+      val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
+      // declare it as class member, so we can access the column before or in the loop.
+      ctx.addMutableState(ctx.javaType(a.dataType), value, "")
+      if (a.nullable) {
+        val isNull = ctx.freshName("isNull")
+        ctx.addMutableState("boolean", isNull, "")
+        val code =
+          s"""
+             |$isNull = $leftRow.isNullAt($i);
+             |$value = $isNull ? ${ctx.defaultValue(a.dataType)} : ($valueCode);
+           """.stripMargin
+        ExprCode(code, isNull, value)
+      } else {
+        ExprCode(s"$value = $valueCode;", "false", value)
+      }
+    }
+  }
+
+  /**
+    * Creates the variables for right part of result row, using BoundReference, since the right
+    * part are accessed inside the loop.
+    */
+  private def createRightVar(ctx: CodegenContext, rightRow: String): Seq[ExprCode] = {
+    ctx.INPUT_ROW = rightRow
+    right.output.zipWithIndex.map { case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).gen(ctx)
+    }
+  }
+
+  /**
+    * Splits variables based on whether it's used by condition or not, returns the code to create
+    * these variables before the condition and after the condition.
+    *
+    * Only a few columns are used by condition, then we can skip the accessing of those columns
+    * that are not used by condition also filtered out by condition.
+    */
+  private def splitVarsByCondition(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode]): (String, String) = {
+    if (condition.isDefined) {
+      val condRefs = condition.get.references
+      val (used, notUsed) = attributes.zip(variables).partition{ case (a, ev) =>
+        condRefs.contains(a)
+      }
+      val beforeCond = used.map(_._2.code).mkString("\n")
+      val afterCond = notUsed.map(_._2.code).mkString("\n")
+      (beforeCond, afterCond)
+    } else {
+      (variables.map(_.code).mkString("\n"), "")
+    }
+  }
+
   override def doProduce(ctx: CodegenContext): String = {
     val leftInput = ctx.freshName("leftInput")
     ctx.addMutableState("scala.collection.Iterator", leftInput, s"$leftInput = inputs[0];")
@@ -260,15 +323,9 @@ case class SortMergeJoin(
     val (leftRow, matches) = genScanner(ctx)
 
     // Create variables for row from both sides.
-    ctx.INPUT_ROW = leftRow
-    val leftVars = left.output.zipWithIndex.map { case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).gen(ctx)
-    }
+    val leftVars = createLeftVars(ctx, leftRow)
     val rightRow = ctx.freshName("rightRow")
-    ctx.INPUT_ROW = rightRow
-    val rightVars = right.output.zipWithIndex.map { case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).gen(ctx)
-    }
+    val rightVars = createRightVar(ctx, rightRow)
     val resultVars = leftVars ++ rightVars
 
     // Check condition
@@ -278,19 +335,30 @@ case class SortMergeJoin(
     } else {
       ExprCode("", "false", "true")
     }
+    // Split the code of creating variables based on whether it's used by condition or not.
+    val loaded = ctx.freshName("loaded")
+    val (leftBefore, leftAfter) = splitVarsByCondition(left.output, leftVars)
+    val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
+
 
     val size = ctx.freshName("size")
     val i = ctx.freshName("i")
     val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
-       |  ${leftVars.map(_.code).mkString("\n")}
        |  int $size = $matches.size();
+       |  boolean $loaded = false;
+       |  $leftBefore
        |  for (int $i = 0; $i < $size; $i ++) {
        |    InternalRow $rightRow = (InternalRow) $matches.get($i);
-       |    ${rightVars.map(_.code).mkString("\n")}
+       |    $rightBefore
        |    ${cond.code}
        |    if (${cond.isNull} || !${cond.value}) continue;
+       |    if (!$loaded) {
+       |      $loaded = true;
+       |      $leftAfter
+       |    }
+       |    $rightAfter
        |    $numOutput.add(1);
        |    ${consume(ctx, resultVars)}
        |  }
