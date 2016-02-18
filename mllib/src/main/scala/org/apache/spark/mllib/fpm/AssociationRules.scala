@@ -30,27 +30,27 @@ import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
 
 /**
- * :: Experimental ::
- *
- * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
- * association rules which have a single item as the consequent.
- *
- */
+  * :: Experimental ::
+  *
+  * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
+  * association rules whose consequent's length are no longer than maxConsequent.
+  *
+  */
 @Since("1.5.0")
 @Experimental
-class AssociationRules private[fpm] (
-    private var minConfidence: Double,
-    private var maxConsequent: Int) extends Logging with Serializable {
+class AssociationRules private[fpm](
+  private var minConfidence: Double,
+  private var maxConsequent: Int = 1) extends Logging with Serializable {
 
   /**
-   * Constructs a default instance with default parameters {minConfidence = 0.8}.
-   */
+    * Constructs a default instance with default parameters {minConfidence = 0.8}.
+    */
   @Since("1.5.0")
   def this() = this(0.8, 1)
 
   /**
-   * Sets the minimal confidence (default: `0.8`).
-   */
+    * Sets the minimal confidence (default: `0.8`).
+    */
   @Since("1.5.0")
   def setMinConfidence(minConfidence: Double): this.type = {
     require(minConfidence >= 0.0 && minConfidence <= 1.0)
@@ -68,12 +68,12 @@ class AssociationRules private[fpm] (
   }
 
   /**
-   * Computes the association rules with confidence above [[minConfidence]].
+    * Computes the association rules with confidence above [[minConfidence]].
     *
     * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
-   * @return a [[Set[Rule[Item]]] containing the assocation rules.
-   *
-   */
+    * @return a [[Set[Rule[Item]]] containing the assocation rules.
+    *
+    */
   @Since("1.5.0")
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
 
@@ -90,11 +90,9 @@ class AssociationRules private[fpm] (
             val indices = itemset.items.flatMap(itemToRank.get).sorted.toSeq
             (indices, itemset.freq)
         }
-    }.persist()
+    }
 
-    val rules = AssociationRules.genRules(freqItemIndices, minConfidence, maxConsequent)
-
-    freqItemIndices.unpersist()
+    val rules = genRules(freqItemIndices, minConfidence, maxConsequent)
 
     rules.mapPartitions {
       it =>
@@ -113,84 +111,21 @@ class AssociationRules private[fpm] (
     val tag = fakeClassTag[Item]
     run(freqItemsets.rdd)(tag)
   }
-}
-
-@Since("1.5.0")
-object AssociationRules extends Logging {
-
-  /**
-   * :: Experimental ::
-   *
-   * An association rule between sets of items.
-    *
-    * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
-   *                   instead.
-   * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
-   *                   instead.
-   * @tparam Item item type
-   *
-   */
-  @Since("1.5.0")
-  @Experimental
-  class Rule[Item] private[fpm] (
-      @Since("1.5.0") val antecedent: Array[Item],
-      @Since("1.5.0") val consequent: Array[Item],
-      freqUnion: Double,
-      freqAntecedent: Double) extends Serializable {
-
-    /**
-     * Returns the confidence of the rule.
-     *
-     */
-    @Since("1.5.0")
-    def confidence: Double = freqUnion.toDouble / freqAntecedent
-
-    require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
-      val sharedItems = antecedent.toSet.intersect(consequent.toSet)
-      s"A valid association rule must have disjoint antecedent and " +
-        s"consequent but ${sharedItems} is present in both."
-    })
-
-    /**
-     * Returns antecedent in a Java List.
-     *
-     */
-    @Since("1.5.0")
-    def javaAntecedent: java.util.List[Item] = {
-      antecedent.toList.asJava
-    }
-
-    /**
-     * Returns consequent in a Java List.
-     *
-     */
-    @Since("1.5.0")
-    def javaConsequent: java.util.List[Item] = {
-      consequent.toList.asJava
-    }
-
-    override def toString: String = {
-      s"${antecedent.mkString("{", ",", "}")} => " +
-        s"${consequent.mkString("{", ",", "}")}: ${confidence}"
-    }
-  }
 
   /**
     * Computes the union seq.
     *
     * @param freqItemIndices Frequent Items with Integer Indices.
-    * @param minConfidence minConfidence.
-    * @param maxConsequent maxConsequent.
-    * @param numPartitions numPartitions.
+    * @param minConfidence   minConfidence.
+    * @param maxConsequent   maxConsequent.
     * @return an ordered union Seq of s1 and s2.
     *
     */
   @Since("1.5.0")
-  def genRules(freqItemIndices: RDD[(Seq[Int], Long)],
-               minConfidence: Double,
-               maxConsequent: Int,
-               numPartitions: Int
-              ): RDD[(Seq[Int], Seq[Int], Long, Long)] = {
+  private def genRules(freqItemIndices: RDD[(Seq[Int], Long)],
+                       minConfidence: Double,
+                       maxConsequent: Int
+                      ): RDD[(Seq[Int], Seq[Int], Long, Long)] = {
 
     val sc = freqItemIndices.sparkContext
 
@@ -216,7 +151,7 @@ object AssociationRules extends Logging {
 
       val numCandidates = candidates.count()
 
-      log.info(s"Candidates for $lenConsequent-consequent rules : $numCandidates")
+      log.info(s"Candidates for ${lenConsequent}-consequent rules : ${numCandidates}")
 
       if (numCandidates == 0 || lenConsequent > maxConsequent) rules
       else {
@@ -226,10 +161,10 @@ object AssociationRules extends Logging {
             Some(antecendent, consequent, freqUnion, freqAntecedent)
 
           case _ => None
-        }.persist()
+        }.cache()
 
         val numNewRules = newRules.count()
-        log.info(s"Generated $lenConsequent-consequent rules : $numNewRules")
+        log.info(s"Generated ${lenConsequent}-consequent rules : ${numNewRules}")
 
         if (lenConsequent == maxConsequent) sc.union(rules, newRules)
         else {
@@ -241,7 +176,7 @@ object AssociationRules extends Logging {
 
             case _ => None
 
-          }.groupByKey(numPartitions).flatMap {
+          }.groupByKey().flatMap {
 
             case ((union, freqUnion), consequents) if consequents.size > 1 =>
               val array = consequents.toArray
@@ -270,7 +205,7 @@ object AssociationRules extends Logging {
   }
 
   /**
-    * Computes the union seq.
+    * Computes the union seq of two sorted seq.
     *
     * @param s1 ordered Seq1
     * @param s2 ordered Seq2
@@ -278,7 +213,7 @@ object AssociationRules extends Logging {
     *
     */
   @Since("1.5.0")
-  def seqAdd(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
+  private def seqAdd(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
     var i1 = 0
     var i2 = 0
 
@@ -313,7 +248,7 @@ object AssociationRules extends Logging {
   }
 
   /**
-    * Computes the complementary seq.
+    * Computes the complementary seq of two sorted seq.
     *
     * @param s1 ordered Seq1
     * @param s2 ordered Seq2, must be a sub-sequence of s1
@@ -321,7 +256,7 @@ object AssociationRules extends Logging {
     *
     */
   @Since("1.5.0")
-  def seqMinus(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
+  private def seqMinus(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
     var i1 = 0
     var i2 = 0
 
@@ -353,4 +288,66 @@ object AssociationRules extends Logging {
 
     res
   }
+}
+
+@Since("1.5.0")
+object AssociationRules {
+
+  /**
+    * :: Experimental ::
+    *
+    * An association rule between sets of items.
+    *
+    * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
+    *                   instead.
+    * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
+    *                   instead.
+    * @tparam Item item type
+    *
+    */
+  @Since("1.5.0")
+  @Experimental
+  class Rule[Item] private[fpm](
+                                 @Since("1.5.0") val antecedent: Array[Item],
+                                 @Since("1.5.0") val consequent: Array[Item],
+                                 freqUnion: Double,
+                                 freqAntecedent: Double) extends Serializable {
+
+    /**
+      * Returns the confidence of the rule.
+      *
+      */
+    @Since("1.5.0")
+    def confidence: Double = freqUnion.toDouble / freqAntecedent
+
+    require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
+      val sharedItems = antecedent.toSet.intersect(consequent.toSet)
+      s"A valid association rule must have disjoint antecedent and " +
+        s"consequent but ${sharedItems} is present in both."
+    })
+
+    /**
+      * Returns antecedent in a Java List.
+      *
+      */
+    @Since("1.5.0")
+    def javaAntecedent: java.util.List[Item] = {
+      antecedent.toList.asJava
+    }
+
+    /**
+      * Returns consequent in a Java List.
+      *
+      */
+    @Since("1.5.0")
+    def javaConsequent: java.util.List[Item] = {
+      consequent.toList.asJava
+    }
+
+    override def toString: String = {
+      s"${antecedent.mkString("{", ",", "}")} => " +
+        s"${consequent.mkString("{", ",", "}")}: ${confidence}"
+    }
+  }
+
 }
