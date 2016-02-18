@@ -162,7 +162,6 @@ object UnifiedMemoryManager {
   // sufficient memory for the system even for small heaps. E.g. if we have a 1GB JVM, then
   // the memory used for execution and storage will be (1024 - 300) * 0.75 = 543MB by default.
   private val RESERVED_SYSTEM_MEMORY_BYTES = 300 * 1024 * 1024
-  private val MINIMUM_EXECUTOR_MEMORY_BYTES = 450 * 1024 * 1024
 
   def apply(conf: SparkConf, numCores: Int): UnifiedMemoryManager = {
     val maxMemory = getMaxMemory(conf)
@@ -181,15 +180,18 @@ object UnifiedMemoryManager {
     val systemMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime.maxMemory)
     val reservedMemory = conf.getLong("spark.testing.reservedMemory",
       if (conf.contains("spark.testing")) 0 else RESERVED_SYSTEM_MEMORY_BYTES)
-    val executorMemory = conf.getSizeAsBytes("spark.executor.memory", MINIMUM_EXECUTOR_MEMORY_BYTES)
     val minSystemMemory = reservedMemory * 1.5
-    if (executorMemory < MINIMUM_EXECUTOR_MEMORY_BYTES) {
-      throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
-        s"$MINIMUM_EXECUTOR_MEMORY_BYTES. Please increase executor memory.")
-    }
     if (systemMemory < minSystemMemory) {
       throw new IllegalArgumentException(s"System memory $systemMemory must " +
-        s"be at least $minSystemMemory. Please use increase driver memory")
+        s"be at least $minSystemMemory. Please increase heap size using the --driver-memory " +
+        s"option or spark.driver.memory in Spark configuration.")
+    }
+    // SPARK-12759 Check executor memory to fail fast if memory is insufficient
+    val executorMemory = conf.getSizeAsBytes("spark.executor.memory", minSystemMemory)
+    if (executorMemory < minSystemMemory) {
+      throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
+        s"$MINIMUM_EXECUTOR_MEMORY_BYTES. Please increase executor memory using the " +
+        s"--executor-memory option or spark.executor.memory in Spark configuration.")
     }
     val usableMemory = systemMemory - reservedMemory
     val memoryFraction = conf.getDouble("spark.memory.fraction", 0.75)
