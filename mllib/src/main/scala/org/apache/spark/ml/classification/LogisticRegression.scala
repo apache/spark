@@ -332,12 +332,13 @@ class LogisticRegression @Since("1.2.0") (
         val optimizer = if ($(elasticNetParam) == 0.0 || $(regParam) == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
         } else {
+          val standardizationParam = $(standardization)
           def regParamL1Fun = (index: Int) => {
             // Remove the L1 penalization on the intercept
             if (index == numFeatures) {
               0.0
             } else {
-              if ($(standardization)) {
+              if (standardizationParam) {
                 regParamL1
               } else {
                 // If `standardization` is false, we still standardize the data

@@ -18,8 +18,9 @@
 package org.apache.spark.streaming
 
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
@@ -550,9 +551,9 @@ class MapWithStateSuite extends SparkFunSuite
     val ssc = new StreamingContext(sc, Seconds(1))
     val inputStream = new TestInputStream(ssc, input, numPartitions = 2)
     val trackeStateStream = inputStream.map(x => (x, 1)).mapWithState(mapWithStateSpec)
-    val collectedOutputs = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]]
+    val collectedOutputs = new ConcurrentLinkedQueue[Seq[T]]
     val outputStream = new TestOutputStream(trackeStateStream, collectedOutputs)
-    val collectedStateSnapshots = new ArrayBuffer[Seq[(K, S)]] with SynchronizedBuffer[Seq[(K, S)]]
+    val collectedStateSnapshots = new ConcurrentLinkedQueue[Seq[(K, S)]]
     val stateSnapshotStream = new TestOutputStream(
       trackeStateStream.stateSnapshots(), collectedStateSnapshots)
     outputStream.register()
@@ -567,7 +568,7 @@ class MapWithStateSuite extends SparkFunSuite
 
     batchCounter.waitUntilBatchesCompleted(numBatches, 10000)
     ssc.stop(stopSparkContext = false)
-    (collectedOutputs, collectedStateSnapshots)
+    (collectedOutputs.asScala.toSeq, collectedStateSnapshots.asScala.toSeq)
   }
 
   private def assert[U](expected: Seq[Seq[U]], collected: Seq[Seq[U]], typ: String) {
@@ -583,4 +584,3 @@ class MapWithStateSuite extends SparkFunSuite
     }
   }
 }
-

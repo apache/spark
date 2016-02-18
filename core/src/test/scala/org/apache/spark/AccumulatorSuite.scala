@@ -34,6 +34,14 @@ import org.apache.spark.serializer.JavaSerializer
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
   import AccumulatorParam._
 
+  override def afterEach(): Unit = {
+    try {
+      Accumulators.clear()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
     new AccumulableParam[mutable.Set[A], A] {
       def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
@@ -268,7 +276,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("thing"), internal = false)
     val acc2 = new Accumulator(0L, LongAccumulatorParam, Some("thing2"), internal = false)
     val externalAccums = Seq(acc1, acc2)
-    val internalAccums = InternalAccumulator.create()
+    val internalAccums = InternalAccumulator.createAll()
     // Set some values; these should not be observed later on the "executors"
     acc1.setValue(10)
     acc2.setValue(20L)
@@ -323,35 +331,60 @@ private[spark] object AccumulatorSuite {
  * A simple listener that keeps track of the TaskInfos and StageInfos of all completed jobs.
  */
 private class SaveInfoListener extends SparkListener {
-  private val completedStageInfos: ArrayBuffer[StageInfo] = new ArrayBuffer[StageInfo]
-  private val completedTaskInfos: ArrayBuffer[TaskInfo] = new ArrayBuffer[TaskInfo]
-  private var jobCompletionCallback: (Int => Unit) = null // parameter is job ID
+  type StageId = Int
+  type StageAttemptId = Int
 
-  // Accesses must be synchronized to ensure failures in `jobCompletionCallback` are propagated
+  private val completedStageInfos = new ArrayBuffer[StageInfo]
+  private val completedTaskInfos =
+    new mutable.HashMap[(StageId, StageAttemptId), ArrayBuffer[TaskInfo]]
+
+  // Callback to call when a job completes. Parameter is job ID.
   @GuardedBy("this")
+  private var jobCompletionCallback: () => Unit = null
+  private var calledJobCompletionCallback: Boolean = false
   private var exception: Throwable = null
 
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
-  def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.toArray.toSeq
+  def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
+  def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
+    completedTaskInfos.get((stageId, stageAttemptId)).getOrElse(Seq.empty[TaskInfo])
 
-  /** Register a callback to be called on job end. */
-  def registerJobCompletionCallback(callback: (Int => Unit)): Unit = {
-    jobCompletionCallback = callback
+  /**
+   * If `jobCompletionCallback` is set, block until the next call has finished.
+   * If the callback failed with an exception, throw it.
+   */
+  def awaitNextJobCompletion(): Unit = synchronized {
+    if (jobCompletionCallback != null) {
+      while (!calledJobCompletionCallback) {
+        wait()
+      }
+      calledJobCompletionCallback = false
+      if (exception != null) {
+        exception = null
+        throw exception
+      }
+    }
   }
 
-  /** Throw a stored exception, if any. */
-  def maybeThrowException(): Unit = synchronized {
-    if (exception != null) { throw exception }
+  /**
+   * Register a callback to be called on job end.
+   * A call to this should be followed by [[awaitNextJobCompletion]].
+   */
+  def registerJobCompletionCallback(callback: () => Unit): Unit = {
+    jobCompletionCallback = callback
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = synchronized {
     if (jobCompletionCallback != null) {
       try {
-        jobCompletionCallback(jobEnd.jobId)
+        jobCompletionCallback()
       } catch {
         // Store any exception thrown here so we can throw them later in the main thread.
         // Otherwise, if `jobCompletionCallback` threw something it wouldn't fail the test.
         case NonFatal(e) => exception = e
+      } finally {
+        calledJobCompletionCallback = true
+        notify()
       }
     }
   }
@@ -361,7 +394,8 @@ private class SaveInfoListener extends SparkListener {
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-    completedTaskInfos += taskEnd.taskInfo
+    completedTaskInfos.getOrElseUpdate(
+      (taskEnd.stageId, taskEnd.stageAttemptId), new ArrayBuffer[TaskInfo]) += taskEnd.taskInfo
   }
 }
 

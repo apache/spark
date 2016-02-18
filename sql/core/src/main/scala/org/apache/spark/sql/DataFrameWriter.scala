@@ -96,6 +96,27 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameWriter = option(key, value.toString)
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameWriter = option(key, value.toString)
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameWriter = option(key, value.toString)
+
+  /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
    * @since 1.4.0
@@ -185,6 +206,17 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * This name must be unique among all the currently active queries in the associated SQLContext.
+   *
+   * @since 2.0.0
+   */
+  def queryName(queryName: String): DataFrameWriter = {
+    this.extraOptions += ("queryName" -> queryName)
+    this
+  }
+
+  /**
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
@@ -209,7 +241,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       extraOptions.toMap,
       normalizedParCols.getOrElse(Nil))
 
-    new StreamExecution(df.sqlContext, df.logicalPlan, sink)
+    df.sqlContext.continuousQueryManager.startQuery(
+      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, sink)
   }
 
   /**
