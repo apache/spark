@@ -270,10 +270,10 @@ class StreamingContext private[streaming] (
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
-  private[streaming] val streamingAccuIdToName: mutable.Map[Long, String] = {
+  private[streaming] val recoverableAccuNameToId: mutable.Map[String, Long] = {
     if (isCheckpointPresent) {
       // accumulators created by StreamingContext must provide name, so it's safe to call name.get
-      mutable.Map(_cp.trackedAccMap.mapValues(_.name.get).toSeq: _*)
+      mutable.Map(_cp.trackedAccs.map(accCP => (accCP.name, -1L)).toSeq: _*)
     } else {
       mutable.Map.empty
     }
@@ -285,25 +285,22 @@ class StreamingContext private[streaming] (
     *
     * @param initialValue   initial value of accumulator. It will be ignored when recovering from
     *                       checkpoint
-    * @param name           name is required as identity to find corresponding accumulator. This
-    *                       method make sure that all accumulators created by it have unique name
+    * @param name           name is required as identity to find corresponding accumulator.
     */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
-    if (isCheckpointPresent) {
-      val accs = _cp.trackedAccMap.values.filter(_.name == Some(name))
-      assert(accs.size == 1)
-      accs.head.asInstanceOf[Accumulator[T]]
-    } else {
-      if (streamingAccuIdToName.values.toSet.contains(name)) {
-        throw new SparkException(s"name ${name} is duplicated with other accumulator created" +
-          s" by StreamingContext")
-      } else {
-        val acc = sc.accumulator(initialValue, name)
-        streamingAccuIdToName(acc.id) = name
-        acc
-      }
+
+    def registerNewAccumulator(_initialV: T) : Accumulator[T] = {
+      val acc = sc.accumulator(_initialV, name)
+      recoverableAccuNameToId(name) = acc.id
+      acc
     }
+
+    val newInitialValue: T = if (isCheckpointPresent) {
+      _cp.trackedAccs.find(_.name == name).map(_.value).getOrElse(initialValue).asInstanceOf[T]
+    } else initialValue
+
+    registerNewAccumulator(newInitialValue)
   }
 
   /**
