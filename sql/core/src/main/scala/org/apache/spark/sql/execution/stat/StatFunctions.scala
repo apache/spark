@@ -74,7 +74,7 @@ private[sql] object StatFunctions extends Logging {
       val compressThreshold: Int,
       val epsilon: Double,
       val sampled: ArrayBuffer[Stats] = ArrayBuffer.empty,
-      private var count: Long = 0L,
+      private[stat] var count: Long = 0L,
       val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
     import QuantileSummaries._
@@ -87,7 +87,9 @@ private[sql] object StatFunctions extends Logging {
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
       if (headSampled.size >= defaultHeadSize) {
-        return insertBatch(headSampled.toArray)
+        return this.withHeadInserted
+      } else {
+        return this
       }
       var idx = sampled.indexWhere(_.value > x)
       if (idx == -1) {
@@ -112,12 +114,19 @@ private[sql] object StatFunctions extends Logging {
     /**
      * Inserts an array of (unsorted samples) in a batch, sorting the array first to traverse the summary statistics in
      * a single batch.
-     * @param array
+     *
+     * This method does not modify the current object and returns if necessary a new copy.
+     *
      * @return a new quantile summary object.
      */
-    def insertBatch(array: Array[Double]): QuantileSummaries = {
+    def withHeadInserted: QuantileSummaries = {
+      if (headSampled.isEmpty) {
+        return this
+      }
+      println(s"insertBatch: samples before = ${printBuffer(sampled)}")
+      println(s"insertBatch: head before = ${headSampled}")
       var currentCount = count
-      val sorted = array.sorted
+      val sorted = headSampled.toArray.sorted
       val newSamples: ArrayBuffer[Stats] = new ArrayBuffer[Stats]()
       // The index of the next element to insert
       var sampleIdx = 0
@@ -140,15 +149,29 @@ private[sql] object StatFunctions extends Logging {
         }
         val tuple = Stats(currentSample, 1, delta)
         newSamples.append(tuple)
-
         opsIdx += 1
       }
+
+      // Add all the remaining existing samples
+      while(sampleIdx < sampled.size) {
+        newSamples.append(sampled(sampleIdx))
+        sampleIdx += 1
+      }
+
+
+      println(s"insertBatch: samples after = ${printBuffer(newSamples)}")
       new QuantileSummaries(compressThreshold, epsilon, newSamples, currentCount)
     }
 
     def compress(): QuantileSummaries = {
-      val compressed = compressImmut(sampled)
-      return new QuantileSummaries(compressThreshold, epsilon, compressed, count)
+      // Inserts all the elements first
+      val inserted = this.withHeadInserted
+      println(s"compress: inserted samples = ${printBuffer(inserted.sampled)}")
+      assert(inserted.headSampled.isEmpty)
+      assert(inserted.count == count + headSampled.size)
+      val compressed = compressImmut(inserted.sampled, mergeThreshold = 2 * epsilon * inserted.count)
+      println(s"compress: compressed samples = ${printBuffer(compressed)}")
+      return new QuantileSummaries(compressThreshold, epsilon, compressed, inserted.count)
       sampled.clear()
       sampled.appendAll(compressed)
       return this
@@ -165,43 +188,34 @@ private[sql] object StatFunctions extends Logging {
       this
     }
 
-    def printBuffer(buff: Seq[Stats]): String = {
-      var rankMin = 0
-      buff.map { s =>
-        rankMin += s.g
-//        (s.value, rankMin, rankMin + rankMin + s.delta, s.g, s.delta)
-        s"${s.value}:$rankMin"
-      }.mkString(" ")
-    }
-
-    def compressImmut(currentSamples: IndexedSeq[Stats]): ArrayBuffer[Stats] = {
-      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
-      val mergeThreshold = 2 * epsilon * count
-      // Start for the last element, which is always part of the set.
-      // The head contains the current new head, that may be merged with the current element.
-      var head = currentSamples.last
-      var i = currentSamples.size - 2
-      // Do not compress the last element
-      while (i >= 1) {
-        // The current sample:
-        val sample1 = currentSamples(i)
-        // Do we need to compress?
-        if (sample1.g + head.g + head.delta < mergeThreshold) {
-          // Do not insert yet, just merge the current element into the head.
-          head = head.copy(g = head.g + sample1.g)
-        } else {
-          // Prepend the current head, and keep the current sample as target for merging.
-          res.prepend(head)
-          head = sample1
-        }
-        i -= 1
-      }
-      res.prepend(head)
-      // If necessary, add the minimum element:
-      res.prepend(currentSamples.head)
-      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
-      res
-    }
+//    def compressImmut(currentSamples: IndexedSeq[Stats]): ArrayBuffer[Stats] = {
+//      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+//      val mergeThreshold = 2 * epsilon * count
+//      // Start for the last element, which is always part of the set.
+//      // The head contains the current new head, that may be merged with the current element.
+//      var head = currentSamples.last
+//      var i = currentSamples.size - 2
+//      // Do not compress the last element
+//      while (i >= 1) {
+//        // The current sample:
+//        val sample1 = currentSamples(i)
+//        // Do we need to compress?
+//        if (sample1.g + head.g + head.delta < mergeThreshold) {
+//          // Do not insert yet, just merge the current element into the head.
+//          head = head.copy(g = head.g + sample1.g)
+//        } else {
+//          // Prepend the current head, and keep the current sample as target for merging.
+//          res.prepend(head)
+//          head = sample1
+//        }
+//        i -= 1
+//      }
+//      res.prepend(head)
+//      // If necessary, add the minimum element:
+//      res.prepend(currentSamples.head)
+//      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
+//      res
+//    }
 
     def merge(other: QuantileSummaries): QuantileSummaries = {
       return mergeImmutable(other)
@@ -261,7 +275,7 @@ private[sql] object StatFunctions extends Logging {
         }
 
         mergeCurrent(thisSampled, otherSampled)
-        val comp = compressImmut(res)
+        val comp = compressImmut(res, mergeThreshold = 2 * epsilon * count)
         new QuantileSummaries(other.compressThreshold, other.epsilon, comp, other.count + count)
       }
     }
@@ -307,7 +321,7 @@ private[sql] object StatFunctions extends Logging {
     /**
      * The size of the head buffer.
      */
-    val defaultHeadSize: Int = 50
+    val defaultHeadSize: Int = 500000
 
     /**
      * The default value for epsilon.
@@ -321,6 +335,45 @@ private[sql] object StatFunctions extends Logging {
      * @param delta the maximum span of the rank.
      */
     case class Stats(value: Double, g: Int, delta: Int)
+
+    def printBuffer(buff: Seq[Stats]): String = {
+      var rankMin = 0
+      buff.map { s =>
+        rankMin += s.g
+        //        (s.value, rankMin, rankMin + rankMin + s.delta, s.g, s.delta)
+        s"${s.value}:$rankMin"
+      }.mkString(" ")
+    }
+
+    def compressImmut(currentSamples: IndexedSeq[Stats], mergeThreshold: Double): ArrayBuffer[Stats] = {
+      val res: ArrayBuffer[Stats] = ArrayBuffer.empty
+//      val mergeThreshold = 2 * epsilon * count
+      // Start for the last element, which is always part of the set.
+      // The head contains the current new head, that may be merged with the current element.
+      var head = currentSamples.last
+      var i = currentSamples.size - 2
+      // Do not compress the last element
+      while (i >= 1) {
+        // The current sample:
+        val sample1 = currentSamples(i)
+        // Do we need to compress?
+        if (sample1.g + head.g + head.delta < mergeThreshold) {
+          // Do not insert yet, just merge the current element into the head.
+          head = head.copy(g = head.g + sample1.g)
+        } else {
+          // Prepend the current head, and keep the current sample as target for merging.
+          res.prepend(head)
+          head = sample1
+        }
+        i -= 1
+      }
+      res.prepend(head)
+      // If necessary, add the minimum element:
+      res.prepend(currentSamples.head)
+      println(s"compressImmut: threshold=$mergeThreshold, \nbefore=${printBuffer(currentSamples)}\nafter=${printBuffer(res)}")
+      res
+    }
+
   }
 
   /** Calculate the Pearson Correlation Coefficient for the given columns */

@@ -10,8 +10,8 @@ class ApproxQuantileSuite extends SparkFunSuite {
 
   private val r = new Random(1)
   private val n = 100
-  private val increasing = "increasing" -> (0 to n).map(_.toDouble)
-  private val decreasing = "decreasing" -> (n to 0 by -1).map(_.toDouble)
+  private val increasing = "increasing" -> (0 until n).map(_.toDouble)
+  private val decreasing = "decreasing" -> (n until 0 by -1).map(_.toDouble)
   private val random = "random" -> Seq.fill(n)(math.ceil(r.nextDouble() * 1000))
 
   private def buildSummary(
@@ -19,7 +19,10 @@ class ApproxQuantileSuite extends SparkFunSuite {
       epsi: Double,
       threshold: Int): QuantileSummaries = {
     var summary = new QuantileSummaries(threshold, epsi)
-    data.foreach(x => summary = summary.insert(x))
+    data.foreach { x =>
+      println(s"buildSummary: $x ${summary.hashCode()}")
+      summary = summary.insert(x)
+    }
     summary.compress()
   }
 
@@ -36,9 +39,12 @@ class ApproxQuantileSuite extends SparkFunSuite {
   }
 
   for {
-    (seq_name, data) <- Seq(increasing, decreasing, random)
-    epsi <- Seq(0.1, 0.0001)
-    compression <- Seq(1000, 10)
+//    (seq_name, data) <- Seq(increasing, decreasing, random)
+//    epsi <- Seq(0.1, 0.0001)
+//    compression <- Seq(1000, 10)
+    (seq_name, data) <- Seq(increasing, decreasing, random).slice(0,3)
+    epsi <- Seq(0.1, 0.0001) //.headOption
+    compression <- Seq(1000, 10) //.drop(1)
   } {
 
     test(s"Extremas with epsi=$epsi and seq=$seq_name, compression=$compression") {
@@ -52,8 +58,9 @@ class ApproxQuantileSuite extends SparkFunSuite {
 
     test(s"Some quantile values with epsi=$epsi and seq=$seq_name, compression=$compression") {
       val s = buildSummary(data, epsi, compression)
+      assert(s.count == data.size, s"Found count=${s.count} but data size=${data.size}")
       println(s"samples: ${s.sampled}")
-      println(s"ranks: ${s.printBuffer(s.sampled)}")
+      println(s"ranks: ${QuantileSummaries.printBuffer(s.sampled)}")
       checkQuantile(0.9999, data, s)
       checkQuantile(0.9, data, s)
       checkQuantile(0.5, data, s)
@@ -67,6 +74,9 @@ class ApproxQuantileSuite extends SparkFunSuite {
     (seq_name, data) <- Seq(increasing, decreasing, random)
     epsi <- Seq(0.1, 0.0001)
     compression <- Seq(1000, 10)
+//    (seq_name, data) <- Seq(increasing, decreasing, random)
+//    epsi <- Seq(0.1, 0.0001)
+//    compression <- Seq(1000, 10)
   } {
 
     val (data1, data2) = {
