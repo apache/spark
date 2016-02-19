@@ -75,7 +75,7 @@ public class JavaSaveLoadSuite {
 
     List<String> csvObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
-      jsonObjects.add(i + ", " + i + ", str" );
+      csvObjects.add(i + "," + i + ",str" );
     }
     JavaRDD<String> csvRDD = sc.parallelize(csvObjects);
     csvDf = sqlContext.read().csv(csvRDD);
