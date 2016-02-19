@@ -878,16 +878,16 @@ private class PythonAccumulatorParam(@transient private val serverHost: String, 
 /**
  * Create a class that extends PhantomReference.
  */
-private[spark] class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
+class FilePhantomReference(@transient var f: File, var q: ReferenceQueue[File])
   extends PhantomReference(f, q){
 
-  private def cleanup()
+  def cleanup()
   {
     f.delete()
   }
 }
 
-private[spark] class PhantomThread( threadName: String, queue: ReferenceQueue[File],
+class PhantomThread( threadName: String, queue: ReferenceQueue[File],
     phantomReferences: ListBuffer[FilePhantomReference])
   extends Thread with Logging {
 
@@ -895,15 +895,15 @@ private[spark] class PhantomThread( threadName: String, queue: ReferenceQueue[Fi
   {
     this.interrupt()
   }
-  
   setDaemon(true)
   override def run(): Unit = Utils.logUncaughtExceptions {
-    while(phantomReferences.size > 0)
+    while (phantomReferences.size > 0)
       {
        try {
         val ref = queue.remove().asInstanceOf[FilePhantomReference]
         phantomReferences -= ref
-       }catch {
+        ref.cleanup()
+       } catch {
         case ex: InterruptedException => {
           logDebug("Exception thrown after file object cleanup", ex)
          }
@@ -934,23 +934,22 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
     val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
     val file = File.createTempFile("broadcast", "", dir)
     val queue = new ReferenceQueue[File]()
-    val exitWhenFinished=false
+    val exitWhenFinished = false
     val phantomReferences = new ListBuffer[FilePhantomReference]()
     val threadName = "WeakReference"
-    val phantomThread=new PhantomThread(threadName,queue,phantomReferences)
-    
+    val phantomThread = new PhantomThread(threadName, queue, phantomReferences)
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
     phantomReferences += new FilePhantomReference(file, queue)
     phantomThread.start()
-    if(phantomReferences.size == 0)
+    if (phantomReferences.size == 0) {
       phantomThread.shutdownOnTaskCompletion
+    }
     Utils.tryWithSafeFinally {
       Utils.copyStream(in, out)
     } {
       out.close()
     }
   }
-
 }
 // scalastyle:on no.finalize
