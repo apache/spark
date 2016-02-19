@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.types.{StructField, StructType, ObjectType}
+import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
 
 /**
  * Helper functions for physical operators that work with user defined objects.
