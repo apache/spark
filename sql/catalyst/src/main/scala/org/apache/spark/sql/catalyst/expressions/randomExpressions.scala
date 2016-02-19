@@ -55,35 +55,21 @@ abstract class RDG extends LeafExpression with Nondeterministic {
 }
 
 /** Generate a random column with i.i.d. uniformly distributed values in [0, 1). */
-case class Rand(seed: Long, isDeterministic: Boolean = false) extends RDG {
+case class Rand(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
   def this() = this(Utils.random.nextLong())
 
-  def this(seed: Expression) = this(
-    seed match {
-      case IntegerLiteral(s) => s
-      case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")},
-    isDeterministic = false)
-
-  def this(seed: Expression, isDeterministic: Expression) = this(
-    seed match {
-      case IntegerLiteral(s) => s
-      case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")},
-    isDeterministic match {
-      case BooleanLiteral(s) =>
-        s
-      case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")})
+  def this(seed: Expression) = this(seed match {
+    case IntegerLiteral(s) => s
+    case _ => throw new AnalysisException("Input argument to rand must be an integer literal.")
+  })
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    if (!isDeterministic) {
-      ctx.addMutableState(className, rngTerm,
-        s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
-    } else {
-      ctx.addMutableState(className, rngTerm, s"$rngTerm = new $className(${seed}L);")
-    }
+    ctx.addMutableState(className, rngTerm,
+      s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();
@@ -92,38 +78,22 @@ case class Rand(seed: Long, isDeterministic: Boolean = false) extends RDG {
 }
 
 /** Generate a random column with i.i.d. gaussian random distribution. */
-case class Randn(seed: Long, isDeterministic: Boolean = false) extends RDG {
+case class Randn(seed: Long) extends RDG {
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
   def this() = this(Utils.random.nextLong())
 
-  def this(seed: Expression) = this(
-    seed match {
+  def this(seed: Expression) = this(seed match {
       case IntegerLiteral(s) => s
       case _ =>
-        throw new AnalysisException("Input argument to randn must be an integer literal.")},
-    isDeterministic = false)
-
-  def this(seed: Expression, isDeterministic: Expression) = this(
-    seed match {
-      case IntegerLiteral(s) => s
-      case _ =>
-        throw new AnalysisException("Input argument to randn must be an integer literal.")},
-    isDeterministic match {
-      case BooleanLiteral(s) =>
-        s
-      case _ =>
-        throw new AnalysisException("Input argument to randn must be an integer literal.")})
+        throw new AnalysisException("Input argument to randn must be an integer literal.")
+  })
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val rngTerm = ctx.freshName("rng")
     val className = classOf[XORShiftRandom].getName
-    if (!isDeterministic) {
-      ctx.addMutableState(className, rngTerm,
-        s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
-    } else {
-      ctx.addMutableState(className, rngTerm, s"$rngTerm = new $className(${seed}L);")
-    }
+    ctx.addMutableState(className, rngTerm,
+      s"$rngTerm = new $className(${seed}L + org.apache.spark.TaskContext.getPartitionId());")
     ev.isNull = "false"
     s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();

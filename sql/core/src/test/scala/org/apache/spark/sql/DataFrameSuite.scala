@@ -1306,22 +1306,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(1, "a"))
   }
 
-  test("SPARK-13333 Rand/Randn(seed) returns different results when using unionall") {
-    val df = sqlContext.createDataFrame(Seq(0, 1).map(Tuple1(_))).toDF("id")
-
-    val df0 = df.filter(col("id") === 0).withColumn("b", rand(12345, deterministic = true))
-    val df1 = df0.select("id", "b")
-    assert(df0.unionAll(df1).distinct().count() == 1)
-
-    val df2 = df.filter(col("id") === 0).withColumn("b", rand(12345))
-    val df3 = df2.select("id", "b")
-    assert(df2.unionAll(df3).distinct().count() == 2)
-
-    val df4 = df.filter(col("id") === 0).withColumn("b", rand())
-    val df5 = df4.select("id", "b")
-    assert(df4.unionAll(df5).distinct().count() == 2)
-  }
-
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     // invalid table name test as below

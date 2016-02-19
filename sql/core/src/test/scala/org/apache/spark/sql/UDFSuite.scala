@@ -27,7 +27,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
 
   test("built-in fixed arity expressions") {
     val df = sqlContext.emptyDataFrame
-    df.selectExpr("rand()", "randn()", "rand(5)", "randn(50)", "rand(5, 0)", "randn(50, 1)")
+    df.selectExpr("rand()", "randn()", "rand(5)", "randn(50)")
   }
 
   test("built-in vararg expressions") {
