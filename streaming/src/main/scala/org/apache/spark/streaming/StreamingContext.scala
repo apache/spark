@@ -287,8 +287,8 @@ class StreamingContext private[streaming] (
     *                       checkpoint
     * @param name           name is required as identity to find corresponding accumulator.
     */
-  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
-    : Accumulator[T] = {
+  def getOrCreateRecoverableAccumulator[T](initialValue: T, name: String)
+    (implicit param: AccumulatorParam[T]): Accumulator[T] = {
 
     def registerNewAccumulator(_initialV: T) : Accumulator[T] = {
       val acc = sc.accumulator(_initialV, name)

@@ -38,7 +38,7 @@ object RecoverableWordsCounter {
       // NOTICE:
       //  "StreamingContext.accumulator" is recoverable from checkpoint
       //  "SparkContext.accumlator" is NOT
-      instance = ssc.accumulator(0L, "WordsCounter")
+      instance = ssc.getOrCreateRecoverableAccumulator(0L, "WordsCounter")
     }
   }
 
