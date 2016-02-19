@@ -17,9 +17,6 @@
 
 package org.apache.spark.streaming.kinesis
 
-import java.util.concurrent.ConcurrentHashMap
-
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -232,7 +229,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.checkpoint(checkpointDir)
 
     val awsCredentials = KinesisTestUtils.getAWSCredentials()
-    val collectedData = new ConcurrentHashMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
+    val collectedData = new mutable.HashMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
 
     val kinesisStream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
@@ -243,13 +240,16 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     kinesisStream.foreachRDD((rdd: RDD[Array[Byte]], time: Time) => {
       val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
       val data = rdd.map { bytes => new String(bytes).toInt }.collect().toSeq
-      collectedData.put(time, (kRdd.arrayOfseqNumberRanges, data))
+      collectedData.synchronized {
+        collectedData(time) = (kRdd.arrayOfseqNumberRanges, data)
+      }
     })
 
     ssc.remember(Minutes(60)) // remember all the batches so that they are all saved in checkpoint
     ssc.start()
 
-    def numBatchesWithData: Int = collectedData.asScala.count(_._2._2.nonEmpty)
+    def numBatchesWithData: Int =
+      collectedData.synchronized { collectedData.count(_._2._2.nonEmpty) }
 
     def isCheckpointPresent: Boolean = Checkpoint.getCheckpointFiles(checkpointDir).nonEmpty
 
@@ -270,9 +270,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Verify that the recomputed RDDs are KinesisBackedBlockRDDs with the same sequence ranges
     // and return the same data
-    val times = collectedData.asScala.keySet
+    val times = collectedData.synchronized { collectedData.keySet }
     times.foreach { time =>
-      val (arrayOfSeqNumRanges, data) = collectedData.get(time)
+      val (arrayOfSeqNumRanges, data) = collectedData.synchronized { collectedData(time) }
       val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
       rdd shouldBe a [KinesisBackedBlockRDD[_]]
 
