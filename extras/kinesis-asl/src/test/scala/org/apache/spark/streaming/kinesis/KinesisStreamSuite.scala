@@ -142,9 +142,9 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     assert(kinesisRDD.config.regionName === dummyRegionName)
     assert(kinesisRDD.config.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
-    assert(kinesisRDD.config.awsCreds.getAWSAccessKeyId() ===
+    assert(kinesisRDD.config.awsCredentials.getAWSAccessKeyId() ===
       dummyAWSAccessKey)
-    assert(kinesisRDD.config.awsCreds.getAWSSecretKey() ===
+    assert(kinesisRDD.config.awsCredentials.getAWSSecretKey() ===
       dummyAWSSecretKey)
     assert(nonEmptyRDD.partitions.size === blockInfos.size)
     nonEmptyRDD.partitions.foreach { _ shouldBe a [KinesisBackedBlockRDDPartition] }

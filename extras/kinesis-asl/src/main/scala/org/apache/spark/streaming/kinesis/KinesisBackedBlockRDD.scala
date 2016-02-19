@@ -195,7 +195,7 @@ class KinesisSequenceRangeIterator(
   private def getRecordsAndNextKinesisIterator(
       shardIterator: String): (Iterator[Record], String) = {
     val getRecordsRequest = new GetRecordsRequest
-    getRecordsRequest.setRequestCredentials(config.awsCreds)
+    getRecordsRequest.setRequestCredentials(config.awsCredentials)
     getRecordsRequest.setShardIterator(shardIterator)
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
       s"getting records using shard iterator") {
@@ -215,7 +215,7 @@ class KinesisSequenceRangeIterator(
       iteratorType: ShardIteratorType,
       sequenceNumber: String): String = {
     val getShardIteratorRequest = new GetShardIteratorRequest
-    getShardIteratorRequest.setRequestCredentials(config.awsCreds)
+    getShardIteratorRequest.setRequestCredentials(config.awsCredentials)
     getShardIteratorRequest.setStreamName(streamName)
     getShardIteratorRequest.setShardId(shardId)
     getShardIteratorRequest.setShardIteratorType(iteratorType.toString)

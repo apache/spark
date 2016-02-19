@@ -27,6 +27,31 @@ import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.cloudwatch.AmazonCloudWatchClient
 
 
+/**
+ * Configuration container for settings to be passed down into the kinesis-client-library (KCL).
+ * This class is also used to build any of the client instances used by the KCL so we
+ * can override the things like the endpoint.
+ *
+ *
+ * @param kinesisAppName The name of kinesis application (used in creating dynamo tables)
+ * @param streamName The name of the actual kinesis stream
+ * @param endpointUrl The AWS API endpoint that will be used for the kinesis client
+ * @param regionName The AWS region that will be connected to (will set default enpoint for dynamo and cloudwatch)
+ * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
+ *                                 worker's initial starting position in the stream.
+ *                                 The values are either the beginning of the stream
+ *                                 per Kinesis' limit of 24 hours
+ *                                 (InitialPositionInStream.TRIM_HORIZON) or
+ *                                 the tip of the stream (InitialPositionInStream.LATEST).
+ * @param awsCredentialsOption None or Some instance of SerializableAWSCredentials that will be used for
+ * 														 credentials for Kinesis and the default for other clients. If None, then the
+ *                             DefaultAWSCredentialsProviderChain will be used
+ * @param dynamoEndpointUrl None or Some AWS API endpoint that will be used for the DynamoDBClient, if None, then the regionName
+ *                          will be used to build the default endpoint
+ * @param dynamoCredentials None or Some SerializableAWSCredentials that will be used as the credentials. If None,
+ * 													then the DefaultProviderKeychain will be used to build credentials
+ *
+ */
 case class KinesisConfig(
     kinesisAppName: String,
     streamName: String,
@@ -38,6 +63,13 @@ case class KinesisConfig(
     dynamoCredentials: Option[SerializableAWSCredentials] = None
     ) {
 
+  /**
+   * Builds a KinesisClientLibConfiguration object, which contains all the configuration options
+   * See the docs for more info:
+   * http://static.javadoc.io/com.amazonaws/amazon-kinesis-client/1.6.1/com/amazonaws/services/kinesis/clientlibrary/lib/worker/KinesisClientLibConfiguration.html
+   *
+   * @param workerId A unique string to identify a worker
+   */
   def buildKCLConfig(workerId: String): KinesisClientLibConfiguration = {
     // KCL config instance
     val kinesisClientLibConfiguration =
@@ -50,10 +82,10 @@ case class KinesisConfig(
 
   }
 
-  def region: Region = {
-    RegionUtils.getRegion(regionName)
-  }
 
+  /**
+   * Returns a AmazonDynamoDBClient instance configured with the proper region/endpoint
+   */
   def buildDynamoClient(): AmazonDynamoDBClient = {
     val client = if (dynamoCredentials.isDefined) new AmazonDynamoDBClient(resolveAWSCredentialsProvider(dynamoCredentials)) else new AmazonDynamoDBClient(resolveAWSCredentialsProvider())
     client.setRegion(region)
@@ -63,6 +95,9 @@ case class KinesisConfig(
     client
   }
 
+  /**
+   * Returns a AmazonKinesisClient instance configured with the proper region/endpoint
+   */
   def buildKinesisClient(): AmazonKinesisClient = {
     val client = new AmazonKinesisClient(resolveAWSCredentialsProvider())
     client.setRegion(region)
@@ -71,6 +106,9 @@ case class KinesisConfig(
 
   }
 
+  /**
+   * Returns a AmazonCloudWatchClient instance configured with the proper region/endpoint
+   */
   def buildCloudwatchClient(): AmazonCloudWatchClient = {
     val client = new AmazonCloudWatchClient(resolveAWSCredentialsProvider())
     client.setRegion(region)
@@ -78,9 +116,11 @@ case class KinesisConfig(
 
   }
 
-  def awsCreds: AWSCredentials = {
-    awsCredentialsOption.getOrElse(new DefaultAWSCredentialsProviderChain().getCredentials())
-
+  /**
+   * Returns the provided credentials or resolves a pair of credentials using DefaultAWSCredentialsProviderChain
+   */
+  def awsCredentials: AWSCredentials = {
+    resolveAWSCredentialsProvider().getCredentials()
   }
 
 
@@ -100,8 +140,22 @@ case class KinesisConfig(
     }
   }
 
+  /**
+   * Resolves string region into the region object
+   */
+  private def region: Region = {
+    RegionUtils.getRegion(regionName)
+  }
+
 }
 
+/**
+ * A small class that extends AWSCredentials that is marked as serializable, which
+ * is needed in order to have it serialized into a spark context
+ *
+ * @param accessKeyId An AWS accessKeyId
+ * @param secretKey An AWS secretKey
+ */
 case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
   extends AWSCredentials {
   override def getAWSAccessKeyId: String = accessKeyId
@@ -109,9 +163,7 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
 }
 
 private object KinesisConfig {
-
-
-  /*
+  /**
    * @param kinesisAppName  Kinesis application name used by the Kinesis Client Library
    *                        (KCL) to update DynamoDB
    * @param streamName   Kinesis stream name
