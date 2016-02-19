@@ -49,10 +49,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.status.api.v1.ApplicationAttemptInfo.this"),
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.status.api.v1.ApplicationAttemptInfo.<init>$default$5")
-      ) ++
-      // SPARK-12600 Remove SQL deprecated methods
-      Seq(
+          "org.apache.spark.status.api.v1.ApplicationAttemptInfo.<init>$default$5"),
+        // SPARK-12600 Remove SQL deprecated methods
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$QueryExecution"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLContext$SparkPlanner"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.sql.SQLContext.applySchema"),
@@ -107,12 +105,10 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.getCheckpointFile"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.api.java.JavaRDDLike.partitioner")
       ) ++
-      // SPARK-12481 Remove Hadoop 1.x
       Seq(
-        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.mapred.SparkHadoopMapRedUtil")
-      ) ++
-      // SPARK-12615 Remove deprecated APIs in core
-      Seq(
+        // SPARK-12481 Remove Hadoop 1.x
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.mapred.SparkHadoopMapRedUtil"),
+        // SPARK-12615 Remove deprecated APIs in core
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.<init>$default$6"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.numericRDDToDoubleRDDFunctions"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.intToIntWritable"),
@@ -171,8 +167,8 @@ object MimaExcludes {
         // SPARK-12149 Added new fields to ExecutorSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
-      // SPARK-12665 Remove deprecated and unused classes
       Seq(
+        // SPARK-12665 Remove deprecated and unused classes
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.graphx.GraphKryoRegistrator"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),

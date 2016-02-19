@@ -267,7 +267,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set("spark.akka.lookupTimeout", "4")
     assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
   }
-
 }
 
 class Class1 {}
