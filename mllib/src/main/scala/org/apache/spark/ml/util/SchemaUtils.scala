@@ -49,10 +49,10 @@ private[spark] object SchemaUtils {
     * @param dataTypes  required column data types
     */
   def checkColumnTypes(
-                        schema: StructType,
-                        colName: String,
-                        dataTypes: Seq[DataType],
-                        msg: String = ""): Unit = {
+      schema: StructType,
+      colName: String,
+      dataTypes: Seq[DataType],
+      msg: String = ""): Unit = {
     val actualDataType = schema(colName).dataType
     val message = if (msg != null && msg.trim.length > 0) " " + msg else ""
     require(dataTypes.exists(actualDataType.equals),
