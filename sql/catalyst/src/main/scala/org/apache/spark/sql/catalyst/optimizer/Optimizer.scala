@@ -950,6 +950,7 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
    * Returns whether the expression returns null or false when all inputs are nulls.
    */
   private def canFilterOutNull(e: Expression): Boolean = {
+    if (!e.deterministic) return false
     val attributes = e.references.toSeq
     val emptyRow = new GenericInternalRow(attributes.length)
     val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
@@ -988,7 +989,8 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
-      Filter(condition, buildNewJoin(f, j))
+      val newJoin = buildNewJoin(f, j)
+      if (j.joinType == newJoin.joinType) f else Filter(condition, newJoin)
   }
 }
 
