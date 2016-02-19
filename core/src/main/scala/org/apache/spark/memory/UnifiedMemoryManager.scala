@@ -17,10 +17,8 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockStatus, BlockId}
+import org.apache.spark.storage.BlockId
 
 /**
  * A [[MemoryManager]] that enforces a soft boundary between execution and storage such that
@@ -133,10 +131,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
     }
   }
 
-  override def acquireStorageMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
+  override def acquireStorageMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
     assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
     assert(numBytes >= 0)
     if (numBytes > maxStorageMemory) {
@@ -152,14 +147,11 @@ private[spark] class UnifiedMemoryManager private[memory] (
       onHeapExecutionMemoryPool.decrementPoolSize(memoryBorrowedFromExecution)
       storageMemoryPool.incrementPoolSize(memoryBorrowedFromExecution)
     }
-    storageMemoryPool.acquireMemory(blockId, numBytes, evictedBlocks)
+    storageMemoryPool.acquireMemory(blockId, numBytes)
   }
 
-  override def acquireUnrollMemory(
-      blockId: BlockId,
-      numBytes: Long,
-      evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    acquireStorageMemory(blockId, numBytes, evictedBlocks)
+  override def acquireUnrollMemory(blockId: BlockId, numBytes: Long): Boolean = synchronized {
+    acquireStorageMemory(blockId, numBytes)
   }
 }
 

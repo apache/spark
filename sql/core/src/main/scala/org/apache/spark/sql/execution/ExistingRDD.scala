@@ -18,14 +18,15 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, Attribute, AttributeSet, GenericMutableRow}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.sql.{Row, SQLContext}
-
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -99,17 +100,27 @@ private[sql] case class PhysicalRDD(
     rdd: RDD[InternalRow],
     override val nodeName: String,
     override val metadata: Map[String, String] = Map.empty,
-    isUnsafeRow: Boolean = false)
+    isUnsafeRow: Boolean = false,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
   extends LeafNode {
 
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   protected override def doExecute(): RDD[InternalRow] = {
-    if (isUnsafeRow) {
+    val unsafeRow = if (isUnsafeRow) {
       rdd
     } else {
       rdd.mapPartitionsInternal { iter =>
         val proj = UnsafeProjection.create(schema)
         iter.map(proj)
       }
+    }
+
+    val numOutputRows = longMetric("numOutputRows")
+    unsafeRow.map { r =>
+      numOutputRows += 1
+      r
     }
   }
 
@@ -131,6 +142,24 @@ private[sql] object PhysicalRDD {
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
     // All HadoopFsRelations output UnsafeRows
     val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
-    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+
+    val bucketSpec = relation match {
+      case r: HadoopFsRelation => r.getBucketSpec
+      case _ => None
+    }
+
+    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
+      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
+        s"(${output.map(_.name).mkString(", ")})")
+    }
+
+    bucketSpec.map { spec =>
+      val numBuckets = spec.numBuckets
+      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+      val partitioning = HashPartitioning(bucketColumns, numBuckets)
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
+    }.getOrElse {
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+    }
   }
 }

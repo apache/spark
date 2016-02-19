@@ -173,7 +173,7 @@ of the most common options to set are:
     stored on disk. This should be on a fast, local disk in your system. It can also be a
     comma-separated list of multiple directories on different disks.
 
-    NOTE: In Spark 1.0 and later this will be overriden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
+    NOTE: In Spark 1.0 and later this will be overridden by SPARK_LOCAL_DIRS (Standalone, Mesos) or
     LOCAL_DIRS (YARN) environment variables set by the cluster manager.
   </td>
 </tr>
@@ -392,6 +392,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.reducer.maxReqsInFlight</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote requests to fetch blocks at any given point.
+    When the number of hosts in the cluster increase, it might lead to very large number
+    of in-bound connections to one or more nodes, causing the workers to fail under load.
+    By allowing it to limit the number of fetch requests, this scenario can be mitigated.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -587,13 +597,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.closure.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Serializer class to use for closures. Currently only the Java serializer is supported.
-  </td>
-</tr>
-<tr>
   <td><code>spark.io.compression.codec</code></td>
   <td>lz4</td>
   <td>
@@ -687,10 +690,10 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.rdd.compress</code></td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for 
-    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java 
-    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python). 
-    Can save substantial space at the cost of some extra CPU time. 
+    Whether to compress serialized RDD partitions (e.g. for
+    <code>StorageLevel.MEMORY_ONLY_SER</code> in Java
+    and Scala or <code>StorageLevel.MEMORY_ONLY</code> in Python).
+    Can save substantial space at the cost of some extra CPU time.
   </td>
 </tr>
 <tr>
@@ -750,7 +753,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.memory.offHeap.enabled</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
   </td>
@@ -824,25 +827,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.cleaner.ttl</code></td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
-    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
-    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
-    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
-    this duration will be cleared as well.
-  </td>
-</tr>
-<tr>
   <td><code>spark.executor.cores</code></td>
-  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
-    The number of cores to use on each executor. For YARN and standalone mode only.
+    1 in YARN mode, all the available cores on the worker in
+    standalone and Mesos coarse-grained modes.
+  </td>
+  <td>
+    The number of cores to use on each executor.
 
-    In standalone mode, setting this parameter allows an application to run multiple executors on
-    the same worker, provided that there are enough cores on that worker. Otherwise, only one
-    executor per application will run on each worker.
+    In standalone and Mesos coarse-grained modes, setting this
+    parameter allows an application to run multiple executors on the
+    same worker, provided that there are enough cores on that
+    worker. Otherwise, only one executor per application will run on
+    each worker.
   </td>
 </tr>
 <tr>
@@ -955,52 +952,12 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.akka.frameSize</code></td>
+  <td><code>spark.rpc.message.maxSize</code></td>
   <td>128</td>
   <td>
     Maximum message size (in MB) to allow in "control plane" communication; generally only applies to map
     output size information sent between executors and the driver. Increase this if you are running
-    jobs with many thousands of map and reduce tasks and see messages about the frame size.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.interval</code></td>
-  <td>1000s</td>
-  <td>
-    This is set to a larger value to disable the transport failure detector that comes built in to
-    Akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger
-    interval value reduces network overhead and a smaller value ( ~ 1 s) might be more
-    informative for Akka's failure detector. Tune this in combination of <code>spark.akka.heartbeat.pauses</code>
-    if you need to. A likely positive use case for using failure detector would be: a sensistive
-    failure detector can help evict rogue executors quickly. However this is usually not the case
-    as GC pauses and network lags are expected in a real Spark cluster. Apart from that enabling
-    this leads to a lot of exchanges of heart beats between nodes leading to flooding the network
-    with those.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>6000s</td>
-  <td>
-     This is set to a larger value to disable the transport failure detector that comes built in to Akka.
-     It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart
-     beat pause for Akka. This can be used to control sensitivity to GC pauses. Tune
-     this along with <code>spark.akka.heartbeat.interval</code> if you need to.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.threads</code></td>
-  <td>4</td>
-  <td>
-    Number of actor threads to use for communication. Can be useful to increase on large clusters
-    when the driver has a lot of CPU cores.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.timeout</code></td>
-  <td>100s</td>
-  <td>
-    Communication timeout between Spark nodes.
+    jobs with many thousands of map and reduce tasks and see messages about the RPC message size.
   </td>
 </tr>
 <tr>
@@ -1027,27 +984,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the executor to listen on. This is used for communicating with the driver.
-    This is only relevant when using the Akka RPC backend.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.fileserver.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP file server to listen on.
-    This is only relevant when using the Akka RPC backend.
-  </td>
-</tr>
-<tr>
   <td><code>spark.network.timeout</code></td>
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>,
+    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1236,8 +1177,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to use dynamic resource allocation, which scales the number of executors registered
-    with this application up and down based on the workload. Note that this is currently only
-    available on YARN mode. For more detail, see the description
+    with this application up and down based on the workload. 
+    For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.
@@ -1429,8 +1370,7 @@ Apart from these, the following properties are also available, and may be useful
 
             <p>Use <code>spark.ssl.YYY.XXX</code> settings to overwrite the global configuration for
             particular protocol denoted by <code>YYY</code>. Currently <code>YYY</code> can be
-            either <code>akka</code> for Akka based connections or <code>fs</code> for file
-            server.</p>
+            only <code>fs</code> for file server.</p>
         </td>
     </tr>
     <tr>
@@ -1441,6 +1381,7 @@ Apart from these, the following properties are also available, and may be useful
             The reference list of protocols one can find on
             <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
+            Note: If not set, it will use the default cipher suites of JVM.
         </td>
     </tr>
     <tr>
@@ -1466,12 +1407,26 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
     <tr>
+        <td><code>spark.ssl.keyStoreType</code></td>
+        <td>JKS</td>
+        <td>
+            The type of the key-store.
+        </td>
+    </tr>
+    <tr>
         <td><code>spark.ssl.protocol</code></td>
         <td>None</td>
         <td>
             A protocol name. The protocol must be supported by JVM. The reference list of protocols
             one can find on <a href="https://blogs.oracle.com/java-platform-group/entry/diagnosing_tls_ssl_and_https">this</a>
             page.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.needClientAuth</code></td>
+        <td>false</td>
+        <td>
+            Set true if SSL needs client authentication.
         </td>
     </tr>
     <tr>
@@ -1487,6 +1442,13 @@ Apart from these, the following properties are also available, and may be useful
         <td>None</td>
         <td>
             A password to the trust-store.
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ssl.trustStoreType</code></td>
+        <td>JKS</td>
+        <td>
+            The type of the trust-store.
         </td>
     </tr>
 </table>
@@ -1506,6 +1468,14 @@ Apart from these, the following properties are also available, and may be useful
     maximum receiving rate of receivers. This rate is upper bounded by the values
     <code>spark.streaming.receiver.maxRate</code> and <code>spark.streaming.kafka.maxRatePerPartition</code>
     if they are set (see below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.backpressure.initialRate</code></td>
+  <td>not set</td>
+  <td>
+    This is the initial maximum receiving rate at which each receiver will receive data for the
+    first batch when the backpressure mechanism is enabled.
   </td>
 </tr>
 <tr>
@@ -1585,6 +1555,24 @@ Apart from these, the following properties are also available, and may be useful
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record on the driver. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
+    on the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record on the receivers. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the data WAL
+    on the receivers.
+  </td>
+</tr>
 </table>
 
 #### SparkR
@@ -1612,6 +1600,29 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 </table>
+
+#### Deploy
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaniing</th></tr>
+  <tr>
+    <td><code>spark.deploy.recoveryMode</code></td>
+    <td>NONE</td>
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
+    This is only applicable for cluster mode when running with Standalone or Mesos.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.url</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.dir</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+  </tr>
+</table>
+
 
 #### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations
@@ -1644,7 +1655,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
@@ -1670,6 +1681,8 @@ to use on each machine and maximum memory.
 
 Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
 compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
+
+Note: When running Spark on YARN in `cluster` mode, environment variables need to be set using the `spark.yarn.appMasterEnv.[EnvironmentVariableName]` property in your `conf/spark-defaults.conf` file.  Environment variables that are set in `spark-env.sh` will not be reflected in the YARN Application Master process in `cluster` mode.  See the [YARN-related Spark Properties](running-on-yarn.html#spark-properties) for more information.
 
 # Configuring Logging
 

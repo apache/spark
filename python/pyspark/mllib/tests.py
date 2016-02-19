@@ -77,21 +77,24 @@ except:
     pass
 
 ser = PickleSerializer()
-sc = SparkContext('local[4]', "MLlib tests")
 
 
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = sc
+        self.sc = SparkContext('local[4]', "MLlib tests")
+
+    def tearDown(self):
+        self.sc.stop()
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = sc
+        self.sc = SparkContext('local[4]', "MLlib tests")
         self.ssc = StreamingContext(self.sc, 1.0)
 
     def tearDown(self):
         self.ssc.stop(False)
+        self.sc.stop()
 
     @staticmethod
     def _eventually(condition, timeout=30.0, catch_assertions=False):
@@ -419,6 +422,17 @@ class ListTests(MLlibTestCase):
     as NumPy arrays.
     """
 
+    def test_bisecting_kmeans(self):
+        from pyspark.mllib.clustering import BisectingKMeans
+        data = array([0.0, 0.0, 1.0, 1.0, 9.0, 8.0, 8.0, 9.0]).reshape(4, 2)
+        bskm = BisectingKMeans()
+        model = bskm.train(self.sc.parallelize(data, 2), k=4)
+        p = array([0.0, 0.0])
+        rdd_p = self.sc.parallelize([p])
+        self.assertEqual(model.predict(p), model.predict(rdd_p).first())
+        self.assertEqual(model.computeCost(p), model.computeCost(rdd_p))
+        self.assertEqual(model.k, len(model.clusterCenters))
+
     def test_kmeans(self):
         from pyspark.mllib.clustering import KMeans
         data = [
@@ -474,6 +488,18 @@ class ListTests(MLlibTestCase):
                                           maxIterations=10, seed=63)
         for c1, c2 in zip(clusters1.weights, clusters2.weights):
             self.assertEqual(round(c1, 7), round(c2, 7))
+
+    def test_gmm_with_initial_model(self):
+        from pyspark.mllib.clustering import GaussianMixture
+        data = self.sc.parallelize([
+            (-10, -5), (-9, -4), (10, 5), (9, 4)
+        ])
+
+        gmm1 = GaussianMixture.train(data, 2, convergenceTol=0.001,
+                                     maxIterations=10, seed=63)
+        gmm2 = GaussianMixture.train(data, 2, convergenceTol=0.001,
+                                     maxIterations=10, seed=63, initialModel=gmm1)
+        self.assertAlmostEqual((gmm1.weights - gmm2.weights).sum(), 0.0)
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
@@ -1143,7 +1169,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             clusterWeights=[1.0, 1.0, 1.0, 1.0])
 
         predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
-        predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
+        predict_data = [self.sc.parallelize(batch, 1) for batch in predict_data]
         predict_stream = self.ssc.queueStream(predict_data)
         predict_val = stkm.predictOn(predict_stream)
 
@@ -1163,6 +1189,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         self._eventually(condition, catch_assertions=True)
 
+    @unittest.skip("SPARK-10086: Flaky StreamingKMeans test in PySpark")
     def test_trainOn_predictOn(self):
         """Test that prediction happens on the updated model."""
         stkm = StreamingKMeans(decayFactor=0.0, k=2)
@@ -1174,7 +1201,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         # classification based in the initial model would have been 0
         # proving that the model is updated.
         batches = [[[-0.5], [0.6], [0.8]], [[0.2], [-0.1], [0.3]]]
-        batches = [sc.parallelize(batch) for batch in batches]
+        batches = [self.sc.parallelize(batch) for batch in batches]
         input_stream = self.ssc.queueStream(batches)
         predict_results = []
 
@@ -1207,7 +1234,7 @@ class LinearDataGeneratorTests(MLlibTestCase):
             self.assertEqual(len(point.features), 3)
 
         linear_data = LinearDataGenerator.generateLinearRDD(
-            sc=sc, nexamples=6, nfeatures=2, eps=0.1,
+            sc=self.sc, nexamples=6, nfeatures=2, eps=0.1,
             nParts=2, intercept=0.0).collect()
         self.assertEqual(len(linear_data), 6)
         for point in linear_data:
@@ -1383,7 +1410,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0, 10.0], xMean, xVariance, 100, 42 + i, 0.1)
-            batches.append(sc.parallelize(batch))
+            batches.append(self.sc.parallelize(batch))
 
         input_stream = self.ssc.queueStream(batches)
         slr.trainOn(input_stream)
@@ -1407,7 +1434,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
-            batches.append(sc.parallelize(batch))
+            batches.append(self.sc.parallelize(batch))
 
         model_weights = []
         input_stream = self.ssc.queueStream(batches)
@@ -1440,7 +1467,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 0.0, [10.0, 10.0], [0.0, 0.0], [1.0 / 3.0, 1.0 / 3.0],
                 100, 42 + i, 0.1)
             batches.append(
-                sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
+                self.sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
 
         input_stream = self.ssc.queueStream(batches)
         output_stream = slr.predictOnValues(input_stream)
@@ -1471,7 +1498,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
-            batches.append(sc.parallelize(batch))
+            batches.append(self.sc.parallelize(batch))
 
         predict_batches = [
             b.map(lambda lp: (lp.label, lp.features)) for b in batches]
@@ -1557,6 +1584,7 @@ class ALSTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
+    from pyspark.mllib.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if xmlrunner:

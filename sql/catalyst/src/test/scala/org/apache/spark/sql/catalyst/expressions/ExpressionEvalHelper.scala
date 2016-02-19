@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
@@ -57,8 +58,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case _ => result == expected
     }
   }
@@ -82,7 +83,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           s"""
             |Code generation of $expression failed:
             |$e
-            |${e.getStackTraceString}
+            |${Utils.exceptionString(e)}
           """.stripMargin)
     }
   }
@@ -275,8 +276,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
-      case (result: Double, expected: Spread[Double]) =>
-        expected.isWithin(result)
+      case (result: Double, expected: Spread[Double @unchecked]) =>
+        expected.asInstanceOf[Spread[Double]].isWithin(result)
       case (result: Double, expected: Double) if result.isNaN && expected.isNaN =>
         true
       case (result: Float, expected: Float) if result.isNaN && expected.isNaN =>

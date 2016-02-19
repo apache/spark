@@ -17,13 +17,13 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.storage.BlockManagerId
+import scala.util.Random
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
-import org.roaringbitmap.RoaringBitmap
-
-import scala.util.Random
+import org.apache.spark.storage.BlockManagerId
 
 class MapStatusSuite extends SparkFunSuite {
 

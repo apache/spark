@@ -21,22 +21,24 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{PathFilter, FileStatus, FileSystem, Path}
-import org.apache.hadoop.mapred.{JobConf, FileInputFormat}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
-import org.apache.spark.sql.execution.datasources.{PartitioningUtils, PartitionSpec, Partition}
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.sql._
 import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.collection.BitSet
 
 /**
  * ::DeveloperApi::
@@ -124,6 +126,27 @@ trait SchemaRelationProvider {
 }
 
 /**
+ * Implemented by objects that can produce a streaming [[Source]] for a specific format or system.
+ */
+trait StreamSourceProvider {
+  def createSource(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source
+}
+
+/**
+ * Implemented by objects that can produce a streaming [[Sink]] for a specific format or system.
+ */
+trait StreamSinkProvider {
+  def createSink(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      partitionColumns: Seq[String]): Sink
+}
+
+/**
  * ::Experimental::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
@@ -147,7 +170,7 @@ trait SchemaRelationProvider {
  * @since 1.4.0
  */
 @Experimental
-trait HadoopFsRelationProvider {
+trait HadoopFsRelationProvider extends StreamSourceProvider {
   /**
    * Returns a new base relation with the given parameters, a user defined schema, and a list of
    * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
@@ -161,6 +184,43 @@ trait HadoopFsRelationProvider {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
+
+  private[sql] def createRelation(
+      sqlContext: SQLContext,
+      paths: Array[String],
+      dataSchema: Option[StructType],
+      partitionColumns: Option[StructType],
+      bucketSpec: Option[BucketSpec],
+      parameters: Map[String, String]): HadoopFsRelation = {
+    if (bucketSpec.isDefined) {
+      throw new AnalysisException("Currently we don't support bucketing for this data source.")
+    }
+    createRelation(sqlContext, paths, dataSchema, partitionColumns, parameters)
+  }
+
+  override def createSource(
+      sqlContext: SQLContext,
+      schema: Option[StructType],
+      providerName: String,
+      parameters: Map[String, String]): Source = {
+    val path = parameters.getOrElse("path", {
+      throw new IllegalArgumentException("'path' is not specified")
+    })
+    val metadataPath = parameters.getOrElse("metadataPath", s"$path/_metadata")
+
+    def dataFrameBuilder(files: Array[String]): DataFrame = {
+      val relation = createRelation(
+        sqlContext,
+        files,
+        schema,
+        partitionColumns = None,
+        bucketSpec = None,
+        parameters)
+      DataFrame(sqlContext, LogicalRelation(relation))
+    }
+
+    new FileStreamSource(sqlContext, metadataPath, path, schema, providerName, dataFrameBuilder)
+  }
 }
 
 /**
@@ -351,7 +411,17 @@ abstract class OutputWriterFactory extends Serializable {
    *
    * @since 1.4.0
    */
-  def newInstance(path: String, dataSchema: StructType, context: TaskAttemptContext): OutputWriter
+  def newInstance(
+      path: String,
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter
+
+  private[sql] def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter =
+    newInstance(path, dataSchema, context)
 }
 
 /**
@@ -403,7 +473,7 @@ abstract class OutputWriter {
  * [[Row]] objects. In addition, when reading from Hive style partitioned tables stored in file
  * systems, it's able to discover partitioning information from the paths of input directories, and
  * perform partition pruning before start reading the data. Subclasses of [[HadoopFsRelation()]]
- * must override one of the three `buildScan` methods to implement the read path.
+ * must override one of the four `buildScan` methods to implement the read path.
  *
  * For the write path, it provides the ability to write to both non-partitioned and partitioned
  * tables.  Directory layout of the partitioned tables is compatible with Hive.
@@ -434,6 +504,13 @@ abstract class HadoopFsRelation private[sql](
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
   private var _partitionSpec: PartitionSpec = _
+
+  private[this] var malformedBucketFile = false
+
+  private[sql] def maybeBucketSpec: Option[BucketSpec] = None
+
+  final private[sql] def getBucketSpec: Option[BucketSpec] =
+    maybeBucketSpec.filter(_ => sqlContext.conf.bucketingEnabled() && !malformedBucketFile)
 
   private class FileStatusCache {
     var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
@@ -639,9 +716,39 @@ abstract class HadoopFsRelation private[sql](
     })
   }
 
+  /**
+   * Groups the input files by bucket id, if bucketing is enabled and this data source is bucketed.
+   * Returns None if there exists any malformed bucket files.
+   */
+  private def groupBucketFiles(
+      files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
+    malformedBucketFile = false
+    if (getBucketSpec.isDefined) {
+      val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
+      var i = 0
+      while (!malformedBucketFile && i < files.length) {
+        val bucketId = BucketingUtils.getBucketId(files(i).getPath.getName)
+        if (bucketId.isEmpty) {
+          logError(s"File ${files(i).getPath} is expected to be a bucket file, but there is no " +
+            "bucket id information in file name. Fall back to non-bucketing mode.")
+          malformedBucketFile = true
+        } else {
+          val bucketFiles =
+            groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty)
+          bucketFiles += files(i)
+        }
+        i += 1
+      }
+      if (malformedBucketFile) None else Some(groupedBucketFiles.mapValues(_.toArray))
+    } else {
+      None
+    }
+  }
+
   final private[sql] def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
+      bucketSet: Option[BitSet],
       inputPaths: Array[String],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val inputStatuses = inputPaths.flatMap { input =>
@@ -658,7 +765,27 @@ abstract class HadoopFsRelation private[sql](
       }
     }
 
-    buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    groupBucketFiles(inputStatuses).map { groupedBucketFiles =>
+      // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket
+      // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
+      // bucket), and coalesce it to one partition. Finally union all bucket RDDs to one result.
+      val perBucketRows = (0 until maybeBucketSpec.get.numBuckets).map { bucketId =>
+        // If the current bucketId is not set in the bucket bitSet, skip scanning it.
+        if (bucketSet.nonEmpty && !bucketSet.get.get(bucketId)){
+          sqlContext.emptyResult
+        } else {
+          // When all the buckets need a scan (i.e., bucketSet is equal to None)
+          // or when the current bucket need a scan (i.e., the bit of bucketId is set to true)
+          groupedBucketFiles.get(bucketId).map { inputStatuses =>
+            buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
+          }.getOrElse(sqlContext.emptyResult)
+        }
+      }
+
+      new UnionRDD(sqlContext.sparkContext, perBucketRows)
+    }.getOrElse {
+      buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+    }
   }
 
   /**

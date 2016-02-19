@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution
 import scala.util.Random
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{RandomDataGenerator, Row}
-
 
 /**
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one
@@ -57,8 +56,8 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
   test("sort followed by limit") {
     checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
-      (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child = child)),
-      (child: SparkPlan) => Limit(10, ReferenceSort('a.asc :: Nil, global = true, child)),
+      (child: SparkPlan) => GlobalLimit(10, Sort('a.asc :: Nil, global = true, child = child)),
+      (child: SparkPlan) => GlobalLimit(10, ReferenceSort('a.asc :: Nil, global = true, child)),
       sortAnswers = false
     )
   }

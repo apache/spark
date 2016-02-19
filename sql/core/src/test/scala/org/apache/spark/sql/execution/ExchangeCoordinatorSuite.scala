@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.{MapOutputStatistics, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.TestSQLContext
-import org.apache.spark.sql._
-import org.apache.spark.{SparkFunSuite, SparkContext, SparkConf, MapOutputStatistics}
 
 class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 

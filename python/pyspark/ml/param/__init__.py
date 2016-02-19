@@ -32,12 +32,22 @@ class Param(object):
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc):
+    def __init__(self, parent, name, doc, expectedType=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
+        self.expectedType = expectedType
+
+    def _copy_new_parent(self, parent):
+        """Copy the current param to a new parent, must be a dummy param."""
+        if self.parent == "undefined":
+            param = copy.copy(self)
+            param.parent = parent.uid
+            return param
+        else:
+            raise ValueError("Cannot copy from non-dummy parent %s." % parent)
 
     def __str__(self):
         return str(self.parent) + "__" + self.name
@@ -75,6 +85,19 @@ class Params(Identifiable):
 
         #: value returned by :py:func:`params`
         self._params = None
+
+        # Copy the params from the class to the object
+        self._copy_params()
+
+    def _copy_params(self):
+        """
+        Copy all params defined on the class to current object.
+        """
+        cls = type(self)
+        src_name_attrs = [(x, getattr(cls, x)) for x in dir(cls)]
+        src_params = list(filter(lambda nameAttr: isinstance(nameAttr[1], Param), src_name_attrs))
+        for name, param in src_params:
+            setattr(self, name, param._copy_new_parent(self))
 
     @property
     @since("1.3.0")
@@ -156,8 +179,11 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        param = self._resolveParam(paramName)
-        return param in self.params
+        if isinstance(paramName, str):
+            p = getattr(self, paramName, None)
+            return isinstance(p, Param)
+        else:
+            raise TypeError("hasParam(): paramName must be a string")
 
     @since("1.4.0")
     def getOrDefault(self, param):
@@ -247,7 +273,24 @@ class Params(Identifiable):
         Sets user-supplied params.
         """
         for param, value in kwargs.items():
-            self._paramMap[getattr(self, param)] = value
+            p = getattr(self, param)
+            if p.expectedType is None or type(value) == p.expectedType or value is None:
+                self._paramMap[getattr(self, param)] = value
+            else:
+                try:
+                    # Try and do "safe" conversions that don't lose information
+                    if p.expectedType == float:
+                        self._paramMap[getattr(self, param)] = float(value)
+                    # Python 3 unified long & int
+                    elif p.expectedType == int and type(value).__name__ == 'long':
+                        self._paramMap[getattr(self, param)] = value
+                    else:
+                        raise Exception(
+                            "Provided type {0} incompatible with type {1} for param {2}"
+                            .format(type(value), p.expectedType, p))
+                except ValueError:
+                    raise Exception(("Failed to convert {0} to type {1} for param {2}"
+                                     .format(type(value), p.expectedType, p)))
         return self
 
     def _setDefault(self, **kwargs):
@@ -274,3 +317,27 @@ class Params(Identifiable):
             if p in paramMap and to.hasParam(p.name):
                 to._set(**{p.name: paramMap[p]})
         return to
+
+    def _resetUid(self, newUid):
+        """
+        Changes the uid of this instance. This updates both
+        the stored uid and the parent uid of params and param maps.
+        This is used by persistence (loading).
+        :param newUid: new uid to use
+        :return: same instance, but with the uid and Param.parent values
+                 updated, including within param maps
+        """
+        self.uid = newUid
+        newDefaultParamMap = dict()
+        newParamMap = dict()
+        for param in self.params:
+            newParam = copy.copy(param)
+            newParam.parent = newUid
+            if param in self._defaultParamMap:
+                newDefaultParamMap[newParam] = self._defaultParamMap[param]
+            if param in self._paramMap:
+                newParamMap[newParam] = self._paramMap[param]
+            param.parent = newUid
+        self._defaultParamMap = newDefaultParamMap
+        self._paramMap = newParamMap
+        return self

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{TypeTag, runtimeMirror}
+import scala.reflect.runtime.universe.{runtimeMirror, TypeTag}
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression

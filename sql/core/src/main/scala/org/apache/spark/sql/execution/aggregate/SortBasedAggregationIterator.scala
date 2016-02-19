@@ -35,7 +35,6 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => (() => MutableProjection),
-    numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric)
   extends AggregationIterator(
     groupingExpressions,
@@ -97,7 +96,6 @@ class SortBasedAggregationIterator(
       val inputRow = inputIterator.next()
       nextGroupingKey = groupingProjection(inputRow).copy()
       firstRowInNextGroup = inputRow.copy()
-      numInputRows += 1
       sortedInputHasNewGroup = true
     } else {
       // This inputIter is empty.
@@ -122,7 +120,6 @@ class SortBasedAggregationIterator(
       // Get the grouping key.
       val currentRow = inputIterator.next()
       val groupingKey = groupingProjection(currentRow)
-      numInputRows += 1
 
       // Check if the current row belongs the current input row.
       if (currentGroupingKey == groupingKey) {

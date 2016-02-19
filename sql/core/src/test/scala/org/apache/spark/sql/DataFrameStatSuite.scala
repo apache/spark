@@ -19,8 +19,11 @@ package org.apache.spark.sql
 
 import java.util.Random
 
+import org.scalatest.Matchers._
+
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.DoubleType
 
 class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -60,6 +63,28 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       assert(math.abs(s(1) - 200) < 50) // std = 11.55
       assert(math.abs(s(2) - 300) < 50) // std = 12.25
     }
+  }
+
+  test("randomSplit on reordered partitions") {
+    // This test ensures that randomSplit does not create overlapping splits even when the
+    // underlying dataframe (such as the one below) doesn't guarantee a deterministic ordering of
+    // rows in each partition.
+    val data =
+      sparkContext.parallelize(1 to 600, 2).mapPartitions(scala.util.Random.shuffle(_)).toDF("id")
+    val splits = data.randomSplit(Array[Double](2, 3), seed = 1)
+
+    assert(splits.length == 2, "wrong number of splits")
+
+    // Verify that the splits span the entire dataset
+    assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
+
+    // Verify that the splits don't overalap
+    assert(splits(0).intersect(splits(1)).collect().isEmpty)
+
+    // Verify that the results are deterministic across multiple runs
+    val firstRun = splits.toSeq.map(_.collect().toSeq)
+    val secondRun = data.randomSplit(Array[Double](2, 3), seed = 1).toSeq.map(_.collect().toSeq)
+    assert(firstRun == secondRun)
   }
 
   test("pearson correlation") {
@@ -187,5 +212,60 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 6), Row(1, 11)))
+  }
+
+  // This test case only verifies that `DataFrame.countMinSketch()` methods do return
+  // `CountMinSketch`es that meet required specs.  Test cases for `CountMinSketch` can be found in
+  // `CountMinSketchSuite` in project spark-sketch.
+  test("countMinSketch") {
+    val df = sqlContext.range(1000)
+
+    val sketch1 = df.stat.countMinSketch("id", depth = 10, width = 20, seed = 42)
+    assert(sketch1.totalCount() === 1000)
+    assert(sketch1.depth() === 10)
+    assert(sketch1.width() === 20)
+
+    val sketch2 = df.stat.countMinSketch($"id", depth = 10, width = 20, seed = 42)
+    assert(sketch2.totalCount() === 1000)
+    assert(sketch2.depth() === 10)
+    assert(sketch2.width() === 20)
+
+    val sketch3 = df.stat.countMinSketch("id", eps = 0.001, confidence = 0.99, seed = 42)
+    assert(sketch3.totalCount() === 1000)
+    assert(sketch3.relativeError() === 0.001)
+    assert(sketch3.confidence() === 0.99 +- 5e-3)
+
+    val sketch4 = df.stat.countMinSketch($"id", eps = 0.001, confidence = 0.99, seed = 42)
+    assert(sketch4.totalCount() === 1000)
+    assert(sketch4.relativeError() === 0.001 +- 1e04)
+    assert(sketch4.confidence() === 0.99 +- 5e-3)
+
+    intercept[IllegalArgumentException] {
+      df.select('id cast DoubleType as 'id)
+        .stat
+        .countMinSketch('id, depth = 10, width = 20, seed = 42)
+    }
+  }
+
+  // This test only verifies some basic requirements, more correctness tests can be found in
+  // `BloomFilterSuite` in project spark-sketch.
+  test("Bloom filter") {
+    val df = sqlContext.range(1000)
+
+    val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
+    assert(filter1.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(filter1.mightContain))
+
+    val filter2 = df.stat.bloomFilter($"id" * 3, 1000, 0.03)
+    assert(filter2.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(i => filter2.mightContain(i * 3)))
+
+    val filter3 = df.stat.bloomFilter("id", 1000, 64 * 5)
+    assert(filter3.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(filter3.mightContain))
+
+    val filter4 = df.stat.bloomFilter($"id" * 3, 1000, 64 * 5)
+    assert(filter4.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(i => filter4.mightContain(i * 3)))
   }
 }

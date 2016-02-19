@@ -18,9 +18,9 @@
 package org.apache.spark.streaming.flume
 
 import java.net.InetSocketAddress
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -30,8 +30,8 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.apache.spark.streaming.{Seconds, TestOutputStream, StreamingContext}
 import org.apache.spark.util.{ManualClock, Utils}
 
 class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
@@ -102,9 +102,8 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
         utils.eventsPerBatch, 5)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputQueue)
     outputStream.register()
 
     ssc.start()
@@ -115,11 +114,11 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
       // The eventually is required to ensure that all data in the batch has been processed.
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        val flattenOutputBuffer = outputBuffer.flatten
-        val headers = flattenOutputBuffer.map(_.event.getHeaders.asScala.map {
+        val flattenOutput = outputQueue.asScala.toSeq.flatten
+        val headers = flattenOutput.map(_.event.getHeaders.asScala.map {
           case (key, value) => (key.toString, value.toString)
         }).map(_.asJava)
-        val bodies = flattenOutputBuffer.map(e => JavaUtils.bytesToString(e.event.getBody))
+        val bodies = flattenOutput.map(e => JavaUtils.bytesToString(e.event.getBody))
         utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {

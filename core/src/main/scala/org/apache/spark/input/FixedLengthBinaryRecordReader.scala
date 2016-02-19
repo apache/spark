@@ -20,8 +20,8 @@ package org.apache.spark.input
 import java.io.IOException
 
 import org.apache.hadoop.fs.FSDataInputStream
-import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.io.{BytesWritable, LongWritable}
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.{InputSplit, RecordReader, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 

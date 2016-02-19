@@ -21,18 +21,18 @@ import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{DataFrame, SaveMode, AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
-
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
@@ -92,11 +92,42 @@ object ResolvedDataSource extends Logging {
     }
   }
 
+  def createSource(
+      sqlContext: SQLContext,
+      userSpecifiedSchema: Option[StructType],
+      providerName: String,
+      options: Map[String, String]): Source = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSourceProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed reading")
+    }
+
+    provider.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+  }
+
+  def createSink(
+      sqlContext: SQLContext,
+      providerName: String,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Sink = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSinkProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed writing")
+    }
+
+    provider.createSink(sqlContext, options, partitionColumns)
+  }
+
   /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
@@ -142,6 +173,7 @@ object ResolvedDataSource extends Logging {
             paths,
             Some(dataSchema),
             maybePartitionsSchema,
+            bucketSpec,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
@@ -173,7 +205,7 @@ object ResolvedDataSource extends Logging {
                 SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
               }
           }
-          dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
+          dataSource.createRelation(sqlContext, paths, None, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
             s"A schema needs to be specified when using $className.")
@@ -210,6 +242,7 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       provider: String,
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
@@ -244,6 +277,7 @@ object ResolvedDataSource extends Logging {
           Array(outputPath.toString),
           Some(dataSchema.asNullable),
           Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+          bucketSpec,
           caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column

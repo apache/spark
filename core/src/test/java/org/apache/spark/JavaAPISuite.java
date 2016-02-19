@@ -21,7 +21,17 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.net.URI;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import scala.Tuple2;
@@ -35,7 +45,6 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
-import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
@@ -49,7 +58,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaFutureAction;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
@@ -688,13 +702,6 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void toArray() {
-    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3));
-    List<Integer> list = rdd.toArray();
-    Assert.assertEquals(Arrays.asList(1, 2, 3), list);
-  }
-
-  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -873,8 +880,8 @@ public class JavaAPISuite implements Serializable {
       "The quick brown fox jumps over the lazy dog."));
     JavaRDD<String> words = rdd.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Arrays.asList(x.split(" "));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(x.split(" ")).iterator();
       }
     });
     Assert.assertEquals("Hello", words.first());
@@ -883,12 +890,12 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<String, String> pairsRDD = rdd.flatMapToPair(
       new PairFlatMapFunction<String, String, String>() {
         @Override
-        public Iterable<Tuple2<String, String>> call(String s) {
+        public Iterator<Tuple2<String, String>> call(String s) {
           List<Tuple2<String, String>> pairs = new LinkedList<>();
           for (String word : s.split(" ")) {
             pairs.add(new Tuple2<>(word, word));
           }
-          return pairs;
+          return pairs.iterator();
         }
       }
     );
@@ -897,12 +904,12 @@ public class JavaAPISuite implements Serializable {
 
     JavaDoubleRDD doubles = rdd.flatMapToDouble(new DoubleFlatMapFunction<String>() {
       @Override
-      public Iterable<Double> call(String s) {
+      public Iterator<Double> call(String s) {
         List<Double> lengths = new LinkedList<>();
         for (String word : s.split(" ")) {
           lengths.add((double) word.length());
         }
-        return lengths;
+        return lengths.iterator();
       }
     });
     Assert.assertEquals(5.0, doubles.first(), 0.01);
@@ -923,8 +930,8 @@ public class JavaAPISuite implements Serializable {
     JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
       new PairFlatMapFunction<Tuple2<Integer, String>, String, Integer>() {
         @Override
-        public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
-          return Collections.singletonList(item.swap());
+        public Iterator<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) {
+          return Collections.singletonList(item.swap()).iterator();
         }
       });
     swapped.collect();
@@ -944,12 +951,12 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> partitionSums = rdd.mapPartitions(
       new FlatMapFunction<Iterator<Integer>, Integer>() {
         @Override
-        public Iterable<Integer> call(Iterator<Integer> iter) {
+        public Iterator<Integer> call(Iterator<Integer> iter) {
           int sum = 0;
           while (iter.hasNext()) {
             sum += iter.next();
           }
-          return Collections.singletonList(sum);
+          return Collections.singletonList(sum).iterator();
         }
     });
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
@@ -1360,8 +1367,8 @@ public class JavaAPISuite implements Serializable {
     FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer> sizesFn =
       new FlatMapFunction2<Iterator<Integer>, Iterator<String>, Integer>() {
         @Override
-        public Iterable<Integer> call(Iterator<Integer> i, Iterator<String> s) {
-          return Arrays.asList(Iterators.size(i), Iterators.size(s));
+        public Iterator<Integer> call(Iterator<Integer> i, Iterator<String> s) {
+          return Arrays.asList(Iterators.size(i), Iterators.size(s)).iterator();
         }
       };
 
@@ -1587,11 +1594,11 @@ public class JavaAPISuite implements Serializable {
     }
     double relativeSD = 0.001;
     JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
-    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD, 8).collect();
-    for (Tuple2<Integer, Object> resItem : res) {
-      double count = (double)resItem._1();
-      Long resCount = (Long)resItem._2();
-      Double error = Math.abs((resCount - count) / count);
+    List<Tuple2<Integer, Long>> res =  pairRdd.countApproxDistinctByKey(relativeSD, 8).collect();
+    for (Tuple2<Integer, Long> resItem : res) {
+      double count = resItem._1();
+      long resCount = resItem._2();
+      double error = Math.abs((resCount - count) / count);
       Assert.assertTrue(error < 0.1);
     }
 
@@ -1640,12 +1647,12 @@ public class JavaAPISuite implements Serializable {
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
-    Map<Integer, Long> wrCounts = (Map<Integer, Long>) (Object) wr.countByKey();
+    Map<Integer, Long> wrCounts = wr.countByKey();
     Assert.assertEquals(2, wrCounts.size());
     Assert.assertTrue(wrCounts.get(0) > 0);
     Assert.assertTrue(wrCounts.get(1) > 0);
     JavaPairRDD<Integer, Integer> wor = rdd2.sampleByKey(false, fractions, 1L);
-    Map<Integer, Long> worCounts = (Map<Integer, Long>) (Object) wor.countByKey();
+    Map<Integer, Long> worCounts = wor.countByKey();
     Assert.assertEquals(2, worCounts.size());
     Assert.assertTrue(worCounts.get(0) > 0);
     Assert.assertTrue(worCounts.get(1) > 0);
@@ -1666,12 +1673,12 @@ public class JavaAPISuite implements Serializable {
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
-    Map<Integer, Long> wrExactCounts = (Map<Integer, Long>) (Object) wrExact.countByKey();
+    Map<Integer, Long> wrExactCounts = wrExact.countByKey();
     Assert.assertEquals(2, wrExactCounts.size());
     Assert.assertTrue(wrExactCounts.get(0) == 2);
     Assert.assertTrue(wrExactCounts.get(1) == 4);
     JavaPairRDD<Integer, Integer> worExact = rdd2.sampleByKeyExact(false, fractions, 1L);
-    Map<Integer, Long> worExactCounts = (Map<Integer, Long>) (Object) worExact.countByKey();
+    Map<Integer, Long> worExactCounts = worExact.countByKey();
     Assert.assertEquals(2, worExactCounts.size());
     Assert.assertTrue(worExactCounts.get(0) == 2);
     Assert.assertTrue(worExactCounts.get(1) == 4);
@@ -1792,32 +1799,6 @@ public class JavaAPISuite implements Serializable {
     Assert.assertTrue(future.isDone());
   }
 
-
-  /**
-   * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
-   * since that's the only artifact where Guava classes have been relocated.
-   */
-  @Test
-  public void testGuavaOptional() {
-    // Stop the context created in setUp() and start a local-cluster one, to force usage of the
-    // assembly.
-    sc.stop();
-    JavaSparkContext localCluster = new JavaSparkContext("local-cluster[1,1,1024]", "JavaAPISuite");
-    try {
-      JavaRDD<Integer> rdd1 = localCluster.parallelize(Arrays.asList(1, 2, null), 3);
-      JavaRDD<Optional<Integer>> rdd2 = rdd1.map(
-        new Function<Integer, Optional<Integer>>() {
-          @Override
-          public Optional<Integer> call(Integer i) {
-            return Optional.fromNullable(i);
-          }
-        });
-      rdd2.collect();
-    } finally {
-      localCluster.stop();
-    }
-  }
-
   static class Class1 {}
   static class Class2 {}
 
@@ -1828,6 +1809,18 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(
         Class1.class.getName() + "," + Class2.class.getName(),
         conf.get("spark.kryo.classesToRegister"));
+  }
+
+  @Test
+  public void testGetPersistentRDDs() {
+    java.util.Map<Integer, JavaRDD<?>> cachedRddsMap = sc.getPersistentRDDs();
+    Assert.assertTrue(cachedRddsMap.isEmpty());
+    JavaRDD<String> rdd1 = sc.parallelize(Arrays.asList("a", "b")).setName("RDD1").cache();
+    JavaRDD<String> rdd2 = sc.parallelize(Arrays.asList("c", "d")).setName("RDD2").cache();
+    cachedRddsMap = sc.getPersistentRDDs();
+    Assert.assertEquals(2, cachedRddsMap.size());
+    Assert.assertEquals("RDD1", cachedRddsMap.get(0).name());
+    Assert.assertEquals("RDD2", cachedRddsMap.get(1).name());
   }
 
 }

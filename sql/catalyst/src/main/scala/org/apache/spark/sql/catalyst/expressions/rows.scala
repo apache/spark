@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{MapData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -231,18 +231,6 @@ class GenericInternalRow(private[sql] val values: Array[Any]) extends BaseGeneri
   override def numFields: Int = values.length
 
   override def copy(): GenericInternalRow = this
-}
-
-/**
- * This is used for serialization of Python DataFrame
- */
-class GenericInternalRowWithSchema(values: Array[Any], val schema: StructType)
-  extends GenericInternalRow(values) {
-
-  /** No-arg constructor for serialization. */
-  protected def this() = this(null, null)
-
-  def fieldIndex(name: String): Int = schema.fieldIndex(name)
 }
 
 class GenericMutableRow(values: Array[Any]) extends MutableRow with BaseGenericInternalRow {

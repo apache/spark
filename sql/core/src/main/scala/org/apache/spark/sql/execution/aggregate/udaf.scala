@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, MutableRow}
+import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, InterpretedMutableProjection, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{ImperativeAggregate, AggregateFunction}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.types._
 
@@ -361,13 +361,7 @@ private[sql] case class ScalaUDAF(
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    try {
-      GenerateMutableProjection.generate(children, inputAttributes)()
-    } catch {
-      case e: Exception =>
-        log.error("Failed to generate mutable projection, fallback to interpreted", e)
-        new InterpretedMutableProjection(children, inputAttributes)
-    }
+    GenerateMutableProjection.generate(children, inputAttributes)()
   }
 
   private[this] lazy val inputToScalaConverters: Any => Any =

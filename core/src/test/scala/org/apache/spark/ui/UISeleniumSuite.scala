@@ -18,7 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.{HttpURLConnection, URL}
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
+import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 import scala.xml.Node
@@ -26,16 +26,16 @@ import scala.xml.Node
 import com.gargoylesoftware.htmlunit.DefaultCssErrorHandler
 import org.json4s._
 import org.json4s.jackson.JsonMethods
-import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.openqa.selenium.{By, WebDriver}
+import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 import org.w3c.css.sac.CSSParseException
 
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark._
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
@@ -289,7 +289,11 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         JInt(stageId) <- stage \ "stageId"
         JInt(attemptId) <- stage \ "attemptId"
       } {
-        val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
+        val exp = if (attemptId.toInt == 0 && stageId.toInt == 1) {
+          StageStatus.FAILED
+        } else {
+          StageStatus.COMPLETE
+        }
         status should be (exp.name())
       }
 

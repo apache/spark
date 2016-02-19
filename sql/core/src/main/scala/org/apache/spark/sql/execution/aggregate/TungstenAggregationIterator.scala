@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.{InternalAccumulator, Logging, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVExternalSorter}
+import org.apache.spark.sql.execution.metric.LongSQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
-import org.apache.spark.{InternalAccumulator, Logging, TaskContext}
 
 /**
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.
@@ -85,7 +85,6 @@ class TungstenAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
     testFallbackStartsAt: Option[Int],
-    numInputRows: LongSQLMetric,
     numOutputRows: LongSQLMetric,
     dataSize: LongSQLMetric,
     spillSize: LongSQLMetric)
@@ -179,14 +178,12 @@ class TungstenAggregationIterator(
       val buffer: UnsafeRow = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
-        numInputRows += 1
         processRow(buffer, newInput)
       }
     } else {
       var i = 0
       while (inputIter.hasNext) {
         val newInput = inputIter.next()
-        numInputRows += 1
         val groupingKey = groupingProjection.apply(newInput)
         var buffer: UnsafeRow = null
         if (i < fallbackStartsAt) {
@@ -418,10 +415,10 @@ class TungstenAggregationIterator(
         val mapMemory = hashMap.getPeakMemoryUsedBytes
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
         val peakMemory = Math.max(mapMemory, sorterMemory)
+        val metrics = TaskContext.get().taskMetrics()
         dataSize += peakMemory
-        spillSize += TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore
-        TaskContext.get().internalMetricsToAccumulators(
-          InternalAccumulator.PEAK_EXECUTION_MEMORY).add(peakMemory)
+        spillSize += metrics.memoryBytesSpilled - spillSizeBefore
+        metrics.incPeakExecutionMemory(peakMemory)
       }
       numOutputRows += 1
       res

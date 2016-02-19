@@ -19,9 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratedExpressionCode, CodeGenContext}
-import org.apache.spark.sql.types.{IntegerType, DataType}
-
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Expression that returns the current partition id of the Spark task.
@@ -45,7 +44,7 @@ private[sql] case class SparkPartitionID() extends LeafExpression with Nondeterm
 
   override protected def evalInternal(input: InternalRow): Int = partitionId
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val idTerm = ctx.freshName("partitionId")
     ctx.addMutableState(ctx.JAVA_INT, idTerm,
       s"$idTerm = org.apache.spark.TaskContext.getPartitionId();")
