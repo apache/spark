@@ -40,7 +40,7 @@ case class PivotFirst(pivotColumn: Expression,
                       mutableAggBufferOffset: Int = 0,
                       inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
 
-  val valueDataType = valueColumn.dataType
+  lazy val valueDataType = valueColumn.dataType
   val indexSize = pivotIndex.size
 
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
@@ -51,7 +51,7 @@ case class PivotFirst(pivotColumn: Expression,
   }
 
   override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
-    for ( i <- 0 until indexSize) {
+    for (i <- 0 until indexSize) {
       if (!inputAggBuffer.isNullAt(inputAggBufferOffset + i)) {
         val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
         // Can't do this with UnsafeRow: mutableAggBuffer.update(mutableAggBufferOffset + i, value)
@@ -60,15 +60,20 @@ case class PivotFirst(pivotColumn: Expression,
     }
   }
 
-  override def initialize(mutableAggBuffer: MutableRow): Unit = {
-    for ( i <- 0 until indexSize) {
-      mutableAggBuffer.setNullAt(mutableAggBufferOffset + i)
-    }
+  override def initialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
+    case d: DecimalType =>
+      for (i <- 0 until indexSize) {
+        mutableAggBuffer.setDecimal(mutableAggBufferOffset + i, null, d.precision)
+      }
+    case _ =>
+      for (i <- 0 until indexSize) {
+        mutableAggBuffer.setNullAt(mutableAggBufferOffset + i)
+      }
   }
 
   override def eval(input: InternalRow): Any = {
     val result = new Array[Any](indexSize)
-    for ( i <- 0 until indexSize) {
+    for (i <- 0 until indexSize) {
       result(i) = input.get(mutableAggBufferOffset + i, valueDataType)
     }
     new GenericArrayData(result)
@@ -100,7 +105,14 @@ case class PivotFirst(pivotColumn: Expression,
   // UnsafeRow.update throws UnsupportedOperationException so we need to do this
   private def updateRow(row: MutableRow, offset: Int, value: Any): Unit = valueDataType match {
     case DoubleType => row.setDouble(offset, value.asInstanceOf[Double])
-    case _ => throw new UnsupportedOperationException(valueDataType.toString)
+    case IntegerType => row.setInt(offset, value.asInstanceOf[Int])
+    case LongType => row.setLong(offset, value.asInstanceOf[Long])
+    case FloatType => row.setFloat(offset, value.asInstanceOf[Float])
+    case BooleanType => row.setBoolean(offset, value.asInstanceOf[Boolean])
+    case ShortType => row.setShort(offset, value.asInstanceOf[Short])
+    case ByteType => row.setByte(offset, value.asInstanceOf[Byte])
+    case d: DecimalType => row.setDecimal(offset, value.asInstanceOf[Decimal], d.precision)
+    case _ => throw new UnsupportedOperationException(s"Unsupported datatype: $valueDataType")
   }
 }
 
