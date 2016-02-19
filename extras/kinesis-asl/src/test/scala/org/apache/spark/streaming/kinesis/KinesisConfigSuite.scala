@@ -38,7 +38,7 @@ class KinesisConfigSuite extends KinesisFunSuite {
 
 
   test("builds a KinesisClientLibConfiguration with defaults set") {
-    val kinesisConfig = new KinesisConfig(kinesisAppName, kinesisStreamName, regionName, endpointUrl, streamPosition)
+    val kinesisConfig = new KinesisConfig(kinesisAppName, kinesisStreamName, endpointUrl, regionName, streamPosition)
     val kclConfig = kinesisConfig.buildKCLConfig(workerId)
     assert(kclConfig.getApplicationName() == kinesisAppName)
     assert(kclConfig.getStreamName() == kinesisStreamName)

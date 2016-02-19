@@ -18,13 +18,12 @@ package org.apache.spark.streaming.kinesis
 
 import scala.reflect.ClassTag
 
-
 import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.regions.{RegionUtils, Region}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
+import com.amazonaws.regions.{Region, RegionUtils}
+import com.amazonaws.services.cloudwatch.AmazonCloudWatchClient
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.kinesis.AmazonKinesisClient
-import com.amazonaws.services.cloudwatch.AmazonCloudWatchClient
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
 
 
 /**
@@ -36,20 +35,24 @@ import com.amazonaws.services.cloudwatch.AmazonCloudWatchClient
  * @param kinesisAppName The name of kinesis application (used in creating dynamo tables)
  * @param streamName The name of the actual kinesis stream
  * @param endpointUrl The AWS API endpoint that will be used for the kinesis client
- * @param regionName The AWS region that will be connected to (will set default enpoint for dynamo and cloudwatch)
+ * @param regionName The AWS region that will be connected to
+ *                  (will set default enpoint for dynamo and cloudwatch)
  * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
  *                                 worker's initial starting position in the stream.
  *                                 The values are either the beginning of the stream
  *                                 per Kinesis' limit of 24 hours
  *                                 (InitialPositionInStream.TRIM_HORIZON) or
  *                                 the tip of the stream (InitialPositionInStream.LATEST).
- * @param awsCredentialsOption None or Some instance of SerializableAWSCredentials that will be used for
- * 														 credentials for Kinesis and the default for other clients. If None, then the
+ * @param awsCredentialsOption None or Some instance of SerializableAWSCredentials that
+ *                             will be used for credentials for Kinesis and the default
+ *                             for other clients. If None, then the
  *                             DefaultAWSCredentialsProviderChain will be used
- * @param dynamoEndpointUrl None or Some AWS API endpoint that will be used for the DynamoDBClient, if None, then the regionName
+ * @param dynamoEndpointUrl None or Some AWS API endpoint that will be used for
+ *                          the DynamoDBClient, if None, then the regionName
  *                          will be used to build the default endpoint
- * @param dynamoCredentials None or Some SerializableAWSCredentials that will be used as the credentials. If None,
- * 													then the DefaultProviderKeychain will be used to build credentials
+ * @param dynamoCredentials None or Some SerializableAWSCredentials that will be used
+ *                          as the credentials. If None, then the
+ *                          DefaultProviderKeychain will be used to build credentials
  *
  */
 case class KinesisConfig(
@@ -65,15 +68,21 @@ case class KinesisConfig(
 
   /**
    * Builds a KinesisClientLibConfiguration object, which contains all the configuration options
-   * See the docs for more info:
-   * http://static.javadoc.io/com.amazonaws/amazon-kinesis-client/1.6.1/com/amazonaws/services/kinesis/clientlibrary/lib/worker/KinesisClientLibConfiguration.html
+   * See the
+   * <a href="http://bit.ly/1oyynyW">KinesisClientLibConfiguration docs</a>
+   *  for more info:
+   *
    *
    * @param workerId A unique string to identify a worker
    */
   def buildKCLConfig(workerId: String): KinesisClientLibConfiguration = {
     // KCL config instance
     val kinesisClientLibConfiguration =
-      new KinesisClientLibConfiguration(kinesisAppName, streamName, resolveAWSCredentialsProvider(), workerId)
+      new KinesisClientLibConfiguration(
+          kinesisAppName,
+          streamName,
+          resolveAWSCredentialsProvider(),
+          workerId)
       .withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream)
       .withTaskBackoffTimeMillis(500)
@@ -87,7 +96,11 @@ case class KinesisConfig(
    * Returns a AmazonDynamoDBClient instance configured with the proper region/endpoint
    */
   def buildDynamoClient(): AmazonDynamoDBClient = {
-    val client = if (dynamoCredentials.isDefined) new AmazonDynamoDBClient(resolveAWSCredentialsProvider(dynamoCredentials)) else new AmazonDynamoDBClient(resolveAWSCredentialsProvider())
+    val client = if (dynamoCredentials.isDefined) {
+      new AmazonDynamoDBClient(resolveAWSCredentialsProvider(dynamoCredentials))
+    } else {
+      new AmazonDynamoDBClient(resolveAWSCredentialsProvider())
+    }
     client.setRegion(region)
     if (dynamoEndpointUrl.isDefined) {
       client.setEndpoint(dynamoEndpointUrl.get)
@@ -117,7 +130,8 @@ case class KinesisConfig(
   }
 
   /**
-   * Returns the provided credentials or resolves a pair of credentials using DefaultAWSCredentialsProviderChain
+   * Returns the provided credentials or resolves a
+   * pair of credentials using DefaultAWSCredentialsProviderChain
    */
   def awsCredentials: AWSCredentials = {
     resolveAWSCredentialsProvider().getCredentials()
@@ -128,7 +142,9 @@ case class KinesisConfig(
    * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
    * Otherwise, return the DefaultAWSCredentialsProviderChain.
    */
-  private def resolveAWSCredentialsProvider(awsCredOpt: Option[SerializableAWSCredentials] = awsCredentialsOption): AWSCredentialsProvider = {
+  private def resolveAWSCredentialsProvider(
+      awsCredOpt: Option[SerializableAWSCredentials] = awsCredentialsOption
+      ): AWSCredentialsProvider = {
     awsCredOpt match {
       case Some(awsCredentials) =>
         new AWSCredentialsProvider {

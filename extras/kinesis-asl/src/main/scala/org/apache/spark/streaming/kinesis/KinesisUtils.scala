@@ -156,7 +156,8 @@ object KinesisUtils {
     // scalastyle:on
     val cleanedHandler = ssc.sc.clean(messageHandler)
     val kinesisClientConfig = KinesisConfig.buildConfig(kinesisAppName, streamName,
-      endpointUrl, validateRegion(regionName), initialPositionInStream, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+      endpointUrl, validateRegion(regionName), initialPositionInStream,
+      Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, kinesisClientConfig,
         checkpointInterval, storageLevel, cleanedHandler)
@@ -184,7 +185,8 @@ object KinesisUtils {
       storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[Array[Byte]](ssc, config, checkpointInterval, storageLevel, defaultMessageHandler)
+      new KinesisInputDStream[Array[Byte]](ssc, config, checkpointInterval,
+          storageLevel, defaultMessageHandler)
     }
   }
 
@@ -274,7 +276,8 @@ object KinesisUtils {
       awsAccessKeyId: String,
       awsSecretKey: String): ReceiverInputDStream[Array[Byte]] = {
     val kinesisClientConfig = KinesisConfig.buildConfig(kinesisAppName, streamName,
-      endpointUrl, validateRegion(regionName), initialPositionInStream, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+      endpointUrl, validateRegion(regionName), initialPositionInStream,
+      Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, kinesisClientConfig,
         checkpointInterval, storageLevel, defaultMessageHandler)

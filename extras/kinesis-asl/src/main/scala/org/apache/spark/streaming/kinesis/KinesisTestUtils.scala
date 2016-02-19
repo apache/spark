@@ -26,10 +26,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Random, Success, Try}
 
 import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model._
 
@@ -68,7 +68,12 @@ private[kinesis] class KinesisTestUtils extends Logging {
   }
 
   lazy val sparkKinesisConfig: KinesisConfig = {
-    KinesisConfig.buildConfig("kinesis-asl-unit-test", _streamName, endpointUrl, regionName, InitialPositionInStream.TRIM_HORIZON)
+    KinesisConfig.buildConfig(
+        "kinesis-asl-unit-test",
+        _streamName,
+        endpointUrl,
+        regionName,
+        InitialPositionInStream.TRIM_HORIZON)
   }
 
   protected def getProducer(aggregate: Boolean): KinesisDataGenerator = {
