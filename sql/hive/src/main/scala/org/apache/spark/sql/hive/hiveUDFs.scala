@@ -83,10 +83,14 @@ private[hive] class HiveFunctionRegistry(
           udf
         } else if (
           classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
+          val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
+          udaf.dataType // Force it to check input data types.
+          udaf
         } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveUDAFFunction(
+          val udaf = HiveUDAFFunction(
             name, new HiveFunctionWrapper(functionClassName), children, isUDAFBridgeRequired = true)
+          udaf.dataType  // Force it to check input data types.
+          udaf
         } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
           val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(functionClassName), children)
           udtf.elementTypes // Force it to check input data types.
@@ -439,7 +443,7 @@ private[hive] case class HiveUDAFFunction(
 
   override def supportsPartial: Boolean = false
 
-  override val dataType: DataType = inspectorToDataType(returnInspector)
+  override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def prettyName: String = name
 

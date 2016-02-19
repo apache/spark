@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.io._
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -138,6 +138,7 @@ package object util {
   def usePrettyExpression(e: Expression): Expression = e transform {
     case a: Attribute => new PrettyAttribute(a)
     case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+    case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
     case e: GetStructField =>
       val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
       PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)

@@ -205,6 +205,12 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "foo", "\"bar\'"
     )
 
+    // Numeric literals (should have CAST or suffixes in column names)
+    checkColumnNames(
+      "SELECT 1Y, 2S, 3, 4L, 5.1, 6.1D",
+      "1", "2", "3", "4", "5.1", "6.1"
+    )
+
     // Aliases
     checkColumnNames(
       "SELECT 1 AS a",
