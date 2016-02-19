@@ -1471,6 +1471,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.backpressure.initialRate</code></td>
+  <td>not set</td>
+  <td>
+    This is the initial maximum receiving rate at which each receiver will receive data for the
+    first batch when the backpressure mechanism is enabled.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>
@@ -1647,7 +1655,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
