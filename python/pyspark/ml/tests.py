@@ -37,7 +37,7 @@ else:
 from shutil import rmtree
 import tempfile
 
-from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
+from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
@@ -117,52 +117,6 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
         lr = LogisticRegression(elasticNetParam=0)
         self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
-
-
-class PipelineTests(PySparkTestCase):
-
-    def test_pipeline(self):
-        dataset = MockDataset()
-        estimator0 = MockEstimator()
-        transformer1 = MockTransformer()
-        estimator2 = MockEstimator()
-        transformer3 = MockTransformer()
-        pipeline = Pipeline(stages=[estimator0, transformer1, estimator2, transformer3])
-        pipeline_model = pipeline.fit(dataset, {estimator0.fake: 0, transformer1.fake: 1})
-        model0, transformer1, model2, transformer3 = pipeline_model.stages
-        self.assertEqual(0, model0.dataset_index)
-        self.assertEqual(0, model0.getFake())
-        self.assertEqual(1, transformer1.dataset_index)
-        self.assertEqual(1, transformer1.getFake())
-        self.assertEqual(2, dataset.index)
-        self.assertIsNone(model2.dataset_index, "The last model shouldn't be called in fit.")
-        self.assertIsNone(transformer3.dataset_index,
-                          "The last transformer shouldn't be called in fit.")
-        dataset = pipeline_model.transform(dataset)
-        self.assertEqual(2, model0.dataset_index)
-        self.assertEqual(3, transformer1.dataset_index)
-        self.assertEqual(4, model2.dataset_index)
-        self.assertEqual(5, transformer3.dataset_index)
-        self.assertEqual(6, dataset.index)
-
-        # Test pipeline save/load
-        path = tempfile.mkdtemp()
-        pipeline_path = path + "/pipeline"
-        pipeline.save(pipeline_path)
-        loaded_pipeline = Pipeline.load(pipeline_path)
-        self.assertEqual(pipeline.getStages().size, loaded_pipeline.getStages().size)
-        for p, loaded_p in zip(pipeline.getStages(), loaded_pipeline.getStages()):
-            self.assertEqual(type(p), type(loaded_p))
-            self.assertEqual(p.dataset_index, loaded_p.dataset_index)
-            self.assertEqual(p.getFake(), loaded_p.getFake)
-        model_path = path + "/model"
-        pipeline_model.save(model_path)
-        loaded_model = PipelineModel.load(model_path)
-        self.assertEqual(pipeline_model.stages.size, loaded_pipeline.stages.size)
-        for p, loaded_p in zip(pipeline_model.stages, loaded_model.stages):
-            self.assertEqual(type(p), type(loaded_p))
-            self.assertEqual(p.dataset_index, loaded_p.dataset_index)
-            self.assertEqual(p.getFake(), loaded_p.getFake)
 
 
 class TestParams(HasMaxIter, HasInputCol, HasSeed):
