@@ -75,8 +75,8 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
-   * merged using the associative reduce function. Hash partitioning is used to generate the RDDs
-   * with Spark's default number of partitions.
+   * merged using the associative and commutative reduce function. Hash partitioning is used to
+   * generate the RDDs with Spark's default number of partitions.
    */
   def reduceByKey(reduceFunc: (V, V) => V): DStream[(K, V)] = ssc.withScope {
     reduceByKey(reduceFunc, defaultPartitioner())
@@ -204,7 +204,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Similar to `DStream.reduceByKey()`, but applies it over a sliding window. The new DStream
    * generates RDDs with the same interval as this DStream. Hash partitioning is used to generate
    * the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    */
@@ -219,7 +219,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -238,7 +238,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * Return a new DStream by applying `reduceByKey` over a sliding window. This is similar to
    * `DStream.reduceByKey()` but applies it over a sliding window. Hash partitioning is used to
    * generate the RDDs with `numPartitions` partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -259,7 +259,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
   /**
    * Return a new DStream by applying `reduceByKey` over a sliding window. Similar to
    * `DStream.reduceByKey()`, but applies it over a sliding window.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -289,7 +289,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
-   * @param reduceFunc associative reduce function
+   * @param reduceFunc associative and commutative reduce function
    * @param invReduceFunc inverse reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
@@ -320,7 +320,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
    *  2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
    * This is more efficient than reduceByKeyAndWindow without "inverse reduce" function.
    * However, it is applicable to only "invertible reduce functions".
-   * @param reduceFunc     associative reduce function
+   * @param reduceFunc     associative and commutative reduce function
    * @param invReduceFunc  inverse reduce function
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
