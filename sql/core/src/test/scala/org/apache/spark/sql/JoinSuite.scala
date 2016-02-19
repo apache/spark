@@ -125,7 +125,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     sql("CACHE TABLE testData2")
     Seq(
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
-        classOf[BroadcastHashOuterJoin]),
+        classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
         classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
