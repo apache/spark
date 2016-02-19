@@ -84,9 +84,8 @@ case class Randn(seed: Long) extends RDG {
   def this() = this(Utils.random.nextLong())
 
   def this(seed: Expression) = this(seed match {
-      case IntegerLiteral(s) => s
-      case _ =>
-        throw new AnalysisException("Input argument to randn must be an integer literal.")
+    case IntegerLiteral(s) => s
+    case _ => throw new AnalysisException("Input argument to randn must be an integer literal.")
   })
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
