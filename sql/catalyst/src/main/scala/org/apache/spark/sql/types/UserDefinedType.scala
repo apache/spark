@@ -112,4 +112,9 @@ private[sql] class PythonUserDefinedType(
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
   }
+
+  override def equals(other: Any) = other match {
+    case that: PythonUserDefinedType => this.pyUDT.equals(that.pyUDT)
+    case _ => false
+  }
 }
