@@ -610,13 +610,12 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.sqlCtx.createDataFrame([row1], schema)
         df2 = self.sqlCtx.createDataFrame([row2], schema)
 
-        result = df1.unionAll(df2)
-
+        result = df1.unionAll(df2).collect()
         self.assertEqual(
             result,
             [
                 Row(label=1.0, point=ExamplePoint(1.0, 2.0)),
-                Row(label=2.0, point=ExamplePoint(2.0, 3.0))
+                Row(label=2.0, point=ExamplePoint(3.0, 4.0))
             ]
         )
 

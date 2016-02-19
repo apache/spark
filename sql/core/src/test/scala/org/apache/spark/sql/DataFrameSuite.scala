@@ -112,7 +112,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("unionAll should union DataFrames with UDTs (SPARK-#)") {
+  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
     val rowRDD1 = sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
     val schema1 = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
     val rowRDD2 = sparkContext.parallelize(Seq(Row(new ExamplePoint(3.0, 4.0))))
