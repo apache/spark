@@ -1834,8 +1834,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       """.stripMargin).select($"r.*"),
       Row(3, 2) :: Nil)
 
-    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
-
     // With GROUP BY
     checkAnswer(sql(
       """
@@ -1938,6 +1936,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("SELECT nameConflict.nameConflict.* FROM nameConflict"),
         Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
     }
+  }
+
+  test("Star Expansion - CreateStruct and CreateArray") {
+    val structDf = testData2.select("a", "b").as("record")
+    // CreateStruct and CreateArray in aggregateExpressions
+    assert(structDf.groupBy($"a").agg(min(struct($"record.*"))).first() == Row(3, Row(3, 1)))
+    assert(structDf.groupBy($"a").agg(min(array($"record.*"))).first() == Row(3, Seq(3, 1)))
+
+    // CreateStruct and CreateArray in project list (unresolved alias)
+    assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
+    assert(structDf.select(array($"record.*")).first().getAs[Seq[Int]](0) === Array(1, 1))
+
+    // CreateStruct and CreateArray in project list (alias)
+    assert(structDf.select(struct($"record.*").as("a")).first() == Row(Row(1, 1)))
+    assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Array(1, 1))
   }
 
   test("Common subexpression elimination") {
