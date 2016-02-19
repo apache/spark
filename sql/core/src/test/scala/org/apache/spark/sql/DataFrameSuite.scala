@@ -112,6 +112,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("unionAll should union DataFrames with UDTs (SPARK-#)") {
+    val rowRDD1 = sparkContext.parallelize(Seq(Row(new ExamplePoint(1.0, 2.0))))
+    val schema1 = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
+    val rowRDD2 = sparkContext.parallelize(Seq(Row(new ExamplePoint(3.0, 4.0))))
+    val schema2 = StructType(Array(StructField("point", new ExamplePointUDT(), false)))
+    val df1 = sqlContext.createDataFrame(rowRDD1, schema1)
+    val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
+
+    checkAnswer(
+      df1.unionAll(df2),
+      Seq(Row(new ExamplePoint(1.0, 2.0)), Row(new ExamplePoint(3.0, 4.0)))
+    )
+  }
+
   test("empty data frame") {
     assert(sqlContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
     assert(sqlContext.emptyDataFrame.count() === 0)
