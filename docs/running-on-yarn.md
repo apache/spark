@@ -476,3 +476,78 @@ If you need a reference to the proper location to put log files in the YARN so t
 - In `cluster` mode, the local directories used by the Spark executors and the Spark driver will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored. In `client` mode, the Spark executors will use the local directories configured for YARN while the Spark driver will use those defined in `spark.local.dir`. This is because the Spark driver does not run on the YARN cluster in `client` mode, only the Spark executors do.
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
+
+# Running in a secure YARN cluster
+
+As covered in [security](security.html), Kerberos is used in a secure YARN cluster to
+authenticate principals with services —and obtain access the services and
+their data . Hadoop services issue 'hadoop tokens' to allow an authenticated
+principal's access to the service and data, tokens provided over Hadoop IPC and REST/Web APIs.
+For YARN applications to interact with HDFS, HBase and Hive, the application must request tokens
+using the kerberos credentials of the user launching the cluster (the principal).
+
+This is normally done at launch time: Spark will automatically obtain a token for the cluster's
+HDFS filesystem, and optionally HBase and Hive.
+
+If an application needs to interact with other secure HDFS clusters, then
+the tokens needed to access these clusters must be explicitly requested at
+launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
+
+```
+spark.yarn.access.namenodes hdfs://ireland.emea.example.org:8020/,hdfs://frankfurt.emea.example.org:8020/
+```
+
+Hadoop tokens expire. They can be renewed "for a while"; the Spark Application Master will automatically
+do this. However, eventually, they will stop being renewable. After this point, all attempts to
+access secure data will fail. The only way to avoid that is for the application to be launched
+with the secrets needed to log in to Kerberos directly: a keytab.
+
+## Launching your application with Apache Oozie
+
+Apache Oozie can launch Spark. In an insecure cluster, this is straightforward.
+In a secure cluster, Spark will need the tokens needed to access the cluster's services.
+If Spark is launched with a keytab, this is automatic. However, if Spark is to be
+launched without a keytab, the responsibility for setting up security must be handed
+over to Oozie.
+ 
+The Oozie workflow configuration must be set up for Oozie to request all tokens, including:
+
+- The YARN resource manager.
+- The local HDFS filesystem.
+- Any remote HDFS filesystems.
+- Hive.
+- HBase.
+
+The Spark configuration must be set to *not* request Hive or HBase tokens:
+
+```
+spark.yarn.security.tokens.hive.enabled   false
+spark.yarn.security.tokens.hbase.enabled  false
+```
+
+Finally, the property `spark.yarn.access.namenodes` must be left unset.
+
+## Troubleshooting Kerberos
+
+Debugging Hadoop/Kerberos problems can be "difficult". One useful technique is to
+enable extra logging of Kerberos operations in Hadoop by setting the `HADOOP_JAAS_DEBUG`
+environment variable.
+
+`export HADOOP_JAAS_DEBUG=true`
+
+The JDK classes can be configured to enable extra logging of their Kerberos and
+SPNEGO/REST authentication via the system properties `sun.security.krb5.debug`
+and `sun.security.spnego.debug=true`
+
+```
+ -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+```
+
+All these options can be enabled in the Application Master:
+
+```
+spark.yarn.appMasterEnv.HADOOP_JAAS_DEBUG true
+spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+```
+
+
