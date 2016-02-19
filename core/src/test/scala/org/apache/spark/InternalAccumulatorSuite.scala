@@ -28,6 +28,14 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   import InternalAccumulator._
   import AccumulatorParam._
 
+  override def afterEach(): Unit = {
+    try {
+      Accumulators.clear()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   test("get param") {
     assert(getParam(EXECUTOR_DESERIALIZE_TIME) === LongAccumulatorParam)
     assert(getParam(EXECUTOR_RUN_TIME) === LongAccumulatorParam)
