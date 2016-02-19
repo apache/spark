@@ -533,7 +533,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       ds.toDF().groupBy($"_1").agg(sum($"*") as "sumOccurances")
     }
-    assert(e.getMessage.contains("Invalid usage of '*' in function 'sum'"), e.getMessage)
+    assert(e.getMessage.contains("Invalid usage of '*' in expression 'sum'"), e.getMessage)
   }
 
   test("runtime nullability check") {

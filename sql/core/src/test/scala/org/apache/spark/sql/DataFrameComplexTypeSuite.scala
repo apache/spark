@@ -30,6 +30,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     val f = udf((a: String) => a)
     val df = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
     df.select(struct($"a").as("s")).select(f($"s.a")).collect()
+    df.select(struct($"*").as("s")).select(f($"s.a")).collect()
   }
 
   test("UDF on named_struct") {
@@ -42,6 +43,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     val f = udf((a: String) => a)
     val df = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
     df.select(array($"a").as("s")).select(f(expr("s[0]"))).collect()
+    df.select(array($"*").as("s")).select(f(expr("s[0]"))).collect()
   }
 
   test("SPARK-12477 accessing null element in array field") {
