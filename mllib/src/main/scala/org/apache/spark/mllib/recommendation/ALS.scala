@@ -286,8 +286,8 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param iterations number of iterations of ALS
+   * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
    * @param seed       random seed for initial matrix factorization model
    */
@@ -311,8 +311,8 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param iterations number of iterations of ALS
+   * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
    */
   @Since("0.8.0")
@@ -334,8 +334,8 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param iterations number of iterations of ALS
+   * @param lambda     regularization parameter
    */
   @Since("0.8.0")
   def train(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double)
@@ -351,7 +351,7 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
+   * @param iterations number of iterations of ALS
    */
   @Since("0.8.0")
   def train(ratings: RDD[Rating], rank: Int, iterations: Int)
@@ -368,8 +368,8 @@ object ALS {
    *
    * @param ratings    RDD of (userID, productID, rating) pairs
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param iterations number of iterations of ALS
+   * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
    * @param seed       random seed for initial matrix factorization model
@@ -395,8 +395,8 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param iterations number of iterations of ALS
+   * @param lambda     regularization parameter
    * @param blocks     level of parallelism to split computation into
    * @param alpha      confidence parameter
    */
@@ -421,8 +421,8 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
-   * @param lambda     regularization factor (recommended: 0.01)
+   * @param iterations number of iterations of ALS
+   * @param lambda     regularization parameter
    * @param alpha      confidence parameter
    */
   @Since("0.8.1")
@@ -440,7 +440,7 @@ object ALS {
    *
    * @param ratings    RDD of [[Rating]] objects with userID, productID, and rating
    * @param rank       number of features to use
-   * @param iterations number of iterations of ALS (recommended: 10-20)
+   * @param iterations number of iterations of ALS
    */
   @Since("0.8.1")
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int)

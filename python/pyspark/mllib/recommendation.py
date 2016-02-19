@@ -254,7 +254,7 @@ class ALS(object):
           Number of iterations of ALS.
           (default: 5)
         :param lambda_:
-          The smoothing parameter.
+          Regularization parameter.
           (default: 0.01)
         :param blocks:
           Number of blocks used to parallelize the computation. A value
@@ -292,7 +292,7 @@ class ALS(object):
           Number of iterations of ALS.
           (default: 5)
         :param lambda_:
-          The smoothing parameter.
+          Regularization parameter.
           (default: 0.01)
         :param blocks:
           Number of blocks used to parallelize the computation. A value
