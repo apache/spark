@@ -43,20 +43,29 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.hive.HiveShim._
+import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.sql.types._
 
 
-private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
+private[hive] class HiveFunctionRegistry(
+    underlying: analysis.FunctionRegistry,
+    executionHive: ClientWrapper)
   extends analysis.FunctionRegistry with HiveInspectors {
 
-  def getFunctionInfo(name: String): FunctionInfo = FunctionRegistry.getFunctionInfo(name)
+  def getFunctionInfo(name: String): FunctionInfo = {
+    // Hive Registry need current database to lookup function
+    // TODO: the current database of executionHive should be consistent with metadataHive
+    executionHive.withHiveState {
+      FunctionRegistry.getFunctionInfo(name)
+    }
+  }
 
   override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     Try(underlying.lookupFunction(name, children)).getOrElse {
       // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
       // not always serializable.
       val functionInfo: FunctionInfo =
-        Option(FunctionRegistry.getFunctionInfo(name.toLowerCase)).getOrElse(
+        Option(getFunctionInfo(name.toLowerCase)).getOrElse(
           throw new AnalysisException(s"undefined function $name"))
 
       val functionClassName = functionInfo.getFunctionClass.getName
@@ -110,7 +119,7 @@ private[hive] class HiveFunctionRegistry(underlying: analysis.FunctionRegistry)
   override def lookupFunction(name: String): Option[ExpressionInfo] = {
     underlying.lookupFunction(name).orElse(
     Try {
-      val info = FunctionRegistry.getFunctionInfo(name)
+      val info = getFunctionInfo(name)
       val annotation = info.getFunctionClass.getAnnotation(classOf[Description])
       if (annotation != null) {
         Some(new ExpressionInfo(

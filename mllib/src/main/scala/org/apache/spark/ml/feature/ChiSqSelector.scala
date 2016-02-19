@@ -17,13 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -60,7 +61,7 @@ private[feature] trait ChiSqSelectorParams extends Params
  */
 @Experimental
 final class ChiSqSelector(override val uid: String)
-  extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams {
+  extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("chiSqSelector"))
 
@@ -95,6 +96,13 @@ final class ChiSqSelector(override val uid: String)
   override def copy(extra: ParamMap): ChiSqSelector = defaultCopy(extra)
 }
 
+@Since("1.6.0")
+object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
+
+  @Since("1.6.0")
+  override def load(path: String): ChiSqSelector = super.load(path)
+}
+
 /**
  * :: Experimental ::
  * Model fitted by [[ChiSqSelector]].
@@ -103,7 +111,12 @@ final class ChiSqSelector(override val uid: String)
 final class ChiSqSelectorModel private[ml] (
     override val uid: String,
     private val chiSqSelector: feature.ChiSqSelectorModel)
-  extends Model[ChiSqSelectorModel] with ChiSqSelectorParams {
+  extends Model[ChiSqSelectorModel] with ChiSqSelectorParams with MLWritable {
+
+  import ChiSqSelectorModel._
+
+  /** list of indices to select (filter). Must be ordered asc */
+  val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
 
   /** @group setParam */
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -147,4 +160,46 @@ final class ChiSqSelectorModel private[ml] (
     val copied = new ChiSqSelectorModel(uid, chiSqSelector)
     copyValues(copied, extra).setParent(parent)
   }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+}
+
+@Since("1.6.0")
+object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
+
+  private[ChiSqSelectorModel]
+  class ChiSqSelectorModelWriter(instance: ChiSqSelectorModel) extends MLWriter {
+
+    private case class Data(selectedFeatures: Seq[Int])
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.selectedFeatures.toSeq)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class ChiSqSelectorModelReader extends MLReader[ChiSqSelectorModel] {
+
+    private val className = classOf[ChiSqSelectorModel].getName
+
+    override def load(path: String): ChiSqSelectorModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath).select("selectedFeatures").head()
+      val selectedFeatures = data.getAs[Seq[Int]](0).toArray
+      val oldModel = new feature.ChiSqSelectorModel(selectedFeatures)
+      val model = new ChiSqSelectorModel(metadata.uid, oldModel)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[ChiSqSelectorModel] = new ChiSqSelectorModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): ChiSqSelectorModel = super.load(path)
 }

@@ -170,6 +170,11 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
+    def test_hasparam(self):
+        testParams = TestParams()
+        self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
+        self.assertFalse(testParams.hasParam("notAParameter"))
+
     def test_params(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
@@ -179,7 +184,7 @@ class ParamTests(PySparkTestCase):
         params = testParams.params
         self.assertEqual(params, [inputCol, maxIter, seed])
 
-        self.assertTrue(testParams.hasParam(maxIter))
+        self.assertTrue(testParams.hasParam(maxIter.name))
         self.assertTrue(testParams.hasDefault(maxIter))
         self.assertFalse(testParams.isSet(maxIter))
         self.assertTrue(testParams.isDefined(maxIter))
@@ -188,7 +193,7 @@ class ParamTests(PySparkTestCase):
         self.assertTrue(testParams.isSet(maxIter))
         self.assertEqual(testParams.getMaxIter(), 100)
 
-        self.assertTrue(testParams.hasParam(inputCol))
+        self.assertTrue(testParams.hasParam(inputCol.name))
         self.assertFalse(testParams.hasDefault(inputCol))
         self.assertFalse(testParams.isSet(inputCol))
         self.assertFalse(testParams.isDefined(inputCol))

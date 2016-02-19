@@ -340,10 +340,11 @@ class AkkaUtilsSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
       new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
 
     val slaveConf = sparkSSLConfig()
+      .set("spark.rpc.askTimeout", "5s")
+      .set("spark.rpc.lookupTimeout", "5s")
     val securityManagerBad = new SecurityManager(slaveConf)
 
     val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0, slaveConf, securityManagerBad)
-    val slaveTracker = new MapOutputTrackerWorker(conf)
     try {
       slaveRpcEnv.setupEndpointRef("spark", rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
       fail("should receive either ActorNotFound or TimeoutException")

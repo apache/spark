@@ -28,6 +28,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark._
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
@@ -61,6 +62,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /** Set of partitions in this RDD. */
   def partitions: JList[Partition] = rdd.partitions.toSeq.asJava
+
+  /** Return the number of partitions in this RDD. */
+  @Since("1.6.0")
+  def getNumPartitions: Int = rdd.getNumPartitions
 
   /** The partitioner of this RDD. */
   def partitioner: Optional[Partitioner] = JavaUtils.optionToOptional(rdd.partitioner)
@@ -556,7 +561,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by
-   * the specified Comparator[T].
+   * the specified Comparator[T] and maintains the order.
    * @param num k, the number of top elements to return
    * @param comp the comparator that defines the order
    * @return an array of top elements
@@ -567,7 +572,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Returns the top k (largest) elements from this RDD using the
-   * natural ordering for T.
+   * natural ordering for T and maintains the order.
    * @param num k, the number of top elements to return
    * @return an array of top elements
    */

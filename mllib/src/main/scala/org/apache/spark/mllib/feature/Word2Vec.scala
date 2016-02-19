@@ -126,6 +126,15 @@ class Word2Vec extends Serializable with Logging {
   }
 
   /**
+   * Sets the window of words (default: 5)
+   */
+  @Since("1.6.0")
+  def setWindowSize(window: Int): this.type = {
+    this.window = window
+    this
+  }
+
+  /**
    * Sets minCount, the minimum number of times a token must appear to be included in the word2vec
    * model's vocabulary (default: 5).
    */
@@ -141,23 +150,23 @@ class Word2Vec extends Serializable with Logging {
   private val MAX_SENTENCE_LENGTH = 1000
 
   /** context words from [-window, window] */
-  private val window = 5
+  private var window = 5
 
-  private var trainWordsCount = 0
+  private var trainWordsCount = 0L
   private var vocabSize = 0
-  private var vocab: Array[VocabWord] = null
-  private var vocabHash = mutable.HashMap.empty[String, Int]
+  @transient private var vocab: Array[VocabWord] = null
+  @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
   private def learnVocab(words: RDD[String]): Unit = {
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
+      .filter(_._2 >= minCount)
       .map(x => VocabWord(
         x._1,
         x._2,
         new Array[Int](MAX_CODE_LENGTH),
         new Array[Int](MAX_CODE_LENGTH),
         0))
-      .filter(_.cn >= minCount)
       .collect()
       .sortWith((a, b) => a.cn > b.cn)
 
@@ -171,7 +180,7 @@ class Word2Vec extends Serializable with Logging {
       trainWordsCount += vocab(a).cn
       a += 1
     }
-    logInfo("trainWordsCount = " + trainWordsCount)
+    logInfo(s"vocabSize = $vocabSize, trainWordsCount = $trainWordsCount")
   }
 
   private def createExpTable(): Array[Float] = {
@@ -321,7 +330,7 @@ class Word2Vec extends Serializable with Logging {
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
         val syn0Modify = new Array[Int](vocabSize)
         val syn1Modify = new Array[Int](vocabSize)
-        val model = iter.foldLeft((syn0Global, syn1Global, 0, 0)) {
+        val model = iter.foldLeft((syn0Global, syn1Global, 0L, 0L)) {
           case ((syn0, syn1, lastWordCount, wordCount), sentence) =>
             var lwc = lastWordCount
             var wc = wordCount
@@ -432,9 +441,9 @@ class Word2Vec extends Serializable with Logging {
  *                    (i * vectorSize, i * vectorSize + vectorSize)
  */
 @Since("1.1.0")
-class Word2VecModel private[mllib] (
-    private val wordIndex: Map[String, Int],
-    private val wordVectors: Array[Float]) extends Serializable with Saveable {
+class Word2VecModel private[spark] (
+    private[spark] val wordIndex: Map[String, Int],
+    private[spark] val wordVectors: Array[Float]) extends Serializable with Saveable {
 
   private val numWords = wordIndex.size
   // vectorSize: Dimension of each word's vector.
@@ -530,7 +539,12 @@ class Word2VecModel private[mllib] (
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
     while (ind < numWords) {
-      cosVec(ind) /= wordVecNorms(ind)
+      val norm = wordVecNorms(ind)
+      if (norm == 0.0) {
+        cosVec(ind) = 0.0
+      } else {
+        cosVec(ind) /= norm
+      }
       ind += 1
     }
     wordList.zip(cosVec)
@@ -582,7 +596,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     def load(sc: SparkContext, path: String): Word2VecModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataFrame = sqlContext.read.parquet(dataPath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
@@ -594,7 +608,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
     def save(sc: SparkContext, path: String, model: Map[String, Array[Float]]): Unit = {
 
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
       val vectorSize = model.values.head.size

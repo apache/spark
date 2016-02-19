@@ -44,29 +44,15 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = left.output ++ right.output
 
-  protected[this] def isUnsafeMode: Boolean = {
-    (self.codegenEnabled && self.unsafeEnabled
-      && UnsafeProjection.canSupport(buildKeys)
-      && UnsafeProjection.canSupport(self.schema))
-  }
-
-  override def outputsUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessUnsafeRows: Boolean = isUnsafeMode
-  override def canProcessSafeRows: Boolean = !isUnsafeMode
+  override def outputsUnsafeRows: Boolean = true
+  override def canProcessUnsafeRows: Boolean = true
+  override def canProcessSafeRows: Boolean = false
 
   protected def buildSideKeyGenerator: Projection =
-    if (isUnsafeMode) {
-      UnsafeProjection.create(buildKeys, buildPlan.output)
-    } else {
-      newMutableProjection(buildKeys, buildPlan.output)()
-    }
+    UnsafeProjection.create(buildKeys, buildPlan.output)
 
   protected def streamSideKeyGenerator: Projection =
-    if (isUnsafeMode) {
-      UnsafeProjection.create(streamedKeys, streamedPlan.output)
-    } else {
-      newMutableProjection(streamedKeys, streamedPlan.output)()
-    }
+    UnsafeProjection.create(streamedKeys, streamedPlan.output)
 
   protected def hashJoin(
       streamIter: Iterator[InternalRow],
@@ -81,13 +67,8 @@ trait HashJoin {
 
       // Mutable per row objects.
       private[this] val joinRow = new JoinedRow
-      private[this] val resultProjection: (InternalRow) => InternalRow = {
-        if (isUnsafeMode) {
-          UnsafeProjection.create(self.schema)
-        } else {
-          identity[InternalRow]
-        }
-      }
+      private[this] val resultProjection: (InternalRow) => InternalRow =
+        UnsafeProjection.create(self.schema)
 
       private[this] val joinKeys = streamSideKeyGenerator
 

@@ -44,7 +44,7 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.{ActorReceiver, ActorSupervisorStrategy, Receiver}
 import org.apache.spark.streaming.scheduler.{JobScheduler, StreamingListener}
 import org.apache.spark.streaming.ui.{StreamingJobProgressListener, StreamingTab}
-import org.apache.spark.util.{CallSite, ShutdownHookManager, ThreadUtils, Utils}
+import org.apache.spark.util.{AsynchronousListenerBus, CallSite, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Main entry point for Spark Streaming functionality. It provides methods used to create
@@ -574,11 +574,12 @@ class StreamingContext private[streaming] (
    * :: DeveloperApi ::
    *
    * Return the current state of the context. The context can be in three possible states -
-   * - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
-   *   Input DStreams, transformations and output operations can be created on the context.
-   * - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
-   *   Input DStreams, transformations and output operations cannot be created on the context.
-   * - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
+   *
+   *  - StreamingContextState.INTIALIZED - The context has been created, but not been started yet.
+   *    Input DStreams, transformations and output operations can be created on the context.
+   *  - StreamingContextState.ACTIVE - The context has been started, and been not stopped.
+   *    Input DStreams, transformations and output operations cannot be created on the context.
+   *  - StreamingContextState.STOPPED - The context has been stopped and cannot be used any more.
    */
   @DeveloperApi
   def getState(): StreamingContextState = synchronized {
@@ -693,6 +694,10 @@ class StreamingContext private[streaming] (
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = {
     var shutdownHookRefToRemove: AnyRef = null
+    if (AsynchronousListenerBus.withinListenerThread.value) {
+      throw new SparkException("Cannot stop StreamingContext within listener thread of" +
+        " AsynchronousListenerBus")
+    }
     synchronized {
       try {
         state match {
@@ -882,12 +887,25 @@ object StreamingContext extends Logging {
   }
 
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
-    if (prefix == null) {
-      time.milliseconds.toString
-    } else if (suffix == null || suffix.length ==0) {
-      prefix + "-" + time.milliseconds
-    } else {
-      prefix + "-" + time.milliseconds + "." + suffix
+    var result = time.milliseconds.toString
+    if (prefix != null && prefix.length > 0) {
+      result = s"$prefix-$result"
     }
+    if (suffix != null && suffix.length > 0) {
+      result = s"$result.$suffix"
+    }
+    result
+  }
+}
+
+private class StreamingContextPythonHelper {
+
+  /**
+   * This is a private method only for Python to implement `getOrCreate`.
+   */
+  def tryRecoverFromCheckpoint(checkpointPath: String): Option[StreamingContext] = {
+    val checkpointOption = CheckpointReader.read(
+      checkpointPath, new SparkConf(), SparkHadoopUtil.get.conf, false)
+    checkpointOption.map(new StreamingContext(null, _, null))
   }
 }

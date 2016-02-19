@@ -82,7 +82,7 @@ private[libsvm] class LibSVMRelation(val path: String, val numFeatures: Int, val
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = sqlContext.read.format("libsvm")
+ *   DataFrame df = sqlContext.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}

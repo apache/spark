@@ -61,11 +61,6 @@
     </dependency>
     <dependency>
       <groupId>com.amazonaws</groupId>
-      <artifactId>aws-java-sdk</artifactId>
-      <version>${aws.java.sdk.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>com.amazonaws</groupId>
       <artifactId>amazon-kinesis-producer</artifactId>
       <version>${aws.kinesis.producer.version}</version>
       <scope>test</scope>

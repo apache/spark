@@ -34,7 +34,6 @@ connExists <- function(env) {
 sparkR.stop <- function() {
   env <- .sparkREnv
   if (exists(".sparkRCon", envir = env)) {
-    # cat("Stopping SparkR\n")
     if (exists(".sparkRjsc", envir = env)) {
       sc <- get(".sparkRjsc", envir = env)
       callJMethod(sc, "stop")
@@ -47,6 +46,12 @@ sparkR.stop <- function() {
       if (exists(".sparkRHivesc", envir = env)) {
         rm(".sparkRHivesc", envir = env)
       }
+    }
+
+    # Remove the R package lib path from .libPaths()
+    if (exists(".libPath", envir = env)) {
+      libPath <- get(".libPath", envir = env)
+      .libPaths(.libPaths()[.libPaths() != libPath])
     }
 
     if (exists(".backendLaunched", envir = env)) {
@@ -78,16 +83,16 @@ sparkR.stop <- function() {
 #' Initialize a new Spark Context.
 #'
 #' This function initializes a new SparkContext. For details on how to initialize
-#' and use SparkR, refer to SparkR programming guide at 
+#' and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparkcontext-sqlcontext}.
 #'
-#' @param master The Spark master URL.
+#' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
 #' @param sparkHome Spark Home directory
-#' @param sparkEnvir Named list of environment variables to set on worker nodes.
-#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors.
-#' @param sparkJars Character string vector of jar files to pass to the worker nodes.
-#' @param sparkPackages Character string vector of packages from spark-packages.org
+#' @param sparkEnvir Named list of environment variables to set on worker nodes
+#' @param sparkExecutorEnv Named list of environment variables to be used when launching executors
+#' @param sparkJars Character vector of jar files to pass to the worker nodes
+#' @param sparkPackages Character vector of packages from spark-packages.org
 #' @export
 #' @examples
 #'\dontrun{
@@ -97,7 +102,9 @@ sparkR.stop <- function() {
 #' sc <- sparkR.init("yarn-client", "SparkR", "/home/spark",
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
-#'                  c("jarfile1.jar","jarfile2.jar"))
+#'                  c("one.jar", "two.jar", "three.jar"),
+#'                  c("com.databricks:spark-avro_2.10:2.0.1",
+#'                    "com.databricks:spark-csv_2.10:1.3.0"))
 #'}
 
 sparkR.init <- function(
@@ -115,15 +122,8 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
-  jars <- suppressWarnings(normalizePath(as.character(sparkJars)))
-
-  # Classpath separator is ";" on Windows
-  # URI needs four /// as from http://stackoverflow.com/a/18522792
-  if (.Platform$OS.type == "unix") {
-    uriSep <- "//"
-  } else {
-    uriSep <- "////"
-  }
+  jars <- processSparkJars(sparkJars)
+  packages <- processSparkPackages(sparkPackages)
 
   sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
@@ -140,7 +140,7 @@ sparkR.init <- function(
         sparkHome = sparkHome,
         jars = jars,
         sparkSubmitOpts = submitOps,
-        packages = sparkPackages)
+        packages = packages)
     # wait atmost 100 seconds for JVM to launch
     wait <- 0.1
     for (i in 1:25) {
@@ -156,14 +156,20 @@ sparkR.init <- function(
     f <- file(path, open="rb")
     backendPort <- readInt(f)
     monitorPort <- readInt(f)
+    rLibPath <- readString(f)
     close(f)
     file.remove(path)
     if (length(backendPort) == 0 || backendPort == 0 ||
-        length(monitorPort) == 0 || monitorPort == 0) {
+        length(monitorPort) == 0 || monitorPort == 0 ||
+        length(rLibPath) != 1) {
       stop("JVM failed to launch")
     }
     assign(".monitorConn", socketConnection(port = monitorPort), envir = .sparkREnv)
     assign(".backendLaunched", 1, envir = .sparkREnv)
+    if (rLibPath != "") {
+      assign(".libPath", rLibPath, envir = .sparkREnv)
+      .libPaths(c(rLibPath, .libPaths()))
+    }
   }
 
   .sparkREnv$backendPort <- backendPort
@@ -184,8 +190,14 @@ sparkR.init <- function(
       paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
   }
 
-  nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- lapply(nonEmptyJars,
+  # Classpath separator is ";" on Windows
+  # URI needs four /// as from http://stackoverflow.com/a/18522792
+  if (.Platform$OS.type == "unix") {
+    uriSep <- "//"
+  } else {
+    uriSep <- "////"
+  }
+  localJarPaths <- lapply(jars,
                           function(j) { utils::URLencode(paste("file:", uriSep, j, sep = "")) })
 
   # Set the start time to identify jobjs
@@ -354,4 +366,23 @@ getClientModeSparkSubmitOpts <- function(submitOps, sparkEnvirMap) {
   })
   # --option must be before the application class "sparkr-shell" in submitOps
   paste0(paste0(envirToOps, collapse = ""), submitOps)
+}
+
+# Utility function that handles sparkJars argument, and normalize paths
+processSparkJars <- function(jars) {
+  splittedJars <- splitString(jars)
+  if (length(splittedJars) > length(jars)) {
+    warning("sparkJars as a comma-separated string is deprecated, use character vector instead")
+  }
+  normalized <- suppressWarnings(normalizePath(splittedJars))
+  normalized
+}
+
+# Utility function that handles sparkPackages argument
+processSparkPackages <- function(packages) {
+  splittedPackages <- splitString(packages)
+  if (length(splittedPackages) > length(packages)) {
+    warning("sparkPackages as a comma-separated string is deprecated, use character vector instead")
+  }
+  splittedPackages
 }

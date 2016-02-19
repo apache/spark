@@ -28,11 +28,13 @@ import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
+import com.google.common.base.Objects
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
@@ -47,6 +49,7 @@ private[hive] object HiveShim {
   // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
   val UNLIMITED_DECIMAL_PRECISION = 38
   val UNLIMITED_DECIMAL_SCALE = 18
+  val HIVE_GENERIC_UDF_MACRO_CLS = "org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro"
 
   /*
    * This function in hive-0.13 become private, but we have to do this to walkaround hive bug
@@ -124,6 +127,26 @@ private[hive] object HiveShim {
 
     // for Serialization
     def this() = this(null)
+
+    override def hashCode(): Int = {
+      if (functionClassName == HIVE_GENERIC_UDF_MACRO_CLS) {
+        Objects.hashCode(functionClassName, instance.asInstanceOf[GenericUDFMacro].getBody())
+      } else {
+        functionClassName.hashCode()
+      }
+    }
+
+    override def equals(other: Any): Boolean = other match {
+      case a: HiveFunctionWrapper if functionClassName == a.functionClassName =>
+        // In case of udf macro, check to make sure they point to the same underlying UDF
+        if (functionClassName == HIVE_GENERIC_UDF_MACRO_CLS) {
+          a.instance.asInstanceOf[GenericUDFMacro].getBody() ==
+            instance.asInstanceOf[GenericUDFMacro].getBody()
+        } else {
+          true
+        }
+      case _ => false
+    }
 
     @transient
     def deserializeObjectByKryo[T: ClassTag](

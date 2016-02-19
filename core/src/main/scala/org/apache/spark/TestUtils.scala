@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
 import java.net.{URI, URL}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Paths
 import java.util.Arrays
 import java.util.jar.{JarEntry, JarOutputStream}
 
@@ -83,15 +84,15 @@ private[spark] object TestUtils {
   }
 
   /**
-   * Create a jar file that contains this set of files. All files will be located at the root
-   * of the jar.
+   * Create a jar file that contains this set of files. All files will be located in the specified
+   * directory or at the root of the jar.
    */
-  def createJar(files: Seq[File], jarFile: File): URL = {
+  def createJar(files: Seq[File], jarFile: File, directoryPrefix: Option[String] = None): URL = {
     val jarFileStream = new FileOutputStream(jarFile)
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
 
     for (file <- files) {
-      val jarEntry = new JarEntry(file.getName)
+      val jarEntry = new JarEntry(Paths.get(directoryPrefix.getOrElse(""), file.getName).toString)
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
@@ -123,7 +124,7 @@ private[spark] object TestUtils {
       classpathUrls: Seq[URL]): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
 
-    // Calling this outputs a class file in pwd. It's easier to just rename the file than
+    // Calling this outputs a class file in pwd. It's easier to just rename the files than
     // build a custom FileManager that controls the output location.
     val options = if (classpathUrls.nonEmpty) {
       Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))

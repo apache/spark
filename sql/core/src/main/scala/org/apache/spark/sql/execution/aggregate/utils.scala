@@ -33,15 +33,14 @@ object Utils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
-    val groupingAttributes = groupingExpressions.map(_.toAttribute)
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map {
       expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
     }
 
     SortBasedAggregate(
-      requiredChildDistributionExpressions = Some(groupingAttributes),
-      groupingExpressions = groupingAttributes,
+      requiredChildDistributionExpressions = Some(groupingExpressions),
+      groupingExpressions = groupingExpressions,
       nonCompleteAggregateExpressions = Nil,
       nonCompleteAggregateAttributes = Nil,
       completeAggregateExpressions = completeAggregateExpressions,
@@ -59,12 +58,9 @@ object Utils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
     // Check if we can use TungstenAggregate.
-    val usesTungstenAggregate =
-      child.sqlContext.conf.unsafeEnabled &&
-      TungstenAggregate.supportsAggregate(
+    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
         groupingExpressions,
         aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-
 
     // 1. Create an Aggregate Operator for partial aggregations.
 
@@ -144,27 +140,21 @@ object Utils {
       child: SparkPlan): Seq[SparkPlan] = {
 
     val aggregateExpressions = functionsWithDistinct ++ functionsWithoutDistinct
-    val usesTungstenAggregate =
-      child.sqlContext.conf.unsafeEnabled &&
-        TungstenAggregate.supportsAggregate(
-          groupingExpressions,
-          aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
+    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
+      groupingExpressions,
+      aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
 
     // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain more than one
-    // DISTINCT aggregate function, all of those functions will have the same column expression.
+    // DISTINCT aggregate function, all of those functions will have the same column expressions.
     // For example, it would be valid for functionsWithDistinct to be
     // [COUNT(DISTINCT foo), MAX(DISTINCT foo)], but [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is
     // disallowed because those two distinct aggregates have different column expressions.
-    val distinctColumnExpression: Expression = {
-      val allDistinctColumnExpressions = functionsWithDistinct.head.aggregateFunction.children
-      assert(allDistinctColumnExpressions.length == 1)
-      allDistinctColumnExpressions.head
-    }
-    val namedDistinctColumnExpression: NamedExpression = distinctColumnExpression match {
+    val distinctColumnExpressions = functionsWithDistinct.head.aggregateFunction.children
+    val namedDistinctColumnExpressions = distinctColumnExpressions.map {
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
     }
-    val distinctColumnAttribute: Attribute = namedDistinctColumnExpression.toAttribute
+    val distinctColumnAttributes = namedDistinctColumnExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     // 1. Create an Aggregate Operator for partial aggregations.
@@ -175,10 +165,11 @@ object Utils {
       // We will group by the original grouping expression, plus an additional expression for the
       // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
       // expressions will be [key, value].
-      val partialAggregateGroupingExpressions = groupingExpressions :+ namedDistinctColumnExpression
+      val partialAggregateGroupingExpressions =
+        groupingExpressions ++ namedDistinctColumnExpressions
       val partialAggregateResult =
         groupingAttributes ++
-          Seq(distinctColumnAttribute) ++
+          distinctColumnAttributes ++
           partialAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
       if (usesTungstenAggregate) {
         TungstenAggregate(
@@ -213,28 +204,28 @@ object Utils {
         partialMergeAggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
       val partialMergeAggregateResult =
         groupingAttributes ++
-          Seq(distinctColumnAttribute) ++
+          distinctColumnAttributes ++
           partialMergeAggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
       if (usesTungstenAggregate) {
         TungstenAggregate(
           requiredChildDistributionExpressions = Some(groupingAttributes),
-          groupingExpressions = groupingAttributes :+ distinctColumnAttribute,
+          groupingExpressions = groupingAttributes ++ distinctColumnAttributes,
           nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
           nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
           completeAggregateExpressions = Nil,
           completeAggregateAttributes = Nil,
-          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          initialInputBufferOffset = (groupingAttributes ++ distinctColumnAttributes).length,
           resultExpressions = partialMergeAggregateResult,
           child = partialAggregate)
       } else {
         SortBasedAggregate(
           requiredChildDistributionExpressions = Some(groupingAttributes),
-          groupingExpressions = groupingAttributes :+ distinctColumnAttribute,
+          groupingExpressions = groupingAttributes ++ distinctColumnAttributes,
           nonCompleteAggregateExpressions = partialMergeAggregateExpressions,
           nonCompleteAggregateAttributes = partialMergeAggregateAttributes,
           completeAggregateExpressions = Nil,
           completeAggregateAttributes = Nil,
-          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          initialInputBufferOffset = (groupingAttributes ++ distinctColumnAttributes).length,
           resultExpressions = partialMergeAggregateResult,
           child = partialAggregate)
       }
@@ -249,14 +240,16 @@ object Utils {
         expr => aggregateFunctionToAttribute(expr.aggregateFunction, expr.isDistinct)
       }
 
+      val distinctColumnAttributeLookup =
+        distinctColumnExpressions.zip(distinctColumnAttributes).toMap
       val (completeAggregateExpressions, completeAggregateAttributes) = functionsWithDistinct.map {
         // Children of an AggregateFunction with DISTINCT keyword has already
         // been evaluated. At here, we need to replace original children
         // to AttributeReferences.
         case agg @ AggregateExpression(aggregateFunction, mode, true) =>
-          val rewrittenAggregateFunction = aggregateFunction.transformDown {
-            case expr if expr == distinctColumnExpression => distinctColumnAttribute
-          }.asInstanceOf[AggregateFunction]
+          val rewrittenAggregateFunction = aggregateFunction
+            .transformDown(distinctColumnAttributeLookup)
+            .asInstanceOf[AggregateFunction]
           // We rewrite the aggregate function to a non-distinct aggregation because
           // its input will have distinct arguments.
           // We just keep the isDistinct setting to true, so when users look at the query plan,
@@ -275,7 +268,7 @@ object Utils {
           nonCompleteAggregateAttributes = finalAggregateAttributes,
           completeAggregateExpressions = completeAggregateExpressions,
           completeAggregateAttributes = completeAggregateAttributes,
-          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          initialInputBufferOffset = (groupingAttributes ++ distinctColumnAttributes).length,
           resultExpressions = resultExpressions,
           child = partialMergeAggregate)
       } else {
@@ -286,7 +279,7 @@ object Utils {
           nonCompleteAggregateAttributes = finalAggregateAttributes,
           completeAggregateExpressions = completeAggregateExpressions,
           completeAggregateAttributes = completeAggregateAttributes,
-          initialInputBufferOffset = (groupingAttributes :+ distinctColumnAttribute).length,
+          initialInputBufferOffset = (groupingAttributes ++ distinctColumnAttributes).length,
           resultExpressions = resultExpressions,
           child = partialMergeAggregate)
       }

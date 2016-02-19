@@ -39,7 +39,7 @@ private[ui] case class RDDOperationGraph(
     rootCluster: RDDOperationCluster)
 
 /** A node in an RDDOperationGraph. This represents an RDD. */
-private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: CallSite)
+private[ui] case class RDDOperationNode(id: Int, name: String, cached: Boolean, callsite: String)
 
 /**
  * A directed edge connecting two nodes in an RDDOperationGraph.
@@ -178,7 +178,7 @@ private[ui] object RDDOperationGraph extends Logging {
 
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
-    val label = s"${node.name} [${node.id}]\n${node.callsite.shortForm}"
+    val label = s"${node.name} [${node.id}]\n${node.callsite}"
     s"""${node.id} [label="$label"]"""
   }
 

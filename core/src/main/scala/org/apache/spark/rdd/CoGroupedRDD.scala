@@ -70,7 +70,7 @@ private[spark] class CoGroupPartition(
  *
  * Note: This is an internal API. We recommend users use RDD.cogroup(...) instead of
  * instantiating this directly.
-
+ *
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output
  */

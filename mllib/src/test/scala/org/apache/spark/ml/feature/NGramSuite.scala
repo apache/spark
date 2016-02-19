@@ -20,13 +20,14 @@ package org.apache.spark.ml.feature
 import scala.beans.BeanInfo
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 @BeanInfo
 case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
 
-class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
+class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   import org.apache.spark.ml.feature.NGramSuite._
 
   test("default behavior yields bigram features") {
@@ -78,6 +79,14 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array()
       )))
     testNGram(nGram, dataset)
+  }
+
+  test("read/write") {
+    val t = new NGram()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setN(3)
+    testDefaultReadWrite(t)
   }
 }
 

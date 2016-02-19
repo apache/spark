@@ -846,4 +846,34 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     sqlContext.sql("""use default""")
     sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
   }
+
+  test("skip hive metadata on table creation") {
+    val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
+
+    catalog.createDataSourceTable(
+      tableIdent = TableIdentifier("not_skip_hive_metadata"),
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      provider = "parquet",
+      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "false"),
+      isExternal = false)
+
+    // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
+    // each column of the table is of native type StringType.
+    assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
+      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == StringType))
+
+    catalog.createDataSourceTable(
+      tableIdent = TableIdentifier("skip_hive_metadata"),
+      userSpecifiedSchema = Some(schema),
+      partitionColumns = Array.empty[String],
+      provider = "parquet",
+      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "true"),
+      isExternal = false)
+
+    // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
+    // the table has a column type as array of StringType.
+    assert(catalog.client.getTable("default", "skip_hive_metadata").schema
+      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == ArrayType(StringType)))
+  }
 }

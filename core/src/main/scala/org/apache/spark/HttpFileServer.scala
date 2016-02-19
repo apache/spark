@@ -63,12 +63,12 @@ private[spark] class HttpFileServer(
 
   def addFile(file: File) : String = {
     addFileToDir(file, fileDir)
-    serverUri + "/files/" + file.getName
+    serverUri + "/files/" + Utils.encodeFileNameToURIRawPath(file.getName)
   }
 
   def addJar(file: File) : String = {
     addFileToDir(file, jarDir)
-    serverUri + "/jars/" + file.getName
+    serverUri + "/jars/" + Utils.encodeFileNameToURIRawPath(file.getName)
   }
 
   def addFileToDir(file: File, dir: File) : String = {
@@ -80,7 +80,7 @@ private[spark] class HttpFileServer(
       throw new IllegalArgumentException(s"$file cannot be a directory.")
     }
     Files.copy(file, new File(dir, file.getName))
-    dir + "/" + file.getName
+    dir + "/" + Utils.encodeFileNameToURIRawPath(file.getName)
   }
 
 }

@@ -486,6 +486,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       val df = sqlContext.read
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
+        .option("basePath", file.getCanonicalPath)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
 
       val expectedPaths = Set(

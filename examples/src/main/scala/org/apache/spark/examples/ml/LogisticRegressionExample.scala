@@ -125,7 +125,7 @@ object LogisticRegressionExample {
     val stages = new mutable.ArrayBuffer[PipelineStage]()
 
     val labelIndexer = new StringIndexer()
-      .setInputCol("labelString")
+      .setInputCol("label")
       .setOutputCol("indexedLabel")
     stages += labelIndexer
 
@@ -149,7 +149,7 @@ object LogisticRegressionExample {
 
     val lorModel = pipelineModel.stages.last.asInstanceOf[LogisticRegressionModel]
     // Print the weights and intercept for logistic regression.
-    println(s"Weights: ${lorModel.weights} Intercept: ${lorModel.intercept}")
+    println(s"Weights: ${lorModel.coefficients} Intercept: ${lorModel.intercept}")
 
     println("Training data results:")
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, training, "indexedLabel")

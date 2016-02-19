@@ -51,7 +51,7 @@ object ExtractValue {
       case (StructType(fields), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
         val ordinal = findField(fields, fieldName, resolver)
-        GetStructField(child, fields(ordinal).copy(name = fieldName), ordinal)
+        GetStructField(child, ordinal, Some(fieldName))
 
       case (ArrayType(StructType(fields), containsNull), NonNullLiteral(v, StringType)) =>
         val fieldName = v.toString
@@ -97,16 +97,21 @@ object ExtractValue {
  * Returns the value of fields in the Struct `child`.
  *
  * No need to do type checking since it is handled by [[ExtractValue]].
+ *
+ * Note that we can pass in the field name directly to keep case preserving in `toString`.
+ * For example, when get field `yEAr` from `<year: int, month: int>`, we should pass in `yEAr`.
  */
-case class GetStructField(child: Expression, field: StructField, ordinal: Int)
+case class GetStructField(child: Expression, ordinal: Int, name: Option[String] = None)
   extends UnaryExpression {
 
-  override def dataType: DataType = field.dataType
-  override def nullable: Boolean = child.nullable || field.nullable
-  override def toString: String = s"$child.${field.name}"
+  private[sql] lazy val childSchema = child.dataType.asInstanceOf[StructType]
+
+  override def dataType: DataType = childSchema(ordinal).dataType
+  override def nullable: Boolean = child.nullable || childSchema(ordinal).nullable
+  override def toString: String = s"$child.${name.getOrElse(childSchema(ordinal).name)}"
 
   protected override def nullSafeEval(input: Any): Any =
-    input.asInstanceOf[InternalRow].get(ordinal, field.dataType)
+    input.asInstanceOf[InternalRow].get(ordinal, childSchema(ordinal).dataType)
 
   override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
     nullSafeCodeGen(ctx, ev, eval => {
@@ -206,7 +211,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   protected override def nullSafeEval(value: Any, ordinal: Any): Any = {
     val baseValue = value.asInstanceOf[ArrayData]
     val index = ordinal.asInstanceOf[Number].intValue()
-    if (index >= baseValue.numElements() || index < 0) {
+    if (index >= baseValue.numElements() || index < 0 || baseValue.isNullAt(index)) {
       null
     } else {
       baseValue.get(index, dataType)
@@ -217,7 +222,7 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int index = (int) $eval2;
-        if (index >= $eval1.numElements() || index < 0) {
+        if (index >= $eval1.numElements() || index < 0 || $eval1.isNullAt(index)) {
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${ctx.getValue(eval1, dataType, "index")};
@@ -255,6 +260,7 @@ case class GetMapValue(child: Expression, key: Expression)
     val map = value.asInstanceOf[MapData]
     val length = map.numElements()
     val keys = map.keyArray()
+    val values = map.valueArray()
 
     var i = 0
     var found = false
@@ -266,10 +272,10 @@ case class GetMapValue(child: Expression, key: Expression)
       }
     }
 
-    if (!found) {
+    if (!found || values.isNullAt(i)) {
       null
     } else {
-      map.valueArray().get(i, dataType)
+      values.get(i, dataType)
     }
   }
 
@@ -279,10 +285,12 @@ case class GetMapValue(child: Expression, key: Expression)
     val keys = ctx.freshName("keys")
     val found = ctx.freshName("found")
     val key = ctx.freshName("key")
+    val values = ctx.freshName("values")
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
         final ArrayData $keys = $eval1.keyArray();
+        final ArrayData $values = $eval1.valueArray();
 
         int $index = 0;
         boolean $found = false;
@@ -295,10 +303,10 @@ case class GetMapValue(child: Expression, key: Expression)
           }
         }
 
-        if ($found) {
-          ${ev.value} = ${ctx.getValue(eval1 + ".valueArray()", dataType, index)};
-        } else {
+        if (!$found || $values.isNullAt($index)) {
           ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${ctx.getValue(values, dataType, index)};
         }
       """
     })

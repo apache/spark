@@ -152,8 +152,8 @@ class WindowSpec private[sql](
           case Sum(child) => WindowExpression(
             UnresolvedWindowFunction("sum", child :: Nil),
             WindowSpecDefinition(partitionSpec, orderSpec, frame))
-          case Count(child) => WindowExpression(
-            UnresolvedWindowFunction("count", child :: Nil),
+          case Count(children) => WindowExpression(
+            UnresolvedWindowFunction("count", children),
             WindowSpecDefinition(partitionSpec, orderSpec, frame))
           case First(child, ignoreNulls) => WindowExpression(
             // TODO this is a hack for Hive UDAF first_value

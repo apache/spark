@@ -26,9 +26,6 @@ import org.apache.spark.ml.classification.DecisionTreeClassifier;
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 // $example off$
@@ -40,9 +37,8 @@ public class JavaDecisionTreeClassificationExample {
     SQLContext sqlContext = new SQLContext(jsc);
 
     // $example on$
-    // Load and parse the data file, converting it to a DataFrame.
-    RDD<LabeledPoint> rdd = MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt");
-    DataFrame data = sqlContext.createDataFrame(rdd, LabeledPoint.class);
+    // Load the data stored in LIBSVM format as a DataFrame.
+    DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.

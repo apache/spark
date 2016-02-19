@@ -284,7 +284,11 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         JInt(stageId) <- stage \ "stageId"
         JInt(attemptId) <- stage \ "attemptId"
       } {
-        val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
+        val exp = if (attemptId.toInt == 0 && stageId.toInt == 1) {
+          StageStatus.FAILED
+        } else {
+          StageStatus.COMPLETE
+        }
         status should be (exp.name())
       }
 

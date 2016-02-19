@@ -45,20 +45,8 @@ trait HashJoinNode {
   private[this] var hashed: HashedRelation = _
   private[this] var joinKeys: Projection = _
 
-  protected def isUnsafeMode: Boolean = {
-    (codegenEnabled &&
-      unsafeEnabled &&
-      UnsafeProjection.canSupport(schema) &&
-      UnsafeProjection.canSupport(streamedKeys))
-  }
-
-  private def streamSideKeyGenerator: Projection = {
-    if (isUnsafeMode) {
-      UnsafeProjection.create(streamedKeys, streamedNode.output)
-    } else {
-      newMutableProjection(streamedKeys, streamedNode.output)()
-    }
-  }
+  private def streamSideKeyGenerator: Projection =
+    UnsafeProjection.create(streamedKeys, streamedNode.output)
 
   /**
    * Sets the HashedRelation used by this node. This method needs to be called after
@@ -76,13 +64,7 @@ trait HashJoinNode {
   override def open(): Unit = {
     doOpen()
     joinRow = new JoinedRow
-    resultProjection = {
-      if (isUnsafeMode) {
-        UnsafeProjection.create(schema)
-      } else {
-        identity[InternalRow]
-      }
-    }
+    resultProjection = UnsafeProjection.create(schema)
     joinKeys = streamSideKeyGenerator
   }
 

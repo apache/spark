@@ -201,12 +201,12 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     if (attribute.isDefined) {
       // This target resolved to an attribute in child. It must be a struct. Expand it.
       attribute.get.dataType match {
-        case s: StructType => {
-          s.fields.map( f => {
-            val extract = GetStructField(attribute.get, f, s.getFieldIndex(f.name).get)
-            Alias(extract, target.get + "." + f.name)()
-          })
+        case s: StructType => s.zipWithIndex.map {
+          case (f, i) =>
+            val extract = GetStructField(attribute.get, i)
+            Alias(extract, f.name)()
         }
+
         case _ => {
           throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
             target.get + "`")

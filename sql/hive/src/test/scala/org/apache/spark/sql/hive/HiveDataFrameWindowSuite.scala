@@ -256,4 +256,14 @@ class HiveDataFrameWindowSuite extends QueryTest with TestHiveSingleton {
         Row(3, 11, 6) :: Row(2, 13, 2) :: Row(1, 13, null) :: Nil)
 
   }
+
+  test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
+    val src = Seq((0, 3, 5)).toDF("a", "b", "c")
+      .withColumn("Data", struct("a", "b"))
+      .drop("a")
+      .drop("b")
+    val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
+    val df = src.select($"*", max("c").over(winSpec) as "max")
+    checkAnswer(df, Row(5, Row(0, 3), 5))
+  }
 }

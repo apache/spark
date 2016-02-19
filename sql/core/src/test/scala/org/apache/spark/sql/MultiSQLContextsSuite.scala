@@ -27,11 +27,11 @@ class MultiSQLContextsSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var sparkConf: SparkConf = _
 
   override protected def beforeAll(): Unit = {
-    originalActiveSQLContext = SQLContext.getActiveContextOption()
+    originalActiveSQLContext = SQLContext.getActive()
     originalInstantiatedSQLContext = SQLContext.getInstantiatedContextOption()
 
     SQLContext.clearActive()
-    originalInstantiatedSQLContext.foreach(ctx => SQLContext.clearInstantiatedContext(ctx))
+    SQLContext.clearInstantiatedContext()
     sparkConf =
       new SparkConf(false)
         .setMaster("local[*]")
@@ -89,10 +89,9 @@ class MultiSQLContextsSuite extends SparkFunSuite with BeforeAndAfterAll {
         testNewSession(rootSQLContext)
         testNewSession(rootSQLContext)
         testCreatingNewSQLContext(allowMultipleSQLContexts)
-
-        SQLContext.clearInstantiatedContext(rootSQLContext)
       } finally {
         sc.stop()
+        SQLContext.clearInstantiatedContext()
       }
     }
   }

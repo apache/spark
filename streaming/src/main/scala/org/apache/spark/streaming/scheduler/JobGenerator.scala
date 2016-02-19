@@ -220,7 +220,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     logInfo("Batches pending processing (" + pendingTimes.size + " batches): " +
       pendingTimes.mkString(", "))
     // Reschedule jobs for these times
-    val timesToReschedule = (pendingTimes ++ downTimes).distinct.sorted(Time.ordering)
+    val timesToReschedule = (pendingTimes ++ downTimes).filter { _ < restartTime }
+      .distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
       timesToReschedule.mkString(", "))
     timesToReschedule.foreach { time =>

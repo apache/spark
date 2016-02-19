@@ -264,8 +264,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     var memoryThreshold = initialMemoryThreshold
     // Memory to request as a multiple of current vector size
     val memoryGrowthFactor = 1.5
-    // Previous unroll memory held by this task, for releasing later (only at the very end)
-    val previousMemoryReserved = currentUnrollMemoryForThisTask
+    // Keep track of pending unroll memory reserved by this method.
+    var pendingMemoryReserved = 0L
     // Underlying vector for unrolling the block
     var vector = new SizeTrackingVector[Any]
 
@@ -275,6 +275,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     if (!keepUnrolling) {
       logWarning(s"Failed to reserve initial memory threshold of " +
         s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+    } else {
+      pendingMemoryReserved += initialMemoryThreshold
     }
 
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
@@ -288,6 +290,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
             val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
             keepUnrolling = reserveUnrollMemoryForThisTask(
               blockId, amountToRequest, droppedBlocks)
+            if (keepUnrolling) {
+              pendingMemoryReserved += amountToRequest
+            }
             // New threshold is currentSize * memoryGrowthFactor
             memoryThreshold += amountToRequest
           }
@@ -314,10 +319,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           // release the unroll memory yet. Instead, we transfer it to pending unroll memory
           // so `tryToPut` can further transfer it to normal storage memory later.
           // TODO: we can probably express this without pending unroll memory (SPARK-10907)
-          val amountToTransferToPending = currentUnrollMemoryForThisTask - previousMemoryReserved
-          unrollMemoryMap(taskAttemptId) -= amountToTransferToPending
+          unrollMemoryMap(taskAttemptId) -= pendingMemoryReserved
           pendingUnrollMemoryMap(taskAttemptId) =
-            pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + amountToTransferToPending
+            pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + pendingMemoryReserved
         }
       } else {
         // Otherwise, if we return an iterator, we can only release the unroll memory when
@@ -406,85 +410,41 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   /**
-   * Try to free up a given amount of space by evicting existing blocks.
-   *
-   * @param space the amount of memory to free, in bytes
-   * @param droppedBlocks a holder for blocks evicted in the process
-   * @return whether the requested free space is freed.
-   */
-  private[spark] def ensureFreeSpace(
-      space: Long,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    ensureFreeSpace(None, space, droppedBlocks)
-  }
-
-  /**
-   * Try to free up a given amount of space to store a block by evicting existing ones.
-   *
-   * @param space the amount of memory to free, in bytes
-   * @param droppedBlocks a holder for blocks evicted in the process
-   * @return whether the requested free space is freed.
-   */
-  private[spark] def ensureFreeSpace(
-      blockId: BlockId,
-      space: Long,
-      droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
-    ensureFreeSpace(Some(blockId), space, droppedBlocks)
-  }
-
-  /**
-   * Try to free up a given amount of space to store a particular block, but can fail if
-   * either the block is bigger than our memory or it would require replacing another block
-   * from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
-   * don't fit into memory that we want to avoid).
-   *
-   * @param blockId the ID of the block we are freeing space for, if any
-   * @param space the size of this block
-   * @param droppedBlocks a holder for blocks evicted in the process
-   * @return whether the requested free space is freed.
-   */
-  private def ensureFreeSpace(
+    * Try to evict blocks to free up a given amount of space to store a particular block.
+    * Can fail if either the block is bigger than our memory or it would require replacing
+    * another block from the same RDD (which leads to a wasteful cyclic replacement pattern for
+    * RDDs that don't fit into memory that we want to avoid).
+    *
+    * @param blockId the ID of the block we are freeing space for, if any
+    * @param space the size of this block
+    * @param droppedBlocks a holder for blocks evicted in the process
+    * @return whether the requested free space is freed.
+    */
+  private[spark] def evictBlocksToFreeSpace(
       blockId: Option[BlockId],
       space: Long,
       droppedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = {
+    assert(space > 0)
     memoryManager.synchronized {
-      val freeMemory = maxMemory - memoryUsed
+      var freedMemory = 0L
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
-      var selectedMemory = 0L
-
-      logInfo(s"Ensuring $space bytes of free space " +
-        blockId.map { id => s"for block $id" }.getOrElse("") +
-        s"(free: $freeMemory, max: $maxMemory)")
-
-      // Fail fast if the block simply won't fit
-      if (space > maxMemory) {
-        logInfo("Will not " + blockId.map { id => s"store $id" }.getOrElse("free memory") +
-          s" as the required space ($space bytes) exceeds our memory limit ($maxMemory bytes)")
-        return false
-      }
-
-      // No need to evict anything if there is already enough free space
-      if (freeMemory >= space) {
-        return true
-      }
-
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
       entries.synchronized {
         val iterator = entries.entrySet().iterator()
-        while (freeMemory + selectedMemory < space && iterator.hasNext) {
+        while (freedMemory < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
           if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
             selectedBlocks += blockId
-            selectedMemory += pair.getValue.size
+            freedMemory += pair.getValue.size
           }
         }
       }
 
-      if (freeMemory + selectedMemory >= space) {
+      if (freedMemory >= space) {
         logInfo(s"${selectedBlocks.size} blocks selected for dropping")
         for (blockId <- selectedBlocks) {
           val entry = entries.synchronized { entries.get(blockId) }

@@ -109,7 +109,9 @@ private[stat] object ChiSqTest extends Logging {
           }
           i += 1
           distinctLabels += label
-          features.toArray.view.zipWithIndex.slice(startCol, endCol).map { case (feature, col) =>
+          val brzFeatures = features.toBreeze
+          (startCol until endCol).map { col =>
+            val feature = brzFeatures(col)
             allDistinctFeatures(col) += feature
             (col, feature, label)
           }
@@ -122,7 +124,7 @@ private[stat] object ChiSqTest extends Logging {
           pairCounts.keys.filter(_._1 == startCol).map(_._3).toArray.distinct.zipWithIndex.toMap
       }
       val numLabels = labels.size
-      pairCounts.keys.groupBy(_._1).map { case (col, keys) =>
+      pairCounts.keys.groupBy(_._1).foreach { case (col, keys) =>
         val features = keys.map(_._2).toArray.distinct.zipWithIndex.toMap
         val numRows = features.size
         val contingency = new BDM(numRows, numLabels, new Array[Double](numRows * numLabels))

@@ -165,10 +165,12 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       var segment: WriteAheadLogRecordHandle = null
       if (buffer.length > 0) {
         logDebug(s"Batched ${buffer.length} records for Write Ahead Log write")
+        // threads may not be able to add items in order by time
+        val sortedByTime = buffer.sortBy(_.time)
         // We take the latest record for the timestamp. Please refer to the class Javadoc for
         // detailed explanation
-        val time = buffer.last.time
-        segment = wrappedLog.write(aggregate(buffer), time)
+        val time = sortedByTime.last.time
+        segment = wrappedLog.write(aggregate(sortedByTime), time)
       }
       buffer.foreach(_.promise.success(segment))
     } catch {
@@ -182,6 +184,9 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
       buffer.clear()
     }
   }
+
+  /** Method for querying the queue length. Should only be used in tests. */
+  private def getQueueLength(): Int = walWriteQueue.size()
 }
 
 /** Static methods for aggregating and de-aggregating records. */

@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.scalatest.Matchers._
 
-import org.apache.spark.sql.execution.{Project, TungstenProject}
+import org.apache.spark.sql.execution.Project
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -368,6 +368,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData.filter($"a" <=> $"b"),
       Row(1, 1) :: Row(null, null) :: Nil)
+
+    val nullData2 = sqlContext.createDataFrame(sparkContext.parallelize(
+        Row("abc") ::
+        Row(null)  ::
+        Row("xyz") :: Nil),
+        StructType(Seq(StructField("a", StringType, true))))
+
+    checkAnswer(
+      nullData2.filter($"a" <=> null),
+      Row(null) :: Nil)
+
   }
 
   test(">") {
@@ -563,6 +574,10 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       df.select(monotonicallyIncreasingId()),
       Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
     )
+    checkAnswer(
+      df.select(expr("monotonically_increasing_id()")),
+      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+    )
   }
 
   test("sparkPartitionId") {
@@ -615,8 +630,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
     def checkNumProjects(df: DataFrame, expectedNumProjects: Int): Unit = {
       val projects = df.queryExecution.executedPlan.collect {
-        case project: Project => project
-        case tungstenProject: TungstenProject => tungstenProject
+        case tungstenProject: Project => tungstenProject
       }
       assert(projects.size === expectedNumProjects)
     }

@@ -37,8 +37,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
                    "== Optimized Logical Plan ==",
-                   "== Physical Plan ==",
-                   "Code Generation")
+                   "== Physical Plan ==")
   }
 
   test("explain create table command") {

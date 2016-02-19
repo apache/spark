@@ -209,7 +209,11 @@ abstract class HiveComparisonTest
   }
 
   val installHooksCommand = "(?i)SET.*hooks".r
-  def createQueryTest(testCaseName: String, sql: String, reset: Boolean = true) {
+  def createQueryTest(
+      testCaseName: String,
+      sql: String,
+      reset: Boolean = true,
+      tryWithoutResettingFirst: Boolean = false) {
     // testCaseName must not contain ':', which is not allowed to appear in a filename of Windows
     assert(!testCaseName.contains(":"))
 
@@ -240,9 +244,6 @@ abstract class HiveComparisonTest
     test(testCaseName) {
       logDebug(s"=== HIVE TEST: $testCaseName ===")
 
-      // Clear old output for this testcase.
-      outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
-
       val sqlWithoutComment =
         sql.split("\n").filterNot(l => l.matches("--.*(?<=[^\\\\]);")).mkString("\n")
       val allQueries =
@@ -269,9 +270,30 @@ abstract class HiveComparisonTest
         }.mkString("\n== Console version of this test ==\n", "\n", "\n")
       }
 
-      try {
+      def doTest(reset: Boolean, isSpeculative: Boolean = false): Unit = {
+        // Clear old output for this testcase.
+        outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
+
         if (reset) {
           TestHive.reset()
+        }
+
+        // Many tests drop indexes on src and srcpart at the beginning, so we need to load those
+        // tables here. Since DROP INDEX DDL is just passed to Hive, it bypasses the analyzer and
+        // thus the tables referenced in those DDL commands cannot be extracted for use by our
+        // test table auto-loading mechanism. In addition, the tests which use the SHOW TABLES
+        // command expect these tables to exist.
+        val hasShowTableCommand = queryList.exists(_.toLowerCase.contains("show tables"))
+        for (table <- Seq("src", "srcpart")) {
+          val hasMatchingQuery = queryList.exists { query =>
+            val normalizedQuery = query.toLowerCase.stripSuffix(";")
+            normalizedQuery.endsWith(table) ||
+              normalizedQuery.contains(s"from $table") ||
+              normalizedQuery.contains(s"from default.$table")
+          }
+          if (hasShowTableCommand || hasMatchingQuery) {
+            TestHive.loadTestTable(table)
+          }
         }
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
@@ -430,12 +452,45 @@ abstract class HiveComparisonTest
                 """.stripMargin
 
               stringToFile(new File(wrongDirectory, testCaseName), errorMessage + consoleTestCase)
-              fail(errorMessage)
+              if (isSpeculative && !reset) {
+                fail("Failed on first run; retrying")
+              } else {
+                fail(errorMessage)
+              }
             }
         }
 
         // Touch passed file.
         new FileOutputStream(new File(passedDirectory, testCaseName)).close()
+      }
+
+      val canSpeculativelyTryWithoutReset: Boolean = {
+        val excludedSubstrings = Seq(
+          "into table",
+          "create table",
+          "drop index"
+        )
+        !queryList.map(_.toLowerCase).exists { query =>
+          excludedSubstrings.exists(s => query.contains(s))
+        }
+      }
+
+      try {
+        try {
+          if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
+            doTest(reset = false, isSpeculative = true)
+          } else {
+            doTest(reset)
+          }
+        } catch {
+          case tf: org.scalatest.exceptions.TestFailedException =>
+            if (tryWithoutResettingFirst && canSpeculativelyTryWithoutReset) {
+              logWarning("Test failed without reset(); retrying with reset()")
+              doTest(reset = true)
+            } else {
+              throw tf
+            }
+        }
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>

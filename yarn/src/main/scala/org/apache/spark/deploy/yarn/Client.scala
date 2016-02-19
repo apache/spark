@@ -225,7 +225,31 @@ private[spark] class Client(
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
     capability.setVirtualCores(args.amCores)
-    appContext.setResource(capability)
+
+    if (sparkConf.contains("spark.yarn.am.nodeLabelExpression")) {
+      try {
+        val amRequest = Records.newRecord(classOf[ResourceRequest])
+        amRequest.setResourceName(ResourceRequest.ANY)
+        amRequest.setPriority(Priority.newInstance(0))
+        amRequest.setCapability(capability)
+        amRequest.setNumContainers(1)
+        val amLabelExpression = sparkConf.get("spark.yarn.am.nodeLabelExpression")
+        val method = amRequest.getClass.getMethod("setNodeLabelExpression", classOf[String])
+        method.invoke(amRequest, amLabelExpression)
+
+        val setResourceRequestMethod =
+          appContext.getClass.getMethod("setAMContainerResourceRequest", classOf[ResourceRequest])
+        setResourceRequestMethod.invoke(appContext, amRequest)
+      } catch {
+        case e: NoSuchMethodException =>
+          logWarning("Ignoring spark.yarn.am.nodeLabelExpression because the version " +
+            "of YARN does not support it")
+          appContext.setResource(capability)
+      }
+    } else {
+      appContext.setResource(capability)
+    }
+
     appContext
   }
 
@@ -258,7 +282,8 @@ private[spark] class Client(
     if (executorMem > maxMem) {
       throw new IllegalArgumentException(s"Required executor memory (${args.executorMemory}" +
         s"+$executorMemoryOverhead MB) is above the max threshold ($maxMem MB) of this cluster! " +
-        "Please increase the value of 'yarn.scheduler.maximum-allocation-mb'.")
+        "Please check the values of 'yarn.scheduler.maximum-allocation-mb' and/or " +
+        "'yarn.nodemanager.resource.memory-mb'.")
     }
     val amMem = args.amMemory + amMemoryOverhead
     if (amMem > maxMem) {
@@ -1311,11 +1336,11 @@ object Client extends Logging {
    *
    * This method uses two configuration values:
    *
-   * - spark.yarn.config.gatewayPath: a string that identifies a portion of the input path that may
-   *   only be valid in the gateway node.
-   * - spark.yarn.config.replacementPath: a string with which to replace the gateway path. This may
-   *   contain, for example, env variable references, which will be expanded by the NMs when
-   *   starting containers.
+   *  - spark.yarn.config.gatewayPath: a string that identifies a portion of the input path that may
+   *    only be valid in the gateway node.
+   *  - spark.yarn.config.replacementPath: a string with which to replace the gateway path. This may
+   *    contain, for example, env variable references, which will be expanded by the NMs when
+   *    starting containers.
    *
    * If either config is not available, the input path is returned.
    */

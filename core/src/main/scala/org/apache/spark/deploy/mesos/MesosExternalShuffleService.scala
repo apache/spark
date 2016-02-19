@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.mesos
 
 import java.net.SocketAddress
+import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
@@ -56,7 +57,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
           }
         }
         connectedApps(address) = appId
-        callback.onSuccess(new Array[Byte](0))
+        callback.onSuccess(ByteBuffer.allocate(0))
       case _ => super.handleMessage(message, client, callback)
     }
   }

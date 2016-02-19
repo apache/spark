@@ -17,17 +17,21 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileOutputStream, FileInputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.{SharedSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.scheduler.HighlyCompressedMapStatus
 import org.apache.spark.serializer.KryoTest._
+import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockManagerId
 
 class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
@@ -322,6 +326,12 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val conf = new SparkConf(false)
     conf.set("spark.kryo.registrationRequired", "true")
 
+    // these cases require knowing the internals of RoaringBitmap a little.  Blocks span 2^16
+    // values, and they use a bitmap (dense) if they have more than 4096 values, and an
+    // array (sparse) if they use less.  So we just create two cases, one sparse and one dense.
+    // and we use a roaring bitmap for the empty blocks, so we trigger the dense case w/ mostly
+    // empty blocks
+
     val ser = new KryoSerializer(conf).newInstance()
     val denseBlockSizes = new Array[Long](5000)
     val sparseBlockSizes = Array[Long](0L, 1L, 0L, 2L)
@@ -342,6 +352,44 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     val ser = new KryoSerializer(conf).newInstance()
     val thrown = intercept[SparkException](ser.serialize(largeObject))
     assert(thrown.getMessage.contains(kryoBufferMaxProperty))
+  }
+
+  test("SPARK-12222: deserialize RoaringBitmap throw Buffer underflow exception") {
+    val dir = Utils.createTempDir()
+    val tmpfile = dir.toString + "/RoaringBitmap"
+    val outStream = new FileOutputStream(tmpfile)
+    val output = new KryoOutput(outStream)
+    val bitmap = new RoaringBitmap
+    bitmap.add(1)
+    bitmap.add(3)
+    bitmap.add(5)
+    // Ignore Kryo because it doesn't use writeObject
+    bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
+    output.flush()
+    output.close()
+
+    val inStream = new FileInputStream(tmpfile)
+    val input = new KryoInput(inStream)
+    val ret = new RoaringBitmap
+    // Ignore Kryo because it doesn't use readObject
+    ret.deserialize(new KryoInputObjectInputBridge(null, input))
+    input.close()
+    assert(ret == bitmap)
+    Utils.deleteRecursively(dir)
+  }
+
+  test("KryoOutputObjectOutputBridge.writeObject and KryoInputObjectInputBridge.readObject") {
+    val kryo = new KryoSerializer(conf).newKryo()
+
+    val bytesOutput = new ByteArrayOutputStream()
+    val objectOutput = new KryoOutputObjectOutputBridge(kryo, new KryoOutput(bytesOutput))
+    objectOutput.writeObject("test")
+    objectOutput.close()
+
+    val bytesInput = new ByteArrayInputStream(bytesOutput.toByteArray)
+    val objectInput = new KryoInputObjectInputBridge(kryo, new KryoInput(bytesInput))
+    assert(objectInput.readObject() === "test")
+    objectInput.close()
   }
 
   test("getAutoReset") {

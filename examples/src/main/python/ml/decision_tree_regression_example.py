@@ -28,7 +28,6 @@ from pyspark.ml import Pipeline
 from pyspark.ml.regression import DecisionTreeRegressor
 from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
@@ -36,8 +35,8 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    # Load and parse the data file, converting it to a DataFrame.
-    data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").toDF()
+    # Load the data stored in LIBSVM format as a DataFrame.
+    data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Automatically identify categorical features, and index them.
     # We specify maxCategories so features with > 4 distinct values are treated as continuous.

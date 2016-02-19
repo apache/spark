@@ -51,13 +51,14 @@ import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
 public class StreamSuite {
-  private static final String[] STREAMS = { "largeBuffer", "smallBuffer", "file" };
+  private static final String[] STREAMS = { "largeBuffer", "smallBuffer", "emptyBuffer", "file" };
 
   private static TransportServer server;
   private static TransportClientFactory clientFactory;
   private static File testFile;
   private static File tempDir;
 
+  private static ByteBuffer emptyBuffer;
   private static ByteBuffer smallBuffer;
   private static ByteBuffer largeBuffer;
 
@@ -73,6 +74,7 @@ public class StreamSuite {
   @BeforeClass
   public static void setUp() throws Exception {
     tempDir = Files.createTempDir();
+    emptyBuffer = createBuffer(0);
     smallBuffer = createBuffer(100);
     largeBuffer = createBuffer(100000);
 
@@ -89,7 +91,7 @@ public class StreamSuite {
       fp.close();
     }
 
-    final TransportConf conf = new TransportConf(new SystemPropertyConfigProvider());
+    final TransportConf conf = new TransportConf("shuffle", new SystemPropertyConfigProvider());
     final StreamManager streamManager = new StreamManager() {
       @Override
       public ManagedBuffer getChunk(long streamId, int chunkIndex) {
@@ -103,6 +105,8 @@ public class StreamSuite {
             return new NioManagedBuffer(largeBuffer);
           case "smallBuffer":
             return new NioManagedBuffer(smallBuffer);
+          case "emptyBuffer":
+            return new NioManagedBuffer(emptyBuffer);
           case "file":
             return new FileSegmentManagedBuffer(conf, testFile, 0, testFile.length());
           default:
@@ -112,7 +116,10 @@ public class StreamSuite {
     };
     RpcHandler handler = new RpcHandler() {
       @Override
-      public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
+      public void receive(
+          TransportClient client,
+          ByteBuffer message,
+          RpcResponseCallback callback) {
         throw new UnsupportedOperationException();
       }
 
@@ -135,6 +142,18 @@ public class StreamSuite {
         f.delete();
       }
       tempDir.delete();
+    }
+  }
+
+  @Test
+  public void testZeroLengthStream() throws Throwable {
+    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
+    try {
+      StreamTask task = new StreamTask(client, "emptyBuffer", TimeUnit.SECONDS.toMillis(5));
+      task.run();
+      task.check();
+    } finally {
+      client.close();
     }
   }
 
@@ -225,6 +244,11 @@ public class StreamSuite {
           case "file":
             outFile = File.createTempFile("data", ".tmp", tempDir);
             out = new FileOutputStream(outFile);
+            break;
+          case "emptyBuffer":
+            baos = new ByteArrayOutputStream();
+            out = baos;
+            srcBuffer = emptyBuffer;
             break;
           default:
             throw new IllegalArgumentException(streamId);

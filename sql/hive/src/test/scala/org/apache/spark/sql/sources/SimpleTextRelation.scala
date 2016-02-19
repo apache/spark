@@ -89,7 +89,7 @@ class SimpleTextRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation {
+  extends HadoopFsRelation(parameters) {
 
   import sqlContext.sparkContext
 

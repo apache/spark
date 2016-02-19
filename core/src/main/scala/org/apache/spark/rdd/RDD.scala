@@ -31,7 +31,7 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Since, DeveloperApi}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
@@ -241,6 +241,12 @@ abstract class RDD[T: ClassTag](
       partitions_
     }
   }
+
+  /**
+    * Returns the number of partitions of this RDD.
+    */
+  @Since("1.6.0")
+  final def getNumPartitions: Int = partitions.length
 
   /**
    * Get the preferred locations of a partition, taking into account whether the
@@ -706,6 +712,24 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * [performance] Spark's internal mapPartitions method which skips closure cleaning. It is a
+   * performance API to be used carefully only if we are sure that the RDD elements are
+   * serializable and don't require closure cleaning.
+   *
+   * @param preservesPartitioning indicates whether the input function preserves the partitioner,
+   * which should be `false` unless this is a pair RDD and the input function doesn't modify
+   * the keys.
+   */
+  private[spark] def mapPartitionsInternal[U: ClassTag](
+      f: Iterator[T] => Iterator[U],
+      preservesPartitioning: Boolean = false): RDD[U] = withScope {
+    new MapPartitionsRDD(
+      this,
+      (context: TaskContext, index: Int, iter: Iterator[T]) => f(iter),
+      preservesPartitioning)
+  }
+
+  /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    *
@@ -1047,6 +1071,13 @@ abstract class RDD[T: ClassTag](
    * apply the fold to each element sequentially in some defined ordering. For functions
    * that are not commutative, the result may differ from that of a fold applied to a
    * non-distributed collection.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the `op`
+   *                  operator, and also the initial value for the combine results from different
+   *                  partitions for the `op` operator - this will typically be the neutral
+   *                  element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param op an operator used to both accumulate results within a partition and combine results
+   *                  from different partitions
    */
   def fold(zeroValue: T)(op: (T, T) => T): T = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1065,6 +1096,13 @@ abstract class RDD[T: ClassTag](
    * and one operation for merging two U's, as in scala.TraversableOnce. Both of these functions are
    * allowed to modify and return their first argument instead of creating a new U to avoid memory
    * allocation.
+   *
+   * @param zeroValue the initial value for the accumulated result of each partition for the
+   *                  `seqOp` operator, and also the initial value for the combine results from
+   *                  different partitions for the `combOp` operator - this will typically be the
+   *                  neutral element (e.g. `Nil` for list concatenation or `0` for summation)
+   * @param seqOp an operator used to accumulate results within a partition
+   * @param combOp an associative operator used to combine results from different partitions
    */
   def aggregate[U: ClassTag](zeroValue: U)(seqOp: (U, T) => U, combOp: (U, U) => U): U = withScope {
     // Clone the zero value since we will also be serializing it as part of tasks
@@ -1309,7 +1347,8 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Returns the top k (largest) elements from this RDD as defined by the specified
-   * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
+   * implicit Ordering[T] and maintains the ordering. This does the opposite of
+   * [[takeOrdered]]. For example:
    * {{{
    *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
    *   // returns Array(12)

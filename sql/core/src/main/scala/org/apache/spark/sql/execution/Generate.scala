@@ -59,7 +59,7 @@ case class Generate(
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
     if (join) {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         val generatorNullRow = InternalRow.fromSeq(Seq.fill[Any](generator.elementTypes.size)(null))
         val joinedRow = new JoinedRow
 
@@ -79,7 +79,7 @@ case class Generate(
         }
       }
     } else {
-      child.execute().mapPartitions { iter =>
+      child.execute().mapPartitionsInternal { iter =>
         iter.flatMap(row => boundGenerator.eval(row)) ++
         LazyIterator(() => boundGenerator.terminate())
       }

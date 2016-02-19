@@ -42,9 +42,8 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
   lazy val optimizedPlan: LogicalPlan = sqlContext.optimizer.execute(withCachedData)
 
-  // TODO: Don't just pick the first one...
   lazy val sparkPlan: SparkPlan = {
-    SparkPlan.currentContext.set(sqlContext)
+    SQLContext.setActive(sqlContext)
     sqlContext.planner.plan(optimizedPlan).next()
   }
 
@@ -77,7 +76,6 @@ class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
        |${stringOrError(optimizedPlan)}
        |== Physical Plan ==
        |${stringOrError(executedPlan)}
-       |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
     """.stripMargin.trim
   }
 }

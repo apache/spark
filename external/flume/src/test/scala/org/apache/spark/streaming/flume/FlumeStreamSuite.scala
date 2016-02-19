@@ -54,7 +54,7 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
       val outputBuffer = startContext(utils.getTestPort(), testCompression)
 
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        utils.writeInput(input, testCompression)
+        utils.writeInput(input.asJava, testCompression)
       }
 
       eventually(timeout(10 seconds), interval(100 milliseconds)) {

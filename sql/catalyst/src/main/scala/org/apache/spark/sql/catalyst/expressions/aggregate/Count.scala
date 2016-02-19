@@ -21,8 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
-case class Count(child: Expression) extends DeclarativeAggregate {
-  override def children: Seq[Expression] = child :: Nil
+case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
   override def nullable: Boolean = false
 
@@ -30,7 +29,7 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   override def dataType: DataType = LongType
 
   // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(AnyDataType)
 
   private lazy val count = AttributeReference("count", LongType)()
 
@@ -41,7 +40,7 @@ case class Count(child: Expression) extends DeclarativeAggregate {
   )
 
   override lazy val updateExpressions = Seq(
-    /* count = */ If(IsNull(child), count, count + 1L)
+    /* count = */ If(children.map(IsNull).reduce(Or), count, count + 1L)
   )
 
   override lazy val mergeExpressions = Seq(
@@ -54,17 +53,5 @@ case class Count(child: Expression) extends DeclarativeAggregate {
 }
 
 object Count {
-  def apply(children: Seq[Expression]): Count = {
-    // This is used to deal with COUNT DISTINCT. When we have multiple
-    // children (COUNT(DISTINCT col1, col2, ...)), we wrap them in a STRUCT (i.e. a Row).
-    // Also, the semantic of COUNT(DISTINCT col1, col2, ...) is that if there is any
-    // null in the arguments, we will not count that row. So, we use DropAnyNull at here
-    // to return a null when any field of the created STRUCT is null.
-    val child = if (children.size > 1) {
-      DropAnyNull(CreateStruct(children))
-    } else {
-      children.head
-    }
-    Count(child)
-  }
+  def apply(child: Expression): Count = Count(child :: Nil)
 }

@@ -48,4 +48,7 @@ object TestRelations {
 
   val listRelation = LocalRelation(
     AttributeReference("list", ArrayType(IntegerType))())
+
+  val mapRelation = LocalRelation(
+    AttributeReference("map", MapType(IntegerType, IntegerType))())
 }

@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.memory.MemoryLocation
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, KnownSizeEstimation, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.{SparkConf, SparkEnv}
 
@@ -189,7 +189,9 @@ private[execution] object HashedRelation {
  */
 private[joins] final class UnsafeHashedRelation(
     private var hashTable: JavaHashMap[UnsafeRow, CompactBuffer[UnsafeRow]])
-  extends HashedRelation with Externalizable {
+  extends HashedRelation
+  with KnownSizeEstimation
+  with Externalizable {
 
   private[joins] def this() = this(null)  // Needed for serialization
 
@@ -212,6 +214,14 @@ private[joins] final class UnsafeHashedRelation(
       binaryMap.getTotalMemoryConsumption
     } else {
       0
+    }
+  }
+
+  override def estimatedSize: Long = {
+    if (binaryMap != null) {
+      binaryMap.getTotalMemoryConsumption
+    } else {
+      SizeEstimator.estimate(hashTable)
     }
   }
 
@@ -324,7 +334,11 @@ private[joins] final class UnsafeHashedRelation(
     // so that tests compile:
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
-        new SparkConf().set("spark.unsafe.offHeap", "false"), Long.MaxValue, Long.MaxValue, 1), 0)
+        new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        Long.MaxValue,
+        Long.MaxValue,
+        1),
+      0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))

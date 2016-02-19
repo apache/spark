@@ -35,7 +35,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 Note that we can have more than 1 thread in local mode, and in cases like Spark Streaming, we may
-actually require one to prevent any sort of starvation issues.
+actually require more than 1 thread to prevent any sort of starvation issues.
 
 Properties that specify some time duration should be configured with a unit of time.
 The following format is accepted:
@@ -305,7 +305,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>daily</td>
   <td>
     Set the time interval by which the executor logs will be rolled over.
-    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly<code>, <code>minutely<code> or
+    Rolling is disabled by default. Valid values are <code>daily</code>, <code>hourly</code>, <code>minutely</code> or
     any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -330,13 +330,13 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
-    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()<code>,
+    Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()</code>,
     or it will be displayed before the driver exiting. It also can be dumped into disk by
-    <code>sc.dump_profiles(path)<code>. If some of the profile results had been displayed manually,
+    <code>sc.dump_profiles(path)</code>. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
-    By default the <code>pyspark.profiler.BasicProfiler<code> will be used, but this can be overridden by
-    passing a profiler class in as a parameter to the <code>SparkContext<code> constructor.
+    By default the <code>pyspark.profiler.BasicProfiler</code> will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the <code>SparkContext</code> constructor.
   </td>
 </tr>
 <tr>
@@ -719,20 +719,39 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.fraction</code></td>
   <td>0.75</td>
   <td>
-    Fraction of the heap space used for execution and storage. The lower this is, the more
-    frequently spills and cached data eviction occur. The purpose of this config is to set
+    Fraction of (heap space - 300MB) used for execution and storage. The lower this is, the
+    more frequently spills and cached data eviction occur. The purpose of this config is to set
     aside memory for internal metadata, user data structures, and imprecise size estimation
-    in the case of sparse, unusually large records.
+    in the case of sparse, unusually large records. Leaving this at the default value is
+    recommended. For more detail, see <a href="tuning.html#memory-management-overview">
+    this description</a>.
   </td>
 </tr>
 <tr>
   <td><code>spark.memory.storageFraction</code></td>
   <td>0.5</td>
   <td>
-    T​he size of the storage region within the space set aside by
-    <code>s​park.memory.fraction</code>. This region is not statically reserved, but dynamically
-    allocated as cache requests come in. ​Cached data may be evicted only if total storage exceeds
-    this region.
+    Amount of storage memory immune to eviction, expressed as a fraction of the size of the
+    region set aside by <code>s​park.memory.fraction</code>. The higher this is, the less
+    working memory may be available to execution and tasks may spill to disk more often.
+    Leaving this at the default value is recommended. For more detail, see
+    <a href="tuning.html#memory-management-overview">this description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.offHeap.enabled</code></td>
+  <td>false</td>
+  <td>
+    If true, Spark will attempt to use off-heap memory for certain operations. If off-heap memory use is enabled, then <code>spark.memory.offHeap.size</code> must be positive.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.memory.offHeap.size</code></td>
+  <td>0</td>
+  <td>
+    The absolute amount of memory which can be used for off-heap allocation.
+    This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
+    This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>
 </tr>
 <tr>
@@ -1228,8 +1247,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to use dynamic resource allocation, which scales the number of executors registered
-    with this application up and down based on the workload. Note that this is currently only
-    available on YARN mode. For more detail, see the description
+    with this application up and down based on the workload. 
+    For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.
@@ -1577,6 +1596,24 @@ Apart from these, the following properties are also available, and may be useful
     How many batches the Spark Streaming UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record on the driver. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
+    on the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to close the file after writing a write ahead log record on the receivers. Set this to 'true'
+    when you want to use S3 (or any file system that does not support flushing) for the data WAL
+    on the receivers.
+  </td>
+</tr>
 </table>
 
 #### SparkR
@@ -1636,7 +1673,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>

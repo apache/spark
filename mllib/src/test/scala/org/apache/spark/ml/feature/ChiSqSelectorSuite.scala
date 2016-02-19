@@ -18,13 +18,17 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{Row, SQLContext}
 
-class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
+class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest {
+
   test("Test Chi-Square selector") {
     val sqlContext = SQLContext.getOrCreate(sc)
     import sqlContext.implicits._
@@ -57,5 +61,21 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
       case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)
     }
+  }
+
+  test("ChiSqSelector read/write") {
+    val t = new ChiSqSelector()
+      .setFeaturesCol("myFeaturesCol")
+      .setLabelCol("myLabelCol")
+      .setOutputCol("myOutputCol")
+      .setNumTopFeatures(2)
+    testDefaultReadWrite(t)
+  }
+
+  test("ChiSqSelectorModel read/write") {
+    val oldModel = new feature.ChiSqSelectorModel(Array(1, 3))
+    val instance = new ChiSqSelectorModel("myChiSqSelectorModel", oldModel)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.selectedFeatures === instance.selectedFeatures)
   }
 }

@@ -91,12 +91,10 @@ private[sql] case class JDBCRelation(
   override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
-    val driver: String = DriverRegistry.getDriverClassName(url)
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sqlContext.sparkContext,
       schema,
-      driver,
       url,
       properties,
       table,

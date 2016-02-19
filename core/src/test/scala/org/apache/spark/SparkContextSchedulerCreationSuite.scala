@@ -175,6 +175,11 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos with zookeeper") {
+    testMesos("mesos://zk://localhost:1234,localhost:2345",
+      classOf[MesosSchedulerBackend], coarse = false)
+  }
+
+  test("mesos with zookeeper and Master URL starting with zk://") {
     testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
   }
 }

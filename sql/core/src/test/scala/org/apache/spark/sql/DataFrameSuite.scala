@@ -578,6 +578,21 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.showString(10) === expectedAnswer)
   }
 
+  test("showString: binary") {
+    val df = Seq(
+      ("12".getBytes, "ABC.".getBytes),
+      ("34".getBytes, "12346".getBytes)
+    ).toDF()
+    val expectedAnswer = """+-------+----------------+
+                           ||     _1|              _2|
+                           |+-------+----------------+
+                           ||[31 32]|   [41 42 43 2E]|
+                           ||[33 34]|[31 32 33 34 36]|
+                           |+-------+----------------+
+                           |""".stripMargin
+    assert(df.showString(10) === expectedAnswer)
+  }
+
   test("showString: minimum column width") {
     val df = Seq(
       (1, 1),
@@ -621,11 +636,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      checkAnswer(
-        decimalData.agg(avg('a)),
-        Row(new java.math.BigDecimal(2.0)))
-    }
+    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2.0)))
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -844,31 +855,16 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-8608: call `show` on local DataFrame with random columns should return same value") {
-    // Make sure we can pass this test for both codegen mode and interpreted mode.
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      val df = testData.select(rand(33))
-      assert(df.showString(5) == df.showString(5))
-    }
-
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-      val df = testData.select(rand(33))
-      assert(df.showString(5) == df.showString(5))
-    }
+    val df = testData.select(rand(33))
+    assert(df.showString(5) == df.showString(5))
 
     // We will reuse the same Expression object for LocalRelation.
-    val df = (1 to 10).map(Tuple1.apply).toDF().select(rand(33))
-    assert(df.showString(5) == df.showString(5))
+    val df1 = (1 to 10).map(Tuple1.apply).toDF().select(rand(33))
+    assert(df1.showString(5) == df1.showString(5))
   }
 
   test("SPARK-8609: local DataFrame with random columns should return same value after sort") {
-    // Make sure we can pass this test for both codegen mode and interpreted mode.
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "true") {
-      checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
-    }
-
-    withSQLConf(SQLConf.CODEGEN_ENABLED.key -> "false") {
-      checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
-    }
+    checkAnswer(testData.sort(rand(33)), testData.sort(rand(33)))
 
     // We will reuse the same Expression object for LocalRelation.
     val df = (1 to 10).map(Tuple1.apply).toDF()
@@ -916,7 +912,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val dir2 = new File(dir, "dir2").getCanonicalPath
       df2.write.format("json").save(dir2)
 
-      checkAnswer(sqlContext.read.format("json").load(Array(dir1, dir2)),
+      checkAnswer(sqlContext.read.format("json").load(dir1, dir2),
         Row(1, 22) :: Row(2, 23) :: Nil)
 
       checkAnswer(sqlContext.read.format("json").load(dir1),
@@ -995,6 +991,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-10743: keep the name of expression if possible when do cast") {
     val df = (1 to 10).map(Tuple1.apply).toDF("i").as("src")
     assert(df.select($"src.i".cast(StringType)).columns.head === "i")
+    assert(df.select($"src.i".cast(StringType).cast(IntegerType)).columns.head === "i")
   }
 
   test("SPARK-11301: fix case sensitivity for filter on partitioned columns") {
@@ -1102,8 +1099,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     // Distribute into one partition and order by. This partition should contain all the values.
-    val df6 = data.repartition(1, $"a").sortWithinPartitions($"b".asc)
-    // Walk each partition and verify that it is sorted descending and not globally sorted.
+    val df6 = data.repartition(1, $"a").sortWithinPartitions("b")
+    // Walk each partition and verify that it is sorted ascending and not globally sorted.
     df6.rdd.foreachPartition { p =>
       var previousValue: Int = -1
       var allSequential: Boolean = true
@@ -1129,9 +1126,48 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  // This test case is to verify a bug when making a new instance of LogicalRDD.
+  test("SPARK-11633: LogicalRDD throws TreeNode Exception: Failed to Copy Node") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val rdd = sparkContext.makeRDD(Seq(Row(1, 3), Row(2, 1)))
+      val df = sqlContext.createDataFrame(
+        rdd,
+        new StructType().add("f1", IntegerType).add("f2", IntegerType),
+        needsConversion = false).select($"F1", $"f2".as("f2"))
+      val df1 = df.as("a")
+      val df2 = df.as("b")
+      checkAnswer(df1.join(df2, $"a.f2" === $"b.f2"), Row(1, 3, 1, 3) :: Row(2, 1, 2, 1) :: Nil)
+    }
+  }
+
   test("SPARK-10656: completely support special chars") {
     val df = Seq(1 -> "a").toDF("i_$.a", "d^'a.")
     checkAnswer(df.select(df("*")), Row(1, "a"))
     checkAnswer(df.withColumnRenamed("d^'a.", "a"), Row(1, "a"))
+  }
+
+  test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    val df = sparkContext.parallelize(Seq(
+      new java.lang.Integer(22) -> "John",
+      null.asInstanceOf[java.lang.Integer] -> "Lucy")).toDF("age", "name")
+
+    // passing null into the UDF that could handle it
+    val boxedUDF = udf[java.lang.Integer, java.lang.Integer] {
+      (i: java.lang.Integer) => if (i == null) -10 else null
+    }
+    checkAnswer(df.select(boxedUDF($"age")), Row(null) :: Row(-10) :: Nil)
+
+    sqlContext.udf.register("boxedUDF",
+      (i: java.lang.Integer) => (if (i == null) -10 else null): java.lang.Integer)
+    checkAnswer(sql("select boxedUDF(null), boxedUDF(-1)"), Row(-10, null) :: Nil)
+
+    val primitiveUDF = udf((i: Int) => i * 2)
+    checkAnswer(df.select(primitiveUDF($"age")), Row(44) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-12841: cast in filter") {
+    checkAnswer(
+      Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
+      Row(1, "a"))
   }
 }

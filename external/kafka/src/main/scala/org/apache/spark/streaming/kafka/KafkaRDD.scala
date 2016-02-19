@@ -156,7 +156,7 @@ class KafkaRDD[
     var requestOffset = part.fromOffset
     var iter: Iterator[MessageAndOffset] = null
 
-    // The idea is to use the provided preferred host, except on task retry atttempts,
+    // The idea is to use the provided preferred host, except on task retry attempts,
     // to minimize number of kafka metadata requests
     private def connectLeader: SimpleConsumer = {
       if (context.attemptNumber > 0) {

@@ -24,16 +24,16 @@ import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.input.WholeTextFileInputFormat
 import org.apache.spark._
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
-import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.storage.StorageLevel
 
@@ -59,7 +59,6 @@ private[spark] class NewHadoopPartition(
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
- * @param conf The Hadoop configuration.
  */
 @DeveloperApi
 class NewHadoopRDD[K, V](
@@ -97,7 +96,13 @@ class NewHadoopRDD[K, V](
       // issues, this cloning is disabled by default.
       NewHadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
         logDebug("Cloning Hadoop Configuration")
-        new Configuration(conf)
+        // The Configuration passed in is actually a JobConf and possibly contains credentials.
+        // To keep those credentials properly we have to create a new JobConf not a Configuration.
+        if (conf.isInstanceOf[JobConf]) {
+          new JobConf(conf)
+        } else {
+          new Configuration(conf)
+        }
       }
     } else {
       conf
@@ -140,14 +145,14 @@ class NewHadoopRDD[K, V](
       }
       inputMetrics.setBytesReadCallback(bytesReadCallback)
 
-      val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
-      val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
       val format = inputFormatClass.newInstance
       format match {
         case configurable: Configurable =>
           configurable.setConf(conf)
         case _ =>
       }
+      val attemptId = newTaskAttemptID(jobTrackerId, id, isMap = true, split.index, 0)
+      val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
       private var reader = format.createRecordReader(
         split.serializableHadoopSplit.value, hadoopAttemptContext)
       reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
@@ -282,32 +287,3 @@ private[spark] object NewHadoopRDD {
     }
   }
 }
-
-private[spark] class WholeTextFileRDD(
-    sc : SparkContext,
-    inputFormatClass: Class[_ <: WholeTextFileInputFormat],
-    keyClass: Class[String],
-    valueClass: Class[String],
-    conf: Configuration,
-    minPartitions: Int)
-  extends NewHadoopRDD[String, String](sc, inputFormatClass, keyClass, valueClass, conf) {
-
-  override def getPartitions: Array[Partition] = {
-    val inputFormat = inputFormatClass.newInstance
-    val conf = getConf
-    inputFormat match {
-      case configurable: Configurable =>
-        configurable.setConf(conf)
-      case _ =>
-    }
-    val jobContext = newJobContext(conf, jobId)
-    inputFormat.setMinPartitions(jobContext, minPartitions)
-    val rawSplits = inputFormat.getSplits(jobContext).toArray
-    val result = new Array[Partition](rawSplits.size)
-    for (i <- 0 until rawSplits.size) {
-      result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
-    }
-    result
-  }
-}
-

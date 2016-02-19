@@ -32,17 +32,23 @@ import org.apache.spark.util.Utils;
 public class JavaDefaultReadWriteSuite {
 
   JavaSparkContext jsc = null;
+  SQLContext sqlContext = null;
   File tempDir = null;
 
   @Before
   public void setUp() {
     jsc = new JavaSparkContext("local[2]", "JavaDefaultReadWriteSuite");
+    SQLContext.clearActive();
+    sqlContext = new SQLContext(jsc);
+    SQLContext.setActive(sqlContext);
     tempDir = Utils.createTempDir(
       System.getProperty("java.io.tmpdir"), "JavaDefaultReadWriteSuite");
   }
 
   @After
   public void tearDown() {
+    sqlContext = null;
+    SQLContext.clearActive();
     if (jsc != null) {
       jsc.stop();
       jsc = null;
@@ -64,7 +70,6 @@ public class JavaDefaultReadWriteSuite {
     } catch (IOException e) {
       // expected
     }
-    SQLContext sqlContext = new SQLContext(jsc);
     instance.write().context(sqlContext).overwrite().save(outputPath);
     MyParams newInstance = MyParams.load(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
