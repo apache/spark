@@ -536,15 +536,27 @@ setMethod("factorial",
 #'
 #' Aggregate function: returns the first value in a group.
 #'
+#' The function by default returns the first values it sees. It will return the first non-NA
+#' value it sees when ignoreNAs is set to true. If all values are NA, then NA is returned.
+#'
 #' @rdname first
 #' @name first
 #' @family agg_funcs
 #' @export
-#' @examples \dontrun{first(df$c)}
+#' @examples
+#' \dontrun{
+#' first(df$c)
+#' first(df$c, TRUE)
+#' }
 setMethod("first",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "first", x@jc)
+          signature(x = "characterOrColumn"),
+          function(x, ignoreNAs = FALSE) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "first", col, ignoreNAs)
             column(jc)
           })
 
@@ -663,15 +675,27 @@ setMethod("kurtosis",
 #'
 #' Aggregate function: returns the last value in a group.
 #'
+#' The function by default returns the last values it sees. It will return the last non-NA
+#' value it sees when ignoreNAs is set to true. If all values are NA, then NA is returned.
+#'
 #' @rdname last
 #' @name last
 #' @family agg_funcs
 #' @export
-#' @examples \dontrun{last(df$c)}
+#' @examples
+#' \dontrun{
+#' last(df$c)
+#' last(df$c, TRUE)
+#' }
 setMethod("last",
-          signature(x = "Column"),
-          function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "last", x@jc)
+          signature(x = "characterOrColumn"),
+          function(x, ignoreNAs = FALSE) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              x
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "last", col, ignoreNAs)
             column(jc)
           })
 
