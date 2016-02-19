@@ -225,10 +225,15 @@ class BigQueryBaseCursor(object):
                 'compression': compression,
                 'destinationUris': destination_cloud_storage_uris,
                 'destinationFormat': export_format,
-                'fieldDelimiter': field_delimiter,
-                'printHeader': print_header,
             }
         }
+
+        if export_format == 'CSV':
+            # Only set fieldDelimiter and printHeader fields if using CSV.
+            # Google does not like it if you set these fields for other export
+            # formats.
+            configuration['extract']['fieldDelimiter'] = field_delimiter
+            configuration['extract']['printHeader'] = print_header
 
         return self.run_with_configuration(configuration)
 
