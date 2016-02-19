@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.vectorized;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.execution.vectorized.ColumnVector.Array;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 

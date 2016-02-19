@@ -40,6 +40,7 @@ object MimaExcludes {
         excludePackage("org.apache.spark.rpc"),
         excludePackage("org.spark-project.jetty"),
         excludePackage("org.apache.spark.unused"),
+        excludePackage("org.apache.spark.unsafe"),
         excludePackage("org.apache.spark.util.collection.unsafe"),
         excludePackage("org.apache.spark.sql.catalyst"),
         excludePackage("org.apache.spark.sql.execution"),
@@ -232,6 +233,21 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.metadataCleaner"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnDriverEndpoint"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
+      ) ++ Seq(
+        // SPARK-7889
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.org$apache$spark$deploy$history$HistoryServer$@tachSparkUI"),
+        // SPARK-13296
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.UDFRegistration.register"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UserDefinedPythonFunction$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UserDefinedPythonFunction"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UserDefinedFunction"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UserDefinedFunction$")
+      ) ++ Seq(
+        // SPARK-12995 Remove deprecated APIs in graphx
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.lib.SVDPlusPlus.runSVDPlusPlus"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.Graph.mapReduceTriplets"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.Graph.mapReduceTriplets$default$3"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets")
       )
     case v if v.startsWith("1.6") =>
       Seq(

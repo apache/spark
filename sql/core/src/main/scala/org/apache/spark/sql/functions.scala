@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -395,6 +396,52 @@ object functions extends LegacyFunctions {
     * @since 1.3.0
     */
   def first(columnName: String): Column = first(Column(columnName))
+
+
+  /**
+    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping(e: Column): Column = Column(Grouping(e.expr))
+
+  /**
+    * Aggregate function: indicates whether a specified column in a GROUP BY list is aggregated
+    * or not, returns 1 for aggregated or 0 for not aggregated in the result set.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping(columnName: String): Column = grouping(Column(columnName))
+
+  /**
+    * Aggregate function: returns the level of grouping, equals to
+    *
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+    *
+    * Note: the list of columns should match with grouping columns exactly, or empty (means all the
+    * grouping columns).
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping_id(cols: Column*): Column = Column(GroupingID(cols.map(_.expr)))
+
+  /**
+    * Aggregate function: returns the level of grouping, equals to
+    *
+    *   (grouping(c1) << (n-1)) + (grouping(c2) << (n-2)) + ... + grouping(cn)
+    *
+    * Note: the list of columns should match with grouping columns exactly.
+    *
+    * @group agg_funcs
+    * @since 2.0.0
+    */
+  def grouping_id(colName: String, colNames: String*): Column = {
+    grouping_id((Seq(colName) ++ colNames).map(n => Column(n)) : _*)
+  }
 
   /**
    * Aggregate function: returns the kurtosis of the values in a group.

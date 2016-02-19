@@ -978,6 +978,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         ("d", 1),
         ("c", 2)
       ).map(i => Row(i._1, i._2)))
+
+    checkAnswer(
+      sql(
+        """
+          |select area, sum(product) / sum(sum(product)) over (partition by area) as c1
+          |from windowData group by area, month order by month, c1
+        """.stripMargin),
+      Seq(
+        ("d", 1.0),
+        ("a", 1.0),
+        ("b", 0.4666666666666667),
+        ("b", 0.5333333333333333),
+        ("c", 0.45),
+        ("c", 0.55)
+      ).map(i => Row(i._1, i._2)))
   }
 
   // todo: fix this test case by reimplementing the function ResolveAggregateFunctions
@@ -1534,6 +1549,116 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("DROP VIEW testView")
       }
     }
+  }
+
+  test("SPARK-8976 Wrong Result for Rollup #1") {
+    checkAnswer(sql(
+      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH ROLLUP"),
+      Seq(
+        (113, 3, 0),
+        (91, 0, 0),
+        (500, null, 1),
+        (84, 1, 0),
+        (105, 2, 0),
+        (107, 4, 0)
+      ).map(i => Row(i._1, i._2, i._3)))
+  }
+
+  test("SPARK-8976 Wrong Result for Rollup #2") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM src GROUP BY key%5, key-5
+        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+      Seq(
+        (1, 0, 5, 0),
+        (1, 0, 15, 0),
+        (1, 0, 25, 0),
+        (1, 0, 60, 0),
+        (1, 0, 75, 0),
+        (1, 0, 80, 0),
+        (1, 0, 100, 0),
+        (1, 0, 140, 0),
+        (1, 0, 145, 0),
+        (1, 0, 150, 0)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("SPARK-8976 Wrong Result for Rollup #3") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+        |WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+      Seq(
+        (1, 0, 5, 0),
+        (1, 0, 15, 0),
+        (1, 0, 25, 0),
+        (1, 0, 60, 0),
+        (1, 0, 75, 0),
+        (1, 0, 80, 0),
+        (1, 0, 100, 0),
+        (1, 0, 140, 0),
+        (1, 0, 145, 0),
+        (1, 0, 150, 0)
+      ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("SPARK-8976 Wrong Result for CUBE #1") {
+    checkAnswer(sql(
+      "SELECT count(*) AS cnt, key % 5, grouping_id() FROM src GROUP BY key%5 WITH CUBE"),
+      Seq(
+        (113, 3, 0),
+        (91, 0, 0),
+        (500, null, 1),
+        (84, 1, 0),
+        (105, 2, 0),
+        (107, 4, 0)
+      ).map(i => Row(i._1, i._2, i._3)))
+  }
+
+  test("SPARK-8976 Wrong Result for CUBE #2") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+        |WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+    Seq(
+      (1, null, -3, 2),
+      (1, null, -1, 2),
+      (1, null, 3, 2),
+      (1, null, 4, 2),
+      (1, null, 5, 2),
+      (1, null, 6, 2),
+      (1, null, 12, 2),
+      (1, null, 14, 2),
+      (1, null, 15, 2),
+      (1, null, 22, 2)
+    ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("SPARK-8976 Wrong Result for GroupingSet") {
+    checkAnswer(sql(
+      """
+        |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM src) t GROUP BY key%5, key-5
+        |GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
+      """.stripMargin),
+    Seq(
+      (1, null, -3, 2),
+      (1, null, -1, 2),
+      (1, null, 3, 2),
+      (1, null, 4, 2),
+      (1, null, 5, 2),
+      (1, null, 6, 2),
+      (1, null, 12, 2),
+      (1, null, 14, 2),
+      (1, null, 15, 2),
+      (1, null, 22, 2)
+    ).map(i => Row(i._1, i._2, i._3, i._4)))
   }
 
   test("SPARK-10562: partition by column with mixed case name") {
