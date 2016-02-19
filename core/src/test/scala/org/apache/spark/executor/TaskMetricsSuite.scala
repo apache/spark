@@ -475,10 +475,9 @@ class TaskMetricsSuite extends SparkFunSuite {
     }
     val metrics1 = TaskMetrics.fromAccumulatorUpdates(accumUpdates1)
     assertUpdatesEquals(metrics1.accumulatorUpdates(), accumUpdates1)
-    // Test this with additional accumulators. Only the ones registered with `Accumulators`
-    // will show up in the reconstructed TaskMetrics. In practice, all accumulators created
+    // Test this with additional accumulators to ensure that we do not crash when handling
+    // updates from unregistered accumulators. In practice, all accumulators created
     // on the driver, internal or not, should be registered with `Accumulators` at some point.
-    // Here we show that reconstruction will succeed even if there are unregistered accumulators.
     val param = IntAccumulatorParam
     val registeredAccums = Seq(
       new Accumulator(0, param, Some("a"), internal = true, countFailedValues = true),
@@ -497,9 +496,8 @@ class TaskMetricsSuite extends SparkFunSuite {
     val registeredAccumInfos = registeredAccums.map(makeInfo)
     val unregisteredAccumInfos = unregisteredAccums.map(makeInfo)
     val accumUpdates2 = accumUpdates1 ++ registeredAccumInfos ++ unregisteredAccumInfos
-    val metrics2 = TaskMetrics.fromAccumulatorUpdates(accumUpdates2)
-    // accumulators that were not registered with `Accumulators` will not show up
-    assertUpdatesEquals(metrics2.accumulatorUpdates(), accumUpdates1 ++ registeredAccumInfos)
+    // Simply checking that this does not crash:
+    TaskMetrics.fromAccumulatorUpdates(accumUpdates2)
   }
 }
 
