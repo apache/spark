@@ -55,11 +55,11 @@ public class JavaPCAExample {
     // Compute the top 3 principal components.
     Matrix pc = mat.computePrincipalComponents(3);
     RowMatrix projected = mat.multiply(pc);
+    // $example off$
     Vector[] collectPartitions = (Vector[])projected.rows().collect();
     System.out.println("Projected vector of principal component:");
     for (Vector vector : collectPartitions) {
       System.out.println("\t" + vector);
     }
-    // $example off$
   }
 }

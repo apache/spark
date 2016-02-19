@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
@@ -26,7 +27,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 // $example off$
 
-// scalastyle:off println
 object PCAOnSourceVectorExample {
 
   def main(args: Array[String]): Unit = {
@@ -48,10 +48,10 @@ object PCAOnSourceVectorExample {
     // Project vectors to the linear space spanned by the top 5 principal
     // components, keeping the label
     val projected = data.map(p => p.copy(features = pca.transform(p.features)))
-    val collect = projected.collect
+    // $example off$
+    val collect = projected.collect()
     println("Projected vector of principal component:")
     collect.foreach { vector => println(vector) }
-    // $example off$
   }
 }
 // scalastyle:on println

@@ -17,11 +17,13 @@
 
 package org.apache.spark.examples.mllib;
 
-//$example on$
+// $example on$
 import java.util.LinkedList;
+// $example off$
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkContext;
+// $example on$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Matrix;
@@ -29,7 +31,7 @@ import org.apache.spark.mllib.linalg.SingularValueDecomposition;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
-//$example off$
+// $example off$
 
 /**
  * Example for SingularValueDecomposition.
