@@ -432,7 +432,8 @@ class Analyzer(
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
-              case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+              case a: Attribute =>
+                attributeRewrites.get(a).getOrElse(a).withQualifiers(a.qualifiers)
             }
           }
           newRight
