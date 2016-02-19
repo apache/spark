@@ -141,6 +141,8 @@ class InMemoryCatalog extends Catalog {
     filterPattern(listDatabases(), pattern)
   }
 
+  override def setCurrentDatabase(db: String): Unit = { /* no-op */ }
+
   // --------------------------------------------------------------------------
   // Tables
   // --------------------------------------------------------------------------

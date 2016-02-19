@@ -407,27 +407,36 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  // TODO: figure out how to fix me for Hive, which currently fails with the most helpful
-  // error message in the world: "Unable to alter partition. alter is not possible"
-  ignore("alter partitions") {
+  test("alter partitions") {
     val catalog = newBasicCatalog()
-    val oldPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
-    val oldPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
-    // alter but keep spec the same
-    catalog.alterPartitions("db2", "tbl2", Seq(
-      part1.copy(storage = storageFormat.copy(locationUri = Some("usa"))),
-      part2.copy(storage = storageFormat.copy(locationUri = Some("china")))))
-    val newPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
-    val newPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
-    assert(newPart1.storage.locationUri != oldPart1.storage.locationUri)
-    assert(newPart2.storage.locationUri != oldPart2.storage.locationUri)
-    assert(newPart1.storage.locationUri == Some("usa"))
-    assert(newPart2.storage.locationUri == Some("china"))
-    // alter but change spec, should fail because new partition specs do not exist yet
-    val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
-    val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
-    intercept[AnalysisException] {
-      catalog.alterPartitions("db2", "tbl2", Seq(badPart1, badPart2))
+    try{
+      // Note: Before altering table partitions in Hive, you *must* set the current database
+      // to the one that contains the table of interest. Otherwise you will end up with the
+      // most helpful error message ever: "Unable to alter partition. alter is not possible."
+      // See HIVE-2742 for more detail.
+      catalog.setCurrentDatabase("db2")
+      val newLocation = newUriForDatabase()
+      // alter but keep spec the same
+      val oldPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
+      val oldPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
+      catalog.alterPartitions("db2", "tbl2", Seq(
+        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocation))),
+        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))))
+      val newPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
+      val newPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
+      assert(newPart1.storage.locationUri == Some(newLocation))
+      assert(newPart2.storage.locationUri == Some(newLocation))
+      assert(oldPart1.storage.locationUri != Some(newLocation))
+      assert(oldPart2.storage.locationUri != Some(newLocation))
+      // alter but change spec, should fail because new partition specs do not exist yet
+      val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
+      val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
+      intercept[AnalysisException] {
+        catalog.alterPartitions("db2", "tbl2", Seq(badPart1, badPart2))
+      }
+    } finally {
+      // Remember to restore the original current database, which we assume to be "default"
+      catalog.setCurrentDatabase("default")
     }
   }
 
