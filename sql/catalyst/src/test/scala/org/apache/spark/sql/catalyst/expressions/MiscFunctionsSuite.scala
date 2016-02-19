@@ -150,17 +150,14 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AesEncrypt(Literal.create(null, BinaryType),
       Literal.create(null, BinaryType)), null)
 
+    val expr3 = AesEncrypt(Literal("ABC".getBytes), Literal("1234567890".getBytes))
     // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
     intercept[java.security.InvalidKeyException] {
-      evaluate(AesEncrypt(Literal("ABC".getBytes), Literal("1234567890".getBytes)))
+      evaluate(expr3)
     }
-
-    // check codegen
-    val instance1 = UnsafeProjection.create(Base64(expr1) :: Nil)
-    assert(instance1.apply(null).getString(0) === "y6Ss+zCYObpCbgfWfyNWTw==")
-
-    val instance2 = UnsafeProjection.create(Base64(expr2) :: Nil)
-    assert(instance2.apply(null).getString(0) === "BQGHoM3lqYcsurCRq3PlUw==")
+    intercept[java.security.InvalidKeyException] {
+      UnsafeProjection.create(expr3::Nil).apply(null)
+    }
   }
 
   test("aesDecrypt") {
@@ -182,34 +179,33 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
       Literal.create(null, BinaryType)), null)
 
+    val expr3 = AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+      Literal("1234567890".getBytes))
+    val expr4 = AesDecrypt(UnBase64(Literal("y6Ss+zCsdYObpCbgfWfyNW3Twewr")),
+      Literal("1234567890123456".getBytes))
+    val expr5 = AesDecrypt(UnBase64(Literal("t6Ss+zCYObpCbgfWfyNWTw==")),
+      Literal("1234567890123456".getBytes))
+
     // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
     intercept[java.security.InvalidKeyException] {
-      evaluate(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
-        Literal("1234567890".getBytes)))
+      evaluate(expr3)
     }
-
+    intercept[java.security.InvalidKeyException] {
+      UnsafeProjection.create(expr3::Nil).apply(null)
+    }
     // input can not be decrypted
     intercept[javax.crypto.IllegalBlockSizeException] {
-      evaluate(AesDecrypt(UnBase64(Literal("y6Ss+zCsdYObpCbgfWfyNW3Twewr")),
-        Literal("1234567890123456".getBytes)));
+      evaluate(expr4)
     }
-
+    intercept[javax.crypto.IllegalBlockSizeException] {
+      UnsafeProjection.create(expr4::Nil).apply(null)
+    }
     // input can not be decrypted
     intercept[javax.crypto.BadPaddingException] {
-      evaluate(AesDecrypt(UnBase64(Literal("t6Ss+zCYObpCbgfWfyNWTw==")),
-        Literal("1234567890123456".getBytes)));
+      evaluate(expr5)
     }
-
-    // check codegen
-    val instance1 = UnsafeProjection.create(expr1 :: Nil)
-    assert(instance1.apply(null).getString(0) === "ABC")
-
-    val instance2 = UnsafeProjection.create(expr2 :: Nil)
-    assert(instance2.apply(null).getString(0) === "")
-
-    intercept[java.security.InvalidKeyException] {
-      UnsafeProjection.create(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
-        Literal("1234567890".getBytes)) :: Nil).apply(null)
+    intercept[javax.crypto.BadPaddingException] {
+      UnsafeProjection.create(expr5::Nil).apply(null)
     }
   }
 
