@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Explode, Literal}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.StringType
@@ -121,6 +121,28 @@ class ColumnPruningSuite extends PlanTest {
           Seq('c, 'aa.int, 'gid.int),
           Project(Seq('c, 'a),
             input))).analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("Keep broadcast hint when pruning on Join") {
+    val input = LocalRelation('key.int, 'value.string)
+
+    val query =
+      Project(Seq($"x.key", $"y.key"),
+        Join(
+          Subquery("x", input),
+          BroadcastHint(Subquery("y", input)), Inner, None)).analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      Project(Seq($"x.key", $"y.key"),
+        Join(
+          Project(Seq($"x.key"), Subquery("x", input)),
+          BroadcastHint(
+            Project(Seq($"y.key"), Subquery("y", input))),
+          Inner, None)).analyze
 
     comparePlans(optimized, expected)
   }
