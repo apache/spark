@@ -1201,7 +1201,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(ds3.count(), 100)
         result = ds3.applySchema(IntegerType()).collect()
         self.assertEqual(result[0][0], 0)
-        self.assertEqual(result[1][0], 3)
+        self.assertEqual(result[1][0], 1)
 
     def test_typed_aggregate(self):
         data = [(i, i * 2) for i in range(100)]
