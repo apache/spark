@@ -133,7 +133,7 @@ The run-tests script also can be limited to a specific Python version or a speci
 
     ./python/run-tests --python-executables=python --modules=pyspark-sql
 
-**Note:** You can also run Python tests with an sbt build provided your assembly JAR includes hive support.
+**Note:** You can also run Python tests with an sbt build, provided your assembly JAR includes hive support.
 
 # Spark Tests in Maven
 
