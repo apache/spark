@@ -237,7 +237,9 @@ object PowerIterationClustering extends Logging {
     Graph(vD, gA.edges)
       .mapTriplets(
         e => e.attr / math.max(e.srcAttr, MLUtils.EPSILON),
-        new TripletFields(/* useSrc */ true, /* useDst */ false, /* useEdge */ true))
+        new TripletFields(/* useSrc */ true,
+                          /* useDst */ false,
+                          /* useEdge */ true))
   }
 
   /**
@@ -298,7 +300,9 @@ object PowerIterationClustering extends Logging {
       val v = curG.aggregateMessages[Double](
         sendMsg = ctx => ctx.sendToSrc(ctx.attr * ctx.dstAttr),
         mergeMsg = _ + _,
-        new TripletFields(/* useSrc */ false, /* useDst */ true, /* useEdge */ true)).cache()
+        new TripletFields(/* useSrc */ false,
+                          /* useDst */ true,
+                          /* useEdge */ true)).cache()
       // normalize v
       val norm = v.values.map(math.abs).sum()
       logInfo(s"$msgPrefix: norm(v) = $norm.")
