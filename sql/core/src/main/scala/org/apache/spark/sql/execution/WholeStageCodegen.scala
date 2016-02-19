@@ -76,7 +76,10 @@ trait CodegenSupport extends SparkPlan {
   def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
-    doProduce(ctx)
+    s"""
+       |/*** PRODUCE: ${commentSafe(this.simpleString)} */
+       |${doProduce(ctx)}
+     """.stripMargin
   }
 
   /**
@@ -109,6 +112,38 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
+    * Returns source code to evaluate all the variables, and clear the code of them, to prevent
+    * them to be evaluated twice.
+    */
+  protected def evaluateVariables(variables: Seq[ExprCode]): String = {
+    val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
+    variables.foreach(_.code = "")
+    evaluate
+  }
+
+  /**
+    * Returns source code to evaluate the variables for required attributes, and clear the code
+    * of evaluated variables, to prevent them to be evaluated twice..
+    */
+  protected def evaluateRequiredVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      required: AttributeSet): String = {
+    var evaluateVars = ""
+    variables.zipWithIndex.foreach { case (ev, i) =>
+      if (ev.code != "" && required.contains(attributes(i))) {
+        evaluateVars += ev.code.trim + "\n"
+        ev.code = ""
+      }
+    }
+    evaluateVars
+  }
+
+  protected def commentSafe(s: String): String = {
+    s.replace("*/", "\\*\\/").replace("\\u", "\\\\u")
+  }
+
+  /**
     * Consume the columns generated from it's child, call doConsume() or emit the rows.
     */
   def consumeChild(
@@ -117,19 +152,22 @@ trait CodegenSupport extends SparkPlan {
       input: Seq[ExprCode],
       row: String = null): String = {
     ctx.freshNamePrefix = variablePrefix
-    if (row != null) {
-      ctx.currentVars = null
-      ctx.INPUT_ROW = row
-      val evals = child.output.zipWithIndex.map { case (attr, i) =>
-        BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+    val inputVars =
+      if (row != null) {
+        ctx.currentVars = null
+        ctx.INPUT_ROW = row
+        child.output.zipWithIndex.map { case (attr, i) =>
+          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+        }
+      } else {
+        input
       }
-      s"""
-         | ${evals.map(_.code).mkString("\n")}
-         | ${doConsume(ctx, evals)}
-       """.stripMargin
-    } else {
-      doConsume(ctx, input)
-    }
+    s"""
+       |
+       |/*** CONSUME: ${commentSafe(this.simpleString)} */
+       |${evaluateRequiredVariables(child.output, inputVars, references)}
+       |${doConsume(ctx, inputVars)}
+     """.stripMargin
   }
 
   /**
@@ -183,13 +221,9 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       | while (input.hasNext()) {
+       | while (!shouldStop() && input.hasNext()) {
        |   InternalRow $row = (InternalRow) input.next();
-       |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
-       |   if (shouldStop()) {
-       |     return;
-       |   }
        | }
      """.stripMargin
   }
@@ -251,7 +285,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
       }
 
       /** Codegened pipeline for:
-        * ${plan.treeString.trim}
+        * ${commentSafe(plan.treeString.trim)}
         */
       class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
@@ -305,7 +339,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRows.add($row.copy());
+         |currentRows.add($row.copy());
        """.stripMargin
     } else {
       assert(input != null)
@@ -317,13 +351,14 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         ctx.currentVars = input
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
-           | ${code.code.trim}
-           | currentRows.add(${code.value}.copy());
+           |${evaluateVariables(input)}
+           |${code.code.trim}
+           |currentRows.add(${code.value}.copy());
          """.stripMargin
       } else {
         // There is no columns
         s"""
-           | currentRows.add(unsafeRow);
+           |currentRows.add(unsafeRow);
          """.stripMargin
       }
     }

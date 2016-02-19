@@ -43,11 +43,12 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
-    val output = exprs.map(_.gen(ctx))
+    val resultVars = exprs.map(_.gen(ctx))
+    // Evaluation of non-deterministic expressions can't be deferred.
+    val nonDeterministicAttrs = projectList.zip(output).filter(!_._1.deterministic).unzip._2
     s"""
-       | ${output.map(_.code).mkString("\n")}
-       |
-       | ${consume(ctx, output)}
+       |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
@@ -89,11 +90,10 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
       s""
     }
     s"""
-       | ${eval.code}
-       | if ($nullCheck ${eval.value}) {
-       |   $numOutput.add(1);
-       |   ${consume(ctx, ctx.currentVars)}
-       | }
+       |${eval.code}
+       |if (!($nullCheck ${eval.value})) continue;
+       |$numOutput.add(1);
+       |${consume(ctx, ctx.currentVars)}
      """.stripMargin
   }
 
@@ -224,15 +224,13 @@ case class Range(
       |   }
       | }
       |
-      | while (!$overflow && $checkEnd) {
+      | while (!$overflow && $checkEnd && !shouldStop()) {
       |  long $value = $number;
       |  $number += ${step}L;
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
-      |
-      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }
