@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -92,5 +94,18 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         .agg("earnings" -> "sum"),
       Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
     )
+  }
+
+  test("fast pivot") {
+    val df = courseSales.groupBy("year", "course").agg(sum("earnings").as("earnings2"))
+    val foo = Column(
+      PivotFirst(df.col("course").expr,
+        df.col("earnings2").expr, Seq(Literal("dotNET"), Literal("Java"))).
+      toAggregateExpression())
+    checkAnswer(
+      df.groupBy("year").agg(foo.as("pivot")).select($"year", $"pivot"(0), $"pivot"(1)),
+      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    )
+
   }
 }

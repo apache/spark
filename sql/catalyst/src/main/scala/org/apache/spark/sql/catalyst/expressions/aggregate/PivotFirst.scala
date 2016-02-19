@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 import scala.collection.immutable.HashMap
@@ -45,13 +46,17 @@ case class PivotFirst(pivotColumn: Expression,
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
     val index = mutableAggBufferOffset + pivotIndex(pivotColumn.eval(inputRow))
     val value = valueColumn.eval(inputRow)
-    mutableAggBuffer.update(index, value)
+    // Can't do this with UnsafeRow: mutableAggBuffer.update(index, value)
+    updateRow(mutableAggBuffer, index, value)
   }
 
   override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
     for ( i <- 0 until indexSize) {
-      val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
-      mutableAggBuffer.update(mutableAggBufferOffset + i, value)
+      if (!inputAggBuffer.isNullAt(inputAggBufferOffset + i)) {
+        val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
+        // Can't do this with UnsafeRow: mutableAggBuffer.update(mutableAggBufferOffset + i, value)
+        updateRow(mutableAggBuffer, mutableAggBufferOffset + i, value)
+      }
     }
   }
 
@@ -66,6 +71,7 @@ case class PivotFirst(pivotColumn: Expression,
     for ( i <- 0 until indexSize) {
       result(i) = input.get(mutableAggBufferOffset + i, valueDataType)
     }
+    new GenericArrayData(result)
   }
 
   override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
@@ -75,19 +81,26 @@ case class PivotFirst(pivotColumn: Expression,
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
 
-  override def aggBufferAttributes: Seq[AttributeReference] =
-    (0 until indexSize).map(i => AttributeReference(i.toString, valueColumn.dataType)())
+  override val aggBufferAttributes: Seq[AttributeReference] =
+    (0 until indexSize).map(i => AttributeReference("agg_" + i, valueDataType)())
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  override def inputAggBufferAttributes: Seq[AttributeReference] =
+  override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
-  override def inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
+  override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
 
-  override def nullable: Boolean = false
+  override val nullable: Boolean = false
 
-  override def dataType: DataType = ArrayType(valueColumn.dataType)
+  override val dataType: DataType = ArrayType(valueDataType)
 
-  override def children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
+  override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
+
+  // UnsafeRow.update throws UnsupportedOperationException so we need to do this
+  private def updateRow(row: MutableRow, offset: Int, value: Any): Unit = valueDataType match {
+    case DoubleType => row.setDouble(offset, value.asInstanceOf[Double])
+    case _ => throw new UnsupportedOperationException(valueDataType.toString)
+  }
 }
+
