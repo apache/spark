@@ -227,9 +227,9 @@ object SparkSubmit {
     // Set the cluster manager
     val clusterManager: Int = args.master match {
       case "yarn" => YARN
-      case "yarn-client" | "yarn-cluster" | "yarn-standalone" =>
+      case "yarn-client" | "yarn-cluster" =>
         printWarning(s"Master ${args.master} is deprecated since 2.0." +
-          " Please use master \"yarn\" with specified deploy mode instead")
+          " Please use master \"yarn\" with specified deploy mode instead.")
         YARN
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
@@ -248,11 +248,6 @@ object SparkSubmit {
     // and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
     if (clusterManager == YARN) {
-      if (args.master == "yarn-standalone") {
-        printWarning("\"yarn-standalone\" is deprecated. Use \"yarn\" " +
-          "with deploy mode \"cluster\" instead.")
-        args.master = "yarn-cluster"
-      }
       (args.master, args.deployMode) match {
         case ("yarn-cluster", null) =>
           deployMode = CLUSTER
