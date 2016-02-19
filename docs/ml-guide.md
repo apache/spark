@@ -305,7 +305,6 @@ The `ParamMap` which produces the best evaluation metric is selected as the best
 
 <div data-lang="scala" markdown="1">
 {% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaTrainValidationSplitExample.scala %}
-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">

@@ -19,11 +19,11 @@
 Pipeline Example.
 """
 from pyspark import SparkContext, SQLContext
-from pyspark.ml import Pipeline
 # $example on$
+from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
-# $example off$
 from pyspark.ml.feature import HashingTF, Tokenizer
+# $example off$
 
 if __name__ == "__main__":
 

@@ -19,8 +19,8 @@
 Estimator Transformer Param Example.
 """
 from pyspark import SparkContext, SQLContext
-from pyspark.mllib.linalg import Vectors
 # $example on$
+from pyspark.mllib.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
 # $example off$
 
