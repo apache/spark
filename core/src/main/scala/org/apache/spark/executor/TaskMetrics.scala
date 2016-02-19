@@ -418,15 +418,15 @@ private[spark] object TaskMetrics extends Logging {
     // Initial accumulators are passed into the TaskMetrics constructor first because these
     // are required to be uniquely named. The rest of the accumulators from this task are
     // registered later because they need not satisfy this requirement.
-    val (initialAccumInfos, otherAccumInfos) = accumUpdates
-      .filter { info => info.update.isDefined }
-      .partition { info => info.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX)) }
-    val initialAccums = initialAccumInfos.map { info =>
-      val accum = InternalAccumulator.create(info.name.get)
-      accum.setValueAny(info.update.get)
-      accum
-    }
-    new ListenerTaskMetrics(initialAccums, otherAccumInfos)
+    val definedAccumUpdates = accumUpdates.filter { info => info.update.isDefined }
+    val initialAccums = definedAccumUpdates
+      .filter { info => info.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX)) }
+      .map { info =>
+        val accum = InternalAccumulator.create(info.name.get)
+        accum.setValueAny(info.update.get)
+        accum
+      }
+    new ListenerTaskMetrics(initialAccums, definedAccumUpdates)
   }
 
 }
