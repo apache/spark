@@ -109,6 +109,12 @@ trait CheckAnalysis {
               s"filter expression '${f.condition.sql}' " +
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
+          case j @ Join(_, _, _, u @ Some(UnresolvedUsingAttributes(cols))) =>
+            val from = operator.inputSet.map(_.name).mkString(", ")
+            failAnalysis(
+              s"using columns [${u.get.toString}] " +
+                s"can not be resolved given input columns: [$from] ")
+
           case j @ Join(_, _, _, Some(condition)) if condition.dataType != BooleanType =>
             failAnalysis(
               s"join condition '${condition.sql}' " +
