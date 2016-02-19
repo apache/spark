@@ -23,8 +23,55 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py
 
 
+class PipelineWrapper(object):
+    """
+    A pipeline wrapper for :py:class:`Pipeline` and :py:class:`PipelineModel` supports transferring
+    the array of pipeline stages between Python side and Scala side.
+    """
+
+    def _transfer_stages_to_java(self, py_stages):
+        """
+        Transforms the parameter of Python stages to a list of Java stages.
+        """
+
+        def __transfer_stage_to_java(py_stage):
+            py_stage._transfer_params_to_java()
+            return py_stage._java_obj
+
+        return [__transfer_stage_to_java(stage) for stage in py_stages]
+
+    @staticmethod
+    def __get_class(clazz):
+        """
+        Loads class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
+
+    def _transfer_stages_from_java(self, java_sc, java_stages):
+        """
+        Transforms the parameter Python stages from a list of Java stages.
+        """
+
+        def __transfer_stage_from_java(java_stage):
+            stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
+            # Generate a default new instance from the stage_name class.
+            py_stage = self.__get_class(stage_name)()
+            # Load information from java_stage to the instance.
+            py_stage._java_obj = java_stage
+            py_stage._resetUid(_java2py(java_sc, java_stage.uid()))
+            py_stage._transfer_params_from_java()
+            return py_stage
+
+        return [__transfer_stage_from_java(stage) for stage in java_stages]
+
+
 @inherit_doc
-class Pipeline(JavaEstimator, MLReadable, MLWritable):
+class Pipeline(PipelineWrapper, JavaEstimator, MLReadable, MLWritable):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
     of a sequence of stages, each of which is either an
@@ -79,6 +126,21 @@ class Pipeline(JavaEstimator, MLReadable, MLWritable):
     True
     >>> loadedPCA.getK() == pca.getK()
     True
+    >>> modelPath = path + "/feature-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = PipelineModel.load(modelPath)
+    >>> [hashingTFinModel, pcaModel] = model.stages
+    >>> [loadedHTinModel, loadedPCAModel] = loadedModel.stages
+    >>> hashingTFinModel.uid == loadedHTinModel.uid
+    True
+    >>> hashingTFinModel.getOrDefault(param) == loadedHTinModel.getOrDefault(param)
+    True
+    >>> pcaModel.uid == loadedPCAModel.uid
+    True
+    >>> pcaModel.pc == loadedPCAModel.pc
+    True
+    >>> pcaModel.explainedVariance == loadedPCAModel.explainedVariance
+    True
     >>> from shutil import rmtree
     >>> try:
     ...     rmtree(path)
@@ -131,17 +193,6 @@ class Pipeline(JavaEstimator, MLReadable, MLWritable):
         if self.stages in self._paramMap:
             return self._paramMap[self.stages]
 
-    def _transfer_stages_to_java(self):
-        """
-        Transforms the parameter stages to a list of Java stages.
-        """
-
-        def __transfer_stage_to_java(stage):
-            stage._transfer_params_to_java()
-            return stage._java_obj
-
-        return [__transfer_stage_to_java(stage) for stage in self.getStages()]
-
     def _transfer_params_to_java(self):
         """
         Transforms the parameter stages to Java stages.
@@ -158,42 +209,15 @@ class Pipeline(JavaEstimator, MLReadable, MLWritable):
         jvm = SparkContext._jvm
         stageArray = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(value))
 
-        for idx, java_stage in enumerate(self._transfer_stages_to_java()):
+        for idx, java_stage in enumerate(self._transfer_stages_to_java(self.getStages())):
             stageArray[idx] = java_stage
 
         java_value = _py2java(sc, stageArray)
         self._java_obj.set(java_param.w(java_value))
 
-    @staticmethod
-    def __get_class(clazz):
-        """
-        Loads class from its name.
-        """
-        parts = clazz.split('.')
-        module = ".".join(parts[:-1])
-        m = __import__( module )
-        for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
-
-    def _transfer_stages_from_java(self, java_sc, java_stages):
-        """
-        Transforms the parameter stages from a list of Java stages.
-        """
-
-        def __transfer_stage_from_java(java_stage):
-            stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
-            py_stage = self.__get_class(stage_name)()
-            py_stage._java_obj = java_stage
-            py_stage._resetUid(_java2py(java_sc, java_stage.uid()))
-            py_stage._transfer_params_from_java()
-            return py_stage
-
-        return [__transfer_stage_from_java(stage) for stage in java_stages]
-
     def _transfer_params_from_java(self):
         """
-        Transforms the embedded params from the companion Java object.
+        Transforms the parameter stages from the companion Java object.
         """
         sc = SparkContext._active_spark_context
         assert self._java_obj.hasParam(self.stages.name)
@@ -209,12 +233,23 @@ class Pipeline(JavaEstimator, MLReadable, MLWritable):
 
 
 @inherit_doc
-class PipelineModel(JavaModel, MLReadable, MLWritable):
+class PipelineModel(PipelineWrapper, JavaModel, MLReadable, MLWritable):
     """
     Represents a compiled pipeline with transformers and fitted models.
 
     .. versionadded:: 1.3.0
     """
+
+    @property
+    @since("2.0.0")
+    def stages(self):
+        """
+        Returns stages of the pipeline model.
+        """
+        sc = SparkContext._active_spark_context
+        java_stages = self._call_java("stages")
+        py_stages = self._transfer_stages_from_java(sc, java_stages)
+        return py_stages
 
 
 if __name__ == "__main__":
