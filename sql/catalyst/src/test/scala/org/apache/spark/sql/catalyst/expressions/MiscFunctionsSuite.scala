@@ -134,32 +134,43 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("aesEncrypt") {
-    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
-      Literal("1234567890123456".getBytes))), "y6Ss+zCYObpCbgfWfyNWTw==")
-    checkEvaluation(Base64(AesEncrypt(Literal("".getBytes),
-      Literal("1234567890123456".getBytes))), "BQGHoM3lqYcsurCRq3PlUw==")
+    val expr1 = AesEncrypt(Literal("ABC".getBytes), Literal("1234567890123456".getBytes))
+    val expr2 = AesEncrypt(Literal("".getBytes), Literal("1234567890123456".getBytes))
+
+    checkEvaluation(Base64(expr1), "y6Ss+zCYObpCbgfWfyNWTw==")
+    checkEvaluation(Base64(expr2), "BQGHoM3lqYcsurCRq3PlUw==")
 
     // input is null
     checkEvaluation(AesEncrypt(Literal.create(null, BinaryType),
       Literal("1234567890123456".getBytes)), null)
     // key is null
-    checkEvaluation(Base64(AesEncrypt(Literal("ABC".getBytes),
-      Literal.create(null, BinaryType))), null)
+    checkEvaluation(AesEncrypt(Literal("ABC".getBytes),
+      Literal.create(null, BinaryType)), null)
     // both are null
-    checkEvaluation(Base64(AesEncrypt(Literal.create(null, BinaryType),
-      Literal.create(null, BinaryType))), null)
+    checkEvaluation(AesEncrypt(Literal.create(null, BinaryType),
+      Literal.create(null, BinaryType)), null)
 
     // key length (80 bits) is not one of the permitted values (128, 192 or 256 bits)
     intercept[java.security.InvalidKeyException] {
       evaluate(AesEncrypt(Literal("ABC".getBytes), Literal("1234567890".getBytes)))
     }
+
+    // check codegen
+    val instance1 = UnsafeProjection.create(Base64(expr1) :: Nil)
+    assert(instance1.apply(null).getString(0) === "y6Ss+zCYObpCbgfWfyNWTw==")
+
+    val instance2 = UnsafeProjection.create(Base64(expr2) :: Nil)
+    assert(instance2.apply(null).getString(0) === "BQGHoM3lqYcsurCRq3PlUw==")
   }
 
   test("aesDecrypt") {
-    checkEvaluation(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
-      Literal("1234567890123456".getBytes)), "ABC")
-    checkEvaluation(AesDecrypt(UnBase64(Literal("BQGHoM3lqYcsurCRq3PlUw==")),
-      Literal("1234567890123456".getBytes)), "")
+    val expr1 = AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+      Literal("1234567890123456".getBytes))
+    val expr2 = AesDecrypt(UnBase64(Literal("BQGHoM3lqYcsurCRq3PlUw==")),
+      Literal("1234567890123456".getBytes))
+
+    checkEvaluation(expr1, "ABC")
+    checkEvaluation(expr2, "")
 
     // input is null
     checkEvaluation(AesDecrypt(UnBase64(Literal.create(null, StringType)),
@@ -187,6 +198,18 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     intercept[javax.crypto.BadPaddingException] {
       evaluate(AesDecrypt(UnBase64(Literal("t6Ss+zCYObpCbgfWfyNWTw==")),
         Literal("1234567890123456".getBytes)));
+    }
+
+    // check codegen
+    val instance1 = UnsafeProjection.create(expr1 :: Nil)
+    assert(instance1.apply(null).getString(0) === "ABC")
+
+    val instance2 = UnsafeProjection.create(expr2 :: Nil)
+    assert(instance2.apply(null).getString(0) === "")
+
+    intercept[java.security.InvalidKeyException] {
+      UnsafeProjection.create(AesDecrypt(UnBase64(Literal("y6Ss+zCYObpCbgfWfyNWTw==")),
+        Literal("1234567890".getBytes)) :: Nil).apply(null)
     }
   }
 
