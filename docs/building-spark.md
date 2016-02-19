@@ -31,13 +31,6 @@ and in `project/SparkBuild.scala` add:
 
 to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
 
-**Note:** If you are building PySpark and wish to run the full PySpark tests you will need to build an assembly JAR and also ensure you have built with hive support.
-
-{% highlight bash %}
-build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package -Phive -Phive-thriftserver
-{% endhighlight %}
-
-
 # Building a Runnable Distribution
 
 To create a Spark distribution like those distributed by the
@@ -126,6 +119,21 @@ To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` prop
 
     ./dev/change-scala-version.sh 2.10
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
+
+# PySpark Tests with Maven
+
+If you are building PySpark and wish to run the PySpark tests you will need to build an assembly JAR and also ensure you have built with hive support.
+
+{% highlight bash %}
+build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package -Phive -Phive-thriftserver
+./python/run-tests
+{% endhighlight %}
+
+The run-tests script also can be limited to a specific Python version or a specific module
+
+    ./python/run-tests --python-executables=python --modules=pyspark-sql
+
+**Note:** You can also run Python tests with an sbt build provided your assembly JAR includes hive support.
 
 # Spark Tests in Maven
 
