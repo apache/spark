@@ -31,6 +31,13 @@ and in `project/SparkBuild.scala` add:
 
 to the `sharedSettings` val. See also [this PR](https://github.com/apache/spark/pull/2883/files) if you are unsure of where to add these lines.
 
+**Note:** If you are building PySpark and wish to run the full PySpark tests you will need to build an assembly JAR and also ensure you have built with hive support.
+
+{% highlight bash %}
+build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package -Phive -Phive-thriftserver
+{% endhighlight %}
+
+
 # Building a Runnable Distribution
 
 To create a Spark distribution like those distributed by the
