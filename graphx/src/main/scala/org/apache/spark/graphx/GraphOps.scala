@@ -435,6 +435,17 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+    * Compute the connected component membership of each vertex and return a graph with the vertex
+    * value containing the largest degree in the connected component and the corresponding vertex
+    * id. If several vertices have the same largest degree, the one with lowest id is chosen.
+    *
+    * @see [[org.apache.spark.graphx.lib.ConnectedComponentsWithDegree#run]]
+    */
+  def connectedComponentsWithDegree(numIter: Int = Int.MaxValue): Graph[(VertexId, Int), ED] = {
+    ConnectedComponentsWithDegree.run(graph, numIter)
+  }
+
+  /**
    * Compute the number of triangles passing through each vertex.
    *
    * @see [[org.apache.spark.graphx.lib.TriangleCount$#run]]
