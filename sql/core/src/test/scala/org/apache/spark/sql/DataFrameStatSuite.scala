@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.execution.stat.StatFunctions
 import org.scalatest.Matchers._
 
+import org.apache.spark.Logging
+import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.DoubleType
