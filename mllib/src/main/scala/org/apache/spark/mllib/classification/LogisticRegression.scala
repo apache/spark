@@ -444,8 +444,8 @@ class LogisticRegressionWithLBFGS
         createModel(weights, mlLogisticRegresionModel.intercept)
       }
       optimizer.getUpdater() match {
-        case x: SquaredL2Updater => runWithMlLogisitcRegression(1.0)
-        case x: L1Updater => runWithMlLogisitcRegression(0.0)
+        case x: SquaredL2Updater => runWithMlLogisitcRegression(0.0)
+        case x: L1Updater => runWithMlLogisitcRegression(1.0)
         case _ => super.run(input, initialWeights)
       }
     } else {
