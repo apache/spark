@@ -68,6 +68,14 @@ class GroupedPythonDataset private[sql](
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = groupedData.sum(colNames: _*)
 
+  def pivot(pivotColumn: String): GroupedData = groupedData.pivot(pivotColumn)
+
+  def pivot(pivotColumn: String, values: Seq[Any]): GroupedData =
+    groupedData.pivot(pivotColumn, values)
+
+  def pivot(pivotColumn: String, values: java.util.List[Any]): GroupedData =
+    groupedData.pivot(pivotColumn, values)
+
   def flatMapGroups(f: PythonFunction, schemaJson: String): DataFrame = {
     val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
     internalFlatMapGroups(f, schema)
