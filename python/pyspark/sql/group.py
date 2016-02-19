@@ -15,6 +15,15 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version >= '3':
+    basestring = unicode = str
+    long = int
+    from functools import reduce
+else:
+    from itertools import imap as map
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
@@ -54,25 +63,25 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jgd, sql_ctx, key_func=None):
+    def __init__(self, jgd, sql_ctx, flat_key=False):
         self._jgd = jgd
         self.sql_ctx = sql_ctx
-        if key_func is None:
-            self.key_func = lambda key: key
+        if flat_key:
+            self._key_converter = lambda key: key[0]
         else:
-            self.key_func = key_func
+            self._key_converter = lambda key: key
 
     @ignore_unicode_prefix
     @since(2.0)
     def flatMapGroups(self, func):
         """ TODO """
-        import itertools
-        key_func = self.key_func
+        key_converter = self._key_converter
 
-        def process(iterator):
-            first = iterator.next()
-            key = key_func(first)
-            return func(key, itertools.chain([first], iterator))
+        def process(inputs):
+            record_converter = lambda record: (key_converter(record[0]), record[1])
+            for key, values in GroupedIterator(map(record_converter, inputs)):
+                for output in func(key, values):
+                    yield output
 
         return PipelinedDataFrame(self, process)
 
@@ -217,6 +226,86 @@ class GroupedData(object):
         return GroupedData(jgd, self.sql_ctx)
 
 
+class GroupedIterator(object):
+    """ TODO """
+
+    def __init__(self, inputs):
+        self.inputs = BufferedIterator(inputs)
+        self.current_input = inputs.next()
+        self.current_key = self.current_input[0]
+        self.current_values = GroupValuesIterator(self)
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self.current_values is None:
+            self._fetch_next_group()
+
+        ret = (self.current_key, self.current_values)
+        self.current_values = None
+        return ret
+
+    def _fetch_next_group(self):
+        if self.current_input is None:
+            self.current_input = self.inputs.next()
+
+        # Skip to next group, or consume all inputs and throw StopIteration exception.
+        while self.current_input[0] == self.current_key:
+            self.current_input = self.inputs.next()
+
+        self.current_key = self.current_input[0]
+        self.current_values = GroupValuesIterator(self)
+
+
+class GroupValuesIterator(object):
+    """ TODO """
+
+    def __init__(self, outter):
+        self.outter = outter
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self.outter.current_input is None:
+            self._fetch_next_value()
+
+        value = self.outter.current_input[1]
+        self.outter.current_input = None
+        return value
+
+    def _fetch_next_value(self):
+        if self.outter.inputs.head()[0] == self.outter.current_key:
+            self.outter.current_input = self.outter.inputs.next()
+        else:
+            raise StopIteration
+
+
+class BufferedIterator(object):
+    """ TODO """
+
+    def __init__(self, iterator):
+        self.iterator = iterator
+        self.buffered = None
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self.buffered is None:
+            return self.iterator.next()
+        else:
+            item = self.buffered
+            self.buffered = None
+            return item
+
+    def head(self):
+        if self.buffered is None:
+            self.buffered = self.iterator.next()
+        return self.buffered
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext
@@ -236,13 +325,6 @@ def _test():
                                    Row(course="dotNET", year=2012, earnings=5000),
                                    Row(course="dotNET", year=2013, earnings=48000),
                                    Row(course="Java",   year=2013, earnings=30000)]).toDF()
-
-    ds = globs['sqlContext'].createDataFrame([(i, i) for i in range(100)], ("key", "value"))
-    grouped = ds.groupByKey(lambda row: row.key % 5, IntegerType())
-    value_sum = lambda rows: sum(map(lambda row: row.value, rows))
-    agged = grouped.mapGroups(lambda key, values: str(key) + ":" + str(value_sum(values)))
-    result = agged.applySchema(StringType()).collect()
-    raise ValueError(result[0][0])
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,

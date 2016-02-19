@@ -1750,9 +1750,13 @@ class DataFrame private[sql](
    * Converts a JavaRDD to a PythonRDD.
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val structType = schema  // capture it for closure
-    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
-    EvaluatePython.javaToPython(rdd)
+    if (EvaluatePython.isPickled(schema)) {
+      queryExecution.toRdd.map(_.getBinary(0))
+    } else {
+      val structType = schema  // capture it for closure
+      val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+      EvaluatePython.javaToPython(rdd)
+    }
   }
 
   protected[sql] def collectToPython(): Int = {

@@ -1188,6 +1188,11 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(result[0][0] > 0)
         self.assertTrue(result[1][0] > 0)
 
+        # If no schema is given, collect will return custom objects instead of rows.
+        result = ds2.collect()
+        self.assertEqual(result[0], 0)
+        self.assertEqual(result[1], 3)
+
         # row count should be corrected even no schema is specified.
         self.assertEqual(ds2.count(), 100)
 
@@ -1197,6 +1202,40 @@ class SQLTests(ReusedPySparkTestCase):
         result = ds3.applySchema(IntegerType()).collect()
         self.assertEqual(result[0][0], 0)
         self.assertEqual(result[1][0], 3)
+
+    def test_typed_aggregate(self):
+        data = [(i, i * 2) for i in range(100)]
+        ds = self.sqlCtx.createDataFrame(data, ("key", "value"))
+        sum_tuple = lambda values: sum(map(lambda value: value[0] * value[1], values))
+
+        def get_python_result(data, key_func, agg_func):
+            data.sort(key=key_func)
+            expected_result = []
+            import itertools
+            for key, values in itertools.groupby(data, key_func):
+                expected_result.append(agg_func(key, values))
+            return expected_result
+
+        grouped = ds.groupByKey(lambda row: row.key % 5, IntegerType())
+        agg_func = lambda key, values: str(key) + ":" + str(sum_tuple(values))
+        result = sorted(grouped.mapGroups(agg_func).collect())
+        expected_result = get_python_result(data, lambda i: i[0] % 5, agg_func)
+        self.assertEqual(result, expected_result)
+
+        # We can also call groupByKey on a Dataset of custom objects.
+        ds2 = ds.map2(lambda row: row.key)
+        grouped = ds2.groupByKey(lambda i: i % 5, IntegerType())
+        agg_func = lambda key, values: str(key) + ":" + str(sum(values))
+        result = sorted(grouped.mapGroups(agg_func).collect())
+        expected_result = get_python_result(range(100), lambda i: i % 5, agg_func)
+        self.assertEqual(result, expected_result)
+
+        # We can also apply typed aggregate after structured groupBy, the key is row object.
+        grouped = ds.groupBy(ds.key % 2, ds.key % 3)
+        agg_func = lambda key, values: str(key[0]) + str(key[1]) + ":" + str(sum_tuple(values))
+        result = sorted(grouped.mapGroups(agg_func).collect())
+        expected_result = get_python_result(data, lambda i: (i[0] % 2, i[0] % 3), agg_func)
+        self.assertEqual(result, expected_result)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

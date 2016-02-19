@@ -33,8 +33,7 @@ class GroupedPythonDataset private[sql](
 
   private def sqlContext = queryExecution.sqlContext
 
-  protected[sql] def isPickled(): Boolean =
-    EvaluatePython.isPickled(queryExecution.analyzed.output.toStructType)
+  protected[sql] def isPickled(): Boolean = EvaluatePython.isPickled(dataAttributes.toStructType)
 
   private def groupedData =
     new GroupedData(

@@ -28,7 +28,8 @@ else:
 
 from pyspark import since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, PickleSerializer, \
+    UTF8Deserializer, PairDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -236,9 +237,14 @@ class DataFrame(object):
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
+
+        if self._jdf.isPickled():
+            deserializer = PickleSerializer()
+        else:
+            deserializer = BatchedSerializer(PickleSerializer())
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(port, deserializer))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -282,13 +288,16 @@ class DataFrame(object):
     @since(2.0)
     def applySchema(self, schema=None):
         """ TODO """
-        if schema is None:
-            from pyspark.sql.types import _infer_type, _merge_type
-            # If no schema is specified, infer it from the whole data set.
-            jrdd = self._prev_jdf.javaToPython()
-            rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
-            schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
-        return PipelinedDataFrame(self, output_schema=schema)
+        if isinstance(self, PipelinedDataFrame):
+            if schema is None:
+                from pyspark.sql.types import _infer_type, _merge_type
+                # If no schema is specified, infer it from the whole data set.
+                jrdd = self._prev_jdf.javaToPython()
+                rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+                schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
+            return PipelinedDataFrame(self, output_schema=schema)
+        else:
+            return self
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -926,7 +935,7 @@ class DataFrame(object):
         wraped_func = _wrap_func(self._sc, self._jdf, f, False)
         jgd = self._jdf.pythonGroupBy(wraped_func, key_type.json())
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx, key_func)
+        return GroupedData(jgd, self.sql_ctx, not isinstance(key_type, StructType))
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1396,6 +1405,7 @@ class PipelinedDataFrame(DataFrame):
         from pyspark.sql.group import GroupedData
 
         if output_schema is None:
+            # should get it from java side
             self._schema = StructType().add("binary", BinaryType(), False, {"pickled": True})
         else:
             self._schema = output_schema
@@ -1446,7 +1456,7 @@ class PipelinedDataFrame(DataFrame):
         return self._jdf_val
 
     def _create_jdf(self, func, schema=None):
-        wrapped_func = _wrap_func(self._sc, self._prev_jdf, func, schema is None)
+        wrapped_func = _wrap_func(self._sc, self._prev_jdf, func, schema is None, self._grouped)
         if schema is None:
             if self._grouped:
                 return self._prev_jdf.flatMapGroups(wrapped_func)
@@ -1460,16 +1470,18 @@ class PipelinedDataFrame(DataFrame):
                 return self._prev_jdf.pythonMapPartitions(wrapped_func, schema_string)
 
 
-def _wrap_func(sc, jdf, func, output_binary):
-    if jdf.isPickled():
+def _wrap_func(sc, jdf, func, output_binary, input_grouped=False):
+    if input_grouped:
+        deserializer = PairDeserializer(PickleSerializer(), PickleSerializer())
+    elif jdf.isPickled():
         deserializer = PickleSerializer()
     else:
-        deserializer = None  # the framework will provide a default one
+        deserializer = AutoBatchedSerializer(PickleSerializer())
 
     if output_binary:
         serializer = PickleSerializer()
     else:
-        serializer = None  # the framework will provide a default one
+        serializer = AutoBatchedSerializer(PickleSerializer())
 
     from pyspark.rdd import _wrap_function
     return _wrap_function(sc, lambda _, iterator: func(iterator), deserializer, serializer)
