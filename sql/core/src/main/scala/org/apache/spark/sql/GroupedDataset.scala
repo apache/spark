@@ -224,15 +224,14 @@ class GroupedDataset[K, V] private[sql](
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
-   * TODO: does not handle aggrecations that return nonflat results,
+   * TODO: does not handle aggregations that return nonflat results.
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(
         _.withInputType(resolvedVEncoder, dataAttributes).named)
-    val keyColumn = if (resolvedKEncoder.flat) {
-      assert(groupingAttributes.length == 1)
+    val keyColumn = if (groupingAttributes.length == 1) {
       groupingAttributes.head
     } else {
       Alias(CreateStruct(groupingAttributes), "key")()

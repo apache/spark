@@ -19,12 +19,15 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot, Project}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.types.NumericType
 
 /**
@@ -210,6 +213,87 @@ class GroupedData protected[sql](
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map(_.expr))
+  }
+
+  /**
+   * Computes the given aggregation, returning a [[DataFrame]] for each unique key
+   * and the result of computing this aggregation over all elements in the group.
+   *
+   * @since 2.0.0
+   */
+  def agg[I: TypeTag, _](col1: TypedColumn[I, _]): DataFrame = {
+    aggInternal(col1)
+  }
+
+  /**
+   * Computes the given aggregation, returning a [[DataFrame]] for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 2.0.0
+   */
+  def agg[I: TypeTag, _](
+      col1: TypedColumn[I, _],
+      col2: TypedColumn[I, _]): DataFrame = {
+    aggInternal(col1, col2)
+  }
+
+  /**
+   * Computes the given aggregation, returning a [[DataFrame]] for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 2.0.0
+   */
+  def agg[I: TypeTag, _](
+      col1: TypedColumn[I, _],
+      col2: TypedColumn[I, _],
+      col3: TypedColumn[I, _]): DataFrame = {
+    aggInternal(col1, col2, col3)
+  }
+
+  /**
+   * Computes the given aggregation, returning a [[DataFrame]] for each unique key
+   * and the result of computing these aggregations over all elements in the group.
+   *
+   * @since 2.0.0
+   */
+  def agg[I: TypeTag, _](
+      col1: TypedColumn[I, _],
+      col2: TypedColumn[I, _],
+      col3: TypedColumn[I, _],
+      col4: TypedColumn[I, _]): DataFrame = {
+    aggInternal(col1, col2, col3, col4)
+  }
+
+  /**
+   * Internal helper function for building typed aggregations that return a single value. It is not
+   * until typed aggregations are used that encoders are initialized. This is because
+   * [[GroupedData]] does not know if typed aggregations are used in advance.
+   * TODO: does not handle aggregations that return nonflat results.
+   */
+  private def aggInternal[I: TypeTag, _](columns: TypedColumn[I, _]*): DataFrame = {
+    // Since Aggregator takes all of the elements of a group, we split an input schema into key
+    // and value here.
+    val (keyAttributes, dataAttributes) = {
+      val withKeyColumns = df.logicalPlan.output ++ groupingExprs.map(UnresolvedAlias(_))
+      val withKey = Project(withKeyColumns, df.logicalPlan)
+      val outputAttributes = df.sqlContext.executePlan(withKey).analyzed.output
+      (outputAttributes.takeRight(groupingExprs.size),
+        outputAttributes.dropRight(groupingExprs.size))
+    }
+
+    val resolvedVEncoder = encoderFor(ExpressionEncoder[I]())
+      .resolve(dataAttributes, OuterScopes.outerScopes)
+
+    val namedColumns = columns.map(_.withInputType(resolvedVEncoder, dataAttributes).named)
+    val keyColumn = if (keyAttributes.length == 1) {
+      keyAttributes.head
+    } else {
+      Alias(CreateStruct(keyAttributes), "key")()
+    }
+    val aggregate = Aggregate(groupingExprs, keyColumn +: namedColumns, df.logicalPlan)
+    val execution = new QueryExecution(df.sqlContext, aggregate)
+
+    new DataFrame(df.sqlContext, execution)
   }
 
   /**
