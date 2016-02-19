@@ -156,7 +156,7 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluate(expr3)
     }
     intercept[java.security.InvalidKeyException] {
-      UnsafeProjection.create(expr3::Nil).apply(null)
+      UnsafeProjection.create(expr3 :: Nil).apply(null)
     }
   }
 
@@ -191,21 +191,21 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluate(expr3)
     }
     intercept[java.security.InvalidKeyException] {
-      UnsafeProjection.create(expr3::Nil).apply(null)
+      UnsafeProjection.create(expr3 :: Nil).apply(null)
     }
     // input can not be decrypted
     intercept[javax.crypto.IllegalBlockSizeException] {
       evaluate(expr4)
     }
     intercept[javax.crypto.IllegalBlockSizeException] {
-      UnsafeProjection.create(expr4::Nil).apply(null)
+      UnsafeProjection.create(expr4 :: Nil).apply(null)
     }
     // input can not be decrypted
     intercept[javax.crypto.BadPaddingException] {
       evaluate(expr5)
     }
     intercept[javax.crypto.BadPaddingException] {
-      UnsafeProjection.create(expr5::Nil).apply(null)
+      UnsafeProjection.create(expr5 :: Nil).apply(null)
     }
   }
 
