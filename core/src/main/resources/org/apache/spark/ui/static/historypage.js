@@ -37,6 +37,22 @@ function formatDuration(milliseconds) {
   return hours.toFixed(1) + " h";
 }
 
+function makeIdNumeric(id) {
+  var strs = id.split("-");
+  if (strs.length < 3) {
+    return id;
+  }
+  var appSeqNum = strs[2];
+  var resl = strs[0] + "-" + strs[1] + "-";
+  var diff = 10 - appSeqNum.length;
+  while (diff > 0) {
+      resl += "0";
+      diff--;
+  }
+  resl += appSeqNum;
+  return resl;
+}
+
 function formatDate(date) {
   return date.split(".")[0].replace("T", " ");
 }
@@ -58,6 +74,21 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     },
 
     "title-numeric-desc": function ( a, b ) {
+        return ((a < b) ? 1 : ((a > b) ? -1 : 0));
+    }
+} );
+
+jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+    "appid-numeric-pre": function ( a ) {
+        var x = a.match(/title="*(-?[0-9a-zA-Z\-]+)/)[1];
+        return makeIdNumeric(x);
+    },
+
+    "appid-numeric-asc": function ( a, b ) {
+        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
+    },
+
+    "appid-numeric-desc": function ( a, b ) {
         return ((a < b) ? 1 : ((a > b) ? -1 : 0));
     }
 } );
@@ -109,7 +140,7 @@ $(document).ready(function() {
         var selector = "#history-summary-table";
         var conf = {
                     "columns": [
-                        {name: 'first'},
+                        {name: 'first', type: "appid-numeric"},
                         {name: 'second'},
                         {name: 'third'},
                         {name: 'fourth'},
