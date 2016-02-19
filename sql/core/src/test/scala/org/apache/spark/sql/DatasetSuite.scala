@@ -528,14 +528,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
 
-  test("verify star in functions fail with a good error") {
-    val ds = Seq(("a", 1, "c"), ("b", 2, "d")).map(a => (a._1, a._3))
-    val e = intercept[AnalysisException] {
-      ds.toDF().groupBy($"_1").agg(sum($"*") as "sumOccurances")
-    }
-    assert(e.getMessage.contains("Invalid usage of '*' in expression 'sum'"), e.getMessage)
-  }
-
   test("runtime nullability check") {
     val schema = StructType(Seq(
       StructField("f", StructType(Seq(
