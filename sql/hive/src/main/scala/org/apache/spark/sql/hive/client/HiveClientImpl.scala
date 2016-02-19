@@ -629,7 +629,7 @@ private[hive] class HiveClientImpl(
       comment = Option(hc.getComment))
   }
 
-  override def toHiveTable(table: CatalogTable): HiveTable = {
+  private def toHiveTable(table: CatalogTable): HiveTable = {
     val hiveTable = new HiveTable(table.database, table.name)
     hiveTable.setTableType(table.tableType match {
       case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE
@@ -663,7 +663,7 @@ private[hive] class HiveClientImpl(
     tbl
   }
 
-  override def toHivePartition(
+  private def toHivePartition(
       p: CatalogTablePartition,
       ht: HiveTable): HivePartition = {
     new HivePartition(ht, p.spec.asJava, p.storage.locationUri.map { l => new Path(l) }.orNull)

@@ -771,7 +771,48 @@ private[hive] case class MetastoreRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] = table :: sqlContext :: Nil
 
-  @transient val hiveQlTable: HiveTable = client.toHiveTable(table)
+  private def toHiveColumn(c: CatalogColumn): FieldSchema = {
+    new FieldSchema(c.name, c.dataType, c.comment.orNull)
+  }
+
+  // TODO: merge this with HiveClientImpl#toHiveTable
+  @transient val hiveQlTable: HiveTable = {
+    // We start by constructing an API table as Hive performs several important transformations
+      // internally when converting an API table to a QL table.
+    val tTable = new org.apache.hadoop.hive.metastore.api.Table()
+    tTable.setTableName(table.name)
+    tTable.setDbName(table.database)
+
+    val tableParameters = new java.util.HashMap[String, String]()
+    tTable.setParameters(tableParameters)
+    table.properties.foreach { case (k, v) => tableParameters.put(k, v) }
+
+    tTable.setTableType(table.tableType match {
+      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE.toString
+      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE.toString
+      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE.toString
+      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW.toString
+    })
+
+    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
+    tTable.setSd(sd)
+    sd.setCols(table.schema.map(toHiveColumn).asJava)
+    tTable.setPartitionKeys(table.partitionColumns.map(toHiveColumn).asJava)
+
+    table.storage.locationUri.foreach(sd.setLocation)
+    table.storage.inputFormat.foreach(sd.setInputFormat)
+    table.storage.outputFormat.foreach(sd.setOutputFormat)
+
+    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
+    table.storage.serde.foreach(serdeInfo.setSerializationLib)
+    sd.setSerdeInfo(serdeInfo)
+
+    val serdeParameters = new java.util.HashMap[String, String]()
+    table.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
+    serdeInfo.setParameters(serdeParameters)
+
+    new HiveTable(tTable)
+  }
 
   @transient override lazy val statistics: Statistics = Statistics(
     sizeInBytes = {
@@ -805,11 +846,14 @@ private[hive] case class MetastoreRelation(
     }
 
     rawPartitions.map { p =>
-      val hp = client.toHivePartition(p, hiveQlTable)
+      val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
+      tPartition.setDbName(databaseName)
+      tPartition.setTableName(tableName)
+      tPartition.setValues(p.spec.values.toList.asJava)
 
-      // TODO: I'm not sure if the following is super necessary;
-      // the partitions will just get these fields from the table anyway, right?
-      val sd = hp.getTPartition.getSd
+      val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
+      tPartition.setSd(sd)
+      sd.setCols(table.schema.map(toHiveColumn).asJava)
       p.storage.locationUri.foreach(sd.setLocation)
       p.storage.inputFormat.foreach(sd.setInputFormat)
       p.storage.outputFormat.foreach(sd.setOutputFormat)
@@ -824,7 +868,7 @@ private[hive] case class MetastoreRelation(
       p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
       serdeInfo.setParameters(serdeParameters)
 
-      hp
+      new Partition(hiveQlTable, tPartition)
     }
   }
 
