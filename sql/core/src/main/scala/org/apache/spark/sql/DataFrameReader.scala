@@ -30,6 +30,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.csv.CSVRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -339,6 +340,46 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         Some(jsonRDD),
         maybeDataSchema = userSpecifiedSchema,
         maybePartitionSpec = None,
+        userDefinedPartitionColumns = None,
+        parameters = extraOptions.toMap)(sqlContext)
+    )
+  }
+
+  /**
+   * Loads a CSV file and returns the result as a [[DataFrame]].
+   *
+   * This function goes through the input once to determine the input schema. If you know the
+   * schema in advance, use the version that specifies the schema to avoid the extra scan.
+   *
+   * @since 2.0.0
+   */
+  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+
+  /**
+   * Loads an `RDD[String]` storing CSV records and returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param csvRDD input RDD containing CSV records
+   * @since 2.0.0
+   */
+  def csv(csvRDD: JavaRDD[String]): DataFrame = csv(csvRDD.rdd)
+
+  /**
+   * Loads an `RDD[String]` storing CSV records and returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param csvRDD input RDD containing CSV records
+   * @since 2.0.0
+   */
+  def csv(csvRDD: RDD[String]): DataFrame = {
+    sqlContext.baseRelationToDataFrame(
+      new CSVRelation(
+        Some(csvRDD),
+        maybeDataSchema = userSpecifiedSchema,
         userDefinedPartitionColumns = None,
         parameters = extraOptions.toMap)(sqlContext)
     )

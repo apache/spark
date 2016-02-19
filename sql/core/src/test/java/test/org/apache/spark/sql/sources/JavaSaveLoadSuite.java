@@ -42,7 +42,8 @@ public class JavaSaveLoadSuite {
 
   String originalDefaultSource;
   File path;
-  DataFrame df;
+  DataFrame jsonDf;
+  DataFrame csvDf;
 
   private static void checkAnswer(DataFrame actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
@@ -68,9 +69,17 @@ public class JavaSaveLoadSuite {
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
-    JavaRDD<String> rdd = sc.parallelize(jsonObjects);
-    df = sqlContext.read().json(rdd);
-    df.registerTempTable("jsonTable");
+    JavaRDD<String> jsonRDD = sc.parallelize(jsonObjects);
+    jsonDf = sqlContext.read().json(jsonRDD);
+    jsonDf.registerTempTable("jsonTable");
+
+    List<String> csvObjects = new ArrayList<>(10);
+    for (int i = 0; i < 10; i++) {
+      jsonObjects.add(i + ", " + i + ", str" );
+    }
+    JavaRDD<String> csvRDD = sc.parallelize(csvObjects);
+    csvDf = sqlContext.read().csv(csvRDD);
+    csvDf.registerTempTable("csvTable");
   }
 
   @After
@@ -81,19 +90,28 @@ public class JavaSaveLoadSuite {
   }
 
   @Test
-  public void saveAndLoad() {
+  public void jsonSaveAndLoad() {
     Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
-    df.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
+    jsonDf.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
     DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
-    checkAnswer(loadedDF, df.collectAsList());
+    checkAnswer(loadedDF, jsonDf.collectAsList());
+  }
+
+  @Test
+  public void csvSaveAndLoad() {
+    Map<String, String> options = new HashMap<>();
+    options.put("path", path.toString());
+    csvDf.write().mode(SaveMode.ErrorIfExists).format("csv").options(options).save();
+    DataFrame loadedDF = sqlContext.read().format("csv").options(options).load();
+    checkAnswer(loadedDF, csvDf.collectAsList());
   }
 
   @Test
   public void saveAndLoadWithSchema() {
     Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
-    df.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
+    jsonDf.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
 
     List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
