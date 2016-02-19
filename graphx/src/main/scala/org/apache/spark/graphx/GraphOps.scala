@@ -411,8 +411,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
    */
-  def connectedComponents(): Graph[VertexId, ED] = {
-    ConnectedComponents.run(graph)
+  def connectedComponents(numIter = Int.MaxValue): Graph[VertexId, ED] = {
+    ConnectedComponents.run(graph, numIter)
   }
 
   /**

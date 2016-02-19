@@ -29,13 +29,14 @@ object ConnectedComponents {
    *
    * @tparam VD the vertex attribute type (discarded in the computation)
    * @tparam ED the edge attribute type (preserved in the computation)
-   *
    * @param graph the graph for which to compute the connected components
-   *
+   * @param numIter the maximum number of iterations to run for
    * @return a graph with vertex attributes containing the smallest vertex in each
    *         connected component
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexId, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
+                                      numIter: Int = Int.MaxValue): Graph[VertexId, ED] = {
+    require(numIter > 0)
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
     def sendMessage(edge: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, VertexId)] = {
       if (edge.srcAttr < edge.dstAttr) {
@@ -47,7 +48,8 @@ object ConnectedComponents {
       }
     }
     val initialMessage = Long.MaxValue
-    val pregelGraph = Pregel(ccGraph, initialMessage, activeDirection = EdgeDirection.Either)(
+    val pregelGraph = Pregel(ccGraph, initialMessage,
+      numIter, EdgeDirection.Either)(
       vprog = (id, attr, msg) => math.min(attr, msg),
       sendMsg = sendMessage,
       mergeMsg = (a, b) => math.min(a, b))
