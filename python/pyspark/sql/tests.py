@@ -1205,7 +1205,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_typed_aggregate(self):
         data = [(i, i * 2) for i in range(100)]
-        ds = self.sqlCtx.createDataFrame(data, ("key", "value"))
+        ds = self.sqlCtx.createDataFrame(data, ("i", "j"))
         sum_tuple = lambda values: sum(map(lambda value: value[0] * value[1], values))
 
         def get_python_result(data, key_func, agg_func):
@@ -1216,14 +1216,14 @@ class SQLTests(ReusedPySparkTestCase):
                 expected_result.append(agg_func(key, values))
             return expected_result
 
-        grouped = ds.groupByKey(lambda row: row.key % 5, IntegerType())
+        grouped = ds.groupByKey(lambda row: row.i % 5, IntegerType())
         agg_func = lambda key, values: str(key) + ":" + str(sum_tuple(values))
         result = sorted(grouped.mapGroups(agg_func).collect())
         expected_result = get_python_result(data, lambda i: i[0] % 5, agg_func)
         self.assertEqual(result, expected_result)
 
         # We can also call groupByKey on a Dataset of custom objects.
-        ds2 = ds.map2(lambda row: row.key)
+        ds2 = ds.map2(lambda row: row.i)
         grouped = ds2.groupByKey(lambda i: i % 5, IntegerType())
         agg_func = lambda key, values: str(key) + ":" + str(sum(values))
         result = sorted(grouped.mapGroups(agg_func).collect())
@@ -1231,10 +1231,18 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(result, expected_result)
 
         # We can also apply typed aggregate after structured groupBy, the key is row object.
-        grouped = ds.groupBy(ds.key % 2, ds.key % 3)
+        grouped = ds.groupBy(ds.i % 2, ds.i % 3)
         agg_func = lambda key, values: str(key[0]) + str(key[1]) + ":" + str(sum_tuple(values))
         result = sorted(grouped.mapGroups(agg_func).collect())
         expected_result = get_python_result(data, lambda i: (i[0] % 2, i[0] % 3), agg_func)
+        self.assertEqual(result, expected_result)
+
+        # We can also apply structured aggregate after groupByKey
+        grouped = ds.groupByKey(lambda row: row.i % 5, IntegerType())
+        result = sorted(grouped.sum("j").collect())
+        get_sum = lambda key: sum(filter(lambda i: i % 5 == key, range(100))) * 2
+        result_row = Row("key", "sum(j)")
+        expected_result = [result_row(i, get_sum(i)) for i in range(5)]
         self.assertEqual(result, expected_result)
 
 
