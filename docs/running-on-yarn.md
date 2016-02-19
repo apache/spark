@@ -480,9 +480,9 @@ If you need a reference to the proper location to put log files in the YARN so t
 # Running in a secure YARN cluster
 
 As covered in [security](security.html), Kerberos is used in a secure YARN cluster to
-authenticate principals with services —and obtain access the services and
-their data . Hadoop services issue 'hadoop tokens' to allow an authenticated
-principal's access to the service and data, tokens provided over Hadoop IPC and REST/Web APIs.
+authenticate principals with services —and so access these services and
+their data. These services issue 'hadoop tokens' to grant access to the service and data,
+tokens which are then supplied over Hadoop IPC and REST/Web APIs as proof of access rights.
 For YARN applications to interact with HDFS, HBase and Hive, the application must request tokens
 using the kerberos credentials of the user launching the cluster (the principal).
 
@@ -498,14 +498,14 @@ spark.yarn.access.namenodes hdfs://ireland.emea.example.org:8020/,hdfs://frankfu
 ```
 
 Hadoop tokens expire. They can be renewed "for a while"; the Spark Application Master will automatically
-do this. However, eventually, they will stop being renewable. After this point, all attempts to
+do this. However, eventually, they will stop being renewable —after which all attempts to
 access secure data will fail. The only way to avoid that is for the application to be launched
 with the secrets needed to log in to Kerberos directly: a keytab.
 
 ## Launching your application with Apache Oozie
 
-Apache Oozie can launch Spark. In an insecure cluster, this is straightforward.
-In a secure cluster, Spark will need the tokens needed to access the cluster's services.
+Apache Oozie can launch Spark. In a secure cluster, the launched application will need the relevant
+tokens to access the cluster's services.
 If Spark is launched with a keytab, this is automatic. However, if Spark is to be
 launched without a keytab, the responsibility for setting up security must be handed
 over to Oozie.
@@ -517,6 +517,7 @@ The Oozie workflow configuration must be set up for Oozie to request all tokens,
 - Any remote HDFS filesystems.
 - Hive.
 - HBase.
+- The YARN timeline server, if the application interacts with this.
 
 The Spark configuration must be set to *not* request Hive or HBase tokens:
 
@@ -550,4 +551,6 @@ spark.yarn.appMasterEnv.HADOOP_JAAS_DEBUG true
 spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
 ```
 
+Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
+will include a list of all tokens obtained, and their expiry details
 

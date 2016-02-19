@@ -312,6 +312,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
+<<<<<<< 6c77c543addb861d7455bf3f050eb33026381cab
    * Run some code as the real logged in user (which may differ from the current user, for
    * example, when using proxying).
    */
