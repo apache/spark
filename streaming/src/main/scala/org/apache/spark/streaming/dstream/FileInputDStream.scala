@@ -148,8 +148,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     // Find new files
     val newFiles = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
-    batchTimeToSelectedFiles.synchronized
-    {
+    batchTimeToSelectedFiles.synchronized {
       batchTimeToSelectedFiles += ((validTime, newFiles))
     }
     recentlySelectedFiles ++= newFiles
@@ -165,17 +164,15 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   /** Clear the old time-to-files mappings along with old RDDs */
   protected[streaming] override def clearMetadata(time: Time) {
-    super.clearMetadata(time)
-    val oldFiles = batchTimeToSelectedFiles.synchronized
-    {
-      batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
+    batchTimeToSelectedFiles.synchronized {
+      val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
+      batchTimeToSelectedFiles --= oldFiles.keys
+      recentlySelectedFiles --= oldFiles.values.flatten
+      logInfo("Cleared " + oldFiles.size + " old files that were older than " +
+        (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
+      logDebug("Cleared files are:\n" +
+        oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
     }
-    batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles --= oldFiles.keys }
-    recentlySelectedFiles --= oldFiles.values.flatten
-    logInfo("Cleared " + oldFiles.size + " old files that were older than " +
-      (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
-    logDebug("Cleared files are:\n" +
-      oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
     // Delete file mod times that weren't accessed in the last round of getting new files
     fileToModTime.clearOldValues(lastNewFileFindingTime - 1)
   }

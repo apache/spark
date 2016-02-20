@@ -270,21 +270,23 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Verify that the recomputed RDDs are KinesisBackedBlockRDDs with the same sequence ranges
     // and return the same data
-    val times = collectedData.synchronized { collectedData.keySet }
-    times.foreach { time =>
-      val (arrayOfSeqNumRanges, data) = collectedData.synchronized { collectedData(time) }
-      val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
-      rdd shouldBe a [KinesisBackedBlockRDD[_]]
+    collectedData.synchronized {
+      val times = collectedData.keySet
+      times.foreach { time =>
+        val (arrayOfSeqNumRanges, data) = collectedData(time)
+        val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
+        rdd shouldBe a[KinesisBackedBlockRDD[_]]
 
-      // Verify the recovered sequence ranges
-      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
-      assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
-      arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
-        assert(expected.ranges.toSeq === found.ranges.toSeq)
+        // Verify the recovered sequence ranges
+        val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
+        assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
+        arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
+          assert(expected.ranges.toSeq === found.ranges.toSeq)
+        }
+
+        // Verify the recovered data
+        assert(rdd.map { bytes => new String(bytes).toInt }.collect().toSeq === data)
       }
-
-      // Verify the recovered data
-      assert(rdd.map { bytes => new String(bytes).toInt }.collect().toSeq === data)
     }
     ssc.stop()
   }
