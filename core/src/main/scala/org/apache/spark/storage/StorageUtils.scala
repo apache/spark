@@ -143,7 +143,7 @@ class StorageStatus(val blockManagerId: BlockManagerId, val maxMem: Long) {
   def getBlock(blockId: BlockId): Option[BlockStatus] = {
     blockId match {
       case RDDBlockId(rddId, _) =>
-        _rddBlocks.get(rddId).map(_.get(blockId)).flatten
+        _rddBlocks.get(rddId).flatMap(_.get(blockId))
       case _ =>
         _nonRddBlocks.get(blockId)
     }
