@@ -17,18 +17,19 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.*;
+import org.apache.spark.mllib.linalg.Matrices;
+import org.apache.spark.mllib.linalg.Matrix;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.stat.Statistics;
 import org.apache.spark.mllib.stat.test.ChiSqTestResult;
 // $example off$
-import org.apache.spark.SparkConf;
-import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
-
 
 public class JavaHypothesisTestingExample {
   public static void main(String[] args) {
@@ -47,7 +48,7 @@ public class JavaHypothesisTestingExample {
     System.out.println(goodnessOfFitTestResult);
 
     // Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
-    Matrix mat = Matrices.dense(3, 2, new double[] {1.0, 3.0, 5.0, 2.0, 4.0, 6.0}); // a contingency matrix
+    Matrix mat = Matrices.dense(3, 2, new double[]{1.0, 3.0, 5.0, 2.0, 4.0, 6.0}); // a contingency matrix
 
     // conduct Pearson's independence test on the input contingency matrix
     ChiSqTestResult independenceTestResult = Statistics.chiSqTest(mat);
@@ -65,9 +66,9 @@ public class JavaHypothesisTestingExample {
     ChiSqTestResult[] featureTestResults = Statistics.chiSqTest(obs.rdd());
     int i = 1;
     for (ChiSqTestResult result : featureTestResults) {
-        System.out.println("Column " + i + ":");
-        System.out.println(result); // summary of the test
-        i++;
+      System.out.println("Column " + i + ":");
+      System.out.println(result); // summary of the test
+      i++;
     }
     // $example off$
 

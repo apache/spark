@@ -17,16 +17,16 @@
 
 package org.apache.spark.examples.mllib;
 
-// $example on$
-import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaRDD;
-import static org.apache.spark.mllib.random.RandomRDDs.*;
-// $example off$
-
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction;
+// $example on$
+import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaRDD;
+
+import static org.apache.spark.mllib.random.RandomRDDs.*;
+// $example off$
 
 public class JavaRandomDataGenerationExample {
   public static void main(String[] args) {
@@ -40,23 +40,23 @@ public class JavaRandomDataGenerationExample {
     JavaDoubleRDD u = normalJavaRDD(jsc, 1000L, 10);
     // Apply a transform to get a random double RDD following `N(1, 4)`.
     JavaRDD v = u.map(
-            new Function<Double, Double>() {
-                public Double call(Double x) {
-                    return 1.0 + 2.0 * x;
-                }
-            });
+      new Function<Double, Double>() {
+        public Double call(Double x) {
+          return 1.0 + 2.0 * x;
+        }
+      });
     // $example off$
 
     u.foreach(new VoidFunction<Double>() {
-        public void call(Double d) throws Exception {
-            System.out.println(d);
-        }
+      public void call(Double d) throws Exception {
+        System.out.println(d);
+      }
     });
 
     v.foreach(new VoidFunction<Double>() {
-        public void call(Double d) throws Exception {
-            System.out.println(d);
-        }
+      public void call(Double d) throws Exception {
+        System.out.println(d);
+      }
     });
 
     jsc.stop();

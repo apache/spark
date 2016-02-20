@@ -17,6 +17,9 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.mllib.linalg.Vectors;
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -24,34 +27,30 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
 import org.apache.spark.mllib.stat.Statistics;
 // $example off$
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.mllib.linalg.Vectors;
 import java.util.Arrays;
 
 
 public class JavaSummaryStatisticsExample {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        SparkConf conf = new SparkConf().setAppName("JavaSummaryStatisticsExample");
-        JavaSparkContext jsc = new JavaSparkContext(conf);
-        SQLContext sqlContext = new SQLContext(jsc);
+    SparkConf conf = new SparkConf().setAppName("JavaSummaryStatisticsExample");
+    JavaSparkContext jsc = new JavaSparkContext(conf);
+    SQLContext sqlContext = new SQLContext(jsc);
 
-        // $example on$
-        Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
-        Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
-        Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
+    // $example on$
+    Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
+    Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
+    Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
 
-        JavaRDD<Vector> mat = jsc.parallelize(Arrays.asList(v1, v2, v3)); // an RDD of Vectors
+    JavaRDD<Vector> mat = jsc.parallelize(Arrays.asList(v1, v2, v3)); // an RDD of Vectors
 
-        // Compute column summary statistics.
-        MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
-        System.out.println(summary.mean()); // a dense vector containing the mean value for each column
-        System.out.println(summary.variance()); // column-wise variance
-        System.out.println(summary.numNonzeros()); // number of nonzeros in each column
-        // $example off$
+    // Compute column summary statistics.
+    MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
+    System.out.println(summary.mean()); // a dense vector containing the mean value for each column
+    System.out.println(summary.variance()); // column-wise variance
+    System.out.println(summary.numNonzeros()); // number of nonzeros in each column
+    // $example off$
 
-        jsc.stop();
-    }
+    jsc.stop();
+  }
 }
