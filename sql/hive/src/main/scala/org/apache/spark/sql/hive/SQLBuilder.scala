@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -73,6 +73,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case p: Project =>
       projectToSQL(p, isDistinct = false)
+
+    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) =>
+      groupingSetToSQL(a, e, p)
 
     case p: Aggregate =>
       aggregateToSQL(p)
@@ -169,6 +172,58 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       toSQL(plan.child),
       if (groupingSQL.isEmpty) "" else "GROUP BY",
       groupingSQL
+    )
+  }
+
+  private def groupingSetToSQL(
+      plan: Aggregate,
+      expand: Expand,
+      project: Project): String = {
+    // In cube/rollup/groupingsets, Analyzer creates new aliases for all group by expressions.
+    // Since conversion from attribute back SQL ignore expression IDs, the alias of attribute
+    // references are ignored in aliasMap
+    val aliasMap = AttributeMap(project.projectList.collect {
+      case a @ Alias(child, name) if !child.isInstanceOf[AttributeReference] => (a.toAttribute, a)
+    })
+
+    val aggExprs = plan.aggregateExpressions.map{
+      // VirtualColumn.groupingIdName is added by Analyzer, and thus remove it.
+      case a @ Alias(child: AttributeReference, name)
+          if child.name == VirtualColumn.groupingIdName =>
+        Alias(GroupingID(Nil), name)()
+      case a @ Alias(child: AttributeReference, name) if aliasMap.contains(child) =>
+        aliasMap(child).child
+      case o => o
+    }
+
+    val groupingExprs = plan.groupingExpressions.filterNot {
+      case a: NamedExpression => a.name == VirtualColumn.groupingIdName
+      case o => false
+    }.map {
+      case a: AttributeReference if aliasMap.contains(a) => aliasMap(a).child
+      case o => o
+    }
+
+    val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
+
+    val groupingSet = expand.projections.map(_.filter {
+      case _: Literal => false
+      case e: Expression if plan.groupingExpressions.exists(_.semanticEquals(e)) => true
+      case _ => false
+    }.map {
+      case a: AttributeReference if aliasMap.contains(a) => aliasMap(a).child
+      case o => o
+    })
+
+    build(
+      "SELECT",
+      aggExprs.map(_.sql).mkString(", "),
+      if (plan.child == OneRowRelation) "" else "FROM",
+      toSQL(project.child),
+      if (groupingSQL.isEmpty) "" else "GROUP BY",
+      groupingSQL,
+      "GROUPING SETS",
+      "(" + groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
     )
   }
 

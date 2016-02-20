@@ -63,4 +63,11 @@ case class GroupingID(groupByExprs: Seq[Expression]) extends Expression with Une
   override def children: Seq[Expression] = groupByExprs
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = false
+
+  // TODO: remove this when SPARK-12799 is resolved. That will provide a general to-sql solution
+  // for all the expressions.
+  override def sql: String = {
+    val childrenSQL = children.map(_.sql).mkString(", ")
+    s"grouping_id($childrenSQL)"
+  }
 }
