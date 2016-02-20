@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -286,6 +287,7 @@ object DecisionTree extends Serializable with Logging {
    *                This index is different from the index used during training a particular
    *                group of nodes on one call to [[findBestSplits()]].
    */
+  @tailrec
   private def predictNodeIndex(
       node: Node,
       binnedFeatures: Array[Int],

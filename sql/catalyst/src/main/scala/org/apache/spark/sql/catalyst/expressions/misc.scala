@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
+import scala.annotation.tailrec
+
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -352,6 +354,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
+  @tailrec
   private def computeHash(
       input: String,
       dataType: DataType,

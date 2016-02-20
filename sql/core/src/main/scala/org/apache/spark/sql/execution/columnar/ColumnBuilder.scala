@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import java.nio.{ByteBuffer, ByteOrder}
 
+import scala.annotation.tailrec
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
@@ -160,6 +162,7 @@ private[columnar] object ColumnBuilder {
     }
   }
 
+  @tailrec
   def apply(
       dataType: DataType,
       initialSize: Int = 0,

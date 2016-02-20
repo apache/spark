@@ -21,6 +21,7 @@ import java.io._
 import java.net._
 import java.util.{ArrayList => JArrayList, Collections, List => JList, Map => JMap}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.language.existentials
@@ -133,6 +134,7 @@ private[spark] class PythonRunner(
         obj
       }
 
+      @tailrec
       private def read(): Array[Byte] = {
         if (writerThread.exception.isDefined) {
           throw writerThread.exception.get

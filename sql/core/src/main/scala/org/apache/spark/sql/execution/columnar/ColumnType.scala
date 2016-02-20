@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
+import scala.annotation.tailrec
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -663,6 +664,7 @@ private[columnar] case class MAP(dataType: MapType)
 }
 
 private[columnar] object ColumnType {
+  @tailrec
   def apply(dataType: DataType): ColumnType[_] = {
     dataType match {
       case NullType => NULL
