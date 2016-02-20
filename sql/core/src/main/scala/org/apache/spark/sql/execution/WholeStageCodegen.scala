@@ -414,9 +414,9 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
           var inputs = ArrayBuffer[SparkPlan]()
           val combined = plan.transform {
             // The build side can't be compiled together
-            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
+            case b @ BroadcastHashJoin(_, _, _, BuildLeft, _, left, right) =>
               b.copy(left = apply(left))
-            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
+            case b @ BroadcastHashJoin(_, _, _, BuildRight, _, left, right) =>
               b.copy(right = apply(right))
             case j @ SortMergeJoin(_, _, _, left, right) =>
               // The children of SortMergeJoin should do codegen separately.

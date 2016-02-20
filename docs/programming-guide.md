@@ -1343,7 +1343,7 @@ value of the broadcast variable (e.g. if the variable is shipped to a new node l
 
 ## Accumulators
 
-Accumulators are variables that are only "added" to through an associative operation and can
+Accumulators are variables that are only "added" to through an associative and commutative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types. If accumulators are created with a name, they will be
