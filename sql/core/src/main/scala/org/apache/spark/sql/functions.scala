@@ -1052,6 +1052,8 @@ object functions extends LegacyFunctions {
   /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
+   * Note that this is indeterministic when data partitions are not fixed.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1067,6 +1069,8 @@ object functions extends LegacyFunctions {
 
   /**
    * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * Note that this is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
