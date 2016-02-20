@@ -30,7 +30,7 @@ public class JavaLabeledPointExample {
 
     // Create a labeled point with a negative label and a sparse feature vector.
     LabeledPoint neg = new LabeledPoint(
-            0.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
+      0.0, Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0}));
     // $example off$
   }
 }

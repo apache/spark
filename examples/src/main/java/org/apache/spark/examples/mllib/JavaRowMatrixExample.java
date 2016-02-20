@@ -56,6 +56,5 @@ public class JavaRowMatrixExample {
     // $example off$
 
     jsc.stop();
-
   }
 }

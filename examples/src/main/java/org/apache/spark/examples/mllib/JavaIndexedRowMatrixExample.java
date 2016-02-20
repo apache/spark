@@ -52,7 +52,6 @@ public class JavaIndexedRowMatrixExample {
 
     // Drop its row indices.
     RowMatrix rowMat = mat.toRowMatrix();
-
     // $example off$
 
     jsc.stop();

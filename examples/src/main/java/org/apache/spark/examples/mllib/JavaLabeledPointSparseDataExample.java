@@ -33,10 +33,9 @@ public class JavaLabeledPointSparseDataExample {
 
     // $example on$
     JavaRDD<LabeledPoint> examples =
-            MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
+      MLUtils.loadLibSVMFile(jsc.sc(), "data/mllib/sample_libsvm_data.txt").toJavaRDD();
     // $example off$
 
       jsc.stop();
-
   }
 }
