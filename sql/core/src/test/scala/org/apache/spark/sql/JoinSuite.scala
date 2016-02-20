@@ -81,7 +81,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[SortMergeOuterJoin]),
+        classOf[SortMergeJoin]), // converted from Right Outer to Inner
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[SortMergeOuterJoin]),
       ("SELECT * FROM testData full outer join testData2 ON key = a",

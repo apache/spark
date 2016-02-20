@@ -21,8 +21,8 @@ import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -62,6 +62,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SetOperationPushDown,
       SamplePushDown,
       ReorderJoin,
+      OuterJoinElimination,
       PushPredicateThroughJoin,
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
@@ -928,6 +929,62 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     case j @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
       createOrderedJoin(input, conditions)
+  }
+}
+
+/**
+ * Elimination of outer joins, if the predicates can restrict the result sets so that
+ * all null-supplying rows are eliminated
+ *
+ * - full outer -> inner if both sides have such predicates
+ * - left outer -> inner if the right side has such predicates
+ * - right outer -> inner if the left side has such predicates
+ * - full outer -> left outer if only the left side has such predicates
+ * - full outer -> right outer if only the right side has such predicates
+ *
+ * This rule should be executed before pushing down the Filter
+ */
+object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
+
+  /**
+   * Returns whether the expression returns null or false when all inputs are nulls.
+   */
+  private def canFilterOutNull(e: Expression): Boolean = {
+    if (!e.deterministic) return false
+    val attributes = e.references.toSeq
+    val emptyRow = new GenericInternalRow(attributes.length)
+    val v = BindReferences.bindReference(e, attributes).eval(emptyRow)
+    v == null || v == false
+  }
+
+  private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
+    val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
+    val leftConditions = splitConjunctiveConditions
+      .filter(_.references.subsetOf(join.left.outputSet))
+    val rightConditions = splitConjunctiveConditions
+      .filter(_.references.subsetOf(join.right.outputSet))
+
+    val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull) ||
+      filter.constraints.filter(_.isInstanceOf[IsNotNull])
+        .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
+    val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull) ||
+      filter.constraints.filter(_.isInstanceOf[IsNotNull])
+        .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
+
+    join.joinType match {
+      case RightOuter if leftHasNonNullPredicate => Inner
+      case LeftOuter if rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate => LeftOuter
+      case FullOuter if rightHasNonNullPredicate => RightOuter
+      case o => o
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
+      val newJoinType = buildNewJoinType(f, j)
+      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
   }
 }
 
