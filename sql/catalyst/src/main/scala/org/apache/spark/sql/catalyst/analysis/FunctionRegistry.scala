@@ -278,6 +278,8 @@ object FunctionRegistry {
     expression[ArrayContains]("array_contains"),
 
     // misc functions
+    expression[AesEncrypt]("aes_encrypt"),
+    expression[AesDecrypt]("aes_decrypt"),
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
     expression[Murmur3Hash]("hash"),
