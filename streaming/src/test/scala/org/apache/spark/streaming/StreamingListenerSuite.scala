@@ -278,7 +278,7 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
 
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(data: Iterable[Long]): Boolean = {
-    !data.sliding(2).map{itr => itr.size == 2 && itr.head > itr.tail.head }.contains(true)
+    !data.sliding(2).exists { itr => itr.size == 2 && itr.head > itr.tail.head }
   }
 }
 

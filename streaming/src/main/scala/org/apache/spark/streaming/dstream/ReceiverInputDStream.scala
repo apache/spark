@@ -108,7 +108,7 @@ abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
       } else {
         // Else, create a BlockRDD. However, if there are some blocks with WAL info but not
         // others then that is unexpected and log a warning accordingly.
-        if (blockInfos.find(_.walRecordHandleOption.nonEmpty).nonEmpty) {
+        if (blockInfos.exists(_.walRecordHandleOption.nonEmpty)) {
           if (WriteAheadLogUtils.enableReceiverLog(ssc.conf)) {
             logError("Some blocks do not have Write Ahead Log information; " +
               "this is unexpected and data may not be recoverable after driver failures")
