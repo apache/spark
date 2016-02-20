@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.{ExprId, SubqueryExpression}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.{InternalRow, expressions}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.DataType
 case class ScalarSubquery(
     @transient executedPlan: SparkPlan,
     exprId: ExprId)
-  extends SubqueryExpression with CodegenFallback {
+  extends SubqueryExpression {
 
   override def query: LogicalPlan = throw new UnsupportedOperationException
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression = {
@@ -53,6 +53,18 @@ case class ScalarSubquery(
   }
 
   override def eval(input: InternalRow): Any = result
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val thisTerm = ctx.addReferenceObj("subquery", this)
+    val isNull = ctx.freshName("isNull")
+    ctx.addMutableState("boolean", isNull, s"$isNull = $thisTerm.eval(null) == null;")
+    val value = ctx.freshName("value")
+    ctx.addMutableState(ctx.javaType(dataType), value,
+      s"$value = (${ctx.boxedType(dataType)}) $thisTerm.eval(null);")
+    ev.isNull = isNull
+    ev.value = value
+    ""
+  }
 }
 
 /**
