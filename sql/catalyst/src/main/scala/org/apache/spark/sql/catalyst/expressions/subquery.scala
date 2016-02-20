@@ -17,24 +17,45 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
 import org.apache.spark.sql.types.DataType
 
 /**
-  * A interface for subquery that is used in expressions.
-  */
-trait SubqueryExpression extends LeafExpression {
+ * An interface for subquery that is used in expressions.
+ */
+abstract class SubqueryExpression extends LeafExpression{
+
+  /**
+   * The logical plan of the query.
+   */
   def query: LogicalPlan
+
+  /**
+   * The underline plan for the query, could be logical plan or physical plan.
+   *
+   * This is used to generate tree string.
+   */
+  def plan: QueryPlan[_]
+
+  /**
+   * Updates the query with new logical plan.
+   */
   def withNewPlan(plan: LogicalPlan): SubqueryExpression
 }
 
 /**
-  * A subquery that will return only one row and one column.
-  */
-case class ScalarSubquery(query: LogicalPlan) extends SubqueryExpression with CodegenFallback {
+ * A subquery that will return only one row and one column.
+ *
+ * This is not evaluable, it should be converted into SparkScalaSubquery.
+ */
+case class ScalarSubquery(
+    query: LogicalPlan,
+    exprId: ExprId = NamedExpression.newExprId)
+  extends SubqueryExpression with Unevaluable {
+
+  override def plan: LogicalPlan = Subquery(toString, query)
 
   override lazy val resolved: Boolean = query.resolved
 
@@ -49,20 +70,12 @@ case class ScalarSubquery(query: LogicalPlan) extends SubqueryExpression with Co
     }
   }
 
-  // It can not be evaluated by optimizer.
   override def foldable: Boolean = false
   override def nullable: Boolean = true
 
-  override def withNewPlan(plan: LogicalPlan): ScalarSubquery = ScalarSubquery(plan)
+  override def withNewPlan(plan: LogicalPlan): ScalarSubquery = ScalarSubquery(plan, exprId)
+
+  override def toString: String = s"subquery#${exprId.id}"
 
   // TODO: support sql()
-
-  // the first column in first row from `query`.
-  private var result: Any = null
-
-  def updateResult(v: Any): Unit = {
-    result = v
-  }
-
-  override def eval(input: InternalRow): Any = result
 }

@@ -114,6 +114,12 @@ class AnalysisErrorSuite extends AnalysisTest {
   val dateLit = Literal.create(null, DateType)
 
   errorTest(
+    "invalid scalar subquery",
+     testRelation.select(
+       (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
+     "Scalar subquery can only have 1 column, but got 2" :: Nil)
+
+  errorTest(
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as('a)),
     "cannot resolve" :: "testfunction" :: "argument 1" :: "requires int type" ::

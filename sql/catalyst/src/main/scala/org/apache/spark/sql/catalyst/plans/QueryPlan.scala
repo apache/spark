@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.Subquery
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -226,4 +227,29 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
   override def simpleString: String = statePrefix + super.simpleString
+
+  override def generateTreeString(
+      depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
+    if (depth > 0) {
+      lastChildren.init.foreach { isLast =>
+        val prefixFragment = if (isLast) "   " else ":  "
+        builder.append(prefixFragment)
+      }
+
+      val branch = if (lastChildren.last) "+- " else ":- "
+      builder.append(branch)
+    }
+
+    builder.append(simpleString)
+    builder.append("\n")
+
+    val allSubqueries = expressions.flatMap(_.collect {case e: SubqueryExpression => e})
+    val allChildren = children ++ allSubqueries.map(e => e.plan)
+    if (allChildren.nonEmpty) {
+      allChildren.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
+      allChildren.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+    }
+
+    builder
+  }
 }

@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -127,31 +127,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       doPrepare()
 
       // collect all the subqueries and submit jobs to execute them in background
-      val queryResults = ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]()
-      val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
+      val queryResults = ArrayBuffer[(SparkScalarSubquery, Future[Array[InternalRow]])]()
+      val allSubqueries = expressions.flatMap(_.collect {case e: SparkScalarSubquery => e})
       allSubqueries.foreach { e =>
-        val futureResult = scala.concurrent.future {
-          val df = DataFrame(sqlContext, e.query)
-          df.queryExecution.toRdd.collect()
+        val futureResult = Future {
+          e.plan.executeCollect()
         }(SparkPlan.subqueryExecutionContext)
         queryResults += e -> futureResult
       }
 
       children.foreach(_.prepare())
 
-      val timeout: Duration = {
-        val timeoutValue = sqlContext.conf.broadcastTimeout
-        if (timeoutValue < 0) {
-          Duration.Inf
-        } else {
-          timeoutValue.seconds
-        }
-      }
-
       // fill in the result of subqueries
       queryResults.foreach {
         case (e, futureResult) =>
-          val rows = Await.result(futureResult, timeout)
+          val rows = Await.result(futureResult, Duration.Inf)
           if (rows.length > 1) {
             sys.error(s"Scalar subquery should return at most one row, but got ${rows.length}: " +
               s"${e.query.treeString}")

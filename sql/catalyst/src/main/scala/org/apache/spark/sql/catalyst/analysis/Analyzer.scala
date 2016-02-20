@@ -122,6 +122,7 @@ class Analyzer(
           }
           substituted.getOrElse(u)
         case other =>
+          // This can't be done in ResolveSubquery because that does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
               e.withNewPlan(substituteCTE(e.query, cteRelations))
@@ -701,8 +702,10 @@ class Analyzer(
   }
 
   /**
-    * This rule resolve subqueries inside expressions.
-    */
+   * This rule resolve subqueries inside expressions.
+   *
+   * Note: CTE are handled in CTESubstitution.
+   */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
     private def hasSubquery(e: Expression): Boolean = {
