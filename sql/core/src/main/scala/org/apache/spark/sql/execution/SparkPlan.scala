@@ -127,8 +127,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       doPrepare()
 
       // collect all the subqueries and submit jobs to execute them in background
-      val queryResults = ArrayBuffer[(SparkScalarSubquery, Future[Array[InternalRow]])]()
-      val allSubqueries = expressions.flatMap(_.collect {case e: SparkScalarSubquery => e})
+      val queryResults = ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]()
+      val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
       allSubqueries.foreach { e =>
         val futureResult = Future {
           e.plan.executeCollect()
@@ -146,9 +146,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
             sys.error(s"Scalar subquery should return at most one row, but got ${rows.length}: " +
               s"${e.query.treeString}")
           }
-          // Analyzer will make sure that it only return on column
           if (rows.length > 0) {
+            assert(rows(0).numFields == 1, "Analyzer should make sure this only returns one column")
             e.updateResult(rows(0).get(0, e.dataType))
+          } else {
+            // the result should be null, since the expression already have null as default value,
+            // we don't need to update that.
           }
       }
     }

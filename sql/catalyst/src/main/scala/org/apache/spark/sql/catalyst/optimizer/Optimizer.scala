@@ -90,16 +90,16 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("LocalRelation", FixedPoint(100),
       ConvertToLocalRelation) ::
     Batch("Subquery", Once,
-      Subquery) :: Nil
+      OptimizeSubqueries) :: Nil
   }
 
   /**
    * Optimize all the subqueries inside expression.
    */
-  object Subquery extends Rule[LogicalPlan] {
+  object OptimizeSubqueries extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       case subquery: SubqueryExpression =>
-        subquery.withNewPlan(execute(subquery.query))
+        subquery.withNewPlan(Optimizer.this.execute(subquery.query))
     }
   }
 }

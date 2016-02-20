@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{ExprId, ScalarSubquery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.expressions.{ExprId, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.DataType
  *
  * This is the physical copy of ScalarSubquery to be used inside SparkPlan.
  */
-case class SparkScalarSubquery(
+case class ScalarSubquery(
     @transient executedPlan: SparkPlan,
     exprId: ExprId)
   extends SubqueryExpression with CodegenFallback {
@@ -58,14 +58,13 @@ case class SparkScalarSubquery(
 /**
  * Convert the subquery from logical plan into executed plan.
  */
-private[sql] case class ConvertSubquery(sqlContext: SQLContext) extends Rule[SparkPlan] {
+private[sql] case class PlanSubqueries(sqlContext: SQLContext) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
-      // Only scalar subquery will be executed separately, all others will be written as join.
-      case subquery: ScalarSubquery =>
+      case subquery: expressions.ScalarSubquery =>
         val sparkPlan = sqlContext.planner.plan(ReturnAnswer(subquery.query)).next()
         val executedPlan = sqlContext.prepareForExecution.execute(sparkPlan)
-        SparkScalarSubquery(executedPlan, subquery.exprId)
+        ScalarSubquery(executedPlan, subquery.exprId)
     }
   }
 }

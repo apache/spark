@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.DataType
 /**
  * An interface for subquery that is used in expressions.
  */
-abstract class SubqueryExpression extends LeafExpression{
+abstract class SubqueryExpression extends LeafExpression {
 
   /**
    * The logical plan of the query.
@@ -33,9 +33,8 @@ abstract class SubqueryExpression extends LeafExpression{
   def query: LogicalPlan
 
   /**
-   * The underline plan for the query, could be logical plan or physical plan.
-   *
-   * This is used to generate tree string.
+   * Either a logical plan or a physical plan. The generated tree string (explain output) uses this
+   * field to explain the subquery.
    */
   def plan: QueryPlan[_]
 
@@ -48,7 +47,9 @@ abstract class SubqueryExpression extends LeafExpression{
 /**
  * A subquery that will return only one row and one column.
  *
- * This is not evaluable, it should be converted into SparkScalaSubquery.
+ * This will be converted into [[execution.ScalarSubquery]] during physical planning.
+ *
+ * Note: `exprId` is used to have unique name in explain string output.
  */
 case class ScalarSubquery(
     query: LogicalPlan,
@@ -63,7 +64,7 @@ case class ScalarSubquery(
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (query.schema.length != 1) {
-      TypeCheckResult.TypeCheckFailure("Scalar subquery can only have 1 column, but got " +
+      TypeCheckResult.TypeCheckFailure("Scalar subquery must return only one column, but got " +
         query.schema.length.toString)
     } else {
       TypeCheckResult.TypeCheckSuccess
