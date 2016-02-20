@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -29,7 +30,10 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * for hash join.
  */
 case class LeftSemiJoinBNL(
-    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
+    joinType: JoinType,
+    streamed: SparkPlan,
+    broadcast: SparkPlan,
+    condition: Option[Expression])
   extends BinaryNode {
   // TODO: Override requiredChildDistribution.
 
@@ -71,10 +75,11 @@ case class LeftSemiJoinBNL(
           }
           i += 1
         }
-        if (matched) {
+        val r = (joinType == LeftSemi) == matched
+        if (r) {
           numOutputRows += 1
         }
-        matched
+        r
       })
     }
   }

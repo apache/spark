@@ -33,6 +33,19 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       Row(1, "1", "2") :: Row(2, "2", "3") :: Row(3, "3", "4") :: Nil)
   }
 
+  test("join - semi/anti join") {
+    val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")
+    val df2 = Seq(3, 4, 5).map(i => (i, (i + 1).toString)).toDF("int", "str")
+
+    checkAnswer(
+      df.join(df2, Seq("int"), "left_semi"),
+      Row(3, "3") :: Nil)
+
+    checkAnswer(
+      df.join(df2, Seq("int"), "left_anti"),
+      Row(1, "1") :: Row(2, "2") :: Nil)
+  }
+
   test("join - join using multiple columns") {
     val df = Seq(1, 2, 3).map(i => (i, i + 1, i.toString)).toDF("int", "int2", "str")
     val df2 = Seq(1, 2, 3).map(i => (i, i + 1, (i + 1).toString)).toDF("int", "int2", "str")

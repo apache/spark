@@ -465,7 +465,7 @@ class DataFrame private[sql](
 
     // Project only one of the join columns.
     val joinedCols = JoinType(joinType) match {
-      case Inner | LeftOuter | LeftSemi =>
+      case Inner | LeftOuter | LeftSemi | LeftAnti =>
         usingColumns.map(col => withPlan(joined.left).resolve(col))
       case RightOuter =>
         usingColumns.map(col => withPlan(joined.right).resolve(col))

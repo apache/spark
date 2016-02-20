@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.{DataFrame, Row, SQLConf}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.{EnsureRequirements, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -63,10 +63,11 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
       leftRows: => DataFrame,
       rightRows: => DataFrame,
       condition: => Expression,
+      joinType: JoinType,
       expectedAnswer: Seq[Product]): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
-      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition))
+      val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, joinType, Some(condition))
       ExtractEquiJoinKeys.unapply(join)
     }
 
@@ -75,7 +76,7 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext).apply(
-              LeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition)),
+              LeftSemiJoinHash(joinType, leftKeys, rightKeys, left, right, boundCondition)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -86,7 +87,7 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
       extractJoinParts().foreach { case (joinType, leftKeys, rightKeys, boundCondition, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-            BroadcastLeftSemiJoinHash(leftKeys, rightKeys, left, right, boundCondition),
+            BroadcastLeftSemiJoinHash(joinType, leftKeys, rightKeys, left, right, boundCondition),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
@@ -96,7 +97,7 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using LeftSemiJoinBNL") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          LeftSemiJoinBNL(left, right, Some(condition)),
+          LeftSemiJoinBNL(joinType, left, right, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
@@ -108,9 +109,26 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
     left,
     right,
     condition,
+    LeftSemi,
     Seq(
       (2, 1.0),
       (2, 1.0)
+    )
+  )
+
+  testLeftSemiJoin(
+    "anti join test",
+    left,
+    right,
+    condition,
+    LeftAnti,
+    Seq(
+      (1, 2.0),
+      (1, 2.0),
+      (3, 3.0),
+      (null, null),
+      (null, 5.0),
+      (6, null)
     )
   )
 }

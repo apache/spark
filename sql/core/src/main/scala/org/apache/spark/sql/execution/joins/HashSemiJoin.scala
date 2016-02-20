@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftSemi}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 
 
 trait HashSemiJoin {
   self: SparkPlan =>
+  val joinType: JoinType
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
   val left: SparkPlan
@@ -69,7 +71,7 @@ trait HashSemiJoin {
     val joinKeys = leftKeyGenerator
     streamIter.filter(current => {
       val key = joinKeys(current)
-      val r = !key.anyNull && hashSet.contains(key)
+      val r = (joinType == LeftSemi) == (!key.anyNull && hashSet.contains(key))
       if (r) numOutputRows += 1
       r
     })
@@ -84,9 +86,9 @@ trait HashSemiJoin {
     streamIter.filter { current =>
       val key = joinKeys(current)
       lazy val rowBuffer = hashedRelation.get(key)
-      val r = !key.anyNull && rowBuffer != null && rowBuffer.exists {
+      val r = (joinType == LeftSemi) == (!key.anyNull && rowBuffer != null && rowBuffer.exists {
         (row: InternalRow) => boundCondition(joinedRow(current, row))
-      }
+      })
       if (r) numOutputRows += 1
       r
     }
