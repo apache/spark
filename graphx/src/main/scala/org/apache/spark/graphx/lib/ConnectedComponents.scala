@@ -35,7 +35,7 @@ object ConnectedComponents {
    *         connected component
    */
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED],
-                                      maxIterations: Int = Int.MaxValue): Graph[VertexId, ED] = {
+                                      maxIterations: Int): Graph[VertexId, ED] = {
     require(maxIterations > 0)
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
     def sendMessage(edge: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, VertexId)] = {
@@ -56,4 +56,18 @@ object ConnectedComponents {
     ccGraph.unpersist()
     pregelGraph
   } // end of connectedComponents
+
+  /**
+    * Compute the connected component membership of each vertex and return a graph with the vertex
+    * value containing the lowest vertex id in the connected component containing that vertex.
+    *
+    * @tparam VD the vertex attribute type (discarded in the computation)
+    * @tparam ED the edge attribute type (preserved in the computation)
+    * @param graph the graph for which to compute the connected components
+    * @return a graph with vertex attributes containing the smallest vertex in each
+    *         connected component
+    */
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexId, ED] = {
+    run(graph, Int.MaxValue)
+  }
 }
