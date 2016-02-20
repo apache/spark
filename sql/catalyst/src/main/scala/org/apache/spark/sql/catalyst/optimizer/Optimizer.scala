@@ -957,7 +957,7 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
     v == null || v == false
   }
 
-  private def buildNewJoin(filter: Filter, join: Join): Join = {
+  private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
     val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
     val leftConditions = splitConjunctiveConditions
       .filter(_.references.subsetOf(join.left.outputSet))
@@ -972,25 +972,19 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
         .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
 
     join.joinType match {
-      case RightOuter if leftHasNonNullPredicate =>
-        Join(join.left, join.right, Inner, join.condition)
-      case LeftOuter if rightHasNonNullPredicate =>
-        Join(join.left, join.right, Inner, join.condition)
-      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate =>
-        Join(join.left, join.right, Inner, join.condition)
-      case FullOuter if leftHasNonNullPredicate =>
-        Join(join.left, join.right, LeftOuter, join.condition)
-      case FullOuter if rightHasNonNullPredicate =>
-        Join(join.left, join.right, RightOuter, join.condition)
-      case _ =>
-        join
+      case RightOuter if leftHasNonNullPredicate => Inner
+      case LeftOuter if rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate && rightHasNonNullPredicate => Inner
+      case FullOuter if leftHasNonNullPredicate => LeftOuter
+      case FullOuter if rightHasNonNullPredicate => RightOuter
+      case o => o
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
-      val newJoin = buildNewJoin(f, j)
-      if (j.joinType == newJoin.joinType) f else Filter(condition, newJoin)
+      val newJoinType = buildNewJoinType(f, j)
+      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
   }
 }
 
