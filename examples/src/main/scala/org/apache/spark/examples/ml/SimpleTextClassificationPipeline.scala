@@ -19,13 +19,14 @@
 package org.apache.spark.examples.ml
 
 import scala.beans.BeanInfo
-
+// $example on$
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.{Row, SQLContext}
+// $example off$
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
@@ -47,7 +48,7 @@ object SimpleTextClassificationPipeline {
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext.implicits._
-
+// $example on$
     // Prepare training documents, which are labeled.
     val training = sc.parallelize(Seq(
       LabeledDocument(0L, "a b c d e spark", 1.0),
@@ -86,6 +87,7 @@ object SimpleTextClassificationPipeline {
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
         println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
+// $example off$
 
     sc.stop()
   }

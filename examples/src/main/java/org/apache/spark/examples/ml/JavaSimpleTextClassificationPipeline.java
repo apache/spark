@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
@@ -32,6 +33,7 @@ import org.apache.spark.ml.feature.Tokenizer;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+// $example off$
 
 /**
  * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java
@@ -47,7 +49,7 @@ public class JavaSimpleTextClassificationPipeline {
     SparkConf conf = new SparkConf().setAppName("JavaSimpleTextClassificationPipeline");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
-
+    // $example on$
     // Prepare training documents, which are labeled.
     List<LabeledDocument> localTraining = Lists.newArrayList(
       new LabeledDocument(0L, "a b c d e spark", 1.0),
@@ -87,7 +89,7 @@ public class JavaSimpleTextClassificationPipeline {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
-
+    // $example off$
     jsc.stop();
   }
 }

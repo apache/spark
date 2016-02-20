@@ -17,14 +17,16 @@
 
 from __future__ import print_function
 
-import pprint
 import sys
 
 from pyspark import SparkContext
+# $example on$
 from pyspark.ml.classification import LogisticRegression
 from pyspark.mllib.linalg import DenseVector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.sql import SQLContext
+import pprint
+# $example off$
 
 """
 A simple example demonstrating ways to specify parameters for Estimators and Transformers.
@@ -38,7 +40,7 @@ if __name__ == "__main__":
         exit(1)
     sc = SparkContext(appName="PythonSimpleParamsExample")
     sqlContext = SQLContext(sc)
-
+    # $example on$
     # prepare training data.
     # We create an RDD of LabeledPoints and convert them into a DataFrame.
     # A LabeledPoint is an Object with two fields named label and features
@@ -94,5 +96,5 @@ if __name__ == "__main__":
     for row in result:
         print("features=%s,label=%s -> prob=%s, prediction=%s"
               % (row.features, row.label, row.myProbability, row.prediction))
-
+    # $example off$
     sc.stop()

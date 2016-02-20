@@ -17,13 +17,14 @@
 
 // scalastyle:off println
 package org.apache.spark.examples.ml
-
+// $example on$
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{Row, SQLContext}
+// $example off$
 
 /**
  * A simple example demonstrating ways to specify parameters for Estimators and Transformers.
@@ -38,6 +39,7 @@ object SimpleParamsExample {
     val conf = new SparkConf().setAppName("SimpleParamsExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
+    // $example on$
     import sqlContext.implicits._
 
     // Prepare training data.
@@ -97,6 +99,7 @@ object SimpleParamsExample {
       .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
         println(s"($features, $label) -> prob=$prob, prediction=$prediction")
       }
+      // $example off$
 
     sc.stop()
   }

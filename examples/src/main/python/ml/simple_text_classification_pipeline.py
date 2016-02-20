@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+    # $example on$
 
 from __future__ import print_function
 
@@ -69,3 +70,6 @@ if __name__ == "__main__":
         print(row)
 
     sc.stop()
+
+    # $example off$
+

@@ -16,12 +16,13 @@
  */
 
 package org.apache.spark.examples.ml
-
+// $example on$
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 import org.apache.spark.sql.SQLContext
+// $example off$
 
 /**
  * A simple example demonstrating model selection using TrainValidationSplit.
@@ -38,9 +39,9 @@ object TrainValidationSplitExample {
     val conf = new SparkConf().setAppName("TrainValidationSplitExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
-
+    // $example on$
     // Prepare training and test data.
-    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_linear_regression_data.txt")
     val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
     val lr = new LinearRegression()
@@ -72,6 +73,7 @@ object TrainValidationSplitExample {
     model.transform(test)
       .select("features", "label", "prediction")
       .show()
+    // $example off$
 
     sc.stop()
   }

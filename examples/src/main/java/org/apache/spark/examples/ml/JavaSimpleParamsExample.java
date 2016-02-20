@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.classification.LogisticRegression;
@@ -31,7 +32,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
-
+// $example off$
 /**
  * A simple example demonstrating ways to specify parameters for Estimators and Transformers.
  * Run with
@@ -45,7 +46,7 @@ public class JavaSimpleParamsExample {
     SparkConf conf = new SparkConf().setAppName("JavaSimpleParamsExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
     SQLContext jsql = new SQLContext(jsc);
-
+    // $example on$
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
     // into DataFrames, where it uses the bean metadata to infer the schema.
@@ -106,7 +107,7 @@ public class JavaSimpleParamsExample {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
-
+    // $example off$
     jsc.stop();
   }
 }
