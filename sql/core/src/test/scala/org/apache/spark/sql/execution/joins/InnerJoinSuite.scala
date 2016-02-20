@@ -88,8 +88,14 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      val broadcastJoin =
-        joins.BroadcastHashJoin(leftKeys, rightKeys, side, boundCondition, leftPlan, rightPlan)
+      val broadcastJoin = joins.BroadcastHashJoin(
+        leftKeys,
+        rightKeys,
+        Inner,
+        side,
+        boundCondition,
+        leftPlan,
+        rightPlan)
       EnsureRequirements(sqlContext).apply(broadcastJoin)
     }
 
