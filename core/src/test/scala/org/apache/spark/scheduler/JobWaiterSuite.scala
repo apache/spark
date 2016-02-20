@@ -24,7 +24,7 @@ import org.apache.spark.SparkFunSuite
 class JobWaiterSuite extends SparkFunSuite {
 
   test("call jobFailed multiple times") {
-    val waiter = new JobWaiter[Int](null, 0, 0, null)
+    val waiter = new JobWaiter[Int](null, 0, totalTasks = 2, null)
 
     // Should not throw exception if calling jobFailed multiple times
     waiter.jobFailed(new RuntimeException("Oops 1"))
