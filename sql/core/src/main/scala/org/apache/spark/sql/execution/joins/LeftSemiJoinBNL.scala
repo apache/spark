@@ -29,20 +29,22 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * for hash join.
  */
 case class LeftSemiJoinBNL(
-    left: SparkPlan, right: SparkPlan, condition: Option[Expression])
-  extends BinaryNode {
-  // TODO: Override requiredChildDistribution.
+    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression]) extends BinaryNode {
 
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+
+  override def output: Seq[Attribute] = left.output
+
+  override def left: SparkPlan = streamed
+
+  override def right: SparkPlan = broadcast
+
   override def requiredChildDistribution: Seq[Distribution] = {
     UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
-
-  override def outputPartitioning: Partitioning = left.outputPartitioning
-
-  override def output: Seq[Attribute] = left.output
 
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
@@ -50,9 +52,9 @@ case class LeftSemiJoinBNL(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastedRelation = right.executeBroadcast[Array[InternalRow]]()
+    val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
-    left.execute().mapPartitions { streamedIter =>
+    streamed.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
       val relation = broadcastedRelation.value
 
