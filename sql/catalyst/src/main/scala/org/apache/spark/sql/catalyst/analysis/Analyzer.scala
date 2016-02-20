@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatal
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -497,6 +498,41 @@ class Analyzer(
         val newOrdering =
           ordering.map(order => resolveExpression(order, child).asInstanceOf[SortOrder])
         Sort(newOrdering, global, child)
+
+      // Replace the index with the related attribute for ORDER BY
+      // which is a 1-base position of the projection list.
+      case s @ Sort(orders, global, child) if child.resolved &&
+        orders.exists(o => IntegerIndex.unapply(o.child).nonEmpty) =>
+        val newOrders = orders map {
+          case s @ SortOrder(IntegerIndex(index), direction) =>
+            if (index > 0 && index <= child.output.size) {
+              SortOrder(child.output(index - 1), direction)
+            } else {
+              throw new UnresolvedException(s,
+                s"""Order by position: $index does not exist \n
+                    |The Select List is indexed from 1 to ${child.output.size}""".stripMargin)
+            }
+          case other => other
+        }
+        Sort(newOrders, global, child)
+
+      // Replace the index with the related attribute for Group BY
+      // which is a 1-base position of the underlying columns.
+      case a @ Aggregate(groups, aggs, child) if child.resolved &&
+        groups.exists(IntegerIndex.unapply(_).nonEmpty) =>
+        val newGroups = groups map {
+          case IntegerIndex(index) =>
+            val attributes = child.output
+            if (index > 0 && index <= attributes.size) {
+              attributes(index - 1)
+            } else {
+              throw new UnresolvedException(a,
+                s"""Aggregate by position: $index does not exist \n
+                    |The Select List is indexed from 1 to ${attributes.size}""".stripMargin)
+            }
+          case other => other
+        }
+        Aggregate(newGroups, aggs, child)
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.

@@ -21,10 +21,10 @@ import java.math.MathContext
 import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
-import org.apache.spark.sql.catalyst.CatalystQl
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.parser.ParserConf
-import org.apache.spark.sql.execution.{aggregate, SparkQl}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, UnresolvedException}
+import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.joins.{CartesianProduct, SortMergeJoin}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction}
 import org.apache.spark.sql.functions._
@@ -461,22 +461,41 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("literal in agg grouping expressions") {
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT * FROM testData2 GROUP BY -1").collect()
+    }
+
+    intercept[UnresolvedException[Aggregate]] {
+      sql("SELECT * FROM testData2 GROUP BY 3").collect()
+    }
+
+    checkAnswer(
+      sql("SELECT SUM(a) FROM testData2 GROUP BY 2"),
+      Seq(Row(6), Row(6)))
+
+    checkAnswer(
+      sql("SELECT a, SUM(b) FROM testData2 GROUP BY 1"),
+      Seq(Row(1, 3), Row(2, 3), Row(3, 3)))
+
     checkAnswer(
       sql("SELECT a, count(1) FROM testData2 GROUP BY a, 1"),
-      Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
-    checkAnswer(
-      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
       Seq(Row(1, 2), Row(2, 2), Row(3, 2)))
 
     checkAnswer(
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1"),
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
+
+    checkAnswer(
+      sql("SELECT a, count(2) FROM testData2 GROUP BY a, 2"),
+      Seq(Row(1, 1), Row(1, 1), Row(2, 1), Row(2, 1), Row(3, 1), Row(3, 1)))
+
+    checkAnswer(
+      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
+      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY a, b"))
+
     checkAnswer(
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a, 1 + 2"),
       sql("SELECT a, 1, sum(b) FROM testData2 GROUP BY a"))
-    checkAnswer(
-      sql("SELECT 1, 2, sum(b) FROM testData2 GROUP BY 1, 2"),
-      sql("SELECT 1, 2, sum(b) FROM testData2"))
   }
 
   test("aggregates with nulls") {
@@ -497,6 +516,24 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT value FROM testData WHERE key = 1"),
       Row("1"))
+  }
+
+  test("order by number index")  {
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY -1 DESC, b ASC").collect()
+    }
+    intercept[UnresolvedException[SortOrder]] {
+      sql("SELECT * FROM testData2 ORDER BY 3 DESC, b ASC").collect()
+    }
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC"),
+      Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2)))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 DESC, b ASC"),
+      sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"))
+    checkAnswer(
+      sql("SELECT * FROM testData2 ORDER BY 1 ASC, b ASC"),
+      Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
   }
 
   def sortTest(): Unit = {
