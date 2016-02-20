@@ -355,6 +355,6 @@ case class Subquery(name: String, child: SparkPlan) extends UnaryNode {
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute()
+    throw new UnsupportedOperationException
   }
 }

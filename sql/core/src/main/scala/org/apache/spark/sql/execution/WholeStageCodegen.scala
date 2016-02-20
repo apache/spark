@@ -73,9 +73,10 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Returns Java source code to process the rows from upstream.
     */
-  def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
+  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
+    waitForSubqueries()
     doProduce(ctx)
   }
 
@@ -101,7 +102,7 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
-  def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
+  final def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
     if (input != null) {
       assert(input.length == output.length)
     }
