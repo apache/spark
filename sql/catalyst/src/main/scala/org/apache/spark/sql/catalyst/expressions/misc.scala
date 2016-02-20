@@ -19,8 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
-import javax.crypto.Cipher
-import javax.crypto.spec.SecretKeySpec
 
 import org.apache.commons.codec.digest.DigestUtils
 
@@ -441,92 +439,5 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
          | System.err.println("Result of ${child.simpleString} is " + $c);
          | ${ev.value} = $c;
        """.stripMargin)
-  }
-}
-
-/**
- * A function that encrypts input using AES. Key lengths of 128, 192 or 256 bits can be used. 192
- * and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength Jurisdic-
- * tion Policy Files are installed. If either argument is NULL, the result will also be null. If
- * input is invalid, key length is not one of the permitted values or using 192/256 bits key before
- * installing JCE, an exception will be thrown.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(input, key) - Encrypts input using AES.",
-  extended = "> SELECT Base64(_FUNC_('ABC', '1234567890123456'));\n 'y6Ss+zCYObpCbgfWfyNWTw=='")
-case class AesEncrypt(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  override def dataType: DataType = BinaryType
-  override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val cipher = Cipher.getInstance("AES")
-    val secretKey: SecretKeySpec = new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
-      input2.asInstanceOf[Array[Byte]].length, "AES")
-    cipher.init(Cipher.ENCRYPT_MODE, secretKey)
-    cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0, input1.asInstanceOf[Array[Byte]].length)
-  }
-
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    nullSafeCodeGen(ctx, ev, (str, key) => {
-      val Cipher = "javax.crypto.Cipher"
-      val SecretKeySpec = "javax.crypto.spec.SecretKeySpec"
-      s"""
-          try {
-            $Cipher cipher = $Cipher.getInstance("AES");
-            $SecretKeySpec secret = new $SecretKeySpec($key, 0, $key.length, "AES");
-            cipher.init($Cipher.ENCRYPT_MODE, secret);
-            ${ev.value} = cipher.doFinal($str, 0, $str.length);
-          } catch (java.security.GeneralSecurityException e) {
-            org.apache.spark.unsafe.Platform.throwException(e);
-          }
-      """
-    })
-  }
-}
-
-/**
- * A function that decrypts input using AES. Key lengths of 128, 192 or 256 bits can be used. 192
- * and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength Jurisdic-
- * tion Policy Files are installed. If either argument is NULL, the result will also be null. If
- * input is invalid, key length is not one of the permitted values or using 192/256 bits key before
- * installing JCE, an exception will be thrown.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(input, key) - Decrypts input using AES.",
-  extended = "> SELECT _FUNC_(UnBase64('y6Ss+zCYObpCbgfWfyNWTw=='),'1234567890123456');\n 'ABC'")
-case class AesDecrypt(left: Expression, right: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes {
-
-  override def dataType: DataType = StringType
-  override def inputTypes: Seq[DataType] = Seq(BinaryType, BinaryType)
-
-  protected override def nullSafeEval(input1: Any, input2: Any): Any = {
-    val cipher = Cipher.getInstance("AES")
-    val secretKey = new SecretKeySpec(input2.asInstanceOf[Array[Byte]], 0,
-      input2.asInstanceOf[Array[Byte]].length, "AES")
-
-    cipher.init(Cipher.DECRYPT_MODE, secretKey)
-    UTF8String.fromBytes(
-      cipher.doFinal(input1.asInstanceOf[Array[Byte]], 0,
-        input1.asInstanceOf[Array[Byte]].length))
-  }
-
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    nullSafeCodeGen(ctx, ev, (str, key) => {
-      val Cipher = "javax.crypto.Cipher"
-      val SecretKeySpec = "javax.crypto.spec.SecretKeySpec"
-      s"""
-          try {
-            $Cipher cipher = $Cipher.getInstance("AES");
-            $SecretKeySpec secret = new $SecretKeySpec($key, 0, $key.length, "AES");
-            cipher.init($Cipher.DECRYPT_MODE, secret);
-            ${ev.value} = UTF8String.fromBytes(cipher.doFinal($str, 0, $str.length));
-          } catch (java.security.GeneralSecurityException e) {
-            org.apache.spark.unsafe.Platform.throwException(e);
-          }
-      """
-    })
   }
 }
