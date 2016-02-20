@@ -1125,6 +1125,43 @@ def hash(*cols):
     return Column(jc)
 
 
+@ignore_unicode_prefix
+@since(2.0)
+def aes_encrypt(input, key):
+    """
+    Encrypts input of given column using AES. Key lengths of 128, 192 or 256 bits can be used. 192
+    and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength Jurisdic-
+    tion Policy Files are installed. If input is invalid, key length is not one of the permitted
+    values or using 192/256 bits key before installing JCE, an exception will be thrown.
+
+    >>> df = sqlContext.createDataFrame([('ABC','1234567890123456')], ['input','key'])
+    >>> df.select(base64(aes_encrypt(df.input, df.key)).alias('aes')).collect()
+    [Row(aes=u'y6Ss+zCYObpCbgfWfyNWTw==')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.aes_encrypt(_to_java_column(input), _to_java_column(key))
+    return Column(jc)
+
+
+@ignore_unicode_prefix
+@since(2.0)
+def aes_decrypt(input, key):
+    """
+    Decrypts input of given column using AES. Key lengths of 128, 192 or 256 bits can be used. 192
+    and 256 bits keys can be used if Java Cryptography Extension (JCE) Unlimited Strength Jurisdic-
+    tion Policy Files are installed. If input is invalid, key length is not one of the permitted
+    values or using 192/256 bits key before installing JCE, an exception will be thrown.
+
+    >>> df = sqlContext.createDataFrame([(u'y6Ss+zCYObpCbgfWfyNWTw==','1234567890123456')], \
+    ['input','key'])
+    >>> df.select(aes_decrypt(unbase64(df.input), df.key).alias('aes')).collect()
+    [Row(aes=u'ABC')]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.aes_decrypt(_to_java_column(input), _to_java_column(key))
+    return Column(jc)
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
