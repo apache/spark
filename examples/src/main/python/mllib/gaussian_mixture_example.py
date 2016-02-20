@@ -38,7 +38,6 @@ if __name__ == "__main__":
     for i in range(2):
         print("weight = ", gmm.weights[i], "mu = ", gmm.gaussians[i].mu,
               "sigma = ", gmm.gaussians[i].sigma.toArray())
-
     # $example off$
 
     sc.stop()
