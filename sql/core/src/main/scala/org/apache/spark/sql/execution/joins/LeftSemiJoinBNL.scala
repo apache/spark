@@ -38,8 +38,10 @@ case class LeftSemiJoinBNL(
 
   override def output: Seq[Attribute] = left.output
 
+  /** The Streamed Relation */
   override def left: SparkPlan = streamed
 
+  /** The Broadcast relation */
   override def right: SparkPlan = broadcast
 
   override def requiredChildDistribution: Seq[Distribution] = {
