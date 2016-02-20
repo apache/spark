@@ -62,10 +62,10 @@ object PipelineExample {
     val model = pipeline.fit(training)
 
     // Now we can optionally save the fitted pipeline to disk
-    model.save("/tmp/spark-logistic-regression-model")
+    model.write.overwrite().save("/tmp/spark-logistic-regression-model")
 
     // We can also save this unfit pipeline to disk
-    pipeline.save("/tmp/unfit-lr-model")
+    pipeline.write.overwrite().save("/tmp/unfit-lr-model")
 
     // And load it back in during production
     val sameModel = PipelineModel.load("/tmp/spark-logistic-regression-model")
