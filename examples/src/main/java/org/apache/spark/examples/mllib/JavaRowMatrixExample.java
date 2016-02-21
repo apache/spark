@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
@@ -27,8 +29,6 @@ import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 // $example off$
 import org.apache.spark.mllib.linalg.Matrix;
-
-import java.util.Arrays;
 
 public class JavaRowMatrixExample {
   public static void main(String[] args) {

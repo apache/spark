@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
@@ -25,7 +27,6 @@ import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
 import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
 // $example off$
-import java.util.Arrays;
 
 public class JavaCoordinateMatrixExample {
   public static void main(String[] args) {
@@ -52,6 +53,5 @@ public class JavaCoordinateMatrixExample {
     // $example off$
 
     jsc.stop();
-
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -26,8 +28,6 @@ import org.apache.spark.mllib.linalg.distributed.IndexedRow;
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
 import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 // $example off$
-
-import java.util.Arrays;
 
 public class JavaIndexedRowMatrixExample {
   public static void main(String[] args) {
@@ -55,6 +55,5 @@ public class JavaIndexedRowMatrixExample {
     // $example off$
 
     jsc.stop();
-
   }
 }

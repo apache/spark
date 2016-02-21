@@ -35,7 +35,6 @@ object LocalVectorExample {
     // Create a sparse vector (1.0, 0.0, 3.0) by specifying its nonzero entries.
     val sv2: Vector = Vectors.sparse(3, Seq((0, 1.0), (2, 3.0)))
     // $example off$
-
   }
 }
 // scalastyle:on println

@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
@@ -25,8 +27,6 @@ import org.apache.spark.mllib.linalg.distributed.BlockMatrix;
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
 // $example off$
 import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
-
-import java.util.Arrays;
 
 public class JavaBlockMatrixExample {
   public static void main(String[] args) {
