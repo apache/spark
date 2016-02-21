@@ -46,7 +46,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] final val sqlContext = SQLContext.getActive().getOrElse(null)
+  protected[spark] final val sqlContext = SQLContext.getActive().orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
@@ -120,44 +120,49 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
-  // All the subqueries and their Future of results.
-  @transient private val queryResults = ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]()
+  /**
+   * List of (uncorrelated scalar subquery, future holding the subquery result) for this plan node.
+   * This list is populated by [[prepareSubqueries]], which is called in [[prepare]].
+   */
+  @transient
+  private val subqueryResults = new ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]
 
   /**
-   * Collects all the subqueries and create a Future to take the first two rows of them.
+   * Finds scalar subquery expressions in this plan node and starts evaluating them.
+   * The list of subqueries are added to [[subqueryResults]].
    */
   protected def prepareSubqueries(): Unit = {
     val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
     allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
       val futureResult = Future {
-        // We only need the first row, try to take two rows so we can throw an exception if there
-        // are more than one rows returned.
+        // Each subquery should return only one row (and one column). We take two here and throws
+        // an exception later if the number of rows is greater than one.
         e.executedPlan.executeTake(2)
       }(SparkPlan.subqueryExecutionContext)
-      queryResults += e -> futureResult
+      subqueryResults += e -> futureResult
     }
   }
 
   /**
-   * Waits for all the subqueries to finish and updates the results.
+   * Blocks the thread until all subqueries finish evaluation and update the results.
    */
   protected def waitForSubqueries(): Unit = {
     // fill in the result of subqueries
-    queryResults.foreach {
-      case (e, futureResult) =>
-        val rows = Await.result(futureResult, Duration.Inf)
-        if (rows.length > 1) {
-          sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
-        }
-        if (rows.length == 1) {
-          assert(rows(0).numFields == 1, "Analyzer should make sure this only returns one column")
-          e.updateResult(rows(0).get(0, e.dataType))
-        } else {
-          // There is no rows returned, the result should be null.
-          e.updateResult(null)
-        }
+    subqueryResults.foreach { case (e, futureResult) =>
+      val rows = Await.result(futureResult, Duration.Inf)
+      if (rows.length > 1) {
+        sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
+      }
+      if (rows.length == 1) {
+        assert(rows(0).numFields == 1,
+          s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
+        e.updateResult(rows(0).get(0, e.dataType))
+      } else {
+        // If there is no rows returned, the result should be null.
+        e.updateResult(null)
+      }
     }
-    queryResults.clear()
+    subqueryResults.clear()
   }
 
   /**
