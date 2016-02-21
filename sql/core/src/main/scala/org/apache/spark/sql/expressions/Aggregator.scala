@@ -26,19 +26,34 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * A base class for user-defined aggregations, which can be used in [[DataFrame]] and [[Dataset]]
  * operations to take all of the elements of a group and reduce them to a single value.
  *
- * For example, the following aggregator extracts an `int` from a specific class and adds them up:
+ * For example, the following user-defined aggregator extracts an `int` from a specific class and
+ * adds them up:
+ *
  * {{{
- *   case class Data(i: Int)
+ *   case class Data(k: String, v: Int)
  *
  *   val customSummer =  new Aggregator[Data, Int, Int] {
  *     def zero: Int = 0
- *     def reduce(b: Int, a: Data): Int = b + a.i
+ *     def reduce(b: Int, a: Data): Int = b + a.v
  *     def merge(b1: Int, b2: Int): Int = b1 + b2
  *     def finish(r: Int): Int = r
  *   }.toColumn()
+ * }}}
  *
+ * == [[Dataset]]==
+ * Sums up all the values of input rows in [[Dataset]].
+ *
+ * {{{
  *   val ds: Dataset[Data] = ...
  *   val aggregated = ds.select(customSummer)
+ * }}}
+ *
+ * == [[DataFrame]]==
+ * Sums up the values of input rows for each group in [[DataFrame]].
+ *
+ * {{{
+ *   val df: DataFrame = ...
+ *   val aggregated = df.groupBy($"k").agg(customSummer)
  * }}}
  *
  * Based loosely on Aggregator from Algebird: https://github.com/twitter/algebird
