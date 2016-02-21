@@ -28,17 +28,17 @@ import org.apache.spark.graphx.PartitionStrategy.EdgePartition2D
  * The algorithm is relatively straightforward and can be computed in three steps:
  *
  * <ul>
- * <li> Compute the set of neighbors for each vertex
- * <li> For each edge compute the intersection of the sets and send the count to both vertices.
- * <li> Compute the sum at each vertex and divide by two since each triangle is counted twice.
+ * <li> Compute the set of neighbors for each vertex</li>
+ * <li> For each edge compute the intersection of the sets and send the count to both vertices.</li>
+ * <li> Compute the sum at each vertex and divide by two since each triangle is counted twice.</li>
  * </ul>
  *
  * There are two implementations.  The default `TriangleCount.run` implementation first removes
  * self cycles and canonicalizes the graph to ensure that the following conditions hold:
  * <ul>
- * <li> There are no self edges
- * <li> All edges are oriented src > dst
- * <li> There are no duplicate edges
+ * <li> There are no self edges</li>
+ * <li> All edges are oriented src > dst</li>
+ * <li> There are no duplicate edges</li>
  * </ul>
  * However, the canonicalization procedure is costly as it requires repartitioning the graph.
  * If the input data is already in "canonical form" with self cycles removed then the
