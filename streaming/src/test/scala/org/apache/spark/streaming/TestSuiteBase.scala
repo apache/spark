@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually.timeout
@@ -130,6 +130,8 @@ class TestOutputStreamWithPartitions[T: ClassTag](
     ois.defaultReadObject()
     output.clear()
   }
+
+  val ct = classTag[T]
 }
 
 /**
