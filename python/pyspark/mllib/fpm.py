@@ -21,14 +21,15 @@ from collections import namedtuple
 
 from pyspark import SparkContext, since
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
+from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
 
 __all__ = ['FPGrowth', 'FPGrowthModel', 'PrefixSpan', 'PrefixSpanModel']
 
 
 @inherit_doc
 @ignore_unicode_prefix
-class FPGrowthModel(JavaModelWrapper):
+class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
     .. note:: Experimental
 
@@ -40,6 +41,17 @@ class FPGrowthModel(JavaModelWrapper):
     >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> sorted(model.freqItemsets().collect())
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
+    >>> import os, tempfile
+    >>> path = tempfile.mkdtemp()
+    >>> model.save(sc,path)
+    >>> sameModel = FPGrowthModel.load(sc,path)
+    >>> sorted(model.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
+    True
+    >>> from shutil import rmtree
+    >>> try:
+    ...     rmtree(path)
+    ... except OSError:
+    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -50,6 +62,16 @@ class FPGrowthModel(JavaModelWrapper):
         Returns the frequent itemsets of this model.
         """
         return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
+
+    @classmethod
+    @since("2.0.0")
+    def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.FPGrowthModelWrapper(model)
+        return FPGrowthModel(wrapper)
 
 
 class FPGrowth(object):
