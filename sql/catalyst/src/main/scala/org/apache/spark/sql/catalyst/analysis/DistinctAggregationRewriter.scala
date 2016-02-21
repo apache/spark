@@ -130,7 +130,7 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
         new AttributeReference("gid", IntegerType, false)(isGenerated = true)
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()
+        case e => e -> new AttributeReference(e.sql, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
 
@@ -184,7 +184,7 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup)
-        val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
+        val operator = Alias(e.copy(aggregateFunction = af), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
@@ -269,5 +269,5 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
-    e -> new AttributeReference(e.prettyString, e.dataType, true)()
+    e -> new AttributeReference(e.sql, e.dataType, true)()
 }

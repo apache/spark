@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst
 
 import java.io._
 
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{NumericType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 package object util {
@@ -130,19 +133,31 @@ package object util {
     ret
   }
 
-  /**
-   * Converts a `Seq` of `Option[T]` to an `Option` of `Seq[T]`.
-   */
-  def sequenceOption[T](seq: Seq[Option[T]]): Option[Seq[T]] = seq match {
-    case xs if xs.isEmpty =>
-      Option(Seq.empty[T])
-
-    case xs =>
-      for {
-        head <- xs.head
-        tail <- sequenceOption(xs.tail)
-      } yield head +: tail
+  // Replaces attributes, string literals, complex type extractors with their pretty form so that
+  // generated column names don't contain back-ticks or double-quotes.
+  def usePrettyExpression(e: Expression): Expression = e transform {
+    case a: Attribute => new PrettyAttribute(a)
+    case Literal(s: UTF8String, StringType) => PrettyAttribute(s.toString, StringType)
+    case Literal(v, t: NumericType) if v != null => PrettyAttribute(v.toString, t)
+    case e: GetStructField =>
+      val name = e.name.getOrElse(e.childSchema(e.ordinal).name)
+      PrettyAttribute(usePrettyExpression(e.child).sql + "." + name, e.dataType)
+    case e: GetArrayStructFields =>
+      PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
   }
+
+  def quoteIdentifier(name: String): String = {
+    // Escapes back-ticks within the identifier name with double-back-ticks, and then quote the
+    // identifier with back-ticks.
+    "`" + name.replace("`", "``") + "`"
+  }
+
+  /**
+   * Returns the string representation of this expression that is safe to be put in
+   * code comments of generated code.
+   */
+  def toCommentSafeString(str: String): String =
+    str.replace("*/", "\\*\\/").replace("\\u", "\\\\u")
 
   /* FIX ME
   implicit class debugLogging(a: Any) {

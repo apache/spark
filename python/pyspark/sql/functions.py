@@ -223,22 +223,22 @@ def coalesce(*cols):
     +----+----+
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
-    +-------------+
-    |coalesce(a,b)|
-    +-------------+
-    |         null|
-    |            1|
-    |            2|
-    +-------------+
+    +--------------+
+    |coalesce(a, b)|
+    +--------------+
+    |          null|
+    |             1|
+    |             2|
+    +--------------+
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
-    +----+----+---------------+
-    |   a|   b|coalesce(a,0.0)|
-    +----+----+---------------+
-    |null|null|            0.0|
-    |   1|null|            1.0|
-    |null|   2|            0.0|
-    +----+----+---------------+
+    +----+----+----------------+
+    |   a|   b|coalesce(a, 0.0)|
+    +----+----+----------------+
+    |null|null|             0.0|
+    |   1|null|             1.0|
+    |null|   2|             0.0|
+    +----+----+----------------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
@@ -1528,7 +1528,7 @@ def array_contains(col, value):
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(array_contains(df.data, "a")).collect()
-    [Row(array_contains(data,a)=True), Row(array_contains(data,a)=False)]
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))

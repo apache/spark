@@ -575,7 +575,7 @@ case class Pivot(
   override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
     case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
     case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + "_" + agg.prettyString, agg.dataType)())
+      aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
     }
   }
 }

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 
 /**
@@ -165,7 +166,8 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case other => Alias(other, optionalAliasName.getOrElse(s"_c$i"))()
+              case e: ExtractValue => Alias(e, usePrettyExpression(e).sql)()
+              case e => Alias(e, optionalAliasName.getOrElse(usePrettyExpression(e).sql))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -328,7 +330,7 @@ class Analyzer(
               throw new AnalysisException(
                 s"Aggregate expression required for pivot, found '$aggregate'")
             }
-            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.sql
             Alias(filteredAggregate, name)()
           }
         }
@@ -1456,7 +1458,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
  */
 object ResolveUpCast extends Rule[LogicalPlan] {
   private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-    throw new AnalysisException(s"Cannot up cast `${from.prettyString}` from " +
+    throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
       s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
       "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
       "You can either add an explicit cast to the input data or choose a higher precision " +
