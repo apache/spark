@@ -17,11 +17,10 @@
 
 from __future__ import print_function
 
-# $example on$
 from pyspark import SparkContext
+# $example on$
 from pyspark.mllib.util import MLUtils
 from pyspark.mllib.feature import Normalizer
-
 # $example off$
 
 if __name__ == "__main__":
@@ -41,5 +40,13 @@ if __name__ == "__main__":
     # Each sample in data2 will be normalized using $L^\infty$ norm.
     data2 = labels.zip(normalizer2.transform(features))
     # $example off$
+
+    print("data1:")
+    for each in data1.collect():
+        print(each)
+
+    print("data2:")
+    for each in data2.collect():
+        print(each)
 
     sc.stop()

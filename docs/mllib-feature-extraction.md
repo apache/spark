@@ -124,7 +124,7 @@ Refer to the [`Word2Vec` Scala docs](api/scala/index.html#org.apache.spark.mllib
 <div data-lang="python" markdown="1">
 Refer to the [`Word2Vec` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.feature.Word2Vec) for more details on the API.
 
-{% include_example python/mllib/word_2_vec_example.py %}
+{% include_example python/mllib/word2vec_example.py %}
 </div>
 </div>
 

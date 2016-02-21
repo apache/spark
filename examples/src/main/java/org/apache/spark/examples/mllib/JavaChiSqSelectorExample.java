@@ -28,6 +28,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 // $example off$
+import org.apache.spark.api.java.function.VoidFunction;
 
 public class JavaChiSqSelectorExample {
   public static void main(String[] args) {
@@ -68,6 +69,14 @@ public class JavaChiSqSelectorExample {
       }
     );
     // $example off$
+
+    System.out.println("filtered data: ");
+    filteredData.foreach(new VoidFunction<LabeledPoint>() {
+      @Override
+      public void call(LabeledPoint labeledPoint) throws Exception {
+        System.out.println(labeledPoint.toString());
+      }
+    });
 
     jsc.stop();
   }

@@ -19,8 +19,8 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
-// $example on$
 import org.apache.spark.SparkContext
+// $example on$
 import org.apache.spark.mllib.feature.{StandardScaler, StandardScalerModel}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLUtils
@@ -28,7 +28,7 @@ import org.apache.spark.mllib.util.MLUtils
 
 object StandardScalerExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("StandardScalerExample")
     val sc = new SparkContext(conf)
@@ -49,6 +49,12 @@ object StandardScalerExample {
     // data2 will be unit variance and zero mean.
     val data2 = data.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.toArray))))
     // $example off$
+
+    println("data1: ")
+    data1.foreach(x => println(x))
+
+    println("data2: ")
+    data2.foreach(x => println(x))
 
     sc.stop()
   }

@@ -19,8 +19,8 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
-// $example on$
 import org.apache.spark.SparkContext
+// $example on$
 import org.apache.spark.mllib.feature.ChiSqSelector
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -29,7 +29,7 @@ import org.apache.spark.mllib.util.MLUtils
 
 object ChiSqSelectorExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("ChiSqSelectorExample")
     val sc = new SparkContext(conf)
@@ -40,7 +40,7 @@ object ChiSqSelectorExample {
     // Discretize data in 16 equal bins since ChiSqSelector requires categorical features
     // Even though features are doubles, the ChiSqSelector treats each unique value as a category
     val discretizedData = data.map { lp =>
-      LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => (x / 16).floor } ) )
+      LabeledPoint(lp.label, Vectors.dense(lp.features.toArray.map { x => (x / 16).floor }))
     }
     // Create ChiSqSelector that will select top 50 of 692 features
     val selector = new ChiSqSelector(50)
@@ -51,6 +51,9 @@ object ChiSqSelectorExample {
       LabeledPoint(lp.label, transformer.transform(lp.features))
     }
     // $example off$
+
+    println("filtered data: ")
+    filteredData.foreach(x => println(x))
 
     sc.stop()
   }

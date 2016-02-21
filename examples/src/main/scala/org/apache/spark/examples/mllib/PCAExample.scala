@@ -19,8 +19,8 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
-// $example on$
 import org.apache.spark.SparkContext
+// $example on$
 import org.apache.spark.mllib.feature.PCA
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.{LabeledPoint, LinearRegressionWithSGD}
@@ -28,7 +28,7 @@ import org.apache.spark.mllib.regression.{LabeledPoint, LinearRegressionWithSGD}
 
 object PCAExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("PCAExample")
     val sc = new SparkContext(conf)
@@ -43,7 +43,7 @@ object PCAExample {
     val training = splits(0).cache()
     val test = splits(1)
 
-    val pca = new PCA(training.first().features.size/2).fit(data.map(_.features))
+    val pca = new PCA(training.first().features.size / 2).fit(data.map(_.features))
     val training_pca = training.map(p => p.copy(features = pca.transform(p.features)))
     val test_pca = test.map(p => p.copy(features = pca.transform(p.features)))
 
@@ -61,8 +61,8 @@ object PCAExample {
       (score, point.label)
     }
 
-    val MSE = valuesAndPreds.map{case(v, p) => math.pow((v - p), 2)}.mean()
-    val MSE_pca = valuesAndPreds_pca.map{case(v, p) => math.pow((v - p), 2)}.mean()
+    val MSE = valuesAndPreds.map { case (v, p) => math.pow((v - p), 2) }.mean()
+    val MSE_pca = valuesAndPreds_pca.map { case (v, p) => math.pow((v - p), 2) }.mean()
 
     println("Mean Squared Error = " + MSE)
     println("PCA Mean Squared Error = " + MSE_pca)

@@ -17,13 +17,11 @@
 
 from __future__ import print_function
 
-from pyspark.mllib.linalg import Vectors
-# $example on$
 from pyspark import SparkContext
-from pyspark.mllib.util import MLUtils
+# $example on$
 from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.feature import StandardScaler
-from pyspark.mllib.feature import StandardScalerModel
+from pyspark.mllib.feature import StandardScaler, StandardScalerModel
+from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
@@ -36,8 +34,6 @@ if __name__ == "__main__":
 
     scaler1 = StandardScaler().fit(features)
     scaler2 = StandardScaler(withMean=True, withStd=True).fit(features)
-    # scaler3 is an identical model to scaler2, and will produce identical transformations
-    scaler3 = StandardScalerModel(scaler2.std, scaler2.mean)
 
     # data1 will be unit variance.
     data1 = label.zip(scaler1.transform(features))
@@ -45,8 +41,15 @@ if __name__ == "__main__":
     # Without converting the features into dense vectors, transformation with zero mean will raise
     # exception on sparse vector.
     # data2 will be unit variance and zero mean.
-    data2 = label.zip(scaler1.transform(features.map(lambda x: Vectors.dense(x.toArray()))))
-
+    data2 = label.zip(scaler2.transform(features.map(lambda x: Vectors.dense(x.toArray()))))
     # $example off$
+
+    print("data1:")
+    for each in data1.collect():
+        print(each)
+
+    print("data2:")
+    for each in data2.collect():
+        print(each)
 
     sc.stop()

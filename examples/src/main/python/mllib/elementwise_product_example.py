@@ -17,8 +17,8 @@
 
 from __future__ import print_function
 
-# $example on$
 from pyspark import SparkContext
+# $example on$
 from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.feature import ElementwiseProduct
 # $example off$
@@ -39,5 +39,13 @@ if __name__ == "__main__":
     # Single-row transform
     transformedData2 = transformer.transform(parsedData.first())
     # $example off$
+
+    print("transformedData:")
+    for each in transformedData.collect():
+        print(each)
+
+    print("transformedData2:")
+    for each in transformedData2.collect():
+        print(each)
 
     sc.stop()
