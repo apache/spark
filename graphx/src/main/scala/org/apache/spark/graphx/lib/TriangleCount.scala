@@ -107,13 +107,10 @@ object TriangleCount {
     // compute the intersection along edges
     val counters: VertexRDD[Int] = setGraph.aggregateMessages(edgeFunc, _ + _)
     // Merge counters with the graph and divide by two since each triangle is counted twice
-    graph.outerJoinVertices(counters) { (vid, _, optCounter: Option[Int]) =>
+    graph.outerJoinVertices(counters) { (_, _, optCounter: Option[Int]) =>
       val dblCount = optCounter.getOrElse(0)
       // This algorithm double counts each triangle so the final count should be even
-      val isEven = (dblCount & 1) == 0
-      if (!isEven) {
-        throw new Exception("Triangle count resulted in an invalid number of triangles.")
-      }
+      require(dblCount % 2 == 0, "Triangle count resulted in an invalid number of triangles.")
       dblCount / 2
     }
   }
