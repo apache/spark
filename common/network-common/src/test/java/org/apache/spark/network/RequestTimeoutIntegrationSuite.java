@@ -244,7 +244,7 @@ public class RequestTimeoutIntegrationSuite {
    * Callback which sets 'success' or 'failure' on completion.
    * Additionally notifies all waiters on this callback when invoked.
    */
-  class TestCallback implements RpcResponseCallback, ChunkReceivedCallback {
+  static class TestCallback implements RpcResponseCallback, ChunkReceivedCallback {
 
     int successLength = -1;
     Throwable failure;

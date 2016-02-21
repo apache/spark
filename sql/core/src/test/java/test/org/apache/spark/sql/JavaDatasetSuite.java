@@ -526,7 +526,7 @@ public class JavaDatasetSuite implements Serializable {
     Encoders.kryo(PrivateClassTest.class);
   }
 
-  public class SimpleJavaBean implements Serializable {
+  public static class SimpleJavaBean implements Serializable {
     private boolean a;
     private int b;
     private byte[] c;
@@ -609,7 +609,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class SimpleJavaBean2 implements Serializable {
+  public static class SimpleJavaBean2 implements Serializable {
     private Timestamp a;
     private Date b;
     private java.math.BigDecimal c;
@@ -647,7 +647,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class NestedJavaBean implements Serializable {
+  public static class NestedJavaBean implements Serializable {
     private SimpleJavaBean a;
 
     public SimpleJavaBean getA() {
@@ -742,7 +742,7 @@ public class JavaDatasetSuite implements Serializable {
     ds.collect();
   }
 
-  public class SmallBean implements Serializable {
+  public static class SmallBean implements Serializable {
     private String a;
 
     private int b;
@@ -777,7 +777,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class NestedSmallBean implements Serializable {
+  public static class NestedSmallBean implements Serializable {
     private SmallBean f;
 
     public SmallBean getF() {

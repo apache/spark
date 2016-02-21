@@ -252,7 +252,7 @@ public class UnsafeShuffleWriterSuite {
     createWriter(false).stop(false);
   }
 
-  class PandaException extends RuntimeException {
+  static class PandaException extends RuntimeException {
   }
 
   @Test(expected=PandaException.class)
