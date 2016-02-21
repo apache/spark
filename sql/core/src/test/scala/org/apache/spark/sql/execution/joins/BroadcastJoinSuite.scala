@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{AccumulatorSuite, SparkConf, SparkContext}
 import org.apache.spark.sql.{QueryTest, SQLContext}
-import org.apache.spark.sql.execution.EnsureRequirements
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.functions._
 
 /**

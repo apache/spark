@@ -24,8 +24,8 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Accumulators
 import org.apache.spark.sql.execution.PhysicalRDD
-import org.apache.spark.sql.execution.ShuffleExchange
 import org.apache.spark.sql.execution.columnar._
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
