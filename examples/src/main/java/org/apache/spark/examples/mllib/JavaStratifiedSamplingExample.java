@@ -17,16 +17,22 @@
 
 package org.apache.spark.examples.mllib;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.VoidFunction;
-import scala.Tuple2;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.HashMap;
 // $example on$
-import java.util.*;
-import org.apache.spark.api.java.JavaRDD;
+import java.util.Map;
+// $example off$
+
+import scala.Tuple2;
+
+import org.apache.spark.api.java.function.VoidFunction;
+// $example on$
+
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example off$
+import org.apache.spark.SparkConf;
 
 public class JavaStratifiedSamplingExample {
   public static void main(String[] args) {

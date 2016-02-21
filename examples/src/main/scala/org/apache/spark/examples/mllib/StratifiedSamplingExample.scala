@@ -21,16 +21,13 @@ package org.apache.spark.examples.mllib
 // $example on$
 import org.apache.spark.{SparkConf, SparkContext}
 // $example off$
-import org.apache.spark.sql.SQLContext
-
 
 object StratifiedSamplingExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("StratifiedSamplingExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("StratifiedSamplingExample")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
 
     // $example on$
     // an RDD[(K, V)] of any key value pairs

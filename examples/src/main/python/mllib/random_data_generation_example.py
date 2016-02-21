@@ -18,16 +18,12 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
-from pyspark.sql import SQLContext
-import numpy as np
-from pyspark.mllib.linalg import Vectors
 # $example on$
 from pyspark.mllib.random import RandomRDDs
 # $example off$
 
 if __name__ == "__main__":
     sc = SparkContext(appName="RandomDataGenerationExample")  # SparkContext
-    sqlContext = SQLContext(sc)
 
     # $example on$
     # Generate a random double RDD that contains 1 million i.i.d. values drawn from the

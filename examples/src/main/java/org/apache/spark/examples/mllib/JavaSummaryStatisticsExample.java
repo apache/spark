@@ -17,25 +17,23 @@
 
 package org.apache.spark.examples.mllib;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.mllib.linalg.Vectors;
+import java.util.Arrays;
+
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
 import org.apache.spark.mllib.stat.Statistics;
 // $example off$
-import java.util.Arrays;
-
+import org.apache.spark.SparkConf;
 
 public class JavaSummaryStatisticsExample {
   public static void main(String[] args) {
 
     SparkConf conf = new SparkConf().setAppName("JavaSummaryStatisticsExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
 
     // $example on$
     Vector v1 = Vectors.dense(1.0, 10.0, 100.0);

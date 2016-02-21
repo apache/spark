@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
@@ -29,7 +31,6 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.stat.Statistics;
 import org.apache.spark.mllib.stat.test.ChiSqTestResult;
 // $example off$
-import java.util.Arrays;
 
 public class JavaHypothesisTestingExample {
   public static void main(String[] args) {

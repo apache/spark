@@ -37,6 +37,7 @@ object RandomDataGenerationExample {
     // Apply a transform to get a random double RDD following `N(1, 4)`.
     val v = u.map(x => 1.0 + 2.0 * x)
     // $example off$
+
     u.foreach(print)
     v.foreach(print)
 

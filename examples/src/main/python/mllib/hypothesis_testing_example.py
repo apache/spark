@@ -18,8 +18,6 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
-from pyspark.sql import SQLContext
-import numpy as np
 from pyspark.mllib.linalg import Vectors
 # $example on$
 from pyspark import SparkContext
@@ -30,7 +28,6 @@ from pyspark.mllib.stat import Statistics
 
 if __name__ == "__main__":
     sc = SparkContext(appName="HypothesisTestingExample")  # SparkContext
-    sqlContext = SQLContext(sc)
 
     # $example on$
     vec = Vectors.dense(0.1, 0.15, 0.2, 0.3, 0.25)  # a vector composed of the frequencies of events
@@ -60,7 +57,6 @@ if __name__ == "__main__":
     for i, result in enumerate(featureTestResults):
         print("Column: " + str(i + 1))
         print(result)
-
     # $example off$
 
     sc.stop()

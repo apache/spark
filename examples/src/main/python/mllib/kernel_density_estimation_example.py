@@ -18,16 +18,12 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
-from pyspark.sql import SQLContext
-import numpy as np
-from pyspark.mllib.linalg import Vectors
 # $example on$
 from pyspark.mllib.stat import KernelDensity
 # $example off$
 
 if __name__ == "__main__":
     sc = SparkContext(appName="KernelDensityEstimationExample")  # SparkContext
-    sqlContext = SQLContext(sc)
 
     # $example on$
     # an RDD of sample data

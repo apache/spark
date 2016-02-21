@@ -17,14 +17,14 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.stat.KernelDensity;
-import org.apache.spark.rdd.RDD;
 // $example off$
-import java.util.Arrays;
 
 public class JavaKernelDensityEstimationExample {
   public static void main(String[] args) {
@@ -36,11 +36,8 @@ public class JavaKernelDensityEstimationExample {
     JavaRDD<Double> data = jsc.parallelize(
       Arrays.asList(1.0, 1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 6.0, 7.0, 8.0, 9.0, 9.0)); // an RDD of sample data
 
-    // Construct the density estimator with the sample data and a standard deviation for the Gaussian
-    // kernels
-    KernelDensity kd = new KernelDensity()
-      .setSample(data)
-      .setBandwidth(3.0);
+    // Construct the density estimator with the sample data and a standard deviation for the Gaussian kernels
+    KernelDensity kd = new KernelDensity().setSample(data).setBandwidth(3.0);
 
     // Find density estimates for the given values
     double[] densities = kd.estimate(new double[]{-1.0, 2.0, 5.0});

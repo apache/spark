@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib;
 
+import java.util.Arrays;
+
 import org.apache.spark.SparkConf;
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
@@ -27,8 +29,6 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.stat.Statistics;
 // $example off$
-import java.util.Arrays;
-
 
 public class JavaCorrelationsExample {
   public static void main(String[] args) {
@@ -44,8 +44,8 @@ public class JavaCorrelationsExample {
     JavaDoubleRDD seriesY = jsc.parallelizeDoubles(
       Arrays.asList(new Double[]{11.0, 22.0, 33.0, 33.0, 555.0}));
 
-    // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
-    // method is not specified, Pearson's method will be used by default.
+    // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method.
+    // If a method is not specified, Pearson's method will be used by default.
     Double correlation = Statistics.corr(seriesX.srdd(), seriesY.srdd(), "pearson");
     System.out.println("correlation is: " + correlation);
 

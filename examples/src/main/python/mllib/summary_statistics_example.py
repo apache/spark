@@ -18,16 +18,13 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
-from pyspark.sql import SQLContext
 import numpy as np
-from pyspark.mllib.linalg import Vectors
 # $example on$
 from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
     sc = SparkContext(appName="SummaryStatisticsExample")  # SparkContext
-    sqlContext = SQLContext(sc)
 
     # $example on$
     v1 = np.array([1.0, 2.0, 3.0])

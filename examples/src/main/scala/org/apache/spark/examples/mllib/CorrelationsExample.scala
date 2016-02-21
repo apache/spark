@@ -29,7 +29,7 @@ object CorrelationsExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("CorrelationsExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("CorrelationsExample")
     val sc = new SparkContext(conf)
 
     // $example on$

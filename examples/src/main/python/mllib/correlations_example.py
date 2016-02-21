@@ -18,23 +18,21 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
-from pyspark.sql import SQLContext
 import numpy as np
-from pyspark.mllib.linalg import Vectors
 # $example on$
 from pyspark.mllib.stat import Statistics
 # $example off$
 
 if __name__ == "__main__":
-    # $example on$
     sc = SparkContext(appName="CorrelationsExample")  # SparkContext
 
+    # $example on$
     seriesX = sc.parallelize([1.0, 2.0, 3.0, 3.0, 5.0])  # a series
     # seriesY must have the same number of partitions and cardinality as seriesX
     seriesY = sc.parallelize([11.0, 22.0, 33.0, 33.0, 555.0])
 
-    # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
-    # method is not specified, Pearson's method will be used by default.
+    # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method.
+    # If a method is not specified, Pearson's method will be used by default.
     print(Statistics.corr(seriesX, seriesY, method="pearson"))
 
     v1 = np.array([1.0, 10.0, 100.0])
@@ -45,7 +43,6 @@ if __name__ == "__main__":
     # calculate the correlation matrix using Pearson's method. Use "spearman" for Spearman's method.
     # If a method is not specified, Pearson's method will be used by default.
     print(Statistics.corr(data, method="pearson"))
-
     # $example off$
 
     sc.stop()

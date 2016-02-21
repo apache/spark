@@ -28,7 +28,7 @@ object SummaryStatisticsExample {
 
   def main(args: Array[String]) {
 
-    val conf = new SparkConf().setAppName("SummaryStatisticsExample").setMaster("local[*]")
+    val conf = new SparkConf().setAppName("SummaryStatisticsExample")
     val sc = new SparkContext(conf)
 
     // $example on$
