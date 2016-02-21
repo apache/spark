@@ -209,13 +209,23 @@ class Analyzer(
       Seq.tabulate(1 << c.groupByExprs.length)(i => i)
     }
 
+    private def hasGroupingId(expr: Seq[Expression]): Boolean = {
+      expr.exists(_.collectFirst {
+        case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.groupingIdName) => u
+      }.isDefined)
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case a if !a.childrenResolved => a // be sure all of the children are resolved.
       case Aggregate(Seq(c @ Cube(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(c), groupByExprs, child, aggregateExpressions)
       case Aggregate(Seq(r @ Rollup(groupByExprs)), aggregateExpressions, child) =>
         GroupingSets(bitmasks(r), groupByExprs, child, aggregateExpressions)
-      case x: GroupingSets =>
+      case g: GroupingSets if g.expressions.exists(!_.resolved) && hasGroupingId(g.expressions) =>
+        failAnalysis(
+          s"${VirtualColumn.groupingIdName} is deprecated; use grouping_id() instead")
+      // Ensure all the expressions have been resolved.
+      case x: GroupingSets if x.expressions.forall(_.resolved) =>
         val gid = AttributeReference(VirtualColumn.groupingIdName, IntegerType, false)()
 
         // Expand works by setting grouping expressions to null as determined by the bitmasks. To
@@ -422,7 +432,8 @@ class Analyzer(
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
-              case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+              case a: Attribute =>
+                attributeRewrites.get(a).getOrElse(a).withQualifiers(a.qualifiers)
             }
           }
           newRight
@@ -598,17 +609,24 @@ class Analyzer(
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
-        val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
-        val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
-        val missingAttrs = requiredAttrs -- child.outputSet
-        if (missingAttrs.nonEmpty) {
-          // Add missing attributes and then project them away after the sort.
-          Project(child.output,
-            Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
-        } else if (newOrder != order) {
-          s.copy(order = newOrder)
-        } else {
-          s
+        try {
+          val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
+          val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
+          val missingAttrs = requiredAttrs -- child.outputSet
+          if (missingAttrs.nonEmpty) {
+            // Add missing attributes and then project them away after the sort.
+            Project(child.output,
+              Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
+          } else if (newOrder != order) {
+            s.copy(order = newOrder)
+          } else {
+            s
+          }
+        } catch {
+          // Attempting to resolve it might fail. When this happens, return the original plan.
+          // Users will see an AnalysisException for resolution failure of missing attributes
+          // in Sort
+          case ae: AnalysisException => s
         }
     }
 
@@ -638,6 +656,11 @@ class Analyzer(
           }
           val newAggregateExpressions = a.aggregateExpressions ++ missingAttrs
           a.copy(aggregateExpressions = newAggregateExpressions)
+        case g: Generate =>
+          // If join is false, we will convert it to true for getting from the child the missing
+          // attributes that its child might have or could have.
+          val missing = missingAttrs -- g.child.outputSet
+          g.copy(join = true, child = addMissingAttr(g.child, missing))
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>
