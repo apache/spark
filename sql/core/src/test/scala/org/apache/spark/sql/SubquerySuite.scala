@@ -36,28 +36,31 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select (select (select 1) + 1) + 1").collect()
     }
 
-    // more than one columns
-    val error = intercept[AnalysisException] {
-      sql("select (select 1, 2) as b").collect()
-    }
-    assert(error.message contains "Scalar subquery must return only one column, but got 2")
-
-    // more than one rows
-    val error2 = intercept[RuntimeException] {
-      sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
-    }
-    assert(error2.getMessage contains
-      "more than one row returned by a subquery used as an expression")
-
     // string type
     assertResult(Array(Row("s"))) {
       sql("select (select 's' as s) as b").collect()
     }
+  }
 
-    // zero rows
+  test("uncorrelated scalar subquery should return null if there is 0 rows") {
     assertResult(Array(Row(null))) {
       sql("select (select 's' as s limit 0) as b").collect()
     }
+  }
+
+  test("analysis error when the number of columns is not 1") {
+    val error = intercept[AnalysisException] {
+      sql("select (select 1, 2) as b").collect()
+    }
+    assert(error.message.contains("Scalar subquery must return only one column, but got 2"))
+  }
+
+  test("runtime error when the number of rows is greater than 1") {
+    val error2 = intercept[RuntimeException] {
+      sql("select (select a from (select 1 as a union all select 2 as a) t) as b").collect()
+    }
+    assert(error2.getMessage.contains(
+      "more than one row returned by a subquery used as an expression"))
   }
 
   test("uncorrelated scalar subquery on testData") {
@@ -65,7 +68,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     testData
 
     assertResult(Array(Row(5))) {
-      sql("select (select key from testData where key > 3 limit 1) + 1").collect()
+      sql("select (select key from testData where key > 3 order by key limit 1) + 1").collect()
     }
 
     assertResult(Array(Row(-100))) {
