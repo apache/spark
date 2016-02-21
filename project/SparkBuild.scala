@@ -155,7 +155,8 @@ object SparkBuild extends PomBuild {
     // Override SBT's default resolvers:
     resolvers := Seq(
       DefaultMavenRepository,
-      Resolver.mavenLocal
+      Resolver.mavenLocal,
+      Resolver.file("local", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns)
     ),
     externalResolvers := resolvers.value,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
@@ -167,8 +168,10 @@ object SparkBuild extends PomBuild {
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
 
     javacOptions in (Compile, doc) ++= {
-      val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
-      if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major == 1) major = versionParts(1).toInt
+      if (major >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
     },
 
     javacJVMVersion := "1.7",
@@ -433,9 +436,12 @@ object Catalyst {
       }
 
       // Generate the parser.
-      antlr.process
-      if (antlr.getNumErrors > 0) {
-        log.error("ANTLR: Caught %d build errors.".format(antlr.getNumErrors))
+      antlr.process()
+      val errorState = org.antlr.tool.ErrorManager.getErrorState
+      if (errorState.errors > 0) {
+        sys.error("ANTLR: Caught %d build errors.".format(errorState.errors))
+      } else if (errorState.warnings > 0) {
+        sys.error("ANTLR: Caught %d build warnings.".format(errorState.warnings))
       }
 
       // Return all generated java files.

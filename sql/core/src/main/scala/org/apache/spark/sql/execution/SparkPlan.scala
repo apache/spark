@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration._
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -31,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
@@ -78,6 +81,13 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
 
   /**
+    * Reset all the metrics.
+    */
+  private[sql] def resetMetrics(): Unit = {
+    metrics.valuesIterator.foreach(_.reset())
+  }
+
+  /**
    * Return a LongSQLMetric according to the name.
    */
   private[sql] def longMetric(name: String): LongSQLMetric =
@@ -105,8 +115,49 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def execute(): RDD[InternalRow] = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
+      waitForSubqueries()
       doExecute()
     }
+  }
+
+  // All the subqueries and their Future of results.
+  @transient private val queryResults = ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]()
+
+  /**
+   * Collects all the subqueries and create a Future to take the first two rows of them.
+   */
+  protected def prepareSubqueries(): Unit = {
+    val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
+    allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
+      val futureResult = Future {
+        // We only need the first row, try to take two rows so we can throw an exception if there
+        // are more than one rows returned.
+        e.executedPlan.executeTake(2)
+      }(SparkPlan.subqueryExecutionContext)
+      queryResults += e -> futureResult
+    }
+  }
+
+  /**
+   * Waits for all the subqueries to finish and updates the results.
+   */
+  protected def waitForSubqueries(): Unit = {
+    // fill in the result of subqueries
+    queryResults.foreach {
+      case (e, futureResult) =>
+        val rows = Await.result(futureResult, Duration.Inf)
+        if (rows.length > 1) {
+          sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
+        }
+        if (rows.length == 1) {
+          assert(rows(0).numFields == 1, "Analyzer should make sure this only returns one column")
+          e.updateResult(rows(0).get(0, e.dataType))
+        } else {
+          // There is no rows returned, the result should be null.
+          e.updateResult(null)
+        }
+    }
+    queryResults.clear()
   }
 
   /**
@@ -115,6 +166,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
       doPrepare()
+      prepareSubqueries()
       children.foreach(_.prepare())
     }
   }
@@ -200,47 +252,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       inputSchema: Seq[Attribute],
       useSubexprElimination: Boolean = false): () => MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    try {
-      GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate mutable projection, fallback to interpreted", e)
-          () => new InterpretedMutableProjection(expressions, inputSchema)
-        }
-    }
+    GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }
 
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    try {
-      GeneratePredicate.generate(expression, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate predicate, fallback to interpreted", e)
-          InterpretedPredicate.create(expression, inputSchema)
-        }
-    }
+    GeneratePredicate.generate(expression, inputSchema)
   }
 
   protected def newOrdering(
       order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
-    try {
-      GenerateOrdering.generate(order, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate ordering, fallback to interpreted", e)
-          new InterpretedOrdering(order, inputSchema)
-        }
-    }
+    GenerateOrdering.generate(order, inputSchema)
   }
 
   /**
@@ -252,6 +274,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
+}
+
+object SparkPlan {
+  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 private[sql] trait LeafNode extends SparkPlan {

@@ -81,6 +81,7 @@ private[ui] class ExecutorsPage(
           <th>RDD Blocks</th>
           <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
           <th>Disk Used</th>
+          <th>Cores</th>
           <th>Active Tasks</th>
           <th>Failed Tasks</th>
           <th>Complete Tasks</th>
@@ -153,6 +154,7 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
       </td>
+      <td>{info.totalCores}</td>
       {taskData(info.maxTasks, info.activeTasks, info.failedTasks, info.completedTasks,
       info.totalTasks, info.totalDuration, info.totalGCTime)}
       <td sorttable_customkey={info.totalInputBytes.toString}>
@@ -200,6 +202,7 @@ private[ui] class ExecutorsPage(
     val maximumMemory = execInfo.map(_.maxMemory).sum
     val memoryUsed = execInfo.map(_.memoryUsed).sum
     val diskUsed = execInfo.map(_.diskUsed).sum
+    val totalCores = execInfo.map(_.totalCores).sum
     val totalInputBytes = execInfo.map(_.totalInputBytes).sum
     val totalShuffleRead = execInfo.map(_.totalShuffleRead).sum
     val totalShuffleWrite = execInfo.map(_.totalShuffleWrite).sum
@@ -214,6 +217,7 @@ private[ui] class ExecutorsPage(
         <td sorttable_customkey={diskUsed.toString}>
           {Utils.bytesToString(diskUsed)}
         </td>
+        <td>{totalCores}</td>
         {taskData(execInfo.map(_.maxTasks).sum,
         execInfo.map(_.activeTasks).sum,
         execInfo.map(_.failedTasks).sum,
@@ -237,6 +241,7 @@ private[ui] class ExecutorsPage(
         <th>RDD Blocks</th>
         <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
         <th>Disk Used</th>
+        <th>Cores</th>
         <th>Active Tasks</th>
         <th>Failed Tasks</th>
         <th>Complete Tasks</th>
@@ -335,6 +340,7 @@ private[spark] object ExecutorsPage {
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
     val maxTasks = listener.executorToTasksMax.getOrElse(execId, 0)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
@@ -354,6 +360,7 @@ private[spark] object ExecutorsPage {
       rddBlocks,
       memUsed,
       diskUsed,
+      totalCores,
       maxTasks,
       activeTasks,
       failedTasks,

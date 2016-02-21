@@ -22,7 +22,7 @@ import java.net.URL
 import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{future, promise, Await}
+import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -249,10 +249,10 @@ private object FaultToleranceTest extends App with Logging {
 
   /** This includes Client retry logic, so it may take a while if the cluster is recovering. */
   private def assertUsable() = {
-    val f = future {
+    val f = Future {
       try {
         val res = sc.parallelize(0 until 10).collect()
-        assertTrue(res.toList == (0 until 10))
+        assertTrue(res.toList == (0 until 10).toList)
         true
       } catch {
         case e: Exception =>
@@ -283,7 +283,7 @@ private object FaultToleranceTest extends App with Logging {
         numAlive == 1 && numStandby == masters.size - 1 && numLiveApps >= 1
     }
 
-    val f = future {
+    val f = Future {
       try {
         while (!stateValid()) {
           Thread.sleep(1000)
@@ -405,7 +405,7 @@ private object SparkDocker {
   }
 
   private def startNode(dockerCmd: ProcessBuilder) : (String, DockerId, File) = {
-    val ipPromise = promise[String]()
+    val ipPromise = Promise[String]()
     val outFile = File.createTempFile("fault-tolerance-test", "", Utils.createTempDir())
     val outStream: FileWriter = new FileWriter(outFile)
     def findIpAndLog(line: String): Unit = {

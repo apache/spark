@@ -36,9 +36,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
+import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -474,6 +475,7 @@ class DataFrame private[sql](
           val rightCol = withPlan(joined.right).resolve(col).toAttribute.withNullability(true)
           Alias(Coalesce(Seq(leftCol, rightCol)), col)()
         }
+      case NaturalJoin(_) => sys.error("NaturalJoin with using clause is not supported.")
     }
     // The nullability of output of joined could be different than original column,
     // so we can only compare them by exprId
@@ -1383,6 +1385,10 @@ class DataFrame private[sql](
 
   /**
    * Returns the first `n` rows.
+   *
+   * @note this method should only be used if the resulting array is expected to be small, as
+   * all the data is loaded into the driver's memory.
+   *
    * @group action
    * @since 1.3.0
    */
@@ -1682,7 +1688,7 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
-   * Interface for saving the content of the [[DataFrame]] out into external storage.
+   * Interface for saving the content of the [[DataFrame]] out into external storage or streams.
    *
    * @group output
    * @since 1.4.0
@@ -1770,7 +1776,7 @@ class DataFrame private[sql](
   private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
     try {
       df.queryExecution.executedPlan.foreach { plan =>
-        plan.metrics.valuesIterator.foreach(_.reset())
+        plan.resetMetrics()
       }
       val start = System.nanoTime()
       val result = action(df)
