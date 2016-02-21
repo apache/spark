@@ -24,6 +24,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
 import org.apache.spark.Logging
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -108,15 +109,30 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
-   * after adding query plan information to created RDDs for visualization.
-   * Concrete implementations of SparkPlan should override doExecute instead.
+   * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute after
+   * preparations. Concrete implementations of SparkPlan should override doExecute.
    */
-  final def execute(): RDD[InternalRow] = {
+  final def execute(): RDD[InternalRow] = executeQuery {
+    doExecute()
+  }
+
+  /**
+   * Returns the result of this query as a broadcast variable by delegating to doBroadcast after
+   * preparations. Concrete implementations of SparkPlan should override doBroadcast.
+   */
+  final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
+    doExecuteBroadcast()
+  }
+
+  /**
+   * Execute a query after preparing the query and adding query plan information to created RDDs
+   * for visualization.
+   */
+  private final def executeQuery[T](query: => T): T = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
       waitForSubqueries()
-      doExecute()
+      query
     }
   }
 
@@ -191,6 +207,14 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Produces the result of the query as an RDD[InternalRow]
    */
   protected def doExecute(): RDD[InternalRow]
+
+  /**
+   * Overridden by concrete implementations of SparkPlan.
+   * Produces the result of the query as a broadcast variable.
+   */
+  protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+  }
 
   /**
    * Runs this query returning the result as an array.

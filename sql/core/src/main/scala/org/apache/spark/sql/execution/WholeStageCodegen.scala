@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -170,6 +171,10 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 
   override def doExecute(): RDD[InternalRow] = {
     child.execute()
+  }
+
+  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    child.doExecuteBroadcast()
   }
 
   override def supportCodegen: Boolean = false

@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.plans.physical
 
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.catalyst.InternalRow
 
-class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
-  import testImplicits.localSeqToDataFrameHolder
+/**
+ * Marker trait to identify the shape in which tuples are broadcasted. Typical examples of this are
+ * identity (tuples remain unchanged) or hashed (tuples are converted into some hash index).
+ */
+trait BroadcastMode {
+  def transform(rows: Array[InternalRow]): Any
+}
 
-  test("shuffling UnsafeRows in exchange") {
-    val input = (1 to 1000).map(Tuple1.apply)
-    checkAnswer(
-      input.toDF(),
-      plan => ShuffleExchange(SinglePartition, plan),
-      input.map(Row.fromTuple)
-    )
-  }
+/**
+ * IdentityBroadcastMode requires that rows are broadcasted in their original form.
+ */
+case object IdentityBroadcastMode extends BroadcastMode {
+  override def transform(rows: Array[InternalRow]): Array[InternalRow] = rows
 }
