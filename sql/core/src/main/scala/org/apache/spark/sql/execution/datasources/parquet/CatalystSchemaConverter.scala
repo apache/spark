@@ -544,7 +544,7 @@ private[parquet] object CatalystSchemaConverter {
       !name.matches(".*[ ,;{}()\n\t=].*"),
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
-       """.stripMargin.split("\n").mkString(" "))
+       """.stripMargin.split("\n").mkString(" ").trim)
   }
 
   def checkFieldNames(schema: StructType): StructType = {

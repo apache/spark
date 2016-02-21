@@ -22,6 +22,7 @@ import java.util.UUID
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types._
 
 object NamedExpression {
@@ -183,9 +184,9 @@ case class Alias(child: Expression, name: String)(
 
   override def sql: String = {
     val qualifiersString =
-      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+      if (qualifiers.isEmpty) "" else qualifiers.map(quoteIdentifier).mkString("", ".", ".")
     val aliasName = if (isGenerated) s"$name#${exprId.id}" else s"$name"
-    s"${child.sql} AS $qualifiersString`$aliasName`"
+    s"${child.sql} AS $qualifiersString${quoteIdentifier(aliasName)}"
   }
 }
 
@@ -300,9 +301,9 @@ case class AttributeReference(
 
   override def sql: String = {
     val qualifiersString =
-      if (qualifiers.isEmpty) "" else qualifiers.map("`" + _ + "`").mkString("", ".", ".")
+      if (qualifiers.isEmpty) "" else qualifiers.map(quoteIdentifier).mkString("", ".", ".")
     val attrRefName = if (isGenerated) s"$name#${exprId.id}" else s"$name"
-    s"$qualifiersString`$attrRefName`"
+    s"$qualifiersString${quoteIdentifier(attrRefName)}"
   }
 }
 
@@ -310,10 +311,19 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(name: String, dataType: DataType = NullType)
+case class PrettyAttribute(
+    name: String,
+    dataType: DataType = NullType)
   extends Attribute with Unevaluable {
 
+  def this(attribute: Attribute) = this(attribute.name, attribute match {
+    case a: AttributeReference => a.dataType
+    case a: PrettyAttribute => a.dataType
+    case _ => NullType
+  })
+
   override def toString: String = name
+  override def sql: String = toString
 
   override def withNullability(newNullability: Boolean): Attribute =
     throw new UnsupportedOperationException

@@ -71,8 +71,17 @@ trait AnalysisTest extends PlanTest {
     val e = intercept[AnalysisException] {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }
-    assert(expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains),
-      s"Expected to throw Exception contains: ${expectedErrors.mkString(", ")}, " +
-        s"actually we get ${e.getMessage}")
+
+    if (!expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
+      fail(
+        s"""Exception message should contain the following substrings:
+           |
+           |  ${expectedErrors.mkString("\n  ")}
+           |
+           |Actual exception message:
+           |
+           |  ${e.getMessage}
+         """.stripMargin)
+    }
   }
 }

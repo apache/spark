@@ -131,17 +131,17 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     val df = sql(
       """
         |SELECT
-        |  CAST(null as TINYINT),
-        |  CAST(null as SMALLINT),
-        |  CAST(null as INT),
-        |  CAST(null as BIGINT),
-        |  CAST(null as FLOAT),
-        |  CAST(null as DOUBLE),
-        |  CAST(null as DECIMAL(7,2)),
-        |  CAST(null as TIMESTAMP),
-        |  CAST(null as DATE),
-        |  CAST(null as STRING),
-        |  CAST(null as VARCHAR(10))
+        |  CAST(null as TINYINT) as c0,
+        |  CAST(null as SMALLINT) as c1,
+        |  CAST(null as INT) as c2,
+        |  CAST(null as BIGINT) as c3,
+        |  CAST(null as FLOAT) as c4,
+        |  CAST(null as DOUBLE) as c5,
+        |  CAST(null as DECIMAL(7,2)) as c6,
+        |  CAST(null as TIMESTAMP) as c7,
+        |  CAST(null as DATE) as c8,
+        |  CAST(null as STRING) as c9,
+        |  CAST(null as VARCHAR(10)) as c10
         |FROM orc_temp_table limit 1
       """.stripMargin)
 
