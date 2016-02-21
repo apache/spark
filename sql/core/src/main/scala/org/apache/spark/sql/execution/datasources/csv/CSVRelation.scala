@@ -154,12 +154,14 @@ private[csv] class CSVRelation(
     */
   private def findFirstLine(rdd: RDD[String]): String = {
     if (params.isCommentSet) {
-      rdd.take(params.MAX_COMMENT_LINES_IN_HEADER)
-        .find(!_.startsWith(params.comment.toString))
-        .getOrElse(sys.error(s"No uncommented header line in " +
-          s"first ${params.MAX_COMMENT_LINES_IN_HEADER} lines"))
+      val comment = params.comment.toString
+      rdd.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(comment)
+      }.first()
     } else {
-      rdd.first()
+      rdd.filter { line =>
+        line.trim.nonEmpty
+      }.first()
     }
   }
 }
