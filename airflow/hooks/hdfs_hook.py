@@ -3,7 +3,7 @@ from airflow import configuration
 
 try:
     snakebite_imported = True
-    from snakebite.client import Client, HAClient, Namenode
+    from snakebite.client import Client, HAClient, Namenode, AutoConfigClient
 except ImportError:
     snakebite_imported = False
 
@@ -31,17 +31,25 @@ class HDFSHook(BaseHook):
         '''
         Returns a snakebite HDFSClient object.
         '''
+        connections = self.get_connections(self.hdfs_conn_id)
+
         use_sasl = False
+        effective_user = connections[0].login
         if configuration.get('core', 'security') == 'kerberos':
             use_sasl = True
 
-        connections = self.get_connections(self.hdfs_conn_id)
         client = None
         if len(connections) == 1:
-            client = Client(connections[0].host, connections[0].port,use_sasl=use_sasl)
+            autoconfig = connections[0].extra_dejson.get('autoconfig', 'false')
+            if autoconfig == 'true':
+                client = AutoConfigClient(effective_user=effective_user, use_sasl=use_sasl)
+            else:
+                client = Client(connections[0].host, connections[0].port,
+                                effective_user=effective_user, use_sasl=use_sasl)
         elif len(connections) > 1:
             nn = [Namenode(conn.host, conn.port) for conn in connections]
-            client = HAClient(nn, use_sasl=use_sasl)
+            client = HAClient(nn, effective_user=effective_user, use_sasl=use_sasl)
         else:
             raise HDFSHookException("conn_id doesn't exist in the repository")
+        
         return client
