@@ -322,7 +322,9 @@ class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Loggin
     val t1 = millis { df.describe() }
     logDebug(s"T1 = $t1")
     logDebug("*** Just quantiles ***")
-    val t2 = millis { StatFunctions.multipleApproxQuantiles(df, Seq("col1"), Seq(0.1, 0.25, 0.5, 0.75, 0.9), 0.01) }
+    val t2 = millis {
+      StatFunctions.multipleApproxQuantiles(df, Seq("col1"), Seq(0.1, 0.25, 0.5, 0.75, 0.9), 0.01)
+    }
     logDebug(s"T1 = $t1, T2 = $t2")
   }
 

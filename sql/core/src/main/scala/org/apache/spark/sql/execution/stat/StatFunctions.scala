@@ -39,16 +39,17 @@ private[sql] object StatFunctions extends Logging {
    *
    * Note on the target error.
    *
-   * The result of this algorithm has the following deterministic bound: if the DataFrame has N elements and if we
-   * request the quantile `phi` up to error `epsi`, then the algorithm will return a sample `x` from the DataFrame so
-   * that the *exact* rank of `x` close to (phi * N). More precisely:
+   * The result of this algorithm has the following deterministic bound:
+   * if the DataFrame has N elements and if we request the quantile `phi` up to error `epsi`,
+   * then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` close to (phi * N). More precisely:
    *
    *   floor((phi - epsi) * N) <= rank(x) <= ceil((phi + epsi) * N)
    *
    * Note on the algorithm used.
    *
-   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed optimizations). The
-   * algorithm was first present in the following article:
+   * This method implements a variation of the Greenwald-Khanna algorithm
+   * (with some speed optimizations). The algorithm was first present in the following article:
    * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
    * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
    *
@@ -88,14 +89,16 @@ private[sql] object StatFunctions extends Logging {
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.schema(colName)
       require(field.dataType.isInstanceOf[NumericType],
-        s"Quantile calculation for column $colName with data type ${field.dataType} is not supported.")
+        s"Quantile calculation for column $colName with data type ${field.dataType}" +
+        " is not supported.")
       Column(Cast(Column(colName).expr, DoubleType))
     }
     val emptySummaries = Array.fill(cols.size)(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))
 
-    // Note that it works more or less by accident as `rdd.aggregate` is not a pure function: this function returns
-    // the same array as given in the input (because `aggregate` reuses the same argument).
+    // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
+    // this function returns the same array as given in the input (because `aggregate` reuses
+    // the same argument).
     def apply(summaries: Array[QuantileSummaries], row: Row): Array[QuantileSummaries] = {
       var i = 0
       while (i < summaries.length) {
@@ -105,7 +108,9 @@ private[sql] object StatFunctions extends Logging {
       summaries
     }
 
-    def merge(sum1: Array[QuantileSummaries], sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
+    def merge(
+        sum1: Array[QuantileSummaries],
+        sum2: Array[QuantileSummaries]): Array[QuantileSummaries] = {
       sum1.zip(sum2).map { case (s1, s2) => s1.compress().merge(s2.compress()) }
     }
     val summaries = df.select(columns: _*).rdd.aggregate(emptySummaries)(apply, merge)
@@ -119,15 +124,16 @@ private[sql] object StatFunctions extends Logging {
    * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
    * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
    *
-   * In order to optimize for speed, it maintains an internal buffer of the last seen samples, and only inserts them
-   * after crossing a certain size threshold. This guarantees a near-constant runtime complexity compared to the
-   * original algorithm.
+   * In order to optimize for speed, it maintains an internal buffer of the last seen samples,
+   * and only inserts them after crossing a certain size threshold. This guarantees a near-constant
+   * runtime complexity compared to the original algorithm.
    *
-   * @param compressThreshold the compression threshold: after the internal buffer of statistics crosses this size, it
-   *                          attempts to compress the statistics together
+   * @param compressThreshold the compression threshold: after the internal buffer of statistics
+   *                          crosses this size, it attempts to compress the statistics together
    * @param epsilon the target precision
    * @param sampled a buffer of quantile statistics. See the G-K article for more details
-   * @param count the count of all the elements *inserted in the sampled buffer* (excluding the head buffer)
+   * @param count the count of all the elements *inserted in the sampled buffer*
+   *              (excluding the head buffer)
    * @param headSampled a buffer of latest samples seen so far
    */
   class QuantileSummaries(
@@ -149,8 +155,8 @@ private[sql] object StatFunctions extends Logging {
     }
 
     /**
-     * Inserts an array of (unsorted samples) in a batch, sorting the array first to traverse the summary statistics in
-     * a single batch.
+     * Inserts an array of (unsorted samples) in a batch, sorting the array first to traverse
+     * the summary statistics in a single batch.
      *
      * This method does not modify the current object and returns if necessary a new copy.
      *
@@ -177,11 +183,13 @@ private[sql] object StatFunctions extends Logging {
 
         // If it is the first one to insert, of if it is the last one
         currentCount += 1
-        val delta = if (newSamples.isEmpty || (sampleIdx == sampled.size && opsIdx == sorted.length - 1)) {
-          0
-        } else {
-          math.floor(2 * epsilon * currentCount).toInt
-        }
+        val delta =
+          if (newSamples.isEmpty || (sampleIdx == sampled.size && opsIdx == sorted.length - 1)) {
+            0
+          } else {
+            math.floor(2 * epsilon * currentCount).toInt
+          }
+
         val tuple = Stats(currentSample, 1, delta)
         newSamples.append(tuple)
         opsIdx += 1
@@ -200,7 +208,8 @@ private[sql] object StatFunctions extends Logging {
       val inserted = this.withHeadInserted
       assert(inserted.headSampled.isEmpty)
       assert(inserted.count == count + headSampled.size)
-      val compressed = compressImmut(inserted.sampled, mergeThreshold = 2 * epsilon * inserted.count)
+      val compressed =
+        compressImmut(inserted.sampled, mergeThreshold = 2 * epsilon * inserted.count)
       new QuantileSummaries(compressThreshold, epsilon, compressed, inserted.count)
     }
 
@@ -216,7 +225,9 @@ private[sql] object StatFunctions extends Logging {
         val res: ArrayBuffer[Stats] = ArrayBuffer.empty
 
         @tailrec
-        def mergeCurrent(thisList: List[Stats], otherList: List[Stats]): Unit = (thisList, otherList) match {
+        def mergeCurrent(
+            thisList: List[Stats],
+            otherList: List[Stats]): Unit = (thisList, otherList) match {
           case (Nil, l) =>
             res.appendAll(l)
           case (l, Nil) =>
@@ -267,8 +278,8 @@ private[sql] object StatFunctions extends Logging {
   }
 
   object QuantileSummaries {
-    // TODO(tjhunter) more tuning could be done one the constants here, but for now the main cost of the algorithm is
-    // accessing the data in SQL.
+    // TODO(tjhunter) more tuning could be done one the constants here, but for now
+    // the main cost of the algorithm is accessing the data in SQL.
     /**
      * The default value for the compression threshold.
      */
@@ -292,7 +303,9 @@ private[sql] object StatFunctions extends Logging {
      */
     case class Stats(value: Double, g: Int, delta: Int)
 
-    private def compressImmut(currentSamples: IndexedSeq[Stats], mergeThreshold: Double): ArrayBuffer[Stats] = {
+    private def compressImmut(
+        currentSamples: IndexedSeq[Stats],
+        mergeThreshold: Double): ArrayBuffer[Stats] = {
       val res: ArrayBuffer[Stats] = ArrayBuffer.empty
       if (currentSamples.isEmpty) {
         return res
