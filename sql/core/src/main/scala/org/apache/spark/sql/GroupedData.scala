@@ -302,9 +302,9 @@ class GroupedData protected[sql](
     val maxValues = df.sqlContext.conf.getConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES)
     // Get the distinct values of the column and sort them so its consistent
     val values = df.select(pivotColumn)
-      .distinct()
+      .distinct
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
-      .map(_.get(0))
+      .mapRows((_: Row).get(0))
       .take(maxValues + 1)
       .toSeq
 

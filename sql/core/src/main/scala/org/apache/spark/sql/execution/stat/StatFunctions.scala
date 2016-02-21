@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.stat
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.{Cast, GenericMutableRow}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.functions._
@@ -30,6 +30,12 @@ private[sql] object StatFunctions extends Logging {
   /** Calculate the Pearson Correlation Coefficient for the given columns */
   private[sql] def pearsonCorrelation(df: DataFrame, cols: Seq[String]): Double = {
     val counts = collectStatisticalData(df, cols, "correlation")
+    counts.Ck / math.sqrt(counts.MkX * counts.MkY)
+  }
+
+  /** Calculate the Pearson Correlation Coefficient for the given columns */
+  private[sql] def pearsonCorrelation[T: Encoder](ds: Dataset[T], cols: Seq[String]): Double = {
+    val counts = collectStatisticalData(ds, cols, "correlation")
     counts.Ck / math.sqrt(counts.MkX * counts.MkY)
   }
 
@@ -92,6 +98,25 @@ private[sql] object StatFunctions extends Logging {
     })
   }
 
+  private def collectStatisticalData[T: Encoder](
+      ds: Dataset[T], cols: Seq[String], functionName: String): CovarianceCounter = {
+    require(cols.length == 2, s"Currently $functionName calculation is supported " +
+      "between two columns.")
+    cols.map(name => (name, ds.schema.fields.find(_.name == name))).foreach { case (name, data) =>
+      require(data.nonEmpty, s"Couldn't find column with name $name")
+      require(data.get.dataType.isInstanceOf[NumericType], s"Currently $functionName calculation " +
+        s"for columns with dataType ${data.get.dataType} not supported.")
+    }
+    val columns = cols.map(n => Column(Cast(Column(n).expr, DoubleType)))
+    ds.select(columns: _*).queryExecution.toRdd.aggregate(new CovarianceCounter)(
+      seqOp = (counter, row) => {
+        counter.add(row.getDouble(0), row.getDouble(1))
+      },
+      combOp = (baseCounter, other) => {
+        baseCounter.merge(other)
+      })
+  }
+
   /**
    * Calculate the covariance of two numerical columns of a DataFrame.
    * @param df The DataFrame
@@ -103,10 +128,21 @@ private[sql] object StatFunctions extends Logging {
     counts.cov
   }
 
+  /**
+   * Calculate the covariance of two numerical columns of a DataFrame.
+   * @param ds The DataFrame
+   * @param cols the column names
+   * @return the covariance of the two columns.
+   */
+  private[sql] def calculateCov[T: Encoder](ds: Dataset[T], cols: Seq[String]): Double = {
+    val counts = collectStatisticalData(ds, cols, "covariance")
+    counts.cov
+  }
+
   /** Generate a table of frequencies for the elements of two columns. */
   private[sql] def crossTabulate(df: DataFrame, col1: String, col2: String): DataFrame = {
     val tableName = s"${col1}_$col2"
-    val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt)
+    val counts = df.groupBy(col1, col2).agg(count("*")).take(1e6.toInt).map(_._1)
     if (counts.length == 1e6.toInt) {
       logWarning("The maximum limit of 1e6 pairs have been collected, which may not be all of " +
         "the pairs. Please try reducing the amount of distinct items in your columns.")

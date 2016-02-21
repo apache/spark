@@ -723,6 +723,10 @@ class SQLContext private[sql](
     catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
+  private[sql] def registerDatasetAsTable[T: Encoder](ds: Dataset[T], tableName: String): Unit = {
+    catalog.registerTable(TableIdentifier(tableName), ds.logicalPlan)
+  }
+
   /**
    * Drops the temporary table with the given table name in the catalog. If the table has been
    * cached/persisted before, it's also unpersisted.
