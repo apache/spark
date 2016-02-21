@@ -41,6 +41,8 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     sqlContext.streams.active.foreach(_.stop())
     assert(sqlContext.streams.active.isEmpty)
     assert(addedListeners.isEmpty)
+    // Make sure we don't leak any events to the next test
+    sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
 
   test("single listener") {
