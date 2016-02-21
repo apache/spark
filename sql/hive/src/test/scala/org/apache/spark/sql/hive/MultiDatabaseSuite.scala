@@ -26,9 +26,9 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   private def checkTablePath(dbName: String, tableName: String): Unit = {
     val metastoreTable = hiveContext.catalog.client.getTable(dbName, tableName)
-    val expectedPath = hiveContext.catalog.client.getDatabase(dbName).location + "/" + tableName
+    val expectedPath = hiveContext.catalog.client.getDatabase(dbName).locationUri + "/" + tableName
 
-    assert(metastoreTable.serdeProperties("path") === expectedPath)
+    assert(metastoreTable.storage.serdeProperties("path") === expectedPath)
   }
 
   test(s"saveAsTable() to non-default database - with USE - Overwrite") {
