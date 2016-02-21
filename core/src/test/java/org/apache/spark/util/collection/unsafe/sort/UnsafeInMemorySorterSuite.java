@@ -54,7 +54,7 @@ public class UnsafeInMemorySorterSuite {
       mock(PrefixComparator.class),
       100);
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
-    assert(!iter.hasNext());
+    Assert.assertFalse(iter.hasNext());
   }
 
   @Test
