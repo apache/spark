@@ -209,7 +209,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy('a, 'c)('a, 'c, count('a).as("a3")).orderBy('b.asc),
-    "cannot resolve" :: "'b'" :: "given input columns" :: "[a, c, a3]" :: Nil)
+    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, c, a3]" :: Nil)
 
   errorTest(
     "non-boolean filters",
