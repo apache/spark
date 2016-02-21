@@ -610,7 +610,7 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.sqlCtx.createDataFrame([row1], schema)
         df2 = self.sqlCtx.createDataFrame([row2], schema)
 
-        result = df1.unionAll(df2).collect()
+        result = df1.unionAll(df2).orderBy("label").collect()
         self.assertEqual(
             result,
             [
