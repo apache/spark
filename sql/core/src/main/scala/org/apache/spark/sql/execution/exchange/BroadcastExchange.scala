@@ -58,11 +58,8 @@ case class BroadcastExchange(
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
       SQLExecution.withExecutionId(sparkContext, executionId) {
-        // Note that we use .execute().collect() because we don't want to convert data to Scala
-        // types
-        val input: Array[InternalRow] = child.execute().map { row =>
-          row.copy()
-        }.collect()
+        // Note that we use .executeCollect() because we don't want to convert data to Scala types
+        val input: Array[InternalRow] = child.executeCollect()
 
         // Construct and broadcast the relation.
         sparkContext.broadcast(mode.transform(input))
