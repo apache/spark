@@ -548,7 +548,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
                 "org.apache.spark.sql.json",
                 schema,
                 Map.empty[String, String])
-            }.getMessage.contains("key not found: path"),
+            }.getMessage.contains("'path' is not specified"),
             "We should complain that path is not specified.")
         }
       }
