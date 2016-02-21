@@ -95,7 +95,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     def right(p: LogicalPlan): Boolean = p match {
-      case j @ Join(_, right, _, _) => j.broadcastHintLeft || smallOutput(right)
+      case j @ Join(_, right, _, _) => j.broadcastHintRight || smallOutput(right)
       case _ => false
     }
   }
