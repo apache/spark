@@ -148,7 +148,7 @@ private[deploy] class Worker(
   // time so that we can register with all masters.
   private val registerMasterThreadPool = ThreadUtils.newDaemonCachedThreadPool(
     "worker-register-master-threadpool",
-    masterRpcAddresses.size // Make sure we can register with all masters at the same time
+    masterRpcAddresses.length // Make sure we can register with all masters at the same time
   )
 
   var coresUsed = 0

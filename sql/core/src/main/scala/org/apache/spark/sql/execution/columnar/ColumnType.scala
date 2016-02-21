@@ -549,7 +549,7 @@ private[columnar] object LARGE_DECIMAL {
 private[columnar] case class STRUCT(dataType: StructType)
   extends ColumnType[UnsafeRow] with DirectCopyColumnType[UnsafeRow] {
 
-  private val numOfFields: Int = dataType.fields.size
+  private val numOfFields: Int = dataType.fields.length
 
   override def defaultSize: Int = 20
 

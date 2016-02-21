@@ -284,7 +284,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       if (selectedVertices.count > 1) {
         found = true
         val collectedVertices = selectedVertices.collect()
-        retVal = collectedVertices(Random.nextInt(collectedVertices.size))
+        retVal = collectedVertices(Random.nextInt(collectedVertices.length))
       }
     }
    retVal

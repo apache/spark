@@ -58,8 +58,8 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val accuracy: Double = predictionAndLabels.map { case (predictions, labels) =>
-    labels.intersect(predictions).size.toDouble /
-      (labels.size + predictions.size - labels.intersect(predictions).size)}.sum / numDocs
+    labels.intersect(predictions).length.toDouble /
+      (labels.length + predictions.length - labels.intersect(predictions).length)}.sum / numDocs
 
 
   /**
@@ -67,7 +67,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val hammingLoss: Double = predictionAndLabels.map { case (predictions, labels) =>
-    labels.size + predictions.size - 2 * labels.intersect(predictions).size
+    labels.length + predictions.length - 2 * labels.intersect(predictions).length
   }.sum / (numDocs * numLabels)
 
   /**
@@ -75,8 +75,8 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val precision: Double = predictionAndLabels.map { case (predictions, labels) =>
-    if (predictions.size > 0) {
-      predictions.intersect(labels).size.toDouble / predictions.size
+    if (predictions.length > 0) {
+      predictions.intersect(labels).length.toDouble / predictions.length
     } else {
       0
     }
@@ -87,7 +87,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val recall: Double = predictionAndLabels.map { case (predictions, labels) =>
-    labels.intersect(predictions).size.toDouble / labels.size
+    labels.intersect(predictions).length.toDouble / labels.length
   }.sum / numDocs
 
   /**
@@ -95,7 +95,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    */
   @Since("1.2.0")
   lazy val f1Measure: Double = predictionAndLabels.map { case (predictions, labels) =>
-    2.0 * predictions.intersect(labels).size / (predictions.size + labels.size)
+    2.0 * predictions.intersect(labels).length / (predictions.length + labels.length)
   }.sum / numDocs
 
   private lazy val tpPerClass = predictionAndLabels.flatMap { case (predictions, labels) =>
