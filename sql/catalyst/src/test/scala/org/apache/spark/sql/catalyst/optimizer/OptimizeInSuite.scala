@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, UnresolvedAttribute}
-// For implicit conversions
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -34,7 +33,7 @@ class OptimizeInSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("AnalysisNodes", Once,
-        EliminateSubQueries) ::
+        EliminateSubqueryAliases) ::
       Batch("ConstantFolding", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
