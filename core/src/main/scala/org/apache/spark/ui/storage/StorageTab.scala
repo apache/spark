@@ -43,7 +43,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
 
   private[ui] val _rddInfoMap = mutable.Map[Int, RDDInfo]() // exposed for testing
 
-  def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.activeStorageStatusList
+  def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
   /** Filter RDD info to include only those with cached partitions */
   def rddInfoList: Seq[RDDInfo] = synchronized {

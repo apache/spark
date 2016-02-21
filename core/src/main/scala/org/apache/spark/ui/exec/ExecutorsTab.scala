@@ -61,7 +61,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   val executorToLogUrls = HashMap[String, Map[String, String]]()
   val executorIdToData = HashMap[String, ExecutorUIData]()
 
-  def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.activeStorageStatusList
+  def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
 
   def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
 

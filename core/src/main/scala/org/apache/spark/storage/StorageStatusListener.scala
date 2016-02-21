@@ -36,7 +36,7 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
   private[storage] val deadExecutorStorageStatus = new mutable.ListBuffer[StorageStatus]()
   private[this] val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
 
-  def activeStorageStatusList: Seq[StorageStatus] = synchronized {
+  def storageStatusList: Seq[StorageStatus] = synchronized {
     executorIdToStorageStatus.values.toSeq
   }
 
@@ -59,7 +59,7 @@ class StorageStatusListener(conf: SparkConf) extends SparkListener {
 
   /** Update storage status list to reflect the removal of an RDD from the cache */
   private def updateStorageStatus(unpersistedRDDId: Int) {
-    activeStorageStatusList.foreach { storageStatus =>
+    storageStatusList.foreach { storageStatus =>
       storageStatus.rddBlocksById(unpersistedRDDId).foreach { case (blockId, _) =>
         storageStatus.removeBlock(blockId)
       }

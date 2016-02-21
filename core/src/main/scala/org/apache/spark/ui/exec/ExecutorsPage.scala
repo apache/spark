@@ -327,8 +327,10 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  def getExecInfo(listener: ExecutorsListener, statusId: Int, isActive: Boolean)
-     : ExecutorSummary = {
+  def getExecInfo(
+      listener: ExecutorsListener,
+      statusId: Int,
+      isActive: Boolean): ExecutorSummary = {
     val status = if (isActive) {
       listener.activeStorageStatusList(statusId)
     } else {
