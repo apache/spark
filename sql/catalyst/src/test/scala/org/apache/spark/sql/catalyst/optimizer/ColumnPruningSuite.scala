@@ -140,11 +140,17 @@ class ColumnPruningSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           Project(Seq($"x.key"), Subquery("x", input)),
-          BroadcastHint(
-            Project(Seq($"y.key"), Subquery("y", input))),
+          Project(Seq($"y.key"),
+            BroadcastHint(Subquery("y", input))),
           Inner, None)).analyze
 
     comparePlans(optimized, expected)
+
+    // Even BroadcastHint is pushed down after additional Project,
+    // We still know the right plan of Join is with broadcast hint.
+    assert(optimized.collect {
+      case j @ Join(_, _, _, _) if j.broadcastHintRight == true => 1
+    }.nonEmpty)
   }
 
   // todo: add more tests for column pruning

@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
@@ -61,7 +61,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case ExtractEquiJoinKeys(
-             LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+             LeftSemi, leftKeys, rightKeys, condition, left, right)
+             if CanBroadcast.right(plan) =>
         joins.BroadcastLeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
@@ -79,11 +80,23 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Matches a plan whose output should be small enough to be used in broadcast join.
    */
   object CanBroadcast {
-    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
-      case BroadcastHint(p) => Some(p)
-      case p if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
-        p.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold => Some(p)
-      case _ => None
+    def smallOutput(p: LogicalPlan): Boolean = {
+      if (sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+        p.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+        true
+      } else {
+        false
+      }
+    }
+
+    def left(p: LogicalPlan): Boolean = p match {
+      case j @ Join(left, _, _, _) => j.broadcastHintLeft || smallOutput(left)
+      case _ => false
+    }
+
+    def right(p: LogicalPlan): Boolean = p match {
+      case j @ Join(_, right, _, _) => j.broadcastHintLeft || smallOutput(right)
+      case _ => false
     }
   }
 
@@ -107,11 +120,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // --- Inner joins --------------------------------------------------------------------------
 
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+          if CanBroadcast.right(plan) =>
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, Inner, BuildRight, condition, planLater(left), planLater(right)))
 
-      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+          if CanBroadcast.left(plan) =>
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
 
@@ -123,12 +138,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Outer joins --------------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(
-          LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
+          LeftOuter, leftKeys, rightKeys, condition, left, right)
+          if CanBroadcast.right(plan) =>
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(
-          RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
+          RightOuter, leftKeys, rightKeys, condition, left, right)
+          if CanBroadcast.left(plan) =>
         Seq(joins.BroadcastHashJoin(
           leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
 
@@ -248,12 +265,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BroadcastNestedLoop extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(
-             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemi =>
+      case logical.Join(left, right, joinType, condition)
+          if CanBroadcast.left(plan) && joinType != LeftSemi =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
-      case logical.Join(
-             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemi =>
+      case logical.Join(left, right, joinType, condition)
+          if CanBroadcast.right(plan) && joinType != LeftSemi =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
       case _ => Nil

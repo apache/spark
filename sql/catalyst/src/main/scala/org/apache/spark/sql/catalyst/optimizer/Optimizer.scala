@@ -391,12 +391,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
   /** Applies a projection only when the child is producing unnecessary attributes */
   private def prunedChild(c: LogicalPlan, allReferences: AttributeSet) =
     if ((c.outputSet -- allReferences.filter(c.outputSet.contains)).nonEmpty) {
-      c match {
-        case BroadcastHint(p) =>
-          BroadcastHint(Project(allReferences.filter(c.outputSet.contains).toSeq, p))
-        case _ =>
-          Project(allReferences.filter(c.outputSet.contains).toSeq, c)
-      }
+      Project(allReferences.filter(c.outputSet.contains).toSeq, c)
     } else {
       c
     }
