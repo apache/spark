@@ -231,12 +231,15 @@ class GroupedIterator(object):
 
     def __init__(self, inputs):
         self.inputs = BufferedIterator(inputs)
-        self.current_input = inputs.next()
+        self.current_input = next(inputs)
         self.current_key = self.current_input[0]
         self.current_values = GroupValuesIterator(self)
 
     def __iter__(self):
         return self
+
+    def __next__(self):
+        return self.next()
 
     def next(self):
         if self.current_values is None:
@@ -248,11 +251,11 @@ class GroupedIterator(object):
 
     def _fetch_next_group(self):
         if self.current_input is None:
-            self.current_input = self.inputs.next()
+            self.current_input = next(self.inputs)
 
         # Skip to next group, or consume all inputs and throw StopIteration exception.
         while self.current_input[0] == self.current_key:
-            self.current_input = self.inputs.next()
+            self.current_input = next(self.inputs)
 
         self.current_key = self.current_input[0]
         self.current_values = GroupValuesIterator(self)
@@ -267,6 +270,9 @@ class GroupValuesIterator(object):
     def __iter__(self):
         return self
 
+    def __next__(self):
+        return self.next()
+
     def next(self):
         if self.outter.current_input is None:
             self._fetch_next_value()
@@ -277,7 +283,7 @@ class GroupValuesIterator(object):
 
     def _fetch_next_value(self):
         if self.outter.inputs.head()[0] == self.outter.current_key:
-            self.outter.current_input = self.outter.inputs.next()
+            self.outter.current_input = next(self.outter.inputs)
         else:
             raise StopIteration
 
@@ -292,9 +298,12 @@ class BufferedIterator(object):
     def __iter__(self):
         return self
 
+    def __next__(self):
+        return self.next()
+
     def next(self):
         if self.buffered is None:
-            return self.iterator.next()
+            return next(self.iterator)
         else:
             item = self.buffered
             self.buffered = None
@@ -302,7 +311,7 @@ class BufferedIterator(object):
 
     def head(self):
         if self.buffered is None:
-            self.buffered = self.iterator.next()
+            self.buffered = next(self.iterator)
         return self.buffered
 
 
