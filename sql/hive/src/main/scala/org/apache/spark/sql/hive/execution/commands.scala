@@ -21,7 +21,7 @@ import org.apache.hadoop.hive.metastore.MetaStoreUtils
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
@@ -220,7 +220,7 @@ case class CreateMetastoreDataSourceAsSelect(
             provider,
             optionsWithPath)
           val createdRelation = LogicalRelation(resolved.relation)
-          EliminateSubQueries(sqlContext.catalog.lookupRelation(tableIdent)) match {
+          EliminateSubqueryAliases(sqlContext.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               if (l.relation != createdRelation.relation) {
                 val errorDescription =

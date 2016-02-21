@@ -350,7 +350,7 @@ case class InsertIntoTable(
  *                     key is the alias of the CTE definition,
  *                     value is the CTE definition.
  */
-case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends UnaryNode {
+case class With(child: LogicalPlan, cteRelations: Map[String, SubqueryAlias]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -623,7 +623,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
-case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
+case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }

@@ -35,10 +35,10 @@ trait AnalysisTest extends PlanTest {
     caseInsensitiveCatalog.registerTable(TableIdentifier("TaBlE"), TestRelations.testRelation)
 
     new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     } ->
     new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
   }
 

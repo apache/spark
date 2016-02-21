@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Rand
@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class CollapseProjectSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Subqueries", FixedPoint(10), EliminateSubQueries) ::
+      Batch("Subqueries", FixedPoint(10), EliminateSubqueryAliases) ::
         Batch("CollapseProject", Once, CollapseProject) :: Nil
   }
 

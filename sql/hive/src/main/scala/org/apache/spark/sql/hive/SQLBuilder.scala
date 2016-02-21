@@ -102,14 +102,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       val childrenSql = p.children.map(toSQL(_))
       childrenSql.mkString(" UNION ALL ")
 
-    case p: Subquery =>
+    case p: SubqueryAlias =>
       p.child match {
         // Persisted data source relation
         case LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
           s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
         // Parentheses is not used for persisted data source relations
         // e.g., select x.c1 from (t1) as x inner join (t1) as y on x.c1 = y.c1
-        case Subquery(_, _: LogicalRelation | _: MetastoreRelation) =>
+        case SubqueryAlias(_, _: LogicalRelation | _: MetastoreRelation) =>
           build(toSQL(p.child), "AS", p.alias)
         case _ =>
           build("(" + toSQL(p.child) + ")", "AS", p.alias)
@@ -215,7 +215,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           wrapChildWithSubquery(plan)
 
         case plan @ Project(_,
-          _: Subquery
+          _: SubqueryAlias
             | _: Filter
             | _: Join
             | _: MetastoreRelation
@@ -237,7 +237,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
               a.withQualifiers(alias :: Nil)
           }.asInstanceOf[NamedExpression])
 
-          Project(aliasedProjectList, Subquery(alias, child))
+          Project(aliasedProjectList, SubqueryAlias(alias, child))
       }
     }
   }

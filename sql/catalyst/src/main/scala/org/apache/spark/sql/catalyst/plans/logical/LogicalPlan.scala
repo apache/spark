@@ -128,8 +128,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * can do better should override this function.
    */
   def sameResult(plan: LogicalPlan): Boolean = {
-    val cleanLeft = EliminateSubQueries(this)
-    val cleanRight = EliminateSubQueries(plan)
+    val cleanLeft = EliminateSubqueryAliases(this)
+    val cleanRight = EliminateSubqueryAliases(plan)
 
     cleanLeft.getClass == cleanRight.getClass &&
       cleanLeft.children.size == cleanRight.children.size && {

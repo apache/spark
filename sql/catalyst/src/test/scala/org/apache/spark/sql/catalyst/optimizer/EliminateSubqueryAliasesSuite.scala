@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -28,10 +28,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
 
-class EliminateSubQueriesSuite extends PlanTest with PredicateHelper {
+class EliminateSubqueryAliasesSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("EliminateSubQueries", Once, EliminateSubQueries) :: Nil
+    val batches = Batch("EliminateSubqueryAliases", Once, EliminateSubqueryAliases) :: Nil
   }
 
   private def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -46,13 +46,13 @@ class EliminateSubQueriesSuite extends PlanTest with PredicateHelper {
 
   test("eliminate top level subquery") {
     val input = LocalRelation('a.int, 'b.int)
-    val query = Subquery("a", input)
+    val query = SubqueryAlias("a", input)
     comparePlans(afterOptimization(query), input)
   }
 
   test("eliminate mid-tree subquery") {
     val input = LocalRelation('a.int, 'b.int)
-    val query = Filter(TrueLiteral, Subquery("a", input))
+    val query = Filter(TrueLiteral, SubqueryAlias("a", input))
     comparePlans(
       afterOptimization(query),
       Filter(TrueLiteral, LocalRelation('a.int, 'b.int)))
@@ -60,10 +60,10 @@ class EliminateSubQueriesSuite extends PlanTest with PredicateHelper {
 
   test("eliminate multiple subqueries") {
     val input = LocalRelation('a.int, 'b.int)
-    val query = Filter(TrueLiteral, Subquery("c", Subquery("b", Subquery("a", input))))
+    val query = Filter(TrueLiteral,
+      SubqueryAlias("c", SubqueryAlias("b", SubqueryAlias("a", input))))
     comparePlans(
       afterOptimization(query),
       Filter(TrueLiteral, LocalRelation('a.int, 'b.int)))
   }
-
 }

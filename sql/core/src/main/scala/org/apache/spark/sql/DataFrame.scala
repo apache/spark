@@ -671,7 +671,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def as(alias: String): DataFrame = withPlan {
-    Subquery(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**

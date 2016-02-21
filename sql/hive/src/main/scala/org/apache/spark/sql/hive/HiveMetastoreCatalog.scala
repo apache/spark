@@ -416,17 +416,17 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     if (table.properties.get("spark.sql.sources.provider").isDefined) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
-      val tableWithQualifiers = Subquery(qualifiedTableName.name, dataSourceTable)
+      val tableWithQualifiers = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
-      alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
     } else if (table.tableType == VirtualView) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => Subquery(table.name, hive.parseSql(viewText))
-        case Some(aliasText) => Subquery(aliasText, hive.parseSql(viewText))
+        case None => SubqueryAlias(table.name, hive.parseSql(viewText))
+        case Some(aliasText) => SubqueryAlias(aliasText, hive.parseSql(viewText))
       }
     } else {
       MetastoreRelation(qualifiedTableName.database, qualifiedTableName.name, alias)(table)(hive)
@@ -564,7 +564,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         case relation: MetastoreRelation if hive.convertMetastoreParquet &&
           relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
-          Subquery(relation.alias.getOrElse(relation.tableName), parquetRelation)
+          SubqueryAlias(relation.alias.getOrElse(relation.tableName), parquetRelation)
       }
     }
   }
