@@ -286,3 +286,26 @@ most likely by deleting rows in the "Task Instances" view in the UI.
 Tasks are instructed to verify their state as part of the heartbeat routine,
 and terminate themselves upon figuring out that they are in this "undead"
 state.
+
+
+Cluster Policy
+''''''''''''''
+
+Your local airflow settings file can define a ``policy`` function that
+has the ability to mutate task attributes based on other task or DAG
+attributes. It receives a single argument as a reference to task objects,
+and is expected to alter its attributes.
+
+For example, this function could apply a specific queue property when
+using a specific operator, or enforce a task timeout policy, making sure
+that no tasks run for more than 48 hours. Here's an example of what this
+may look like inside your ``airflow_settings.py``:
+
+
+.. code:: python
+
+    def policy(task):
+        if task.__class__.__name__ == 'HivePartitionSensor':
+            task.queue = "sensor_queue"
+        if task.timeout > timedelta(hours=48):
+            task.timeout = timedelta(hours=48)
