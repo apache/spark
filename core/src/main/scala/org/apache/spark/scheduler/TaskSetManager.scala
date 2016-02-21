@@ -202,7 +202,7 @@ private[spark] class TaskSetManager(
                 ", but there are no executors alive there.")
           }
         }
-        case _ => Unit
+        case _ =>
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
       for (rack <- sched.getRackForHost(loc.host)) {

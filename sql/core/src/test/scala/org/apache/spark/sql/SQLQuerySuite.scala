@@ -1566,7 +1566,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val e = intercept[AnalysisException] {
         sql(s)
       }
-      e.message.contains("at least one time unit should be given for interval literal")
+      assert(e.message.contains("at least one time unit should be given for interval literal"))
     }
 
     checkIntervalParseError("select interval")
