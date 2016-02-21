@@ -229,6 +229,8 @@ class FileBasedWriteAheadLogSuite
      */
     val numThreads = 8
     val tpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "wal-test-thread-pool")
+    val executionContext = ExecutionContext.fromExecutorService(tpool)
+
     class GetMaxCounter {
       private val value = new AtomicInteger()
       @volatile private var max: Int = 0
@@ -258,7 +260,8 @@ class FileBasedWriteAheadLogSuite
       val t = new Thread() {
         override def run() {
           // run the calculation on a separate thread so that we can release the latch
-          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
+          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](executionContext,
+            testSeq, handle)
           collected = iterator.toSeq
         }
       }
