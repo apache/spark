@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.exchange
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.SparkPlanTest
 import org.apache.spark.sql.test.SharedSQLContext
 
-class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
+class ShuffleExchangeSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.localSeqToDataFrameHolder
 
   test("shuffling UnsafeRows in exchange") {
