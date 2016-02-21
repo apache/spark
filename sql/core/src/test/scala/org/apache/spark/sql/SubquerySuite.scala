@@ -20,16 +20,11 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("simple uncorrelated scalar subquery") {
     assertResult(Array(Row(1))) {
       sql("select (select 1 as b) as b").collect()
-    }
-
-    assertResult(Array(Row(1))) {
-      sql("with t2 as (select 1 as b, 2 as c) " +
-        "select a from (select 1 as a union all select 2 as a) t " +
-        "where a = (select max(b) from t2) ").collect()
     }
 
     assertResult(Array(Row(3))) {
@@ -42,17 +37,18 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("uncorrelated scalar subquery in CTE") {
+    assertResult(Array(Row(1))) {
+      sql("with t2 as (select 1 as b, 2 as c) " +
+        "select a from (select 1 as a union all select 2 as a) t " +
+        "where a = (select max(b) from t2) ").collect()
+    }
+  }
+
   test("uncorrelated scalar subquery should return null if there is 0 rows") {
     assertResult(Array(Row(null))) {
       sql("select (select 's' as s limit 0) as b").collect()
     }
-  }
-
-  test("analysis error when the number of columns is not 1") {
-    val error = intercept[AnalysisException] {
-      sql("select (select 1, 2) as b").collect()
-    }
-    assert(error.message.contains("Scalar subquery must return only one column, but got 2"))
   }
 
   test("runtime error when the number of rows is greater than 1") {
@@ -63,25 +59,25 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       "more than one row returned by a subquery used as an expression"))
   }
 
-  test("uncorrelated scalar subquery on testData") {
-    // initialize test Data
-    testData
+  test("uncorrelated scalar subquery on a DataFrame generated query") {
+    val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
+    df.registerTempTable("subqueryData")
 
-    assertResult(Array(Row(5))) {
-      sql("select (select key from testData where key > 3 order by key limit 1) + 1").collect()
+    assertResult(Array(Row(4))) {
+      sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1").collect()
     }
 
-    assertResult(Array(Row(-100))) {
-      sql("select -(select max(key) from testData)").collect()
+    assertResult(Array(Row(-3))) {
+      sql("select -(select max(key) from subqueryData)").collect()
     }
 
     assertResult(Array(Row(null))) {
-      sql("select (select value from testData limit 0)").collect()
+      sql("select (select value from subqueryData limit 0)").collect()
     }
 
-    assertResult(Array(Row("99"))) {
-      sql("select (select min(value) from testData" +
-        " where key = (select max(key) from testData) - 1)").collect()
+    assertResult(Array(Row("two"))) {
+      sql("select (select min(value) from subqueryData" +
+        " where key = (select max(key) from subqueryData) - 1)").collect()
     }
   }
 }
