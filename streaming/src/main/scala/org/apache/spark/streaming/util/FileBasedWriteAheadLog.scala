@@ -283,9 +283,10 @@ private[streaming] object FileBasedWriteAheadLog {
 
   /**
    * This creates an iterator from a parallel collection, by keeping at most `n` objects in memory
-   * at any given time, where `n` is the size of the thread pool. This is crucial for use cases
-   * where we create `FileBasedWriteAheadLogReader`s during parallel recovery. We don't want to
-   * open up `k` streams altogether where `k` is the size of the Seq that we want to parallelize.
+   * at any given time, where `n` is at most the max of the size of the thread pool or 8. This is
+   * crucial for use cases where we create `FileBasedWriteAheadLogReader`s during parallel recovery.
+   * We don't want to open up `k` streams altogether where `k` is the size of the Seq that we want
+   * to parallelize.
    */
   def seqToParIterator[I, O](
       executionContext: ExecutionContext,
