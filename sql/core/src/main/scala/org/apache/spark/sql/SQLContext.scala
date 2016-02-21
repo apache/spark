@@ -884,6 +884,7 @@ class SQLContext private[sql](
   @transient
   protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
     val batches = Seq(
+      Batch("Subquery", Once, PlanSubqueries(self)),
       Batch("Add exchange", Once, EnsureRequirements(self)),
       Batch("Whole stage codegen", Once, CollapseCodegenStages(self))
     )
