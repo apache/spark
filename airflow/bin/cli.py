@@ -3,6 +3,7 @@ from __future__ import print_function
 import logging
 import os
 import subprocess
+import textwrap
 from datetime import datetime
 
 from builtins import input
@@ -13,7 +14,7 @@ import airflow
 from airflow import jobs, settings, utils
 from airflow import configuration
 from airflow.executors import DEFAULT_EXECUTOR
-from airflow.models import DagBag, TaskInstance, DagPickle, DagRun
+from airflow.models import DagModel, DagBag, TaskInstance, DagPickle, DagRun
 from airflow.utils import AirflowException, State
 
 DAGS_FOLDER = os.path.expanduser(configuration.get('core', 'DAGS_FOLDER'))
@@ -27,9 +28,9 @@ def process_subdir(subdir):
     dags_folder = configuration.get("core", "DAGS_FOLDER")
     dags_folder = os.path.expanduser(dags_folder)
     if subdir:
-        subdir = os.path.expanduser(subdir)
         if "DAGS_FOLDER" in subdir:
             subdir = subdir.replace("DAGS_FOLDER", dags_folder)
+        subdir = os.path.abspath(os.path.expanduser(subdir))
         if dags_folder not in subdir:
             raise AirflowException(
                 "subdir has to be part of your DAGS_FOLDER as defined in your "
@@ -84,20 +85,45 @@ def trigger_dag(args):
     session = settings.Session()
     # TODO: verify dag_id
     execution_date = datetime.now()
+    run_id = args.run_id or "manual__{0}".format(execution_date.isoformat())
     dr = session.query(DagRun).filter(
-        DagRun.dag_id==args.dag_id, DagRun.run_id==args.run_id).first()
+        DagRun.dag_id==args.dag_id, DagRun.run_id==run_id).first()
     if dr:
         logging.error("This run_id already exists")
     else:
         trigger = DagRun(
             dag_id=args.dag_id,
-            run_id=args.run_id,
+            run_id=run_id,
             execution_date=execution_date,
             state=State.RUNNING,
             external_trigger=True)
         session.add(trigger)
         logging.info("Created {}".format(trigger))
     session.commit()
+
+
+def pause(args):
+    set_is_paused(True, args)
+
+
+def unpause(args):
+    set_is_paused(False, args)
+
+
+def set_is_paused(is_paused, args):
+    dagbag = DagBag(process_subdir(args.subdir))
+    if args.dag_id not in dagbag.dags:
+        raise AirflowException('dag_id could not be found')
+    dag = dagbag.dags[args.dag_id]
+
+    session = settings.Session()
+    dm = session.query(DagModel).filter(
+        DagModel.dag_id == dag.dag_id).first()
+    dm.is_paused = is_paused
+    session.commit()
+
+    msg = "Dag: {}, paused: {}".format(dag, str(dag.is_paused))
+    print(msg)
 
 
 def run(args):
@@ -126,6 +152,7 @@ def run(args):
         filename=filename,
         level=settings.LOGGING_LEVEL,
         format=settings.LOG_FORMAT)
+
     if not args.pickle:
         dagbag = DagBag(subdir)
         if args.dag_id not in dagbag.dags:
@@ -195,7 +222,8 @@ def run(args):
             mark_success=args.mark_success,
             pickle_id=pickle_id,
             ignore_dependencies=args.ignore_dependencies,
-            force=args.force)
+            force=args.force,
+            pool=args.pool)
         executor.heartbeat()
         executor.end()
 
@@ -223,7 +251,8 @@ def run(args):
                     new_log = old_s3_log + '\n' + new_log
 
                 # send log to S3
-                s3_key.set_contents_from_string(new_log)
+                encrypt = configuration.get('core', 'ENCRYPT_S3_LOGS')
+                s3_key.set_contents_from_string(new_log, encrypt_key=encrypt)
             except:
                 print('Could not send logs to S3.')
 
@@ -263,7 +292,6 @@ def list_tasks(args):
 
 
 def test(args):
-
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(process_subdir(args.subdir))
     if args.dag_id not in dagbag.dags:
@@ -276,6 +304,24 @@ def test(args):
         ti.dry_run()
     else:
         ti.run(force=True, ignore_dependencies=True, test_mode=True)
+
+
+def render(args):
+    args.execution_date = dateutil.parser.parse(args.execution_date)
+    dagbag = DagBag(process_subdir(args.subdir))
+    if args.dag_id not in dagbag.dags:
+        raise AirflowException('dag_id could not be found')
+    dag = dagbag.dags[args.dag_id]
+    task = dag.get_task(task_id=args.task_id)
+    ti = TaskInstance(task, args.execution_date)
+    ti.render_templates()
+    for attr in task.__class__.template_fields:
+        print(textwrap.dedent("""\
+        # ----------------------------------------------------------
+        # property: {}
+        # ----------------------------------------------------------
+        {}
+        """.format(attr, getattr(task, attr))))
 
 
 def clear(args):
@@ -381,13 +427,13 @@ def worker(args):
 
 
 def initdb(args):
-    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + repr(settings.engine.url))
     utils.initdb()
     print("Done.")
 
 
 def resetdb(args):
-    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + repr(settings.engine.url))
     if args.yes or input(
             "This will drop existing tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
@@ -399,7 +445,7 @@ def resetdb(args):
 
 
 def upgradedb(args):
-    print("DB: " + configuration.get('core', 'SQL_ALCHEMY_CONN'))
+    print("DB: " + repr(settings.engine.url))
     utils.upgradedb()
 
 
@@ -508,6 +554,22 @@ def get_parser():
         "-r", "--run_id",
         help="Helps to indentify this run")
     parser_trigger_dag.set_defaults(func=trigger_dag)
+
+    ht = "Pause a DAG"
+    parser_pause = subparsers.add_parser('pause', help=ht)
+    parser_pause.add_argument("dag_id", help="The id of the dag to pause")
+    parser_pause.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=DAGS_FOLDER)
+    parser_pause.set_defaults(func=pause)
+
+    ht = "Unpause a DAG"
+    parser_unpause = subparsers.add_parser('unpause', help=ht)
+    parser_unpause.add_argument("dag_id", help="The id of the dag to unpause")
+    parser_unpause.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=DAGS_FOLDER)
+    parser_unpause.set_defaults(func=unpause)
 
     ht = "Run a single task instance"
     parser_run = subparsers.add_parser('run', help=ht)
@@ -699,5 +761,16 @@ def get_parser():
         "principal", help="kerberos principal",
         nargs='?', default=configuration.get('kerberos', 'principal'))
     parser_kerberos.set_defaults(func=kerberos)
+
+    ht = "Render a task instance's template(s)"
+    parser_render = subparsers.add_parser('render', help=ht)
+    parser_render.add_argument("dag_id", help="The id of the dag to check")
+    parser_render.add_argument("task_id", help="The task_id to check")
+    parser_render.add_argument(
+        "execution_date", help="The execution date to check")
+    parser_render.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=DAGS_FOLDER)
+    parser_render.set_defaults(func=render)
 
     return parser

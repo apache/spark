@@ -1,4 +1,6 @@
 #### Roadmap items
+* UI page answering "Why isn't this task instance running?"
+* Attempt removing DagBag caching for the web server
 * Distributed scheduler (supervisors)
     * Get the supervisors to run sensors (as opposed to each sensor taking a slot)
     * Improve DagBag differential refresh
@@ -8,6 +10,7 @@
 * Get s3 logs
 * Test and migrate to use beeline instead of the Hive CLI
 * Run Hive / Hadoop / HDFS tests in Travis-CI
+
 
 #### UI
 * Backfill form

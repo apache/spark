@@ -55,6 +55,11 @@ To turn on LDAP authentication configure your ``airflow.cfg`` as follows. Please
 an encrypted connection to the ldap server as you probably do not want passwords be readable on the network level.
 It is however possible to configure without encryption if you really want to.
 
+Additionally, if you are using Active Directory, and are not explicitly specifying an OU that your users are in,
+you will need to change ``search_scope`` to "SUBTREE".
+
+Valid search_scope options can be found in the `ldap3 Documentation <http://ldap3.readthedocs.org/searches.html?highlight=search_scope>`_
+
 .. code-block:: bash
 
     [webserver]
@@ -65,11 +70,15 @@ It is however possible to configure without encryption if you really want to.
     uri = ldaps://<your.ldap.server>:<port>
     user_filter = objectClass=*
     user_name_attr = uid # in case of Active Directory you would use sAMAccountName
+    superuser_filter = memberOf=CN=airflow-super-users,OU=Groups,OU=RWC,OU=US,OU=NORAM,DC=example,DC=com
+    data_profiler_filter = memberOf=CN=airflow-data-profilers,OU=Groups,OU=RWC,OU=US,OU=NORAM,DC=example,DC=com
     bind_user = cn=Manager,dc=example,dc=com
     bind_password = insecure
     basedn = dc=example,dc=com
     cacert = /etc/ca/ldap_ca.crt
+    search_scope = LEVEL # Set this to SUBTREE if using Active Directory, and not specifying an Organizational Unit
 
+The superuser_filter and data_profiler_filter are optional. If defined, these configurations allow you to specify LDAP groups that users must belong to in order to have superuser (admin) and data-profiler permissions. If undefined, all users will be superusers and data profilers.
 
 Roll your own
 '''''''''''''
@@ -202,7 +211,7 @@ and in your DAG, when initializing the HiveOperator, specify
     run_as_owner=True
 
 GitHub Enterprise (GHE) Authentication
-''''''''''''''''''''''''''''''''
+''''''''''''''''''''''''''''''''''''''
 
 The GitHub Enterprise authentication backend can be used to authenticate users
 against an installation of GitHub Enterprise using OAuth2. You can optionally
@@ -235,9 +244,6 @@ backend. In order to setup an application:
 2. Select 'Applications' from the left hand nav
 3. Select the 'Developer Applications' tab
 4. Click 'Register new application'
-5. Fill in the required information
-  * The 'Authorization callback URL' must be fully qualifed (e.g.
-    http://airflow.example.com/example/ghe_oauth/callback)
+5. Fill in the required information (the 'Authorization callback URL' must be fully qualifed e.g. http://airflow.example.com/example/ghe_oauth/callback)
 6. Click 'Register application'
-7. Copy 'Client ID', 'Client Secret', and your callback route to your
-   airflow.cfg according to the above example
+7. Copy 'Client ID', 'Client Secret', and your callback route to your airflow.cfg according to the above example
