@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 
@@ -26,18 +28,38 @@ import org.apache.spark.sql.AnalysisException
  *
  * Implementations of the [[Catalog]] interface can create test suites by extending this.
  */
-abstract class CatalogTestCases extends SparkFunSuite {
-  private val storageFormat = StorageFormat("usa", "$", "zzz", "serde", Map())
-  private val part1 = TablePartition(Map("a" -> "1"), storageFormat)
-  private val part2 = TablePartition(Map("b" -> "2"), storageFormat)
-  private val part3 = TablePartition(Map("c" -> "3"), storageFormat)
+abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
+  private lazy val storageFormat = CatalogStorageFormat(
+    locationUri = None,
+    inputFormat = Some(tableInputFormat),
+    outputFormat = Some(tableOutputFormat),
+    serde = None,
+    serdeProperties = Map.empty)
+  private lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
+  private lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
+  private lazy val part3 = CatalogTablePartition(Map("a" -> "5", "b" -> "6"), storageFormat)
   private val funcClass = "org.apache.spark.myFunc"
 
+  // Things subclasses should override
+  protected val tableInputFormat: String = "org.apache.park.serde.MyInputFormat"
+  protected val tableOutputFormat: String = "org.apache.park.serde.MyOutputFormat"
+  protected def newUriForDatabase(): String = "uri"
+  protected def resetState(): Unit = { }
   protected def newEmptyCatalog(): Catalog
+
+  // Clear all state after each test
+  override def afterEach(): Unit = {
+    try {
+      resetState()
+    } finally {
+      super.afterEach()
+    }
+  }
 
   /**
    * Creates a basic catalog, with the following structure:
    *
+   * default
    * db1
    * db2
    *   - tbl1
@@ -48,37 +70,65 @@ abstract class CatalogTestCases extends SparkFunSuite {
    */
   private def newBasicCatalog(): Catalog = {
     val catalog = newEmptyCatalog()
+    // When testing against a real catalog, the default database may already exist
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     catalog.createDatabase(newDb("db1"), ignoreIfExists = false)
     catalog.createDatabase(newDb("db2"), ignoreIfExists = false)
-    catalog.createTable("db2", newTable("tbl1"), ignoreIfExists = false)
-    catalog.createTable("db2", newTable("tbl2"), ignoreIfExists = false)
+    catalog.createTable("db2", newTable("tbl1", "db2"), ignoreIfExists = false)
+    catalog.createTable("db2", newTable("tbl2", "db2"), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
-    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
+    catalog.createFunction("db2", newFunc("func1"))
     catalog
   }
 
-  private def newFunc(): Function = Function("funcname", funcClass)
+  private def newFunc(): CatalogFunction = CatalogFunction("funcname", funcClass)
 
-  private def newDb(name: String = "default"): Database =
-    Database(name, name + " description", "uri", Map.empty)
+  private def newDb(name: String): CatalogDatabase = {
+    CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
+  }
 
-  private def newTable(name: String): Table =
-    Table(name, "", Seq.empty, Seq.empty, Seq.empty, null, 0, Map.empty, "EXTERNAL_TABLE", 0, 0,
-      None, None)
+  private def newTable(name: String, db: String): CatalogTable = {
+    CatalogTable(
+      specifiedDatabase = Some(db),
+      name = name,
+      tableType = CatalogTableType.EXTERNAL_TABLE,
+      storage = storageFormat,
+      schema = Seq(CatalogColumn("col1", "int"), CatalogColumn("col2", "string")),
+      partitionColumns = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string")))
+  }
 
-  private def newFunc(name: String): Function = Function(name, funcClass)
+  private def newFunc(name: String): CatalogFunction = CatalogFunction(name, funcClass)
+
+  /**
+   * Whether the catalog's table partitions equal the ones given.
+   * Note: Hive sets some random serde things, so we just compare the specs here.
+   */
+  private def catalogPartitionsEqual(
+      catalog: Catalog,
+      db: String,
+      table: String,
+      parts: Seq[CatalogTablePartition]): Boolean = {
+    catalog.listPartitions(db, table).map(_.spec).toSet == parts.map(_.spec).toSet
+  }
+
 
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
 
-  test("basic create, drop and list databases") {
+  test("basic create and list databases") {
     val catalog = newEmptyCatalog()
-    catalog.createDatabase(newDb(), ignoreIfExists = false)
-    assert(catalog.listDatabases().toSet == Set("default"))
-
-    catalog.createDatabase(newDb("default2"), ignoreIfExists = false)
-    assert(catalog.listDatabases().toSet == Set("default", "default2"))
+    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    assert(catalog.databaseExists("default"))
+    assert(!catalog.databaseExists("testing"))
+    assert(!catalog.databaseExists("testing2"))
+    catalog.createDatabase(newDb("testing"), ignoreIfExists = false)
+    assert(catalog.databaseExists("testing"))
+    assert(catalog.listDatabases().toSet == Set("default", "testing"))
+    catalog.createDatabase(newDb("testing2"), ignoreIfExists = false)
+    assert(catalog.listDatabases().toSet == Set("default", "testing", "testing2"))
+    assert(catalog.databaseExists("testing2"))
+    assert(!catalog.databaseExists("does_not_exist"))
   }
 
   test("get database when a database exists") {
@@ -93,7 +143,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("list databases without pattern") {
     val catalog = newBasicCatalog()
-    assert(catalog.listDatabases().toSet == Set("db1", "db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db1", "db2"))
   }
 
   test("list databases with pattern") {
@@ -107,7 +157,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
   test("drop database") {
     val catalog = newBasicCatalog()
     catalog.dropDatabase("db1", ignoreIfNotExists = false, cascade = false)
-    assert(catalog.listDatabases().toSet == Set("db2"))
+    assert(catalog.listDatabases().toSet == Set("default", "db2"))
   }
 
   test("drop database when the database is not empty") {
@@ -118,6 +168,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
     intercept[AnalysisException] {
       catalog1.dropDatabase("db2", ignoreIfNotExists = false, cascade = false)
     }
+    resetState()
 
     // Throw exception if there are tables left
     val catalog2 = newBasicCatalog()
@@ -125,11 +176,12 @@ abstract class CatalogTestCases extends SparkFunSuite {
     intercept[AnalysisException] {
       catalog2.dropDatabase("db2", ignoreIfNotExists = false, cascade = false)
     }
+    resetState()
 
     // When cascade is true, it should drop them
     val catalog3 = newBasicCatalog()
     catalog3.dropDatabase("db2", ignoreIfNotExists = false, cascade = true)
-    assert(catalog3.listDatabases().toSet == Set("db1"))
+    assert(catalog3.listDatabases().toSet == Set("default", "db1"))
   }
 
   test("drop database when the database does not exist") {
@@ -144,13 +196,19 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("alter database") {
     val catalog = newBasicCatalog()
-    catalog.alterDatabase("db1", Database("db1", "new description", "lll", Map.empty))
-    assert(catalog.getDatabase("db1").description == "new description")
+    val db1 = catalog.getDatabase("db1")
+    // Note: alter properties here because Hive does not support altering other fields
+    catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
+    val newDb1 = catalog.getDatabase("db1")
+    assert(db1.properties.isEmpty)
+    assert(newDb1.properties.size == 2)
+    assert(newDb1.properties.get("k") == Some("v3"))
+    assert(newDb1.properties.get("good") == Some("true"))
   }
 
   test("alter database should throw exception when the database does not exist") {
     intercept[AnalysisException] {
-      newBasicCatalog().alterDatabase("no_db", Database("no_db", "ddd", "lll", Map.empty))
+      newBasicCatalog().alterDatabase(newDb("does_not_exist"))
     }
   }
 
@@ -165,61 +223,56 @@ abstract class CatalogTestCases extends SparkFunSuite {
     assert(catalog.listTables("db2").toSet == Set("tbl2"))
   }
 
-  test("drop table when database / table does not exist") {
+  test("drop table when database/table does not exist") {
     val catalog = newBasicCatalog()
-
     // Should always throw exception when the database does not exist
     intercept[AnalysisException] {
       catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = false)
     }
-
     intercept[AnalysisException] {
       catalog.dropTable("unknown_db", "unknown_table", ignoreIfNotExists = true)
     }
-
     // Should throw exception when the table does not exist, if ignoreIfNotExists is false
     intercept[AnalysisException] {
       catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = false)
     }
-
     catalog.dropTable("db2", "unknown_table", ignoreIfNotExists = true)
   }
 
   test("rename table") {
     val catalog = newBasicCatalog()
-
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
     catalog.renameTable("db2", "tbl1", "tblone")
     assert(catalog.listTables("db2").toSet == Set("tblone", "tbl2"))
   }
 
-  test("rename table when database / table does not exist") {
+  test("rename table when database/table does not exist") {
     val catalog = newBasicCatalog()
-
-    intercept[AnalysisException] {  // Throw exception when the database does not exist
+    intercept[AnalysisException] {
       catalog.renameTable("unknown_db", "unknown_table", "unknown_table")
     }
-
-    intercept[AnalysisException] {  // Throw exception when the table does not exist
+    intercept[AnalysisException] {
       catalog.renameTable("db2", "unknown_table", "unknown_table")
     }
   }
 
   test("alter table") {
     val catalog = newBasicCatalog()
-    catalog.alterTable("db2", "tbl1", newTable("tbl1").copy(createTime = 10))
-    assert(catalog.getTable("db2", "tbl1").createTime == 10)
+    val tbl1 = catalog.getTable("db2", "tbl1")
+    catalog.alterTable("db2", tbl1.copy(properties = Map("toh" -> "frem")))
+    val newTbl1 = catalog.getTable("db2", "tbl1")
+    assert(!tbl1.properties.contains("toh"))
+    assert(newTbl1.properties.size == tbl1.properties.size + 1)
+    assert(newTbl1.properties.get("toh") == Some("frem"))
   }
 
-  test("alter table when database / table does not exist") {
+  test("alter table when database/table does not exist") {
     val catalog = newBasicCatalog()
-
-    intercept[AnalysisException] {  // Throw exception when the database does not exist
-      catalog.alterTable("unknown_db", "unknown_table", newTable("unknown_table"))
+    intercept[AnalysisException] {
+      catalog.alterTable("unknown_db", newTable("tbl1", "unknown_db"))
     }
-
-    intercept[AnalysisException] {  // Throw exception when the table does not exist
-      catalog.alterTable("db2", "unknown_table", newTable("unknown_table"))
+    intercept[AnalysisException] {
+      catalog.alterTable("db2", newTable("unknown_table", "db2"))
     }
   }
 
@@ -227,12 +280,11 @@ abstract class CatalogTestCases extends SparkFunSuite {
     assert(newBasicCatalog().getTable("db2", "tbl1").name == "tbl1")
   }
 
-  test("get table when database / table does not exist") {
+  test("get table when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.getTable("unknown_db", "unknown_table")
     }
-
     intercept[AnalysisException] {
       catalog.getTable("db2", "unknown_table")
     }
@@ -246,10 +298,7 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("list tables with pattern") {
     val catalog = newBasicCatalog()
-
-    // Test when database does not exist
     intercept[AnalysisException] { catalog.listTables("unknown_db") }
-
     assert(catalog.listTables("db1", "*").toSet == Set.empty)
     assert(catalog.listTables("db2", "*").toSet == Set("tbl1", "tbl2"))
     assert(catalog.listTables("db2", "tbl*").toSet == Set("tbl1", "tbl2"))
@@ -263,12 +312,12 @@ abstract class CatalogTestCases extends SparkFunSuite {
   test("basic create and list partitions") {
     val catalog = newEmptyCatalog()
     catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-    catalog.createTable("mydb", newTable("mytbl"), ignoreIfExists = false)
-    catalog.createPartitions("mydb", "mytbl", Seq(part1, part2), ignoreIfExists = false)
-    assert(catalog.listPartitions("mydb", "mytbl").toSet == Set(part1, part2))
+    catalog.createTable("mydb", newTable("tbl", "mydb"), ignoreIfExists = false)
+    catalog.createPartitions("mydb", "tbl", Seq(part1, part2), ignoreIfExists = false)
+    assert(catalogPartitionsEqual(catalog, "mydb", "tbl", Seq(part1, part2)))
   }
 
-  test("create partitions when database / table does not exist") {
+  test("create partitions when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.createPartitions("does_not_exist", "tbl1", Seq(), ignoreIfExists = false)
@@ -288,16 +337,17 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("drop partitions") {
     val catalog = newBasicCatalog()
-    assert(catalog.listPartitions("db2", "tbl2").toSet == Set(part1, part2))
+    assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part1, part2)))
     catalog.dropPartitions("db2", "tbl2", Seq(part1.spec), ignoreIfNotExists = false)
-    assert(catalog.listPartitions("db2", "tbl2").toSet == Set(part2))
+    assert(catalogPartitionsEqual(catalog, "db2", "tbl2", Seq(part2)))
+    resetState()
     val catalog2 = newBasicCatalog()
-    assert(catalog2.listPartitions("db2", "tbl2").toSet == Set(part1, part2))
+    assert(catalogPartitionsEqual(catalog2, "db2", "tbl2", Seq(part1, part2)))
     catalog2.dropPartitions("db2", "tbl2", Seq(part1.spec, part2.spec), ignoreIfNotExists = false)
     assert(catalog2.listPartitions("db2", "tbl2").isEmpty)
   }
 
-  test("drop partitions when database / table does not exist") {
+  test("drop partitions when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.dropPartitions("does_not_exist", "tbl1", Seq(), ignoreIfNotExists = false)
@@ -317,14 +367,14 @@ abstract class CatalogTestCases extends SparkFunSuite {
 
   test("get partition") {
     val catalog = newBasicCatalog()
-    assert(catalog.getPartition("db2", "tbl2", part1.spec) == part1)
-    assert(catalog.getPartition("db2", "tbl2", part2.spec) == part2)
+    assert(catalog.getPartition("db2", "tbl2", part1.spec).spec == part1.spec)
+    assert(catalog.getPartition("db2", "tbl2", part2.spec).spec == part2.spec)
     intercept[AnalysisException] {
       catalog.getPartition("db2", "tbl1", part3.spec)
     }
   }
 
-  test("get partition when database / table does not exist") {
+  test("get partition when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.getPartition("does_not_exist", "tbl1", part1.spec)
@@ -334,28 +384,69 @@ abstract class CatalogTestCases extends SparkFunSuite {
     }
   }
 
-  test("alter partitions") {
+  test("rename partitions") {
     val catalog = newBasicCatalog()
-    val partSameSpec = part1.copy(storage = storageFormat.copy(serde = "myserde"))
-    val partNewSpec = part1.copy(spec = Map("x" -> "10"))
-    // alter but keep spec the same
-    catalog.alterPartition("db2", "tbl2", part1.spec, partSameSpec)
-    assert(catalog.getPartition("db2", "tbl2", part1.spec) == partSameSpec)
-    // alter and change spec
-    catalog.alterPartition("db2", "tbl2", part1.spec, partNewSpec)
-    intercept[AnalysisException] {
-      catalog.getPartition("db2", "tbl2", part1.spec)
-    }
-    assert(catalog.getPartition("db2", "tbl2", partNewSpec.spec) == partNewSpec)
+    val newPart1 = part1.copy(spec = Map("a" -> "100", "b" -> "101"))
+    val newPart2 = part2.copy(spec = Map("a" -> "200", "b" -> "201"))
+    val newSpecs = Seq(newPart1.spec, newPart2.spec)
+    catalog.renamePartitions("db2", "tbl2", Seq(part1.spec, part2.spec), newSpecs)
+    assert(catalog.getPartition("db2", "tbl2", newPart1.spec).spec === newPart1.spec)
+    assert(catalog.getPartition("db2", "tbl2", newPart2.spec).spec === newPart2.spec)
+    // The old partitions should no longer exist
+    intercept[AnalysisException] { catalog.getPartition("db2", "tbl2", part1.spec) }
+    intercept[AnalysisException] { catalog.getPartition("db2", "tbl2", part2.spec) }
   }
 
-  test("alter partition when database / table does not exist") {
+  test("rename partitions when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterPartition("does_not_exist", "tbl1", part1.spec, part1)
+      catalog.renamePartitions("does_not_exist", "tbl1", Seq(part1.spec), Seq(part2.spec))
     }
     intercept[AnalysisException] {
-      catalog.alterPartition("db2", "does_not_exist", part1.spec, part1)
+      catalog.renamePartitions("db2", "does_not_exist", Seq(part1.spec), Seq(part2.spec))
+    }
+  }
+
+  test("alter partitions") {
+    val catalog = newBasicCatalog()
+    try{
+      // Note: Before altering table partitions in Hive, you *must* set the current database
+      // to the one that contains the table of interest. Otherwise you will end up with the
+      // most helpful error message ever: "Unable to alter partition. alter is not possible."
+      // See HIVE-2742 for more detail.
+      catalog.setCurrentDatabase("db2")
+      val newLocation = newUriForDatabase()
+      // alter but keep spec the same
+      val oldPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
+      val oldPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
+      catalog.alterPartitions("db2", "tbl2", Seq(
+        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocation))),
+        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))))
+      val newPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
+      val newPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
+      assert(newPart1.storage.locationUri == Some(newLocation))
+      assert(newPart2.storage.locationUri == Some(newLocation))
+      assert(oldPart1.storage.locationUri != Some(newLocation))
+      assert(oldPart2.storage.locationUri != Some(newLocation))
+      // alter but change spec, should fail because new partition specs do not exist yet
+      val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
+      val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))
+      intercept[AnalysisException] {
+        catalog.alterPartitions("db2", "tbl2", Seq(badPart1, badPart2))
+      }
+    } finally {
+      // Remember to restore the original current database, which we assume to be "default"
+      catalog.setCurrentDatabase("default")
+    }
+  }
+
+  test("alter partitions when database/table does not exist") {
+    val catalog = newBasicCatalog()
+    intercept[AnalysisException] {
+      catalog.alterPartitions("does_not_exist", "tbl1", Seq(part1))
+    }
+    intercept[AnalysisException] {
+      catalog.alterPartitions("db2", "does_not_exist", Seq(part1))
     }
   }
 
@@ -366,23 +457,22 @@ abstract class CatalogTestCases extends SparkFunSuite {
   test("basic create and list functions") {
     val catalog = newEmptyCatalog()
     catalog.createDatabase(newDb("mydb"), ignoreIfExists = false)
-    catalog.createFunction("mydb", newFunc("myfunc"), ignoreIfExists = false)
+    catalog.createFunction("mydb", newFunc("myfunc"))
     assert(catalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
   }
 
   test("create function when database does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.createFunction("does_not_exist", newFunc(), ignoreIfExists = false)
+      catalog.createFunction("does_not_exist", newFunc())
     }
   }
 
   test("create function that already exists") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = false)
+      catalog.createFunction("db2", newFunc("func1"))
     }
-    catalog.createFunction("db2", newFunc("func1"), ignoreIfExists = true)
   }
 
   test("drop function") {
@@ -421,31 +511,43 @@ abstract class CatalogTestCases extends SparkFunSuite {
     }
   }
 
+  test("rename function") {
+    val catalog = newBasicCatalog()
+    val newName = "funcky"
+    assert(catalog.getFunction("db2", "func1").className == funcClass)
+    catalog.renameFunction("db2", "func1", newName)
+    intercept[AnalysisException] { catalog.getFunction("db2", "func1") }
+    assert(catalog.getFunction("db2", newName).name == newName)
+    assert(catalog.getFunction("db2", newName).className == funcClass)
+    intercept[AnalysisException] { catalog.renameFunction("db2", "does_not_exist", "me") }
+  }
+
+  test("rename function when database does not exist") {
+    val catalog = newBasicCatalog()
+    intercept[AnalysisException] {
+      catalog.renameFunction("does_not_exist", "func1", "func5")
+    }
+  }
+
   test("alter function") {
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1").className == funcClass)
-    // alter func but keep name
-    catalog.alterFunction("db2", "func1", newFunc("func1").copy(className = "muhaha"))
+    catalog.alterFunction("db2", newFunc("func1").copy(className = "muhaha"))
     assert(catalog.getFunction("db2", "func1").className == "muhaha")
-    // alter func and change name
-    catalog.alterFunction("db2", "func1", newFunc("funcky"))
-    intercept[AnalysisException] {
-      catalog.getFunction("db2", "func1")
-    }
-    assert(catalog.getFunction("db2", "funcky").className == funcClass)
+    intercept[AnalysisException] { catalog.alterFunction("db2", newFunc("funcky")) }
   }
 
   test("alter function when database does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.alterFunction("does_not_exist", "func1", newFunc())
+      catalog.alterFunction("does_not_exist", newFunc())
     }
   }
 
   test("list functions") {
     val catalog = newBasicCatalog()
-    catalog.createFunction("db2", newFunc("func2"), ignoreIfExists = false)
-    catalog.createFunction("db2", newFunc("not_me"), ignoreIfExists = false)
+    catalog.createFunction("db2", newFunc("func2"))
+    catalog.createFunction("db2", newFunc("not_me"))
     assert(catalog.listFunctions("db2", "*").toSet == Set("func1", "func2", "not_me"))
     assert(catalog.listFunctions("db2", "func*").toSet == Set("func1", "func2"))
   }

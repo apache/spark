@@ -205,7 +205,7 @@ case class InsertIntoHiveTable(
         val oldPart =
           catalog.client.getPartitionOption(
             catalog.client.getTable(table.databaseName, table.tableName),
-            partitionSpec.asJava)
+            partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
             catalog.client.loadPartition(
