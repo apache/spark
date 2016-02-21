@@ -155,12 +155,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   val sparkContext = new JavaSparkContext(ssc.sc)
 
   /**
-   * @deprecated As of 0.9.0, replaced by `sparkContext`
-   */
-  @deprecated("use sparkContext", "0.9.0")
-  val sc: JavaSparkContext = sparkContext
-
-  /**
    * Create an input stream from network source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
    * lines.
@@ -571,17 +565,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
-   * @param timeout time to wait in milliseconds
-   * @deprecated As of 1.3.0, replaced by `awaitTerminationOrTimeout(Long)`.
-   */
-  @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
-  def awaitTermination(timeout: Long): Unit = {
-    ssc.awaitTermination(timeout)
-  }
-
-  /**
-   * Wait for the execution to stop. Any exceptions that occurs during the execution
-   * will be thrown in this thread.
    *
    * @param timeout time to wait in milliseconds
    * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
@@ -622,78 +605,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
  * JavaStreamingContext object contains a number of utility functions.
  */
 object JavaStreamingContext {
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the provided factory
-   * will be used to create a JavaStreamingContext.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
-   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
-   */
-  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
-  def getOrCreate(
-      checkpointPath: String,
-      factory: JavaStreamingContextFactory
-    ): JavaStreamingContext = {
-    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
-      factory.create.ssc
-    })
-    new JavaStreamingContext(ssc)
-  }
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the provided factory
-   * will be used to create a JavaStreamingContext.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
-   * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
-   *                       file system
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
-   */
-  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
-  def getOrCreate(
-      checkpointPath: String,
-      hadoopConf: Configuration,
-      factory: JavaStreamingContextFactory
-    ): JavaStreamingContext = {
-    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
-      factory.create.ssc
-    }, hadoopConf)
-    new JavaStreamingContext(ssc)
-  }
-
-  /**
-   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
-   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the provided factory
-   * will be used to create a JavaStreamingContext.
-   *
-   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
-   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
-   * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
-   *                       file system
-   * @param createOnError  Whether to create a new JavaStreamingContext if there is an
-   *                       error in reading checkpoint data.
-   * @deprecated As of 1.4.0, replaced by `getOrCreate` without JavaStreamingContextFactory.
-   */
-  @deprecated("use getOrCreate without JavaStreamingContextFactory", "1.4.0")
-  def getOrCreate(
-      checkpointPath: String,
-      hadoopConf: Configuration,
-      factory: JavaStreamingContextFactory,
-      createOnError: Boolean
-    ): JavaStreamingContext = {
-    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
-      factory.create.ssc
-    }, hadoopConf, createOnError)
-    new JavaStreamingContext(ssc)
-  }
 
   /**
    * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
@@ -766,11 +677,4 @@ object JavaStreamingContext {
    * their JARs to StreamingContext.
    */
   def jarOfClass(cls: Class[_]): Array[String] = SparkContext.jarOfClass(cls).toArray
-}
-
-/**
- * Factory interface for creating a new JavaStreamingContext
- */
-trait JavaStreamingContextFactory {
-  def create(): JavaStreamingContext
 }
