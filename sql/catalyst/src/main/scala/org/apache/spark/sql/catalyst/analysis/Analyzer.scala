@@ -118,7 +118,7 @@ class Analyzer(
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(Subquery(_, relation))
+            val withAlias = u.alias.map(SubqueryAlias(_, relation))
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)
@@ -357,7 +357,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubQueries(getTable(u)))
+        i.copy(table = EliminateSubqueryAliases(getTable(u)))
       case u: UnresolvedRelation =>
         try {
           getTable(u)
@@ -688,7 +688,7 @@ class Analyzer(
         resolved
       } else {
         plan match {
-          case u: UnaryNode if !u.isInstanceOf[Subquery] =>
+          case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
             resolveExpressionRecursively(resolved, u.child)
           case other => resolved
         }
@@ -1372,12 +1372,12 @@ class Analyzer(
 }
 
 /**
- * Removes [[Subquery]] operators from the plan. Subqueries are only required to provide
+ * Removes [[SubqueryAlias]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
  */
-object EliminateSubQueries extends Rule[LogicalPlan] {
+object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case Subquery(_, child) => child
+    case SubqueryAlias(_, child) => child
   }
 }
 

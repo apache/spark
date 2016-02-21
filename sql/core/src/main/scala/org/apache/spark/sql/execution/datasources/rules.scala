@@ -40,7 +40,7 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
           provider = u.tableIdentifier.database.get,
           options = Map("path" -> u.tableIdentifier.table))
         val plan = LogicalRelation(resolved.relation)
-        u.alias.map(a => Subquery(u.alias.get, plan)).getOrElse(plan)
+        u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
       } catch {
         case e: ClassNotFoundException => u
         case e: Exception =>
@@ -171,7 +171,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         // the query. If so, we will throw an AnalysisException to let users know it is not allowed.
         if (c.mode == SaveMode.Overwrite && catalog.tableExists(c.tableIdent)) {
           // Need to remove SubQuery operator.
-          EliminateSubQueries(catalog.lookupRelation(c.tableIdent)) match {
+          EliminateSubqueryAliases(catalog.lookupRelation(c.tableIdent)) match {
             // Only do the check if the table is a data source table
             // (the relation is a BaseRelation).
             case l @ LogicalRelation(dest: BaseRelation, _, _) =>

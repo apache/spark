@@ -243,7 +243,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         queryArgs match {
           case Token("TOK_CTE", ctes) :: Token("TOK_FROM", from) :: inserts =>
             val cteRelations = ctes.map { node =>
-              val relation = nodeToRelation(node).asInstanceOf[Subquery]
+              val relation = nodeToRelation(node).asInstanceOf[SubqueryAlias]
               relation.alias -> relation
             }
             (Some(from.head), inserts, Some(cteRelations.toMap))
@@ -454,7 +454,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   protected def nodeToRelation(node: ASTNode): LogicalPlan = {
     node match {
       case Token("TOK_SUBQUERY", query :: Token(alias, Nil) :: Nil) =>
-        Subquery(cleanIdentifier(alias), nodeToPlan(query))
+        SubqueryAlias(cleanIdentifier(alias), nodeToPlan(query))
 
       case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
         nodeToGenerate(
