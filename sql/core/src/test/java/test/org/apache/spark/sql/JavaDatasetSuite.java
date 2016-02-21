@@ -304,15 +304,12 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
-  private <T> Set<T> toSet(List<T> records) {
-    Set<T> set = new HashSet<T>();
-    for (T record : records) {
-      set.add(record);
-    }
-    return set;
+  private static <T> Set<T> toSet(List<T> records) {
+    return new HashSet<>(records);
   }
 
-  private <T> Set<T> asSet(T... records) {
+  @SafeVarargs
+  private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
   }
 
