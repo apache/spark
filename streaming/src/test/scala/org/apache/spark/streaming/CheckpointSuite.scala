@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File, ObjectOutputS
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -150,7 +150,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
       clock.setTime(targetBatchTime.milliseconds)
       logInfo("Manual clock after advancing = " + clock.getTimeMillis())
 
-      val outputStream = CheckpointSuite.getTypedStream[V](ssc.graph.getOutputStreams())
+      val outputStream = CheckpointSuite.getTestOutputStream[V](ssc.graph.getOutputStreams())
 
       eventually(timeout(10 seconds)) {
         ssc.awaitTerminationOrTimeout(10)
@@ -905,7 +905,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     logInfo("Manual clock after advancing = " + clock.getTimeMillis())
     Thread.sleep(batchDuration.milliseconds)
 
-    val outputStream = CheckpointSuite.getTypedStream[V](ssc.graph.getOutputStreams())
+    val outputStream = CheckpointSuite.getTestOutputStream[V](ssc.graph.getOutputStreams())
     outputStream.output.asScala.map(_.flatten)
   }
 }
@@ -914,11 +914,11 @@ private object CheckpointSuite extends Serializable {
   var batchThreeShouldBlockIndefinitely: Boolean = true
 
   /**
-   * Get the first output stream containing the provided type.
+   * Get the first TestOutputStreamWithPartitions.
    */
-  def getTypedStream[V: ClassTag](streams: Array[DStream[_]]): TestOutputStreamWithPartitions[V] = {
+  def getTestOutputStream[V: ClassTag](streams: Array[DStream[_]]): TestOutputStreamWithPartitions[V] = {
     streams.collect{
-      case ds: TestOutputStreamWithPartitions[V @unchecked] if ds.ct == classTag[V] => ds
+      case ds: TestOutputStreamWithPartitions[V @unchecked] => ds
     }.head
   }
 }
