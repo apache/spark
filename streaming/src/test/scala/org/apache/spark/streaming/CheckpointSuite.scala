@@ -914,7 +914,7 @@ private object CheckpointSuite extends Serializable {
   var batchThreeShouldBlockIndefinitely: Boolean = true
 
   /**
-   * Get the first TestOutputStreamWithPartitions.
+   * Get the first TestOutputStreamWithPartitions, does not check the provided generic type.
    */
   def getTestOutputStream[V: ClassTag](streams: Array[DStream[_]]): TestOutputStreamWithPartitions[V] = {
     streams.collect{
