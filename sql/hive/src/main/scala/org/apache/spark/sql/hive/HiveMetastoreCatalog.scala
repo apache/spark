@@ -778,7 +778,7 @@ private[hive] case class MetastoreRelation(
   // TODO: merge this with HiveClientImpl#toHiveTable
   @transient val hiveQlTable: HiveTable = {
     // We start by constructing an API table as Hive performs several important transformations
-      // internally when converting an API table to a QL table.
+    // internally when converting an API table to a QL table.
     val tTable = new org.apache.hadoop.hive.metastore.api.Table()
     tTable.setTableName(table.name)
     tTable.setDbName(table.database)

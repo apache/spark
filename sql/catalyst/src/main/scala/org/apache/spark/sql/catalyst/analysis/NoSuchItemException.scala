@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.catalog.Catalog.TablePartitionSpec
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-abstract class NoSuchItemException extends Exception { override def getMessage: String }
+abstract class NoSuchItemException extends Exception {
+  override def getMessage: String
+}
 
 class NoSuchDatabaseException(db: String) extends NoSuchItemException {
   override def getMessage: String = s"Database $db not found"

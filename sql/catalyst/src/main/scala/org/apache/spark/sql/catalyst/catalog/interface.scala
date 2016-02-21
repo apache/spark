@@ -265,7 +265,7 @@ case class CatalogDatabase(
 
 object Catalog {
   /**
-   * Specifications of a table partition indexed by column name.
+   * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
 }
