@@ -22,7 +22,7 @@ import java.util.concurrent.{RejectedExecutionException, ThreadPoolExecutor}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.parallel.ThreadPoolTaskSupport
+import scala.collection.parallel.ExecutionContextTaskSupport
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
@@ -144,7 +144,7 @@ private[streaming] class FileBasedWriteAheadLog(
     } else {
       // For performance gains, it makes sense to parallelize the recovery if
       // closeFileAfterWrite = true
-      seqToParIterator(threadpool, logFilesToRead, readFile).asJava
+      seqToParIterator(executionContext, logFilesToRead, readFile).asJava
     }
   }
 
@@ -288,11 +288,11 @@ private[streaming] object FileBasedWriteAheadLog {
    * open up `k` streams altogether where `k` is the size of the Seq that we want to parallelize.
    */
   def seqToParIterator[I, O](
-      tpool: ThreadPoolExecutor,
+      executionContext: ExecutionContext,
       source: Seq[I],
       handler: I => Iterator[O]): Iterator[O] = {
-    val taskSupport = new ThreadPoolTaskSupport(tpool)
-    val groupSize = tpool.getMaximumPoolSize.max(8)
+    val taskSupport = new ExecutionContextTaskSupport(executionContext)
+    val groupSize = taskSupport.parallelismLevel.max(8)
     source.grouped(groupSize).flatMap { group =>
       val parallelCollection = group.par
       parallelCollection.tasksupport = taskSupport
