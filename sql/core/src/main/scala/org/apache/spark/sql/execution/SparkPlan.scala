@@ -120,7 +120,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
   }
 
-  // All the subquries and their Future of results.
+  // All the subqueries and their Future of results.
   @transient private val queryResults = ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]()
 
   /**
@@ -128,7 +128,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   protected def prepareSubqueries(): Unit = {
     val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
-    allSubqueries.foreach { e =>
+    allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
       val futureResult = Future {
         // We only need the first row, try to take two rows so we can throw an exception if there
         // are more than one rows returned.
@@ -139,7 +139,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
-   * Waits for all the subquires to finish and updates the results.
+   * Waits for all the subqueries to finish and updates the results.
    */
   protected def waitForSubqueries(): Unit = {
     // fill in the result of subqueries

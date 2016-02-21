@@ -20,9 +20,6 @@ package org.apache.spark.sql
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SubquerySuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
-
-  setupTestData()
 
   test("simple uncorrelated scalar subquery") {
     assertResult(Array(Row(1))) {
@@ -64,6 +61,9 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("uncorrelated scalar subquery on testData") {
+    // initialize test Data
+    testData
+
     assertResult(Array(Row(5))) {
       sql("select (select key from testData where key > 3 limit 1) + 1").collect()
     }
