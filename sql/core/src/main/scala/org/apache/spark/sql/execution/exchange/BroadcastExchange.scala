@@ -40,7 +40,8 @@ case class BroadcastExchange(
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
-  val timeout: Duration = {
+  @transient
+  private val timeout: Duration = {
     val timeoutValue = sqlContext.conf.broadcastTimeout
     if (timeoutValue < 0) {
       Duration.Inf
@@ -75,7 +76,8 @@ case class BroadcastExchange(
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException("Broadcast does not support the execute() code path.")
+    throw new UnsupportedOperationException(
+      "BroadcastExchange does not support the execute() code path.")
   }
 
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
