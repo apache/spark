@@ -850,7 +850,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         return res;
       }
     }
-    return numBytes - other.numBytes;
+    return numBytes < other.numBytes ? -1 : (numBytes > other.numBytes ? 1 : 0);
   }
 
   public int compare(final UTF8String other) {
