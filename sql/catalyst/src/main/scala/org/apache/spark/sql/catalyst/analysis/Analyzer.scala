@@ -123,13 +123,12 @@ class Analyzer(
           }
           substituted.getOrElse(u)
         case other =>
-          // This can't be done in ResolveSubquery because that does not know the CTE.
+          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
               e.withNewPlan(substituteCTE(e.query, cteRelations))
           }
       }
-
     }
   }
 
