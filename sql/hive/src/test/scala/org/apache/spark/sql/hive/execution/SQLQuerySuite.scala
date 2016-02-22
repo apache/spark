@@ -1021,8 +1021,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       ).map(i => Row(i._1, i._2)))
   }
 
-  // todo: fix this test case by reimplementing the function ResolveAggregateFunctions
-  ignore("window function: Pushing aggregate Expressions in Sort to Aggregate") {
+  test("window function: Pushing aggregate Expressions in Sort to Aggregate") {
     val data = Seq(
       WindowData(1, "d", 10),
       WindowData(2, "a", 6),
@@ -1038,7 +1037,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         """
           |select area, sum(product) over () as c from windowData
           |where product > 3 group by area, product
-          |having avg(month) > 0 order by avg(month), product
+          |having avg(month) > 0 order by area, avg(month), product
         """.stripMargin),
       Seq(
         ("a", 51),
