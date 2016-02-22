@@ -227,17 +227,11 @@ object CSVRelation extends Logging {
           while (subIndex < safeRequiredIndices.length) {
             index = safeRequiredIndices(subIndex)
             val field = schemaFields(index)
-            val value = indexSafeTokens(index)
-            val dataType = field.dataType
-            val isNull =
-              value == params.nullValue && field.nullable && !dataType.isInstanceOf[StringType]
-            val safeValue = dataType match {
-              case _: DecimalType if !isNull => value.replaceAll(",", "")
-              case _ if !isNull => value
-              case _ => null
-            }
-            val castedValue = Cast(Literal(safeValue), dataType).eval()
-            rowArray(subIndex) = CatalystTypeConverters.convertToScala(castedValue, dataType)
+            rowArray(subIndex) = CSVTypeCast.castTo(
+              indexSafeTokens(index),
+              field.dataType,
+              field.nullable,
+              params.nullValue)
             subIndex = subIndex + 1
           }
           Some(Row.fromSeq(rowArray.take(requiredSize)))

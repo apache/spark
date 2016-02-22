@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.math.BigDecimal
 import java.sql.Timestamp
+import java.text.NumberFormat
+import java.util.Locale
 
+import scala.util.Try
 import scala.util.control.Exception._
 
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
 
@@ -175,4 +182,40 @@ private[csv] object CSVTypeCast {
       throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
     }
   }
+
+  /**
+   * Casts given string datum to specified type.
+   * Currently we do not support complex types (ArrayType, MapType, StructType).
+   *
+   * For string types, this is simply the datum. For other types.
+   * For other nullable types, this is null if the string datum is empty.
+   *
+   * @param datum string value
+   * @param castType SparkSQL type
+   */
+  def castTo(
+      datum: String,
+      castType: DataType,
+      nullable: Boolean = true,
+      nullValue: String = ""): Any = {
+    val isNull =
+      datum == nullValue && nullable && !castType.isInstanceOf[StringType]
+    val safeValue = castType match {
+      case _ if isNull => null
+      case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
+      case _: FloatType => Try(datum.toFloat)
+        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+      case _: DoubleType => Try(datum.toDouble)
+        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+      case _ =>
+        val castedValue = Cast(Literal(datum), castType).eval()
+        val convertedValue = CatalystTypeConverters.convertToScala(castedValue, castType)
+        if (convertedValue == null) {
+          throw new SparkException(s"[$convertedValue] could not be converted to [$castType].")
+        }
+        convertedValue
+      case _ => null
+    }
+    safeValue
+   }
 }

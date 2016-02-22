@@ -21,10 +21,20 @@ import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.types._
 
 class CSVTypeCastSuite extends SparkFunSuite {
+
+  test("Can parse decimal type values") {
+    val stringValues = Seq("10.05", "1,000.01", "158,058,049.001")
+    val decimalValues = Seq(10.05, 1000.01, 158058049.001)
+    val decimalType = new DecimalType()
+
+    stringValues.zip(decimalValues).foreach { case (strVal, decimalVal) =>
+      assert(CSVTypeCast.castTo(strVal, decimalType) === new BigDecimal(decimalVal.toString))
+    }
+  }
 
   test("Can parse escaped characters") {
     assert(CSVTypeCast.toChar("""\t""") === '\t')
@@ -48,5 +58,46 @@ class CSVTypeCastSuite extends SparkFunSuite {
       CSVTypeCast.toChar("""\1""")
     }
     assert(exception.getMessage.contains("Unsupported special character for delimiter"))
+  }
+
+  test("Nullable types are handled") {
+    assert(CSVTypeCast.castTo("", IntegerType, nullable = true) == null)
+  }
+
+  test("String type should always return the same as the input") {
+    assert(CSVTypeCast.castTo("", StringType, nullable = true) == "")
+    assert(CSVTypeCast.castTo("", StringType, nullable = false) == "")
+  }
+
+  test("Throws exception for empty string with non null type") {
+    val exception = intercept[SparkException]{
+      CSVTypeCast.castTo("", IntegerType, nullable = false)
+    }
+    assert(exception.getMessage.contains("could not be converted to"))
+  }
+
+  test("Types are cast correctly") {
+    assert(CSVTypeCast.castTo("10", ByteType) == 10)
+    assert(CSVTypeCast.castTo("10", ShortType) == 10)
+    assert(CSVTypeCast.castTo("10", IntegerType) == 10)
+    assert(CSVTypeCast.castTo("10", LongType) == 10)
+    assert(CSVTypeCast.castTo("1.00", FloatType) == 1.0)
+    assert(CSVTypeCast.castTo("1.00", DoubleType) == 1.0)
+    assert(CSVTypeCast.castTo("true", BooleanType) == true)
+    val timestamp = "2015-01-01 00:00:00"
+    assert(CSVTypeCast.castTo(timestamp, TimestampType) == Timestamp.valueOf(timestamp))
+    assert(CSVTypeCast.castTo("2015-01-01", DateType) == Date.valueOf("2015-01-01"))
+  }
+
+  test("Float and Double Types are cast correctly with Locale") {
+    val originalLocale = Locale.getDefault
+    try {
+      val locale : Locale = new Locale("fr", "FR")
+      Locale.setDefault(locale)
+      assert(CSVTypeCast.castTo("1,00", FloatType) == 1.0)
+      assert(CSVTypeCast.castTo("1,00", DoubleType) == 1.0)
+    } finally {
+      Locale.setDefault(originalLocale)
+    }
   }
 }
