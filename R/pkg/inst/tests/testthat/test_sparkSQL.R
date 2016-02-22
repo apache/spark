@@ -698,6 +698,10 @@ test_that("names() colnames() set the column names", {
                "Column names must have the same length as the number of columns in the dataset.")
   expect_error(colnames(df) <- c("1", NA), "Column names cannot be NA.")
 
+  # Note: if this test is broken, remove check for "." character on colnames<- method
+  irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+  expect_equal(names(irisDF)[1], "Sepal_Length")
+
   # Test base::colnames base::names
   m2 <- cbind(1, 1:4)
   expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
