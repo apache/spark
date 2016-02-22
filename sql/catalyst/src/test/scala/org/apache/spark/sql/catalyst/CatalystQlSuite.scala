@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
@@ -50,7 +51,7 @@ class CatalystQlSuite extends PlanTest {
     val parsed2 = parser.parsePlan("SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1")
     val expected =
       Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-        Subquery("u_1",
+        SubqueryAlias("u_1",
           Distinct(
             Union(
               Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
@@ -65,7 +66,7 @@ class CatalystQlSuite extends PlanTest {
     val parsed = parser.parsePlan("SELECT * FROM t0 UNION ALL SELECT * FROM t1")
     val expected =
       Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
-        Subquery("u_1",
+        SubqueryAlias("u_1",
           Union(
             Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
               UnresolvedRelation(TableIdentifier("t0"), None)),
@@ -200,5 +201,11 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
+  }
+
+  test("subquery") {
+    parser.parsePlan("select (select max(b) from s) ss from t")
+    parser.parsePlan("select * from t where a = (select b from s)")
+    parser.parsePlan("select * from t group by g having a > (select b from s)")
   }
 }

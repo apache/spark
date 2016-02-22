@@ -32,7 +32,7 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 
 # Installing Mesos
 
-Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} and does not
+Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
 require any special patches of Mesos.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.

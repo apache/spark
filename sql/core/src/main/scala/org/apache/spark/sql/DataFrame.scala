@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
@@ -670,7 +671,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def as(alias: String): DataFrame = withPlan {
-    Subquery(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
@@ -1359,7 +1360,8 @@ class DataFrame private[sql](
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
-    val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
+    val outputCols =
+      (if (cols.isEmpty) numericColumns.map(usePrettyExpression(_).sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>

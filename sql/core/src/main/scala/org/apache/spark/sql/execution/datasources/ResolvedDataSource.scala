@@ -159,7 +159,9 @@ object ResolvedDataSource extends Logging {
       }
       caseInsensitiveOptions.get("paths")
         .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-        .getOrElse(Array(caseInsensitiveOptions("path")))
+        .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
+        throw new IllegalArgumentException("'path' is not specified")
+      })))
         .flatMap{ pathString =>
         val hdfsPath = new Path(pathString)
         val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
@@ -282,7 +284,9 @@ object ResolvedDataSource extends Logging {
         //  3. It's OK that the output path doesn't exist yet;
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val outputPath = {
-          val path = new Path(caseInsensitiveOptions("path"))
+          val path = new Path(caseInsensitiveOptions.getOrElse("path", {
+            throw new IllegalArgumentException("'path' is not specified")
+          }))
           val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }

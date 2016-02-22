@@ -27,7 +27,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 class ConstraintPropagationSuite extends SparkFunSuite {
 
   private def resolveColumn(tr: LocalRelation, columnName: String): Expression =
-    tr.analyze.resolveQuoted(columnName, caseInsensitiveResolution).get
+    resolveColumn(tr.analyze, columnName)
+
+  private def resolveColumn(plan: LogicalPlan, columnName: String): Expression =
+    plan.resolveQuoted(columnName, caseInsensitiveResolution).get
 
   private def verifyConstraints(found: Set[Expression], expected: Set[Expression]): Unit = {
     val missing = expected.filterNot(i => found.map(_.semanticEquals(i)).reduce(_ || _))
@@ -67,6 +70,21 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         resolveColumn(tr, "c") < 100,
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "c"))))
+  }
+
+  test("propagating constraints in aliases") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+
+    assert(tr.where('c.attr > 10).select('a.as('x), 'b.as('y)).analyze.constraints.isEmpty)
+
+    val aliasedRelation = tr.where('a.attr > 10).select('a.as('x), 'b, 'b.as('y), 'a.as('z))
+
+    verifyConstraints(aliasedRelation.analyze.constraints,
+      Set(resolveColumn(aliasedRelation.analyze, "x") > 10,
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "x")),
+        resolveColumn(aliasedRelation.analyze, "b") <=> resolveColumn(aliasedRelation.analyze, "y"),
+        resolveColumn(aliasedRelation.analyze, "z") > 10,
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "z"))))
   }
 
   test("propagating constraints in union") {
