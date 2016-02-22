@@ -42,8 +42,7 @@ public class JavaSaveLoadSuite {
 
   String originalDefaultSource;
   File path;
-  DataFrame jsonDf;
-  DataFrame csvDf;
+  DataFrame df;
 
   private static void checkAnswer(DataFrame actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
@@ -60,7 +59,7 @@ public class JavaSaveLoadSuite {
 
     originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
-      Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
+            Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }
@@ -69,17 +68,9 @@ public class JavaSaveLoadSuite {
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"a\":" + i + ", \"b\":\"str" + i + "\"}");
     }
-    JavaRDD<String> jsonRDD = sc.parallelize(jsonObjects);
-    jsonDf = sqlContext.read().json(jsonRDD);
-    jsonDf.registerTempTable("jsonTable");
-
-    List<String> csvObjects = new ArrayList<>(10);
-    for (int i = 0; i < 10; i++) {
-      csvObjects.add(i + "," + i + ",str" );
-    }
-    JavaRDD<String> csvRDD = sc.parallelize(csvObjects);
-    csvDf = sqlContext.read().csv(csvRDD);
-    csvDf.registerTempTable("csvTable");
+    JavaRDD<String> rdd = sc.parallelize(jsonObjects);
+    df = sqlContext.read().json(rdd);
+    df.registerTempTable("jsonTable");
   }
 
   @After
@@ -90,28 +81,19 @@ public class JavaSaveLoadSuite {
   }
 
   @Test
-  public void jsonSaveAndLoad() {
+  public void saveAndLoad() {
     Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
-    jsonDf.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
+    df.write().mode(SaveMode.ErrorIfExists).format("json").options(options).save();
     DataFrame loadedDF = sqlContext.read().format("json").options(options).load();
-    checkAnswer(loadedDF, jsonDf.collectAsList());
-  }
-
-  @Test
-  public void csvSaveAndLoad() {
-    Map<String, String> options = new HashMap<>();
-    options.put("path", path.toString());
-    csvDf.write().mode(SaveMode.ErrorIfExists).format("csv").options(options).save();
-    DataFrame loadedDF = sqlContext.read().format("csv").options(options).load();
-    checkAnswer(loadedDF, csvDf.collectAsList());
+    checkAnswer(loadedDF, df.collectAsList());
   }
 
   @Test
   public void saveAndLoadWithSchema() {
     Map<String, String> options = new HashMap<>();
     options.put("path", path.toString());
-    jsonDf.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
+    df.write().format("json").mode(SaveMode.ErrorIfExists).options(options).save();
 
     List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));

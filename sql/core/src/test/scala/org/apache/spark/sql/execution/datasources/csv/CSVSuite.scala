@@ -100,16 +100,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = false, checkTypes = false)
   }
 
-  test("simple csv test with loading csv data from RDD") {
-    val csvRDD = sparkContext.textFile(testFile(carsFile))
-    val cars = sqlContext
-      .read
-      .option("header", "false")
-      .csv(csvRDD)
-
-    verifyCars(cars, withHeader = false, checkTypes = false)
-  }
-
   test("simple csv test with type inference") {
     val cars = sqlContext
       .read

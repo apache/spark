@@ -30,7 +30,6 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
-import org.apache.spark.sql.execution.datasources.csv.CSVRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -353,37 +352,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 2.0.0
    */
+  @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
-
-  /**
-   * Loads an `RDD[String]` storing CSV records and returns the result as a [[DataFrame]].
-   *
-   * Unless the schema is specified using [[schema]] function, this function goes through the
-   * input once to determine the input schema.
-   *
-   * @param csvRDD input RDD containing CSV records
-   * @since 2.0.0
-   */
-  def csv(csvRDD: JavaRDD[String]): DataFrame = csv(csvRDD.rdd)
-
-  /**
-   * Loads an `RDD[String]` storing CSV records and returns the result as a [[DataFrame]].
-   *
-   * Unless the schema is specified using [[schema]] function, this function goes through the
-   * input once to determine the input schema.
-   *
-   * @param csvRDD input RDD containing CSV records
-   * @since 2.0.0
-   */
-  def csv(csvRDD: RDD[String]): DataFrame = {
-    sqlContext.baseRelationToDataFrame(
-      new CSVRelation(
-        Some(csvRDD),
-        maybeDataSchema = userSpecifiedSchema,
-        userDefinedPartitionColumns = None,
-        parameters = extraOptions.toMap)(sqlContext)
-    )
-  }
 
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
