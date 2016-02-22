@@ -17,10 +17,15 @@
 
 package org.apache.spark.graphx
 
+import scala.reflect.{classTag, ClassTag}
 import scala.reflect.ClassTag
 import scala.util.Random
 
+import org.apache.spark.HashPartitioner
+import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
+import org.apache.spark.graphx.impl.EdgePartitionBuilder
+import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.graphx.lib._
 import org.apache.spark.rdd.RDD
 
@@ -181,6 +186,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
     }
+  }
+
+  /**
+   * Remove self edges.
+   *
+   * @return a graph with all self edges removed
+   */
+  def removeSelfEdges(): Graph[VD, ED] = {
+    graph.subgraph(epred = e => e.srcId != e.dstId)
   }
 
   /**

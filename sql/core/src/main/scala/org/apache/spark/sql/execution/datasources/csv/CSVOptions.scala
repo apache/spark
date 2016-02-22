@@ -75,9 +75,6 @@ private[sql] class CSVOptions(
   val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
   val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
 
-  // Limit the number of lines we'll search for a header row that isn't comment-prefixed
-  val MAX_COMMENT_LINES_IN_HEADER = 10
-
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {
     logWarning(s"$parseMode is not a valid parse mode. Using ${ParseModes.DEFAULT}.")

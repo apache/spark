@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubQueries}
+import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubqueryAliases}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
@@ -40,7 +40,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     // However, because we also use the analyzer to canonicalized queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
-      EliminateSubQueries,
+      EliminateSubqueryAliases,
       ComputeCurrentTime) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
@@ -90,7 +90,19 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
-      ConvertToLocalRelation) :: Nil
+      ConvertToLocalRelation) ::
+    Batch("Subquery", Once,
+      OptimizeSubqueries) :: Nil
+  }
+
+  /**
+   * Optimize all the subqueries inside expression.
+   */
+  object OptimizeSubqueries extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case subquery: SubqueryExpression =>
+        subquery.withNewPlan(Optimizer.this.execute(subquery.query))
+    }
   }
 }
 
