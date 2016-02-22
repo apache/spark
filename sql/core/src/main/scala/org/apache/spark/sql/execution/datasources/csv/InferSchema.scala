@@ -177,16 +177,22 @@ private[csv] object CSVTypeCast {
       case _ if isNull => null
       case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
       case _: FloatType => Try(datum.toFloat)
-        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+        .orElse(Try(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue()))
+        .getOrElse {
+          throw new SparkException(s"[$datum] could not be converted to [$castType].")
+        }
       case _: DoubleType => Try(datum.toDouble)
-        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+        .orElse(Try(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue()))
+        .getOrElse {
+          throw new SparkException(s"[$datum] could not be converted to [$castType].")
+        }
       case _ =>
         val castedValue = Cast(Literal(datum), castType).eval()
-        val convertedValue = CatalystTypeConverters.convertToScala(castedValue, castType)
-        if (convertedValue == null) {
-          throw new SparkException(s"[$convertedValue] could not be converted to [$castType].")
+        val catalystConvertedValue = CatalystTypeConverters.convertToScala(castedValue, castType)
+        if (catalystConvertedValue == null) {
+          throw new SparkException(s"[$datum] could not be converted to [$castType].")
         }
-        convertedValue
+        catalystConvertedValue
       case _ => null
     }
     convertedValue
