@@ -167,10 +167,10 @@ private[csv] object CSVTypeCast {
    * @param castType SparkSQL type
    */
   def castTo(
-              datum: String,
-              castType: DataType,
-              nullable: Boolean = true,
-              nullValue: String = ""): Any = {
+      datum: String,
+      castType: DataType,
+      nullable: Boolean = true,
+      nullValue: String = ""): Any = {
     val isNull =
       datum == nullValue && nullable && !castType.isInstanceOf[StringType]
     val convertedValue = castType match {
@@ -191,7 +191,7 @@ private[csv] object CSVTypeCast {
     }
     convertedValue
   }
-  
+
   /**
    * Helper method that converts string representation of a character to actual character.
    * It handles some Java escaped strings and throws exception if given string is longer than one
