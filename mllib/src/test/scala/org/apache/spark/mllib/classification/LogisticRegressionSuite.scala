@@ -667,9 +667,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
   test("binary logistic regression with intercept with L1 regularization") {
     val trainer1 = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(true)
-    trainer1.optimizer.setUpdater(new L1Updater).setRegParam(0.12).setConvergenceTol(1E-6)
+    trainer1.optimizer.setUpdater(new L1Updater).setRegParam(0.12)
     val trainer2 = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(false)
-    trainer2.optimizer.setUpdater(new L1Updater).setRegParam(0.12).setConvergenceTol(1E-6)
+    trainer2.optimizer.setUpdater(new L1Updater).setRegParam(0.12)
 
     val model1 = trainer1.run(binaryDataset)
     val model2 = trainer2.run(binaryDataset)
@@ -726,9 +726,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
   test("binary logistic regression without intercept with L1 regularization") {
     val trainer1 = new LogisticRegressionWithLBFGS().setIntercept(false).setFeatureScaling(true)
-    trainer1.optimizer.setUpdater(new L1Updater).setRegParam(0.12).setConvergenceTol(1E-6)
+    trainer1.optimizer.setUpdater(new L1Updater).setRegParam(0.12)
     val trainer2 = new LogisticRegressionWithLBFGS().setIntercept(false).setFeatureScaling(false)
-    trainer2.optimizer.setUpdater(new L1Updater).setRegParam(0.12).setConvergenceTol(1E-6)
+    trainer2.optimizer.setUpdater(new L1Updater).setRegParam(0.12)
 
     val model1 = trainer1.run(binaryDataset)
     val model2 = trainer2.run(binaryDataset)
@@ -786,9 +786,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
   test("binary logistic regression with intercept with L2 regularization") {
     val trainer1 = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(true)
-    trainer1.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37).setConvergenceTol(1E-6)
+    trainer1.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37)
     val trainer2 = new LogisticRegressionWithLBFGS().setIntercept(true).setFeatureScaling(false)
-    trainer2.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37).setConvergenceTol(1E-6)
+    trainer2.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37)
 
     val model1 = trainer1.run(binaryDataset)
     val model2 = trainer2.run(binaryDataset)
@@ -845,9 +845,9 @@ class LogisticRegressionSuite extends SparkFunSuite with MLlibTestSparkContext w
 
   test("binary logistic regression without intercept with L2 regularization") {
     val trainer1 = new LogisticRegressionWithLBFGS().setIntercept(false).setFeatureScaling(true)
-    trainer1.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37).setConvergenceTol(1E-6)
+    trainer1.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37)
     val trainer2 = new LogisticRegressionWithLBFGS().setIntercept(false).setFeatureScaling(false)
-    trainer2.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37).setConvergenceTol(1E-6)
+    trainer2.optimizer.setUpdater(new SquaredL2Updater).setRegParam(1.37)
 
     val model1 = trainer1.run(binaryDataset)
     val model2 = trainer2.run(binaryDataset)
