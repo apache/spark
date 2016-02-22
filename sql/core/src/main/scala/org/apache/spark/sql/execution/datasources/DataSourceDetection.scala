@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.sql.SQLContext
 
-object DataSourceDetect extends Logging {
+object DataSourceDetection extends Logging {
   /** A map to detect data sources by the extensions of given files. */
   private val extensionDatasourceMap = Map(
     "csv" -> "csv",
@@ -115,7 +115,7 @@ object DataSourceDetect extends Logging {
       name.startsWith("_") || name.startsWith(".")
     }
     val (dirs, files) = statuses.partition(_.isDirectory)
-    
+
     if (files.nonEmpty) {
       Some(files.head)
     } else if (dirs.isEmpty) {

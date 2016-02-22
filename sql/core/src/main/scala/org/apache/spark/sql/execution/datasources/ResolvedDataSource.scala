@@ -150,7 +150,7 @@ object ResolvedDataSource extends Logging {
       }
     }
     val safeProvider = Option(provider)
-      .getOrElse(DataSourceDetect.detect(sqlContext, paths.head))
+      .getOrElse(DataSourceDetection.detect(sqlContext, paths.head))
 
     val clazz: Class[_] = lookupDataSource(safeProvider)
     def className: String = clazz.getCanonicalName

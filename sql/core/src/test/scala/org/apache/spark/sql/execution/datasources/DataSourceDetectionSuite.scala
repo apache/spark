@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
 
-class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
+class DataSourceDetectionSuite extends QueryTest with SharedSQLContext  {
 
   test("detect datasource - parquet") {
     val data = (1 to 10).map(i => (i, i.toString))
@@ -39,7 +39,7 @@ class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
         }
 
         val source = "parquet"
-        assert(DataSourceDetect.detect(sqlContext, path) == source)
+        assert(DataSourceDetection.detect(sqlContext, path) == source)
       }
     }
   }
@@ -51,7 +51,7 @@ class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
       sqlContext.createDataFrame(data).write.json(path)
 
       val source = "json"
-      assert(DataSourceDetect.detect(sqlContext, path) == source)
+      assert(DataSourceDetection.detect(sqlContext, path) == source)
     }
   }
 
@@ -62,7 +62,7 @@ class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
       sqlContext.createDataFrame(data).write.json(path)
 
       val message = intercept[SparkException] {
-        DataSourceDetect.detect(sqlContext, path)
+        DataSourceDetection.detect(sqlContext, path)
       }.getMessage
       assert(message.contains("Detected data source was"))
     }
