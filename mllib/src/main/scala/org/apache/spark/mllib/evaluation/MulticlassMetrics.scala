@@ -250,7 +250,7 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
         }
       case t =>
         throw new IllegalArgumentException(
-          s"weightedKappa only supports {linear, quadratic, default} but got type ${t}.")
+          s"kappa only supports {linear, quadratic, default} but got type ${t}.")
     }
 
     kappa(wFunc)
