@@ -127,20 +127,20 @@ class TransformFunctionSerializer(object):
 
 def rddToFileName(prefix, suffix, timestamp):
     """
-    Return string prefix-time(.suffix)
+    Return string <prefix>time[.suffix]
 
-    >>> rddToFileName("spark", None, 12345678910)
+    >>> rddToFileName("spark-", None, 12345678910)
     'spark-12345678910'
-    >>> rddToFileName("spark", "tmp", 12345678910)
+    >>> rddToFileName("spark-", "tmp", 12345678910)
     'spark-12345678910.tmp'
     """
     if isinstance(timestamp, datetime):
         seconds = time.mktime(timestamp.timetuple())
         timestamp = int(seconds * 1000) + timestamp.microsecond // 1000
     if suffix is None:
-        return prefix + "-" + str(timestamp)
+        return prefix + str(timestamp)
     else:
-        return prefix + "-" + str(timestamp) + "." + suffix
+        return prefix + str(timestamp) + "." + suffix
 
 
 if __name__ == "__main__":

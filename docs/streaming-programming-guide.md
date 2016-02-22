@@ -1237,13 +1237,13 @@ Currently, the following output operations are defined:
 <tr>
   <td> <b>saveAsTextFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
   <td> Save this DStream's contents as text files. The file name at each batch interval is
-  generated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>. </td>
+  generated based on <i>prefix</i> and <i>suffix</i>: <i>"<prefix>TIME_IN_MS[.suffix]"</i>. </td>
 </tr>
 <tr>
   <td> <b>saveAsObjectFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
   <td> Save this DStream's contents as <code>SequenceFiles</code> of serialized Java objects. The file
   name at each batch interval is generated based on <i>prefix</i> and
-  <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>.
+  <i>suffix</i>: <i>"<prefix>TIME_IN_MS[.suffix]"</i>.
   <br/>
   <span class="badge" style="background-color: grey">Python API</span> This is not available in
   the Python API.
@@ -1252,7 +1252,7 @@ Currently, the following output operations are defined:
 <tr>
   <td> <b>saveAsHadoopFiles</b>(<i>prefix</i>, [<i>suffix</i>]) </td>
   <td> Save this DStream's contents as Hadoop files. The file name at each batch interval is
-  generated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>.
+  generated based on <i>prefix</i> and <i>suffix</i>: <i>"<prefix>TIME_IN_MS[.suffix]"</i>.
   <br>
   <span class="badge" style="background-color: grey">Python API</span> This is not available in
   the Python API.

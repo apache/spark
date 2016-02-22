@@ -843,7 +843,7 @@ object StreamingContext extends Logging {
   private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
     var result = time.milliseconds.toString
     if (prefix != null && prefix.length > 0) {
-      result = s"$prefix-$result"
+      result = s"$prefix$result"
     }
     if (suffix != null && suffix.length > 0) {
       result = s"$result.$suffix"
