@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
+import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -29,9 +29,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * for hash join.
  */
 case class LeftSemiJoinBNL(
-    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression])
-  extends BinaryNode {
-  // TODO: Override requiredChildDistribution.
+    streamed: SparkPlan, broadcast: SparkPlan, condition: Option[Expression]) extends BinaryNode {
 
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
@@ -46,27 +44,28 @@ case class LeftSemiJoinBNL(
   /** The Broadcast relation */
   override def right: SparkPlan = broadcast
 
+  override def requiredChildDistribution: Seq[Distribution] = {
+    UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
+  }
+
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastedRelation =
-      sparkContext.broadcast(broadcast.execute().map { row =>
-        row.copy()
-      }.collect().toIndexedSeq)
+    val broadcastedRelation = broadcast.executeBroadcast[Array[InternalRow]]()
 
     streamed.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow
+      val relation = broadcastedRelation.value
 
       streamedIter.filter(streamedRow => {
         var i = 0
         var matched = false
 
-        while (i < broadcastedRelation.value.size && !matched) {
-          val broadcastedRow = broadcastedRelation.value(i)
-          if (boundCondition(joinedRow(streamedRow, broadcastedRow))) {
+        while (i < relation.length && !matched) {
+          if (boundCondition(joinedRow(streamedRow, relation(i)))) {
             matched = true
           }
           i += 1
