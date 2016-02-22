@@ -225,7 +225,43 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
     * Returns the sequence of labels in ascending order
     */
   @Since("1.6.0")
-  def kappa(weights: Matrix): Double = {
+  def Kappa(weights: String): Double = {
+    weightedKappa("default")
+  }
+
+
+  /**
+    * Returns the sequence of labels in ascending order
+    */
+  @Since("1.6.0")
+  def weightedKappa(weights: String): Double = {
+    val wFunc = weights match {
+      case "linear" =>
+        (i: Int, j:Int) => Math.abs(i - j).toDouble
+      case "quadratic" =>
+        (i: Int, j:Int) => (i - j) * (i - j)
+      case "default" =>
+        (i: Int, j:Int) => {
+          if(i == j) {
+            0
+          } else {
+            0
+          }
+        }
+      case t =>
+        throw new IllegalArgumentException(
+          s"weightedKappa only supports {linear, quadratic, default} but got type ${t}.")
+    }
+
+    weightedKappa(wFunc)
+  }
+
+
+  /**
+    * Returns the sequence of labels in ascending order
+    */
+  @Since("1.6.0")
+  def weightedKappa(weights: Matrix): Double = {
     val n = labels.size
     require(weights.numRows == n)
     require(weights.numCols == n)
@@ -235,19 +271,16 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
         require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
     }
 
-    val f =  (i:Double, j:Double) =>    {
-      weights.index(i, j)
-    }
+    val wFunc = (i: Int, j:Int) => weights(i, j)
 
-
-    1.0
+    weightedKappa(wFunc)
   }
 
   /**
     * Returns the sequence of labels in ascending order
     */
   @Since("1.6.0")
-  def weightedKappa(weights: (Double, Double) => Double): Double = {
+  def weightedKappa(weights: (Int, Int) => Double): Double = {
     val mat = confusionMatrix
 
     val sumByRows = collection.mutable.Map[Int, Double]()
