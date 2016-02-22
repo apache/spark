@@ -157,6 +157,42 @@ private[csv] object InferSchema {
 private[csv] object CSVTypeCast {
 
   /**
+   * Casts given string datum to specified type.
+   * Currently we do not support complex types (ArrayType, MapType, StructType).
+   *
+   * For string types, this is simply the datum. For other types.
+   * For other nullable types, this is null if the string datum is empty.
+   *
+   * @param datum string value
+   * @param castType SparkSQL type
+   */
+  def castTo(
+              datum: String,
+              castType: DataType,
+              nullable: Boolean = true,
+              nullValue: String = ""): Any = {
+    val isNull =
+      datum == nullValue && nullable && !castType.isInstanceOf[StringType]
+    val convertedValue = castType match {
+      case _ if isNull => null
+      case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
+      case _: FloatType => Try(datum.toFloat)
+        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+      case _: DoubleType => Try(datum.toDouble)
+        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+      case _ =>
+        val castedValue = Cast(Literal(datum), castType).eval()
+        val convertedValue = CatalystTypeConverters.convertToScala(castedValue, castType)
+        if (convertedValue == null) {
+          throw new SparkException(s"[$convertedValue] could not be converted to [$castType].")
+        }
+        convertedValue
+      case _ => null
+    }
+    convertedValue
+  }
+  
+  /**
    * Helper method that converts string representation of a character to actual character.
    * It handles some Java escaped strings and throws exception if given string is longer than one
    * character.
@@ -182,40 +218,4 @@ private[csv] object CSVTypeCast {
       throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
     }
   }
-
-  /**
-   * Casts given string datum to specified type.
-   * Currently we do not support complex types (ArrayType, MapType, StructType).
-   *
-   * For string types, this is simply the datum. For other types.
-   * For other nullable types, this is null if the string datum is empty.
-   *
-   * @param datum string value
-   * @param castType SparkSQL type
-   */
-  def castTo(
-      datum: String,
-      castType: DataType,
-      nullable: Boolean = true,
-      nullValue: String = ""): Any = {
-    val isNull =
-      datum == nullValue && nullable && !castType.isInstanceOf[StringType]
-    val safeValue = castType match {
-      case _ if isNull => null
-      case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
-      case _: FloatType => Try(datum.toFloat)
-        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
-      case _: DoubleType => Try(datum.toDouble)
-        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
-      case _ =>
-        val castedValue = Cast(Literal(datum), castType).eval()
-        val convertedValue = CatalystTypeConverters.convertToScala(castedValue, castType)
-        if (convertedValue == null) {
-          throw new SparkException(s"[$convertedValue] could not be converted to [$castType].")
-        }
-        convertedValue
-      case _ => null
-    }
-    safeValue
-   }
 }
