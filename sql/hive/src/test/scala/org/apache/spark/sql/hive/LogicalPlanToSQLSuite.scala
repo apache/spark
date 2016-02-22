@@ -138,6 +138,97 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT DISTINCT id FROM t0")
   }
 
+  test("rollup/cube #1") {
+    // Original logical plan:
+    //   Aggregate [(key#17L % cast(5 as bigint))#47L,grouping__id#46],
+    //             [(count(1),mode=Complete,isDistinct=false) AS cnt#43L,
+    //              (key#17L % cast(5 as bigint))#47L AS _c1#45L,
+    //              grouping__id#46 AS _c2#44]
+    //   +- Expand [List(key#17L, value#18, (key#17L % cast(5 as bigint))#47L, 0),
+    //              List(key#17L, value#18, null, 1)],
+    //             [key#17L,value#18,(key#17L % cast(5 as bigint))#47L,grouping__id#46]
+    //      +- Project [key#17L,
+    //                  value#18,
+    //                  (key#17L % cast(5 as bigint)) AS (key#17L % cast(5 as bigint))#47L]
+    //         +- Subquery t1
+    //            +- Relation[key#17L,value#18] ParquetRelation
+    // Converted SQL:
+    //   SELECT count( 1) AS `cnt`,
+    //          (`t1`.`key` % CAST(5 AS BIGINT)),
+    //          grouping_id() AS `_c2`
+    //   FROM `default`.`t1`
+    //   GROUP BY (`t1`.`key` % CAST(5 AS BIGINT))
+    //   GROUPING SETS (((`t1`.`key` % CAST(5 AS BIGINT))), ())
+    checkHiveQl(
+      "SELECT count(*) as cnt, key % 5, grouping_id() FROM t1 GROUP BY key % 5 WITH ROLLUP")
+    checkHiveQl(
+      "SELECT count(*) as cnt, key % 5, grouping_id() FROM t1 GROUP BY key % 5 WITH CUBE")
+  }
+
+  test("rollup/cube #2") {
+    checkHiveQl("SELECT key, value, count(value) FROM t1 GROUP BY key, value WITH ROLLUP")
+    checkHiveQl("SELECT key, value, count(value) FROM t1 GROUP BY key, value WITH CUBE")
+  }
+
+  test("rollup/cube #3") {
+    checkHiveQl(
+      "SELECT key, count(value), grouping_id() FROM t1 GROUP BY key, value WITH ROLLUP")
+    checkHiveQl(
+      "SELECT key, count(value), grouping_id() FROM t1 GROUP BY key, value WITH CUBE")
+  }
+
+  test("rollup/cube #4") {
+    checkHiveQl(
+      s"""
+        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM t1
+        |GROUP BY key % 5, key - 5 WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+         |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM t1
+         |GROUP BY key % 5, key - 5 WITH CUBE
+      """.stripMargin)
+  }
+
+  test("rollup/cube #5") {
+    checkHiveQl(
+      s"""
+         |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+         |FROM (SELECT key, key%2, key - 5 FROM t1) t GROUP BY key%5, key-5
+         |WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+         |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
+         |FROM (SELECT key, key%2, key - 5 FROM t1) t GROUP BY key%5, key-5
+         |WITH CUBE
+      """.stripMargin)
+  }
+
+  test("rollup/cube #6") {
+    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY CUBE(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(a) FROM t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(a) FROM t2 GROUP BY CUBE(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM t2 GROUP BY a + b, b WITH ROLLUP")
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM t2 GROUP BY a + b, b WITH CUBE")
+  }
+
+  test("grouping sets #1") {
+    checkHiveQl(
+      s"""
+         |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id() AS k3
+         |FROM (SELECT key, key % 2, key - 5 FROM t1) t GROUP BY key % 5, key - 5
+         |GROUPING SETS (key % 5, key - 5)
+      """.stripMargin)
+  }
+
+  test("grouping sets #2") {
+    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY a, b GROUPING SETS (a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY a, b GROUPING SETS (a) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY a, b GROUPING SETS (b) ORDER BY a, b")
+  }
+
   test("cluster by") {
     checkHiveQl("SELECT id FROM t0 CLUSTER BY id")
   }
