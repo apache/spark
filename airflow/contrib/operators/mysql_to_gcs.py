@@ -10,6 +10,9 @@ from MySQLdb.constants import FIELD_TYPE
 from tempfile import NamedTemporaryFile
 
 class MySqlToGoogleCloudStorageOperator(BaseOperator):
+    """
+    Copy data from MySQL to Google cloud storage in JSON format.
+    """
     template_fields = ('sql', 'bucket', 'filename', 'schema_filename')
     template_ext = ('.sql',)
     ui_color = '#a0e08c'
@@ -20,12 +23,41 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
                  bucket,
                  filename,
                  schema_filename=None,
-                 approx_max_file_size_bytes=3900000000L,
+                 approx_max_file_size_bytes=1900000000L,
                  mysql_conn_id='mysql_default',
                  google_cloud_storage_conn_id='google_cloud_storage_default',
                  delegate_to=None,
                  *args,
                  **kwargs):
+        """
+        :param sql: The SQL to execute on the MySQL table.
+        :type sql: string
+        :param bucket: The bucket to upload to.
+        :type bucket: string
+        :param filename: The filename to use as the object name when uploading
+            to Google cloud storage. A {} should be specified in the filename
+            to allow the operator to inject file numbers in cases where the
+            file is split due to size.
+        :type filename: string
+        :param schema_filename: If set, the filename to use as the object name
+            when uploading a .json file containing the BigQuery schema fields
+            for the table that was dumped from MySQL.
+        :type schema_filename: string
+        :param approx_max_file_size_bytes: This operator supports the ability
+            to split large table dumps into multiple files (see notes in the
+            filenamed param docs above). Google cloud storage allows for files
+            to be a maximum of 4GB. This param allows developers to specify the
+            file size of the splits.
+        :type approx_max_file_size_bytes: long
+        :param mysql_conn_id: Reference to a specific MySQL hook.
+        :type mysql_conn_id: string
+        :param google_cloud_storage_conn_id: Reference to a specific Google
+            cloud storage hook.
+        :type google_cloud_storage_conn_id: string
+        :param delegate_to: The account to impersonate, if any. For this to
+            work, the service account making the request must have domain-wide
+            delegation enabled.
+        """
         super(MySqlToGoogleCloudStorageOperator, self).__init__(*args, **kwargs)
         self.sql = sql;
         self.bucket = bucket
@@ -55,6 +87,9 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
             file_handle.close()
 
     def _query_mysql(self):
+        """
+        Queries mysql and returns a cursor to the results.
+        """
         mysql = MySqlHook(mysql_conn_id=self.mysql_conn_id)
         conn = mysql.get_conn()
         cursor = conn.cursor()
@@ -62,6 +97,13 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
         return cursor
 
     def _write_local_data_files(self, cursor):
+        """
+        Takes a cursor, and writes results to a local file.
+
+        :return: A dictionary where keys are filenames to be used as object
+            names in GCS, and values are file handles to local files that
+            contain the data for the GCS objects.
+        """
         schema = map(lambda schema_tuple: schema_tuple[0], cursor.description)
         file_no = 0
         tmp_file_handle = NamedTemporaryFile(delete=True)
@@ -84,6 +126,14 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
         return tmp_file_handles
 
     def _write_local_schema_file(self, cursor):
+        """
+        Takes a cursor, and writes the BigQuery schema for the results to a
+        local file system.
+
+        :return: A dictionary where key is a filename to be used as an object
+            name in GCS, and values are file handles to local files that
+            contains the BigQuery schema fields in .json format.
+        """
         schema = []
         for field in cursor.description:
             # See PEP 249 for details about the description tuple.
@@ -96,12 +146,16 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
                 'mode': field_mode,
             })
 
-        print('Using schema for {}: {}', self.schema_filename, str(schema))
+        logging.info('Using schema for %s: %s', self.schema_filename, schema)
         tmp_schema_file_handle = NamedTemporaryFile(delete=True)
         json.dump(schema, tmp_schema_file_handle)
         return {self.schema_filename: tmp_schema_file_handle}
 
     def _upload_to_gcs(self, files_to_upload):
+        """
+        Upload all of the file splits (and optionally the schema .json file) to
+        Google cloud storage.
+        """
         hook = GoogleCloudStorageHook(google_cloud_storage_conn_id=self.google_cloud_storage_conn_id,
                                       delegate_to=self.delegate_to)
         for object, tmp_file_handle in files_to_upload.items():
@@ -109,6 +163,10 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
 
     @classmethod
     def type_map(cls, mysql_type):
+        """
+        Helper function that maps from MySQL fields to BigQuery fields. Used
+        when a schema_filename is set.
+        """
         d = {
             FIELD_TYPE.BIT: 'INTEGER',
             FIELD_TYPE.DATETIME: 'TIMESTAMP',
