@@ -120,7 +120,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * The effective storage level refers to the level that actually specifies BlockManager put
    * behavior, not the level originally specified by the user. This is mainly for forcing a
    * MEMORY_AND_DISK partition to disk if there is not enough room to unroll the partition,
-   * while preserving the the original semantics of the RDD as specified by the application.
+   * while preserving the original semantics of the RDD as specified by the application.
    */
   private def putInBlockManager[T](
       key: BlockId,
