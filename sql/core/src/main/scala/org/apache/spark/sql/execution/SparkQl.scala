@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending}
-import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
+import org.apache.spark.sql.catalyst.parser.{ASTNode, CatalystQl, ParserConf, ParserSupport, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.execution.commands._
@@ -30,28 +30,23 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.StructType
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
+  import ParserSupport._
+
   /** Check if a command should not be explained. */
   protected def isNoExplainCommand(command: String): Boolean =
     "TOK_DESCTABLE" == command || "TOK_ALTERTABLE" == command
 
-  protected def extractProps(node: ASTNode): Seq[(String, String)] = node match {
-    case Token("TOK_TABLEOPTIONS", options) =>
+  protected def extractProps(
+      node: ASTNode,
+      firstLevelNodeStr: String,
+      secondLevelNodeStr: String): Seq[(String, String)] = node match {
+    case Token(firstLevelNodeStr, options) =>
       options.map {
-        case Token("TOK_TABLEOPTION", keysAndValue) =>
-          val key = keysAndValue.init.map(_.text).mkString(".")
-          val value = unquoteString(keysAndValue.last.text)
-          (key, value)
-      }
-
-    case Token("TOK_DBPROPLIST", props) =>
-      props.map {
-        case Token("TOK_TABLEPROPERTY", keysAndValue) =>
+        case Token(secondLevelNodeStr, keysAndValue) =>
           val key = keysAndValue.init.map(x => unquoteString(x.text)).mkString(".")
           val value = unquoteString(keysAndValue.last.text)
           (key, value)
       }
-
-    case _ => Seq.empty
   }
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
@@ -106,7 +101,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
         val props: Map[String, String] = dbprops.toSeq.flatMap {
           case Token("TOK_DATABASEPROPERTIES", propList) =>
-            propList.flatMap(extractProps)
+            propList.flatMap(extractProps(_, "TOK_DBPROPLIST", "TOK_TABLEPROPERTY"))
         }.toMap
 
         CreateDataBase(databaseName, allowExisting.isDefined, location, comment, props)(node.source)
@@ -135,8 +130,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         CreateFunction(funcName, asName, resourcesMap, temp.isDefined)(node.source)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
-        AlterTableCommandParser(this).applyOrElse(node,
-          (node: ASTNode) => throw new NotImplementedError(node.text))
+        AlterTableCommandParser.parse(node)
 
       case Token("TOK_CREATETABLEUSING", createTableArgs) =>
         val Seq(
@@ -164,7 +158,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case Token(name, Nil) => name
         }.mkString(".")
 
-        val options: Map[String, String] = tableOpts.toSeq.flatMap(extractProps).toMap
+        val options: Map[String, String] =
+          tableOpts.toSeq.flatMap(extractProps(_, "TOK_TABLEOPTIONS", "TOK_TABLEOPTION")).toMap
         val asClause = tableAs.map(nodeToPlan(_))
 
         if (temp.isDefined && allowExisting.isDefined) {

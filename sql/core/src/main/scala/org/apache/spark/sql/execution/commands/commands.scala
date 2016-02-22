@@ -31,15 +31,6 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
-abstract class NativeDDLCommands(val sql: String) extends RunnableCommand {
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    sqlContext.catalog.runNativeCommand(sql)
-  }
-
-  override val output: Seq[Attribute] =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
-
 case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableCommand with Logging {
 
   private def keyValueOutput: Seq[Attribute] = {
@@ -49,8 +40,47 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     schema.toAttributes
   }
 
+  private val deprecatedProperties: Map[String, SQLContext => Seq[Row]] =
+    Seq((SQLConf.Deprecated.EXTERNAL_SORT, (sqlContext: SQLContext) => {
+      logWarning(
+        s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
+          s"External sort will continue to be used.")
+      Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
+    }),
+    (SQLConf.Deprecated.USE_SQL_AGGREGATE2, (sqlContext: SQLContext) => {
+      logWarning(
+        s"Property ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} is deprecated and " +
+          s"will be ignored. ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} will " +
+          s"continue to be true.")
+      Seq(Row(SQLConf.Deprecated.USE_SQL_AGGREGATE2, "true"))
+    }),
+    (SQLConf.Deprecated.TUNGSTEN_ENABLED, (sqlContext: SQLContext) => {
+      logWarning(
+        s"Property ${SQLConf.Deprecated.TUNGSTEN_ENABLED} is deprecated and " +
+          s"will be ignored. Tungsten will continue to be used.")
+      Seq(Row(SQLConf.Deprecated.TUNGSTEN_ENABLED, "true"))
+    }),
+    (SQLConf.Deprecated.CODEGEN_ENABLED, (sqlContext: SQLContext) => {
+      logWarning(
+        s"Property ${SQLConf.Deprecated.CODEGEN_ENABLED} is deprecated and " +
+          s"will be ignored. Codegen will continue to be used.")
+      Seq(Row(SQLConf.Deprecated.CODEGEN_ENABLED, "true"))
+    }),
+    (SQLConf.Deprecated.UNSAFE_ENABLED, (sqlContext: SQLContext) => {
+      logWarning(
+        s"Property ${SQLConf.Deprecated.UNSAFE_ENABLED} is deprecated and " +
+          s"will be ignored. Unsafe mode will continue to be used.")
+      Seq(Row(SQLConf.Deprecated.UNSAFE_ENABLED, "true"))
+    }),
+    (SQLConf.Deprecated.SORTMERGE_JOIN, (sqlContext: SQLContext) => {
+      logWarning(
+        s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
+          s"will be ignored. Sort merge join will continue to be used.")
+      Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
+    })
+  ).toMap
+
   private val (_output, runFunc): (Seq[Attribute], SQLContext => Seq[Row]) = kv match {
-    // Configures the deprecated "mapred.reduce.tasks" property.
     case Some((SQLConf.Deprecated.MAPRED_REDUCE_TASKS, Some(value))) =>
       val runFunc = (sqlContext: SQLContext) => {
         logWarning(
@@ -67,61 +97,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
         }
       }
       (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.EXTERNAL_SORT, Some(value))) =>
-      val runFunc = (sqlContext: SQLContext) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.EXTERNAL_SORT} is deprecated and will be ignored. " +
-            s"External sort will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.EXTERNAL_SORT, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.USE_SQL_AGGREGATE2, Some(value))) =>
-      val runFunc = (sqlContext: SQLContext) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} is deprecated and " +
-            s"will be ignored. ${SQLConf.Deprecated.USE_SQL_AGGREGATE2} will " +
-            s"continue to be true.")
-        Seq(Row(SQLConf.Deprecated.USE_SQL_AGGREGATE2, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.TUNGSTEN_ENABLED, Some(value))) =>
-      val runFunc = (sqlContext: SQLContext) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.TUNGSTEN_ENABLED} is deprecated and " +
-            s"will be ignored. Tungsten will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.TUNGSTEN_ENABLED, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.CODEGEN_ENABLED, Some(value))) =>
-      val runFunc = (sqlContext: SQLContext) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.CODEGEN_ENABLED} is deprecated and " +
-            s"will be ignored. Codegen will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.CODEGEN_ENABLED, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.UNSAFE_ENABLED, Some(value))) =>
-      val runFunc = (sqlContext: SQLContext) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.UNSAFE_ENABLED} is deprecated and " +
-            s"will be ignored. Unsafe mode will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.UNSAFE_ENABLED, "true"))
-      }
-      (keyValueOutput, runFunc)
-
-    case Some((SQLConf.Deprecated.SORTMERGE_JOIN, Some(value))) =>
-      val runFunc = (sqlContext: SQLContext) => {
-        logWarning(
-          s"Property ${SQLConf.Deprecated.SORTMERGE_JOIN} is deprecated and " +
-            s"will be ignored. Sort merge join will continue to be used.")
-        Seq(Row(SQLConf.Deprecated.SORTMERGE_JOIN, "true"))
-      }
-      (keyValueOutput, runFunc)
+ 
+    case Some((key, Some(value))) if deprecatedProperties.contains(key) =>
+      (keyValueOutput, deprecatedProperties(key))
 
     // Configures a single property.
     case Some((key, Some(value))) =>
@@ -384,150 +362,3 @@ case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq.empty
 }
-
-case class CreateDataBase(
-    databaseName: String,
-    allowExisting: Boolean,
-    path: Option[String],
-    comment: Option[String],
-    props: Map[String, String])(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class CreateFunction(
-    functionName: String,
-    asName: String,
-    resourcesMap: Map[String, String],
-    isTemp: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class AlterTableRename(
-    tableName: TableIdentifier,
-    renameTableName: TableIdentifier)(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableSetProperties(
-    tableName: TableIdentifier,
-    setProperties: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableDropProperties(
-    tableName: TableIdentifier,
-    dropProperties: Map[String, Option[String]],
-    allowExisting: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class AlterTableSerDeProperties(
-    tableName: TableIdentifier,
-    serdeClassName: Option[String],
-    serdeProperties: Option[Map[String, Option[String]]],
-    partition: Option[Map[String, Option[String]]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableStoreProperties(
-    tableName: TableIdentifier,
-    buckets: Option[BucketSpec],
-    noClustered: Boolean,
-    noSorted: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class AlterTableSkewed(
-    tableName: TableIdentifier,
-    skewedCols: Seq[String],
-    skewedValues: Seq[Seq[String]],
-    storedAsDirs: Boolean,
-    notSkewed: Boolean,
-    notStoredAsDirs: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class AlterTableSkewedLocation(
-    tableName: TableIdentifier,
-    skewedMap: Map[Seq[String], String])(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class AlterTableAddPartition(
-    tableName: TableIdentifier,
-    partitionsAndLocs: Seq[(Map[String, Option[String]], Option[String])],
-    allowExisting: Boolean)(sql: String) extends NativeDDLCommands(sql) with Logging
-
-case class AlterTableRenamePartition(
-    tableName: TableIdentifier,
-    oldPartition: Map[String, Option[String]],
-    newPartition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableExchangePartition(
-    tableName: TableIdentifier,
-    fromTableName: TableIdentifier,
-    partition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableDropPartition(
-    tableName: TableIdentifier,
-    partitions: Seq[Seq[(String, String, String)]],
-    allowExisting: Boolean,
-    purge: Boolean,
-    replication: Option[(String, Boolean)])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableArchivePartition(
-    tableName: TableIdentifier,
-    partition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableUnarchivePartition(
-    tableName: TableIdentifier,
-    partition: Map[String, Option[String]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableSetFileFormat(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]],
-    fileFormat: Option[Seq[String]],
-    genericFormat: Option[String])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableSetLocation(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]],
-    location: String)(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableTouch(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableCompact(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]],
-    compactType: String)(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableMerge(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]])(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableChangeCol(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]],
-    oldColName: String,
-    newColName: String,
-    dataType: DataType,
-    comment: Option[String],
-    afterPos: Boolean,
-    afterPosCol: Option[String],
-    restrict: Boolean,
-    cascade: Boolean)(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableAddCol(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
-case class AlterTableReplaceCol(
-    tableName: TableIdentifier,
-    partition: Option[Map[String, Option[String]]],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(sql: String) extends NativeDDLCommands(sql)
-    with Logging
-
