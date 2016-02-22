@@ -191,7 +191,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case RetrieveSparkProps =>
         context.reply(sparkProperties)
 
-      case RetrieveCurrentExecutorIdCounter =>
+      case RetrieveMaxExecutorId =>
         context.reply(currentExecutorIdCounter)
     }
 

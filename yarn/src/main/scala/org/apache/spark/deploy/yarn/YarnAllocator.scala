@@ -38,7 +38,7 @@ import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveCurrentExecutorIdCounter
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveMaxExecutorId
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
@@ -172,7 +172,13 @@ private[yarn] class YarnAllocator(
   }
 
   /**
-   * Init `executorIdCounter`
+   * Init `executorIdCounter`.
+   *
+   * when AM restart, `executorIdCounter` will reset to 0. Then the id of new executor will
+   * start from 1, this will conflict with the executor has already created before. So, we
+   * should initialize the `executorIdCounter` by getting the max executorId from driver.
+   *
+   * @see SPARK-12864
    */
   def initExecutorIdCounter(): Unit = {
     val port = sparkConf.getInt("spark.yarn.am.port", 0)
@@ -184,7 +190,7 @@ private[yarn] class YarnAllocator(
         sparkConf,
         new SecurityManager(sparkConf))
       val driver = init.setupEndpointRefByURI(driverUrl)
-      executorIdCounter = driver.askWithRetry[Integer](RetrieveCurrentExecutorIdCounter)
+      executorIdCounter = driver.askWithRetry[Integer](RetrieveMaxExecutorId)
       init.shutdown()
     }
   }
