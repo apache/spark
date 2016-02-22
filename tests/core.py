@@ -721,6 +721,18 @@ class CliTests(unittest.TestCase):
     def test_process_subdir_path_with_placeholder(self):
         assert cli.process_subdir('DAGS_FOLDER/abc') == os.path.join(configuration.get_dags_folder(), 'abc')
 
+    def test_trigger_dag(self):
+        cli.trigger_dag(self.parser.parse_args([
+            'trigger_dag', 'example_bash_operator',
+            '-c', '{"foo": "bar"}']))
+        self.assertRaises(
+            ValueError,
+            cli.trigger_dag,
+            self.parser.parse_args([
+                'trigger_dag', 'example_bash_operator',
+                '-c', 'NOT JSON'])
+        )
+
 
 class WebUiTests(unittest.TestCase):
 
@@ -1243,7 +1255,7 @@ class ConnectionTest(unittest.TestCase):
 class WebHDFSHookTest(unittest.TestCase):
     def setUp(self):
         configuration.test_mode()
-    
+
     def test_simple_init(self):
         from airflow.hooks.webhdfs_hook import WebHDFSHook
         c = WebHDFSHook()
