@@ -297,9 +297,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   val sparkUser = Utils.getCurrentUserName()
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
-  private[spark] def schedulerBackend_=(sb: SchedulerBackend): Unit = {
-    _schedulerBackend = sb
-  }
 
   private[spark] def taskScheduler: TaskScheduler = _taskScheduler
   private[spark] def taskScheduler_=(ts: TaskScheduler): Unit = {
@@ -321,8 +318,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def applicationId: String = _applicationId
   def applicationAttemptId: Option[String] = _applicationAttemptId
-
-  def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
   private[spark] def eventLogger: Option[EventLoggingListener] = _eventLogger
 
@@ -514,9 +509,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    metricsSystem.start()
+    _env.metricsSystem.start()
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
