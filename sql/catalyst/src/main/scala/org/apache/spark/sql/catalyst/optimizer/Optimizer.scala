@@ -365,7 +365,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, child) =>
       val required = child.references ++ p.references
       if ((child.inputSet -- required).nonEmpty) {
-        val newChildren = child.children.map(c => prunedChild(c, p.references))
+        val newChildren = child.children.map(c => prunedChild(c, required))
         p.copy(child = child.withNewChildren(newChildren))
       } else {
         p
