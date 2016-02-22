@@ -25,18 +25,19 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * ::Experimental::
- * Evaluator for multiclass classification.
- *
- * @param predictionAndLabels an RDD of (prediction, label) pairs.
- */
+  * ::Experimental::
+  * Evaluator for multiclass classification.
+  *
+  * @param predictionAndLabels an RDD of (prediction, label) pairs.
+  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Double)]) {
+class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double)]) {
 
   /**
-   * An auxiliary constructor taking a DataFrame.
-   * @param predictionAndLabels a DataFrame with two double columns: prediction and label
-   */
+    * An auxiliary constructor taking a DataFrame.
+    *
+    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
+    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
     this(predictionAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
@@ -59,11 +60,11 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
     .collectAsMap()
 
   /**
-   * Returns confusion matrix:
-   * predicted classes are in columns,
-   * they are ordered by class label ascending,
-   * as in "labels"
-   */
+    * Returns confusion matrix:
+    * predicted classes are in columns,
+    * they are ordered by class label ascending,
+    * as in "labels"
+    */
   @Since("1.1.0")
   def confusionMatrix: Matrix = {
     val n = labels.size
@@ -81,16 +82,18 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   }
 
   /**
-   * Returns true positive rate for a given label (category)
-   * @param label the label.
-   */
+    * Returns true positive rate for a given label (category)
+    *
+    * @param label the label.
+    */
   @Since("1.1.0")
   def truePositiveRate(label: Double): Double = recall(label)
 
   /**
-   * Returns false positive rate for a given label (category)
-   * @param label the label.
-   */
+    * Returns false positive rate for a given label (category)
+    *
+    * @param label the label.
+    */
   @Since("1.1.0")
   def falsePositiveRate(label: Double): Double = {
     val fp = fpByClass.getOrElse(label, 0)
@@ -98,9 +101,10 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   }
 
   /**
-   * Returns precision for a given label (category)
-   * @param label the label.
-   */
+    * Returns precision for a given label (category)
+    *
+    * @param label the label.
+    */
   @Since("1.1.0")
   def precision(label: Double): Double = {
     val tp = tpByClass(label)
@@ -109,17 +113,19 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   }
 
   /**
-   * Returns recall for a given label (category)
-   * @param label the label.
-   */
+    * Returns recall for a given label (category)
+    *
+    * @param label the label.
+    */
   @Since("1.1.0")
   def recall(label: Double): Double = tpByClass(label).toDouble / labelCountByClass(label)
 
   /**
-   * Returns f-measure for a given label (category)
-   * @param label the label.
-   * @param beta the beta parameter.
-   */
+    * Returns f-measure for a given label (category)
+    *
+    * @param label the label.
+    * @param beta  the beta parameter.
+    */
   @Since("1.1.0")
   def fMeasure(label: Double, beta: Double): Double = {
     val p = precision(label)
@@ -129,86 +135,151 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   }
 
   /**
-   * Returns f1-measure for a given label (category)
-   * @param label the label.
-   */
+    * Returns f1-measure for a given label (category)
+    *
+    * @param label the label.
+    */
   @Since("1.1.0")
   def fMeasure(label: Double): Double = fMeasure(label, 1.0)
 
   /**
-   * Returns precision
-   */
+    * Returns precision
+    */
   @Since("1.1.0")
   lazy val precision: Double = tpByClass.values.sum.toDouble / labelCount
 
   /**
-   * Returns recall
-   * (equals to precision for multiclass classifier
-   * because sum of all false positives is equal to sum
-   * of all false negatives)
-   */
+    * Returns recall
+    * (equals to precision for multiclass classifier
+    * because sum of all false positives is equal to sum
+    * of all false negatives)
+    */
   @Since("1.1.0")
   lazy val recall: Double = precision
 
   /**
-   * Returns f-measure
-   * (equals to precision and recall because precision equals recall)
-   */
+    * Returns f-measure
+    * (equals to precision and recall because precision equals recall)
+    */
   @Since("1.1.0")
   lazy val fMeasure: Double = precision
 
   /**
-   * Returns weighted true positive rate
-   * (equals to precision, recall and f-measure)
-   */
+    * Returns weighted true positive rate
+    * (equals to precision, recall and f-measure)
+    */
   @Since("1.1.0")
   lazy val weightedTruePositiveRate: Double = weightedRecall
 
   /**
-   * Returns weighted false positive rate
-   */
+    * Returns weighted false positive rate
+    */
   @Since("1.1.0")
   lazy val weightedFalsePositiveRate: Double = labelCountByClass.map { case (category, count) =>
     falsePositiveRate(category) * count.toDouble / labelCount
   }.sum
 
   /**
-   * Returns weighted averaged recall
-   * (equals to precision, recall and f-measure)
-   */
+    * Returns weighted averaged recall
+    * (equals to precision, recall and f-measure)
+    */
   @Since("1.1.0")
   lazy val weightedRecall: Double = labelCountByClass.map { case (category, count) =>
     recall(category) * count.toDouble / labelCount
   }.sum
 
   /**
-   * Returns weighted averaged precision
-   */
+    * Returns weighted averaged precision
+    */
   @Since("1.1.0")
   lazy val weightedPrecision: Double = labelCountByClass.map { case (category, count) =>
     precision(category) * count.toDouble / labelCount
   }.sum
 
   /**
-   * Returns weighted averaged f-measure
-   * @param beta the beta parameter.
-   */
+    * Returns weighted averaged f-measure
+    *
+    * @param beta the beta parameter.
+    */
   @Since("1.1.0")
   def weightedFMeasure(beta: Double): Double = labelCountByClass.map { case (category, count) =>
     fMeasure(category, beta) * count.toDouble / labelCount
   }.sum
 
   /**
-   * Returns weighted averaged f1-measure
-   */
+    * Returns weighted averaged f1-measure
+    */
   @Since("1.1.0")
   lazy val weightedFMeasure: Double = labelCountByClass.map { case (category, count) =>
     fMeasure(category, 1.0) * count.toDouble / labelCount
   }.sum
 
   /**
-   * Returns the sequence of labels in ascending order
-   */
+    * Returns the sequence of labels in ascending order
+    */
   @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
+
+
+  /**
+    * Returns the sequence of labels in ascending order
+    */
+  @Since("1.6.0")
+  def kappa(weights: Matrix): Double = {
+    val n = labels.size
+    require(weights.numRows == n)
+    require(weights.numCols == n)
+
+    weights.foreachActive {
+      case (i, j, w) =>
+        require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
+    }
+
+    val f =  (i:Double, j:Double) =>    {
+      weights.index(i, j)
+    }
+
+
+    1.0
+  }
+
+  /**
+    * Returns the sequence of labels in ascending order
+    */
+  @Since("1.6.0")
+  def weightedKappa(weights: (Double, Double) => Double): Double = {
+    val mat = confusionMatrix
+
+    val sumByRows = collection.mutable.Map[Int, Double]()
+    val sumByCols = collection.mutable.Map[Int, Double]()
+    var sum = 0.0
+
+    mat.foreachActive {
+      case (i, j, v) =>
+        val vRow = sumByRows.getOrElse(i, 0.0)
+        sumByRows.update(i, vRow + v)
+        val vCol = sumByCols.getOrElse(j, 0.0)
+        sumByCols.update(j, vCol + v)
+        sum += v
+    }
+
+    // weighted observed proportional agreement
+    var po = 0.0
+    // weighted proportional agreement expected just by chance
+    var pe = 0.0
+
+    mat.foreachActive {
+      case (i, j, v) =>
+        val w = weights(i, j)
+        require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
+
+        po += w * v
+        pe += w * sumByRows.getOrElse(i, 0.0) * sumByCols.getOrElse(j, 0.0)
+    }
+
+    po /= sum
+    pe /= sum * sum
+
+    (po - pe) / (1 - pe)
+  }
 }
