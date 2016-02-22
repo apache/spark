@@ -51,6 +51,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val f2measure0 = (1 + 2 * 2) * precision0 * recall0 / (2 * 2 * precision0 + recall0)
     val f2measure1 = (1 + 2 * 2) * precision1 * recall1 / (2 * 2 * precision1 + recall1)
     val f2measure2 = (1 + 2 * 2) * precision2 * recall2 / (2 * 2 * precision2 + recall2)
+    val unweighted_kappa = 0.47058823529411764
+    val linear_weighted_kappa = 0.4193548387096774
+    val quadratic_weighted_kappa = 0.3571428571428571
 
     assert(metrics.confusionMatrix.toArray.sameElements(confusionMatrix.toArray))
     assert(math.abs(metrics.falsePositiveRate(0.0) - fpRate0) < delta)
@@ -85,5 +88,9 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(math.abs(metrics.weightedFMeasure(2.0) -
       ((4.0 / 9) * f2measure0 + (4.0 / 9) * f2measure1 + (1.0 / 9) * f2measure2)) < delta)
     assert(metrics.labels.sameElements(labels))
+
+    assert(math.abs(metrics.kappa - unweighted_kappa) < delta)
+    assert(math.abs(metrics.kappa("linear") - linear_weighted_kappa) < delta)
+    assert(math.abs(metrics.kappa("quadratic") - quadratic_weighted_kappa) < delta)
   }
 }

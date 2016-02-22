@@ -222,24 +222,31 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
 
   /**
-    * Returns the sequence of labels in ascending order
+    * Returns unweighted Cohen's Kappa
+    * Cohen's kappa coefficient is a statistic which measures inter-rater
+    * agreement for qualitative (categorical) items. It is generally thought
+    * to be a more robust measure than simple percent agreement calculation,
+    * since kappa takes into account the agreement occurring by chance.
+    * The kappa score is a number between -1 and 1. Scores above 0.8 are
+    * generally considered good agreement; zero or lower means no agreement
+    * (practically random labels).
     */
   @Since("1.6.0")
-  def Kappa(): Double = {
+  def kappa(): Double = {
     kappa("default")
   }
 
   /**
-    * Returns the sequence of labels in ascending order
+    * Returns Cohen's Kappa with built-in weighted types
+    *
+    * @param weights the weighted type. "default" means no weighted;
+    *                "linear" means linear weighted;
+    *                "quadratic" means quadratic weighted.
     */
   @Since("1.6.0")
   def kappa(weights: String): Double = {
 
-    val wFunc = weights match {
-      case "linear" =>
-        (i: Int, j: Int) => Math.abs(i - j).toDouble
-      case "quadratic" =>
-        (i: Int, j: Int) => (i - j).toDouble * (i - j)
+    val func = weights match {
       case "default" =>
         (i: Int, j: Int) => {
           if (i == j) {
@@ -248,17 +255,24 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
             1.0
           }
         }
+      case "linear" =>
+        (i: Int, j: Int) => Math.abs(i - j).toDouble
+      case "quadratic" =>
+        (i: Int, j: Int) => (i - j).toDouble * (i - j)
       case t =>
         throw new IllegalArgumentException(
           s"kappa only supports {linear, quadratic, default} but got type ${t}.")
     }
 
-    kappa(wFunc)
+    kappa(func)
   }
 
 
   /**
-    * Returns the sequence of labels in ascending order
+    * Returns Cohen's Kappa with user-defined weight matrix
+    *
+    * @param weights the weight matrix, must be of the same shape with Confusion Matrix.
+    *                Note: Each Element in it must be no less than zero.
     */
   @Since("1.6.0")
   def kappa(weights: Matrix): Double = {
@@ -271,13 +285,17 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
         require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
     }
 
-    val wFunc = (i: Int, j: Int) => weights(i, j)
+    val func = (i: Int, j: Int) => weights(i, j)
 
-    kappa(wFunc)
+    kappa(func)
   }
 
   /**
-    * Returns the sequence of labels in ascending order
+    * Returns Cohen's Kappa with user-defined weight calculation function
+    *
+    * @param weights the weight calculation function. It takes two number as inputs,
+    *                and return a number no less than zero as the corresponding weight.
+    *                Note: Each return must not be negative.
     */
   @Since("1.6.0")
   def kappa(weights: (Int, Int) => Double): Double = {
@@ -288,11 +306,11 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
     val sumByCols = Array.fill(n)(0.0)
     var sum = 0.0
 
-    mat.foreachActive {
-      case (i, j, v) =>
-        sumByRows(i) += v
-        sumByCols(j) += v
-        sum += v
+    for (i <- 0 until n; j <- 0 until n) {
+      val v = mat(i, j)
+      sumByRows(i) += v
+      sumByCols(j) += v
+      sum += v
     }
 
     var numerator = 0.0
