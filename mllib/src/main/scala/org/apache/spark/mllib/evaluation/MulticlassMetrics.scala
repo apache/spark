@@ -229,7 +229,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
     weightedKappa("default")
   }
 
-
   /**
     * Returns the sequence of labels in ascending order
     */
@@ -239,13 +238,13 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
       case "linear" =>
         (i: Int, j:Int) => Math.abs(i - j).toDouble
       case "quadratic" =>
-        (i: Int, j:Int) => (i - j) * (i - j)
+        (i: Int, j:Int) => (i - j) * (i - j).toDouble
       case "default" =>
         (i: Int, j:Int) => {
           if(i == j) {
-            0
+            0.0
           } else {
-            0
+            1.0
           }
         }
       case t =>
@@ -271,7 +270,7 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
         require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
     }
 
-    val wFunc = (i: Int, j:Int) => weights(i, j)
+    val wFunc = (i: Int, j: Int) => weights(i, j)
 
     weightedKappa(wFunc)
   }
@@ -282,17 +281,16 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
   @Since("1.6.0")
   def weightedKappa(weights: (Int, Int) => Double): Double = {
     val mat = confusionMatrix
+    val n = mat.numRows
 
-    val sumByRows = collection.mutable.Map[Int, Double]()
-    val sumByCols = collection.mutable.Map[Int, Double]()
+    val sumByRows = Array.fill(n)(0.0)
+    val sumByCols = Array.fill(n)(0.0)
     var sum = 0.0
 
     mat.foreachActive {
       case (i, j, v) =>
-        val vRow = sumByRows.getOrElse(i, 0.0)
-        sumByRows.update(i, vRow + v)
-        val vCol = sumByCols.getOrElse(j, 0.0)
-        sumByCols.update(j, vCol + v)
+        sumByRows(i) += v
+        sumByCols(j) += v
         sum += v
     }
 
@@ -307,7 +305,7 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
         require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
 
         po += w * v
-        pe += w * sumByRows.getOrElse(i, 0.0) * sumByCols.getOrElse(j, 0.0)
+        pe += w * sumByRows(i) * sumByCols(j)
     }
 
     po /= sum
