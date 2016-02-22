@@ -64,7 +64,7 @@ class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
       val message = intercept[SparkException] {
         DataSourceDetect.detect(sqlContext, path)
       }.getMessage
-      assert(message.contains(""))
+      assert(message.contains("Detected data source was"))
     }
   }
 }
