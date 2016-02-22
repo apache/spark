@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -91,8 +90,6 @@ private[sql] case class AggregateExpression(
 
     AttributeSet(childReferences)
   }
-
-  override def prettyString: String = aggregateFunction.prettyString
 
   override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
 
@@ -168,7 +165,7 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   }
 
   def sql(isDistinct: Boolean): String = {
-    val distinct = if (isDistinct) "DISTINCT " else " "
+    val distinct = if (isDistinct) "DISTINCT " else ""
     s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
   }
 }

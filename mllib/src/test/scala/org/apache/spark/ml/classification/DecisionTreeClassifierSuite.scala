@@ -305,7 +305,11 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
         n.split match {
           case s: CategoricalSplit =>
             assert(s.leftCategories === Array(1.0))
+          case other =>
+            fail(s"All splits should be categorical, but got ${other.getClass.getName}: $other.")
         }
+      case other =>
+        fail(s"Root node should be an internal node, but got ${other.getClass.getName}: $other.")
     }
   }
 
