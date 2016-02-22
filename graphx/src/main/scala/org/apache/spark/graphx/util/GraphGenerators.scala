@@ -166,7 +166,7 @@ object GraphGenerators extends Logging {
   }
 
   /**
-   * This method recursively subdivides the the adjacency matrix into quadrants
+   * This method recursively subdivides the adjacency matrix into quadrants
    * until it picks a single cell. The naming conventions in this paper match
    * those of the R-MAT paper. There are a power of 2 number of nodes in the graph.
    * The adjacency matrix looks like:

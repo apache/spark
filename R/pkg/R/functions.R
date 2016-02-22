@@ -1962,7 +1962,7 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 
 #' shiftLeft
 #'
-#' Shift the the given value numBits left. If the given value is a long value, this function
+#' Shift the given value numBits left. If the given value is a long value, this function
 #' will return a long value else it will return an integer value.
 #'
 #' @family math_funcs
@@ -1980,7 +1980,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 
 #' shiftRight
 #'
-#' Shift the the given value numBits right. If the given value is a long value, it will return
+#' Shift the given value numBits right. If the given value is a long value, it will return
 #' a long value else it will return an integer value.
 #'
 #' @family math_funcs
@@ -1998,7 +1998,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 
 #' shiftRightUnsigned
 #'
-#' Unsigned shift the the given value numBits right. If the given value is a long value,
+#' Unsigned shift the given value numBits right. If the given value is a long value,
 #' it will return a long value else it will return an integer value.
 #'
 #' @family math_funcs

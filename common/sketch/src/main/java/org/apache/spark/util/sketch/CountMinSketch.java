@@ -39,7 +39,7 @@ import java.io.OutputStream;
  * Suppose you want to estimate the number of times an element {@code x} has appeared in a data
  * stream so far.  With probability {@code delta}, the estimate of this frequency is within the
  * range {@code true frequency <= estimate <= true frequency + eps * N}, where {@code N} is the
- * total count of items have appeared the the data stream so far.
+ * total count of items have appeared the data stream so far.
  *
  * Under the cover, a {@link CountMinSketch} is essentially a two-dimensional {@code long} array
  * with depth {@code d} and width {@code w}, where

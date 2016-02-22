@@ -655,7 +655,7 @@ class DAGScheduler(
 
   /**
    * Submit a shuffle map stage to run independently and get a JobWaiter object back. The waiter
-   * can be used to block until the the job finishes executing or can be used to cancel the job.
+   * can be used to block until the job finishes executing or can be used to cancel the job.
    * This method is used for adaptive query planning, to run map stages and look at statistics
    * about their outputs before submitting downstream stages.
    *

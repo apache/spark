@@ -76,7 +76,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   }
 
   /**
-   * Returns an RDD containing only the elements in the the inclusive range `lower` to `upper`.
+   * Returns an RDD containing only the elements in the inclusive range `lower` to `upper`.
    * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
    * performed efficiently by only scanning the partitions that might contain matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.

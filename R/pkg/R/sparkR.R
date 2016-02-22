@@ -299,7 +299,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #'
 #' @param sc existing spark context
 #' @param groupid the ID to be assigned to job groups
-#' @param description description for the the job group ID
+#' @param description description for the job group ID
 #' @param interruptOnCancel flag to indicate if the job is interrupted on job cancellation
 #' @examples
 #'\dontrun{

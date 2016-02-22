@@ -629,7 +629,7 @@ class MyClass {
 }
 {% endhighlight %}
 
-is equilvalent to writing `rdd.map(x => this.field + x)`, which references all of `this`. To avoid this
+is equivalent to writing `rdd.map(x => this.field + x)`, which references all of `this`. To avoid this
 issue, the simplest way is to copy `field` into a local variable instead of accessing it externally:
 
 {% highlight scala %}
