@@ -79,24 +79,20 @@ private[mesos] class MesosExternalShuffleBlockHandler(
   /** An extractor object for matching [[RegisterDriver]] message. */
   private object RegisterDriverParam {
     def unapply(r: RegisterDriver): Option[(String, AppState)] =
-      Some((r.getAppId, AppState(r.getHeartbeatTimeoutMs, System.nanoTime())))
+      Some((r.getAppId, new AppState(r.getHeartbeatTimeoutMs, System.nanoTime())))
   }
 
   private object Heartbeat {
     def unapply(h: ShuffleServiceHeartbeat): Option[String] = Some(h.getAppId)
   }
 
-  private case class AppState(heartbeatTimeout: Long, var lastHeartbeat: Long)
+  private class AppState(val heartbeatTimeout: Long, @volatile var lastHeartbeat: Long)
 
   private class CleanerThread extends Runnable {
     override def run(): Unit = {
       val now = System.nanoTime()
-      val appsToRemove = connectedApps.asScala.filter{ case (address, appState) =>
-        now - appState.lastHeartbeat > appState.heartbeatTimeout * 1000 * 1000
-      }
-      appsToRemove.foreach { case (appId, appState) =>
-        val nanosSinceLastHeartbeat = System.nanoTime() - appState.lastHeartbeat
-        if (nanosSinceLastHeartbeat > appState.heartbeatTimeout * 1000 * 1000) {
+      connectedApps.asScala.foreach { case (appId, appState) =>
+        if (now - appState.lastHeartbeat > appState.heartbeatTimeout * 1000 * 1000) {
           logInfo(s"Application $appId timed out. Removing shuffle files.")
           connectedApps.remove(appId)
           applicationRemoved(appId, true)

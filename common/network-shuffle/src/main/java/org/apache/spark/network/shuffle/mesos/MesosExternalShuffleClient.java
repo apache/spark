@@ -65,28 +65,31 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
     super(conf, secretKeyHolder, saslEnabled, saslEncryptionEnabled);
   }
 
-  public void registerDriverWithShuffleService(String host, int port, long heartbeatTimeoutMs)
-      throws IOException {
+  public void registerDriverWithShuffleService(
+      String host,
+      int port,
+      long heartbeatTimeoutMs,
+      long heartbeatIntervalMs) throws IOException {
 
     checkInit();
     ByteBuffer registerDriver = new RegisterDriver(appId, heartbeatTimeoutMs).toByteBuffer();
     TransportClient client = clientFactory.createClient(host, port);
-    client.sendRpc(registerDriver, new RegisterDriverCallback(client, heartbeatTimeoutMs));
+    client.sendRpc(registerDriver, new RegisterDriverCallback(client, heartbeatIntervalMs));
   }
 
   private class RegisterDriverCallback implements RpcResponseCallback {
     private final TransportClient client;
-    private final long heartbeatTimeoutMs;
+    private final long heartbeatIntervalMs;
 
-    private RegisterDriverCallback(TransportClient client, long heartbeatTimeoutMs) {
+    private RegisterDriverCallback(TransportClient client, long heartbeatIntervalMs) {
       this.client = client;
-      this.heartbeatTimeoutMs = heartbeatTimeoutMs;
+      this.heartbeatIntervalMs = heartbeatIntervalMs;
     }
 
     @Override
     public void onSuccess(ByteBuffer response) {
       heartbeaterThread.scheduleAtFixedRate(
-          new Heartbeater(client), 0, heartbeatTimeoutMs / 4, TimeUnit.MILLISECONDS);
+          new Heartbeater(client), 0, heartbeatIntervalMs, TimeUnit.MILLISECONDS);
       logger.info("Successfully registered app " + appId + " with external shuffle service.");
     }
 
