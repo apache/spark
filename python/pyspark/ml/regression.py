@@ -172,23 +172,16 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> ir_path = path + "/ir"
+    >>> ir_path = temp_path + "/ir"
     >>> ir.save(ir_path)
     >>> ir2 = IsotonicRegression.load(ir_path)
     >>> ir2.getIsotonic()
     True
-    >>> model_path = path + "/ir_model"
+    >>> model_path = temp_path + "/ir_model"
     >>> model.save(model_path)
     >>> model2 = IsotonicRegressionModel.load(model_path)
-    >>> model.boundaries[0] == model2.boundaries[0]
+    >>> model.boundaries == model2.boundaries
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
     """
 
     isotonic = \
@@ -707,25 +700,18 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     |  0.0|(1,[],[])|   0.0|       1.0|
     +-----+---------+------+----------+
     ...
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> aftsr_path = path + "/aftsr"
+    >>> aftsr_path = temp_path + "/aftsr"
     >>> aftsr.save(aftsr_path)
     >>> aftsr2 = AFTSurvivalRegression.load(aftsr_path)
     >>> aftsr2.getMaxIter()
     100
-    >>> model_path = path + "/aftsr_model"
+    >>> model_path = temp_path + "/aftsr_model"
     >>> model.save(model_path)
     >>> model2 = AFTSurvivalRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> model.coefficients == model2.coefficients
     True
     >>> model.intercept == model2.intercept
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
