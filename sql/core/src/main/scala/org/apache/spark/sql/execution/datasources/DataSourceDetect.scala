@@ -114,10 +114,8 @@ object DataSourceDetect extends Logging {
       val name = status.getPath.getName
       name.startsWith("_") || name.startsWith(".")
     }
-
     val (dirs, files) = statuses.partition(_.isDirectory)
-
-    // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
+    
     if (files.nonEmpty) {
       Some(files.head)
     } else if (dirs.isEmpty) {
