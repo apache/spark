@@ -260,19 +260,25 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
-  private def isBrocastHint(plan: LogicalPlan): Boolean = {
-    plan match {
-      case BroadcastHint(_) => true
-      case Project(_, p) => isBrocastHint(p)
-      case Filter(_, p) => isBrocastHint(p)
-      case Sample(_, _, _, _, p) => isBrocastHint(p)
-      case GlobalLimit(_, p) => isBrocastHint(p)
-      case _ => false
-    }
+  private var _broadcastHintLeft: Boolean = false
+  private var _broadcastHintRight: Boolean = false
+
+  if (left.isInstanceOf[BroadcastHint]) {
+    _broadcastHintLeft = true
   }
 
-  val broadcastHintLeft = isBrocastHint(left)
-  val broadcastHintRight = isBrocastHint(right)
+  if (right.isInstanceOf[BroadcastHint]) {
+    _broadcastHintRight = true
+  }
+
+  def broadcastHintLeft = _broadcastHintLeft
+  def broadcastHintRight = _broadcastHintRight
+
+  def copyBroadHintFrom(j: Join): Join = {
+    _broadcastHintLeft = j._broadcastHintLeft
+    _broadcastHintRight = j._broadcastHintRight
+    this
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {
