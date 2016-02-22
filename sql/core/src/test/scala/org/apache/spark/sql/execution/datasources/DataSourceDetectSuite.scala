@@ -38,7 +38,7 @@ class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
           file.renameTo(new File(file.toString.replace(".parquet", "")))
         }
 
-        val source = sqlContext.conf.defaultDataSourceName
+        val source = "parquet"
         assert(DataSourceDetect.detect(sqlContext, path) == source)
       }
     }
@@ -50,7 +50,7 @@ class DataSourceDetectSuite extends QueryTest with SharedSQLContext  {
       val path = s"${file.getCanonicalPath}.json"
       sqlContext.createDataFrame(data).write.json(path)
 
-      val source = "org.apache.spark.sql.json"
+      val source = "json"
       assert(DataSourceDetect.detect(sqlContext, path) == source)
     }
   }
