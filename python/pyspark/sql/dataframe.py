@@ -288,6 +288,9 @@ class DataFrame(object):
     @since(2.0)
     def applySchema(self, schema=None):
         """ TODO """
+        # TODO: should we throw exception instead?
+        return self
+
         if isinstance(self, PipelinedDataFrame):
             if schema is None:
                 from pyspark.sql.types import _infer_type, _merge_type
@@ -1401,16 +1404,9 @@ class PipelinedDataFrame(DataFrame):
 
     """ TODO """
 
-    def __init__(self, prev, func=None, output_schema=None):
+    def __init__(self, prev, func):
         from pyspark.sql.group import GroupedData
 
-        if output_schema is None:
-            # should get it from java side
-            self._schema = StructType().add("binary", BinaryType(), False, {"pickled": True})
-        else:
-            self._schema = output_schema
-
-        self._output_schema = output_schema
         self._jdf_val = None
         self.is_cached = False
         self.sql_ctx = prev.sql_ctx
@@ -1424,35 +1420,38 @@ class PipelinedDataFrame(DataFrame):
             self._prev_jdf = prev._jgd
         elif not isinstance(prev, PipelinedDataFrame) or prev.is_cached:
             # This transformation is the first in its stage:
+            self._grouped = False
             self._func = func
             self._prev_jdf = prev._jdf
-            self._grouped = False
         else:
-            if func is None:
-                # This transformation is applying schema, no need to pipeline the function.
-                self._func = prev._func
-            else:
-                self._func = _pipeline_func(prev._func, func)
+            self._grouped = prev._grouped
+            self._func = _pipeline_func(prev._func, func)
             # maintain the pipeline.
             self._prev_jdf = prev._prev_jdf
-            self._grouped = prev._grouped
+
+    def applySchema(self, schema=None):
+        if schema is None:
+            from pyspark.sql.types import _infer_type, _merge_type
+            # If no schema is specified, infer it from the whole data set.
+            jrdd = self._prev_jdf.javaToPython()
+            rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+            schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
+
+        if isinstance(schema, StructType):
+            to_rows = lambda iterator: map(schema.toInternal, iterator)
+        else:
+            data_type = schema
+            schema = StructType().add("value", data_type)
+            to_row = lambda obj: (data_type.toInternal(obj), )
+            to_rows = lambda iterator: map(to_row, iterator)
+
+        jdf = self._create_jdf(_pipeline_func(self._func, to_rows), schema)
+        return DataFrame(jdf, self.sql_ctx)
 
     @property
     def _jdf(self):
         if self._jdf_val is None:
-            if self._output_schema is None:
-                self._jdf_val = self._create_jdf(self._func)
-            elif isinstance(self._output_schema, StructType):
-                schema = self._output_schema
-                to_row = lambda iterator: map(schema.toInternal, iterator)
-                self._jdf_val = self._create_jdf(_pipeline_func(self._func, to_row), schema)
-            else:
-                data_type = self._output_schema
-                schema = StructType().add("value", data_type)
-                converter = lambda obj: (data_type.toInternal(obj), )
-                to_row = lambda iterator: map(converter, iterator)
-                self._jdf_val = self._create_jdf(_pipeline_func(self._func, to_row), schema)
-
+            self._jdf_val = self._create_jdf(self._func)
         return self._jdf_val
 
     def _create_jdf(self, func, schema=None):
