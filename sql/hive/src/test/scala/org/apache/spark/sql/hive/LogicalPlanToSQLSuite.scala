@@ -86,6 +86,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT id FROM t0 WHERE id IN (1, 2, 3)")
   }
 
+  test("not in") {
+    checkHiveQl("SELECT id FROM t0 WHERE id NOT IN (1, 2, 3)")
+  }
+
+  test("not like") {
+    checkHiveQl("SELECT id FROM t0 WHERE id + 5 NOT LIKE '1%'")
+  }
+
   test("aggregate function in having clause") {
     checkHiveQl("SELECT COUNT(value) FROM t1 GROUP BY key HAVING MAX(key) > 0")
   }
