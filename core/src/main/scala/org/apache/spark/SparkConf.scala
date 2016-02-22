@@ -520,6 +520,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         case _ => // Any other unexpected master will be checked when creating scheduler backend.
       }
     }
+
+    if (contains("spark.submit.deployMode")) {
+      get("spark.submit.deployMode") match {
+        case "cluster" | "client" =>
+        case e => throw new SparkException("spark.submit.deployMode can only be \"cluster\" or " +
+          "\"client\".")
+      }
+    }
   }
 
   /**

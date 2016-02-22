@@ -250,6 +250,7 @@ object MimaExcludes {
         // SPARK-7889
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.org$apache$spark$deploy$history$HistoryServer$@tachSparkUI"),
         // SPARK-13296
+
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.UDFRegistration.register"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UserDefinedPythonFunction$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.UserDefinedPythonFunction"),
@@ -270,7 +271,8 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.schedulerBackend_=")
       ) ++ Seq(
         // SPARK-13220 Deprecate yarn-client and yarn-cluster mode
-        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
       )
     case v if v.startsWith("1.6") =>
       Seq(

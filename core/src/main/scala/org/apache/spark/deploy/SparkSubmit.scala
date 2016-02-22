@@ -234,7 +234,9 @@ object SparkSubmit {
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
-      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, or local"); -1
+      case _ =>
+        printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
+        -1
     }
 
     // Set the deploy mode; default is client mode
@@ -244,8 +246,8 @@ object SparkSubmit {
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
     }
 
-    // Because "yarn-cluster" and "yarn-client" encapsulate both the master
-    // and deploy mode, we have some logic to infer the master and deploy mode
+    // Because the deprecated way of specifying "yarn-cluster" and "yarn-client" encapsulate both
+    // the master and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
     if (clusterManager == YARN) {
       (args.master, args.deployMode) match {
