@@ -21,7 +21,8 @@ following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
 * *rank* is the number of latent factors in the model.
-* *iterations* is the number of iterations to run.
+* *iterations* is the number of iterations of ALS to run. ALS typically converges to a reasonable
+  solution in 20 iterations or less.
 * *lambda* specifies the regularization parameter in ALS.
 * *implicitPrefs* specifies whether to use the *explicit feedback* ALS variant or one adapted for
   *implicit feedback* data.
