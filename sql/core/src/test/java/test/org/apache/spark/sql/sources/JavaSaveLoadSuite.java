@@ -59,7 +59,7 @@ public class JavaSaveLoadSuite {
 
     originalDefaultSource = sqlContext.conf().defaultDataSourceName();
     path =
-            Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
+      Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource").getCanonicalFile();
     if (path.exists()) {
       path.delete();
     }
