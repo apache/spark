@@ -291,6 +291,34 @@ class BigQueryBaseCursor(object):
 
         return self.run_with_configuration(configuration)
 
+    def run_load(self, destination_dataset_table, schema_fields, source_uris, source_format='CSV', create_disposition='CREATE_IF_NEEDED', skip_leading_rows=0, write_disposition='WRITE_EMPTY', field_delimiter=','):
+        assert '.' in destination_dataset_table, \
+            'Expected destination_dataset_table in the format of <dataset>.<table>. Got: {}'.format(destination_dataset_table)
+
+        destination_dataset, destination_table = destination_dataset_table.split('.', 1)
+
+        configuration = {
+            'load': {
+                'createDisposition': create_disposition,
+                'destinationTable': {
+                    'projectId': self.project_id,
+                    'datasetId': destination_dataset,
+                    'tableId': destination_table,
+                },
+                'schema': {
+                    'fields': schema_fields
+                },
+                'sourceFormat': source_format,
+                'sourceUris': source_uris,
+                'writeDisposition': write_disposition,
+        }
+
+        if source_format == 'CSV':
+            configuration['load']['skipLeadingRows'] = skip_leading_rows
+            configuration['load']['fieldDelimiter'] = field_delimiter
+
+        return self.run_with_configuration(configuration)
+
     def run_with_configuration(self, configuration):
         """
         Executes a BigQuery SQL query. See here:

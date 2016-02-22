@@ -4,6 +4,7 @@ import logging
 from airflow.contrib.hooks.gc_base_hook import GoogleCloudBaseHook
 from airflow.hooks.base_hook import BaseHook
 from apiclient.discovery import build
+from apiclient.http import MediaFileUpload
 from oauth2client.client import SignedJwtAssertionCredentials
 
 logging.getLogger("google_cloud_storage").setLevel(logging.INFO)
@@ -66,3 +67,12 @@ class GoogleCloudStorageHook(GoogleCloudBaseHook):
                 file_fd.write(downloaded_file_bytes)
 
         return downloaded_file_bytes
+
+    def upload(self, bucket, object, filename, mime_type='application/octet-stream'):
+        service = self.get_conn()
+        media = MediaFileUpload(filename, mime_type)
+        response = service \
+            .objects() \
+            .insert(bucket=bucket, name=object, media_body=media) \
+            .execute()
+
