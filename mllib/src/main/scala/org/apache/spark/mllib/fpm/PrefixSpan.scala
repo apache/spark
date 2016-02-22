@@ -38,9 +38,9 @@ import org.apache.spark.storage.StorageLevel
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth ([[http://doi.org/10.1109/ICDE.2001.914830]]).
  *
- * @param minSupport the minimal support level of the sequential pattern, any pattern appears
- *                   more than  (minSupport * size-of-the-dataset) times will be output
- * @param maxPatternLength the maximal length of the sequential pattern, any pattern appears
+ * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
+ *                   more than (minSupport * size-of-the-dataset) times will be output
+ * @param maxPatternLength the maximal length of the sequential pattern, any pattern that appears
  *                         less than maxPatternLength will be output
  * @param maxLocalProjDBSize The maximum number of items (including delimiters used in the internal
  *                           storage format) allowed in a projected database before local

@@ -29,7 +29,6 @@ __all__ = ['FPGrowth', 'FPGrowthModel', 'PrefixSpan', 'PrefixSpanModel']
 @inherit_doc
 @ignore_unicode_prefix
 class FPGrowthModel(JavaModelWrapper):
-
     """
     .. note:: Experimental
 
@@ -68,11 +67,15 @@ class FPGrowth(object):
         """
         Computes an FP-Growth model that contains frequent itemsets.
 
-        :param data: The input data set, each element contains a
-            transaction.
-        :param minSupport: The minimal support level (default: `0.3`).
-        :param numPartitions: The number of partitions used by
-            parallel FP-growth (default: same as input data).
+        :param data:
+          The input data set, each element contains a transaction.
+        :param minSupport:
+          The minimal support level.
+          (default: 0.3)
+        :param numPartitions:
+          The number of partitions used by parallel FP-growth. A value
+          of -1 will use the same number as input data.
+          (default: -1)
         """
         model = callMLlibFunc("trainFPGrowthModel", data, float(minSupport), int(numPartitions))
         return FPGrowthModel(model)
@@ -128,17 +131,27 @@ class PrefixSpan(object):
     @since("1.6.0")
     def train(cls, data, minSupport=0.1, maxPatternLength=10, maxLocalProjDBSize=32000000):
         """
-        Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
+        Finds the complete set of frequent sequential patterns in the
+        input sequences of itemsets.
 
-        :param data: The input data set, each element contains a sequnce of itemsets.
-        :param minSupport: the minimal support level of the sequential pattern, any pattern appears
-            more than  (minSupport * size-of-the-dataset) times will be output (default: `0.1`)
-        :param maxPatternLength: the maximal length of the sequential pattern, any pattern appears
-            less than maxPatternLength will be output. (default: `10`)
-        :param maxLocalProjDBSize: The maximum number of items (including delimiters used in
-            the internal storage format) allowed in a projected database before local
-            processing. If a projected database exceeds this size, another
-            iteration of distributed prefix growth is run. (default: `32000000`)
+        :param data:
+          The input data set, each element contains a sequence of
+          itemsets.
+        :param minSupport:
+          The minimal support level of the sequential pattern, any
+          pattern that appears more than (minSupport *
+          size-of-the-dataset) times will be output.
+          (default: 0.1)
+        :param maxPatternLength:
+          The maximal length of the sequential pattern, any pattern
+          that appears less than maxPatternLength will be output.
+          (default: 10)
+        :param maxLocalProjDBSize:
+          The maximum number of items (including delimiters used in the
+          internal storage format) allowed in a projected database before
+          local processing. If a projected database exceeds this size,
+          another iteration of distributed prefix growth is run.
+          (default: 32000000)
         """
         model = callMLlibFunc("trainPrefixSpanModel",
                               data, minSupport, maxPatternLength, maxLocalProjDBSize)
