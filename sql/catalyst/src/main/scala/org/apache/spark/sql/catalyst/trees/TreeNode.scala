@@ -41,6 +41,7 @@ import org.apache.spark.util.Utils
 private class MutableInt(var i: Int)
 
 case class Origin(
+  callSite: Option[String] = None,
   line: Option[Int] = None,
   startPosition: Option[Int] = None)
 
@@ -58,21 +59,21 @@ object CurrentOrigin {
 
   def reset(): Unit = value.set(Origin())
 
-  def setPosition(line: Int, start: Int): Unit = {
+  def setPosition(callSite: String, line: Int, start: Int): Unit = {
     value.set(
-      value.get.copy(line = Some(line), startPosition = Some(start)))
+      value.get.copy(callSite = Some(callSite), line = Some(line), startPosition = Some(start)))
   }
 
   def withOrigin[A](o: Origin)(f: => A): A = {
+    val current = get
     set(o)
-    val ret = try f finally { reset() }
-    reset()
+    val ret = try f finally { set(current) }
     ret
   }
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Serializable {
 // scalastyle:on
   self: BaseType =>
 
