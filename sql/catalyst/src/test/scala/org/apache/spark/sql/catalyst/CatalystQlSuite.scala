@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
@@ -213,7 +212,7 @@ class CatalystQlSuite extends PlanTest {
 
     val expected = Project(
       UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
-      Subquery("u_1",
+      SubqueryAlias("u_1",
         Union(
           Union(
             Project(
@@ -247,7 +246,7 @@ class CatalystQlSuite extends PlanTest {
 
     val expected2 = Project(
       UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
-      Subquery("u_1",
+      SubqueryAlias("u_1",
         Union(
           Union(
             Union(
