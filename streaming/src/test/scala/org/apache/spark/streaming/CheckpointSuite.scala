@@ -613,7 +613,8 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
     def recordedFiles(ssc: StreamingContext): Seq[Int] = {
       val fileInputDStream =
         ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
-      val filenames = fileInputDStream.batchTimeToSelectedFiles.values.flatten
+      val filenames = fileInputDStream.batchTimeToSelectedFiles.synchronized
+         { fileInputDStream.batchTimeToSelectedFiles.values.flatten }
       filenames.map(_.split(File.separator).last.toInt).toSeq.sorted
     }
 

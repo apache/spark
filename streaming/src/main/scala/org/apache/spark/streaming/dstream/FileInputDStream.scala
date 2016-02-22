@@ -117,7 +117,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
   // Map of batch-time to selected file info for the remembered batches
   // This is a concurrent map because it's also accessed in unit tests
   @transient private[streaming] var batchTimeToSelectedFiles =
-    new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
+    new mutable.HashMap[Time, Array[String]]
 
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
@@ -148,7 +148,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     // Find new files
     val newFiles = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
-    batchTimeToSelectedFiles += ((validTime, newFiles))
+    batchTimeToSelectedFiles.synchronized {
+      batchTimeToSelectedFiles += ((validTime, newFiles))
+    }
     recentlySelectedFiles ++= newFiles
     val rdds = Some(filesToRDD(newFiles))
     // Copy newFiles to immutable.List to prevent from being modified by the user
@@ -162,14 +164,15 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   /** Clear the old time-to-files mappings along with old RDDs */
   protected[streaming] override def clearMetadata(time: Time) {
-    super.clearMetadata(time)
-    val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
-    batchTimeToSelectedFiles --= oldFiles.keys
-    recentlySelectedFiles --= oldFiles.values.flatten
-    logInfo("Cleared " + oldFiles.size + " old files that were older than " +
-      (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
-    logDebug("Cleared files are:\n" +
-      oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
+    batchTimeToSelectedFiles.synchronized {
+      val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
+      batchTimeToSelectedFiles --= oldFiles.keys
+      recentlySelectedFiles --= oldFiles.values.flatten
+      logInfo("Cleared " + oldFiles.size + " old files that were older than " +
+        (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
+      logDebug("Cleared files are:\n" +
+        oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
+    }
     // Delete file mod times that weren't accessed in the last round of getting new files
     fileToModTime.clearOldValues(lastNewFileFindingTime - 1)
   }
@@ -307,8 +310,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new mutable.HashMap[Time, RDD[(K, V)]]()
-    batchTimeToSelectedFiles =
-      new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
+    batchTimeToSelectedFiles = new mutable.HashMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
   }
@@ -324,7 +326,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
     override def update(time: Time) {
       hadoopFiles.clear()
-      hadoopFiles ++= batchTimeToSelectedFiles
+      batchTimeToSelectedFiles.synchronized { hadoopFiles ++= batchTimeToSelectedFiles }
     }
 
     override def cleanup(time: Time) { }
@@ -335,7 +337,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
           // Restore the metadata in both files and generatedRDDs
           logInfo("Restoring files for time " + t + " - " +
             f.mkString("[", ", ", "]") )
-          batchTimeToSelectedFiles += ((t, f))
+          batchTimeToSelectedFiles.synchronized { batchTimeToSelectedFiles += ((t, f)) }
           recentlySelectedFiles ++= f
           generatedRDDs += ((t, filesToRDD(f)))
         }
