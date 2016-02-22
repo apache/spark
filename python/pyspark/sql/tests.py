@@ -601,6 +601,24 @@ class SQLTests(ReusedPySparkTestCase):
         point = df1.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
+    def test_unionAll_with_udt(self):
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
+        row1 = (1.0, ExamplePoint(1.0, 2.0))
+        row2 = (2.0, ExamplePoint(3.0, 4.0))
+        schema = StructType([StructField("label", DoubleType(), False),
+                             StructField("point", ExamplePointUDT(), False)])
+        df1 = self.sqlCtx.createDataFrame([row1], schema)
+        df2 = self.sqlCtx.createDataFrame([row2], schema)
+
+        result = df1.unionAll(df2).orderBy("label").collect()
+        self.assertEqual(
+            result,
+            [
+                Row(label=1.0, point=ExamplePoint(1.0, 2.0)),
+                Row(label=2.0, point=ExamplePoint(3.0, 4.0))
+            ]
+        )
+
     def test_column_operators(self):
         ci = self.df.key
         cs = self.df.value
