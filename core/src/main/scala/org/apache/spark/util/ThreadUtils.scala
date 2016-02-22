@@ -156,4 +156,11 @@ private[spark] object ThreadUtils {
         result
     }
   }
+
+  /**
+   * Construct a new ForkJoinPool with a specified max parallelism.
+   */
+  def newForkJoinPool(maxThreadNumber: Int): scala.concurrent.forkjoin.ForkJoinPool = {
+    new scala.concurrent.forkjoin.ForkJoinPool(maxThreadNumber)
+  }
 }

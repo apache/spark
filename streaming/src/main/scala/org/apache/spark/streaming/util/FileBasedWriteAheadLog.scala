@@ -59,11 +59,8 @@ private[streaming] class FileBasedWriteAheadLog(
   private val pastLogs = new ArrayBuffer[LogInfo]
   private val callerName = getCallerName
 
-  private val threadpoolName = {
-    "WriteAheadLogManager" + callerName.map(c => s" for $c").getOrElse("")
-  }
-  private val threadpool = ThreadUtils.newDaemonCachedThreadPool(threadpoolName, 20)
-  private val executionContext = ExecutionContext.fromExecutorService(threadpool)
+  private val forkJoinPool = ThreadUtils.newForkJoinPool(20)
+  private val executionContext = ExecutionContext.fromExecutorService(forkJoinPool)
 
   override protected def logName = {
     getClass.getName.stripSuffix("$") +

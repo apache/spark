@@ -228,8 +228,8 @@ class FileBasedWriteAheadLogSuite
      the list of files.
      */
     val numThreads = 8
-    val tpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "wal-test-thread-pool")
-    val executionContext = ExecutionContext.fromExecutorService(tpool)
+    val fpool = ThreadUtils.newForkJoinPool(numThreads)
+    val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     class GetMaxCounter {
       private val value = new AtomicInteger()
@@ -276,7 +276,7 @@ class FileBasedWriteAheadLogSuite
       // make sure we didn't open too many Iterators
       assert(counter.getMax() <= numThreads)
     } finally {
-      tpool.shutdownNow()
+      fpool.shutdownNow()
     }
   }
 
