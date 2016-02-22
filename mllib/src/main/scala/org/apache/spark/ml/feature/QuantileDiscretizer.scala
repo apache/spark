@@ -95,7 +95,7 @@ final class QuantileDiscretizer(override val uid: String)
     val candidates = QuantileDiscretizer.findSplitCandidates(samples, $(numBuckets) - 1)
     val splits = QuantileDiscretizer.getSplits(candidates)
     val bucketizer = new Bucketizer(uid).setSplits(splits)
-    copyValues(bucketizer)
+    copyValues(bucketizer.setParent(this))
   }
 
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
