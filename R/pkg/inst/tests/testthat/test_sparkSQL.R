@@ -1047,13 +1047,13 @@ test_that("column functions", {
                         schema = c("a", "b", "c"))
   result <- collect(select(df, struct("a", "c")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
+  expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
                                  listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
   result <- collect(select(df, struct(df$a, df$b)))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
+  expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
                                  listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 
