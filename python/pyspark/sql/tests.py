@@ -1216,7 +1216,7 @@ class SQLTests(ReusedPySparkTestCase):
         sum_tuple = lambda values: sum(map(lambda value: value[0] * value[1], values))
 
         def get_python_result(data, key_func, agg_func):
-            data.sort(key=key_func)
+            data = sorted(data, key=key_func)
             expected_result = []
             import itertools
             for key, values in itertools.groupby(data, key_func):
