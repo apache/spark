@@ -271,8 +271,8 @@ case class Join(
     _broadcastHintRight = true
   }
 
-  def broadcastHintLeft = _broadcastHintLeft
-  def broadcastHintRight = _broadcastHintRight
+  def broadcastHintLeft: Boolean = _broadcastHintLeft
+  def broadcastHintRight: Boolean = _broadcastHintRight
 
   def copyBroadHintFrom(j: Join): Join = {
     _broadcastHintLeft = j._broadcastHintLeft
