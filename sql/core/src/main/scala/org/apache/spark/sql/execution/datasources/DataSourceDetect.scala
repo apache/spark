@@ -35,13 +35,11 @@ object DataSourceDetect extends Logging {
     "parquet" -> "parquet",
     "orc" -> "orc"
   )
-
   // This `magic number` is to detect the Parquet file format. Parquet files start with the
   // bytes. See https://github.com/Parquet/parquet-format.
   private val parquetMagicNumber: Array[Byte] =
     Array(0x50.toByte, 0x41.toByte, 0x52.toByte, 0x31.toByte)
-
-  val defaultDataSourceName = "parquet"
+  private val defaultDataSourceName = "parquet"
 
   /**
    * This detects the data source by extension of one of the given files. If it fails
