@@ -20,7 +20,7 @@ package org.apache.spark.ui.scope
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
 
-import org.apache.commons.lang.StringEscapeUtils
+import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
