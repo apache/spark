@@ -45,7 +45,7 @@ object DataSourceDetect extends Logging {
    * This detects the data source by extension of one of the given files. If it fails
    * to detect the source, then, this tries to read the "magic number" of Parquet to decide
    * if it is a Parquet file or not. Since it drops `sqlContext.conf.defaultDataSourceName`
-   * option, we assume the default datasource if Parquet.
+   * option, we assume the default datasource is Parquet.
    */
   def detect(sqlContext: SQLContext, path: String): String = {
     // Detection steps follows:
