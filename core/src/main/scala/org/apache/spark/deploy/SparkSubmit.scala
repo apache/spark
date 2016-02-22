@@ -723,7 +723,7 @@ object SparkSubmit {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
 
-    @scala.annotation.tailrec
+    @tailrec
     def findCause(t: Throwable): Throwable = t match {
       case e: UndeclaredThrowableException =>
         if (e.getCause() != null) findCause(e.getCause()) else e
