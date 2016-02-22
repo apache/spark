@@ -108,7 +108,7 @@ The history server can be configured as follows:
     <td>spark.history.fs.update.interval</td>
     <td>10s</td>
     <td>
-      The period at which the the filesystem history provider checks for new or
+      The period at which the filesystem history provider checks for new or
       updated logs in the log directory. A shorter interval detects new applications faster,
       at the expense of more server load re-reading updated applications.
       As soon as an update has completed, listings of the completed and incomplete applications

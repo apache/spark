@@ -23,7 +23,6 @@ import java.util.{HashMap, Locale, Map => JMap}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
@@ -62,8 +61,6 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
       }
     """
   }
-
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 
@@ -156,8 +153,6 @@ case class ConcatWs(children: Seq[Expression])
       """
     }
   }
-
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 trait String2StringExpression extends ImplicitCastInputTypes {

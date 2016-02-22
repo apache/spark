@@ -345,6 +345,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Loads a CSV file and returns the result as a [[DataFrame]].
+   *
+   * This function goes through the input once to determine the input schema. To avoid going
+   * through the entire data once, specify the schema explicitly using [[schema]].
+   *
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+
+  /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
    * [[DataFrame]] if no paths are passed in.
    *

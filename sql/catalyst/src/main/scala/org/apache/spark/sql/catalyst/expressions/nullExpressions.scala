@@ -83,8 +83,6 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
       """
     }.mkString("\n")
   }
-
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")})"
 }
 
 

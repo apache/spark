@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.metric.LongSQLMetricValue
@@ -73,9 +75,10 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Returns Java source code to process the rows from upstream.
     */
-  def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
+  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
+    waitForSubqueries()
     s"""
        |/*** PRODUCE: ${commentSafe(this.simpleString)} */
        |${doProduce(ctx)}
@@ -104,7 +107,7 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
-  def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
+  final def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
     if (input != null) {
       assert(input.length == output.length)
     }
@@ -208,6 +211,10 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     child.execute()
   }
 
+  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    child.doExecuteBroadcast()
+  }
+
   override def supportCodegen: Boolean = false
 
   override def upstream(): RDD[InternalRow] = {
@@ -285,7 +292,11 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
       }
 
       /** Codegened pipeline for:
+<<<<<<< HEAD
         * ${commentSafe(plan.treeString.trim)}
+=======
+        * ${toCommentSafeString(plan.treeString.trim)}
+>>>>>>> 00461bb911c31aff9c945a14e23df2af4c280c23
         */
       class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
