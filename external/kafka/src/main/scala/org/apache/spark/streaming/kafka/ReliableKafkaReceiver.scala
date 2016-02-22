@@ -24,7 +24,7 @@ import scala.collection.{Map, mutable}
 import scala.reflect.{ClassTag, classTag}
 
 import kafka.common.TopicAndPartition
-import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
+import kafka.consumer._
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
 import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZKStringSerializer, ZkUtils}
@@ -55,8 +55,9 @@ class ReliableKafkaReceiver[
   T <: Decoder[_]: ClassTag](
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
-    storageLevel: StorageLevel)
-    extends Receiver[(K, V)](storageLevel) with Logging {
+    storageLevel: StorageLevel,
+    useWhiteListTopicFilter: Boolean = false
+  ) extends Receiver[(K, V)](storageLevel) with Logging {
 
   private val groupId = kafkaParams("group.id")
   private val AUTO_OFFSET_COMMIT = "auto.commit.enable"
@@ -121,10 +122,10 @@ class ReliableKafkaReceiver[
     zkClient = new ZkClient(consumerConfig.zkConnect, consumerConfig.zkSessionTimeoutMs,
       consumerConfig.zkConnectionTimeoutMs, ZKStringSerializer)
 
-    messageHandlerThreadPool = ThreadUtils.newDaemonFixedThreadPool(
-      topics.values.sum, "KafkaMessageHandler")
-
     blockGenerator.start()
+
+    messageHandlerThreadPool =
+      ThreadUtils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
 
     val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
@@ -134,12 +135,37 @@ class ReliableKafkaReceiver[
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
 
-    val topicMessageStreams = consumerConnector.createMessageStreams(
-      topics, keyDecoder, valueDecoder)
+    try {
+      createMessageHandlers(keyDecoder, valueDecoder).foreach(messageHandlerThreadPool.submit)
+    } finally {
+      // Just causes threads to terminate after work is done
+      messageHandlerThreadPool.shutdown()
+    }
+  }
 
-    topicMessageStreams.values.foreach { streams =>
-      streams.foreach { stream =>
-        messageHandlerThreadPool.submit(new MessageHandler(stream))
+  private def createMessageHandlers(
+      keyDecoder: Decoder[K], valueDecoder: Decoder[V]) : Iterable[MessageHandler] = {
+    if (!useWhiteListTopicFilter) {
+      val topicMessageStreams = consumerConnector.createMessageStreams(
+        topics, keyDecoder, valueDecoder)
+
+      topicMessageStreams.values.flatten { streams =>
+        streams.map { stream =>
+          new MessageHandler(stream)
+        }
+      }
+    } else {
+      val topicsHeadOption = topics.headOption
+      assert(topicsHeadOption.isDefined)
+
+      val topicsHead = topicsHeadOption.get
+      val topicFilter = Whitelist(topicsHead._1);
+
+      val topicMessageStreams = consumerConnector.createMessageStreamsByFilter(
+        topicFilter, topicsHead._2, keyDecoder, valueDecoder)
+
+      topicMessageStreams.map { stream =>
+        new MessageHandler(stream)
       }
     }
   }

@@ -52,91 +52,15 @@ class KafkaInputDStream[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     useReliableReceiver: Boolean,
-    storageLevel: StorageLevel
+    storageLevel: StorageLevel,
+    useWhiteListTopicFilter: Boolean = false
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
     if (!useReliableReceiver) {
-      new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
+      new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel, useWhiteListTopicFilter)
     } else {
-      new ReliableKafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
-    }
-  }
-}
-
-private[streaming]
-class KafkaReceiver[
-  K: ClassTag,
-  V: ClassTag,
-  U <: Decoder[_]: ClassTag,
-  T <: Decoder[_]: ClassTag](
-    kafkaParams: Map[String, String],
-    topics: Map[String, Int],
-    storageLevel: StorageLevel
-  ) extends Receiver[(K, V)](storageLevel) with Logging {
-
-  // Connection to Kafka
-  var consumerConnector: ConsumerConnector = null
-
-  def onStop() {
-    if (consumerConnector != null) {
-      consumerConnector.shutdown()
-      consumerConnector = null
-    }
-  }
-
-  def onStart() {
-
-    logInfo("Starting Kafka Consumer Stream with group: " + kafkaParams("group.id"))
-
-    // Kafka connection properties
-    val props = new Properties()
-    kafkaParams.foreach(param => props.put(param._1, param._2))
-
-    val zkConnect = kafkaParams("zookeeper.connect")
-    // Create the connection to the cluster
-    logInfo("Connecting to Zookeeper: " + zkConnect)
-    val consumerConfig = new ConsumerConfig(props)
-    consumerConnector = Consumer.create(consumerConfig)
-    logInfo("Connected to " + zkConnect)
-
-    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(consumerConfig.props)
-      .asInstanceOf[Decoder[K]]
-    val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(consumerConfig.props)
-      .asInstanceOf[Decoder[V]]
-
-    // Create threads for each topic/message Stream we are listening
-    val topicMessageStreams = consumerConnector.createMessageStreams(
-      topics, keyDecoder, valueDecoder)
-
-    val executorPool =
-      ThreadUtils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
-    try {
-      // Start the messages handler for each partition
-      topicMessageStreams.values.foreach { streams =>
-        streams.foreach { stream => executorPool.submit(new MessageHandler(stream)) }
-      }
-    } finally {
-      executorPool.shutdown() // Just causes threads to terminate after work is done
-    }
-  }
-
-  // Handles Kafka messages
-  private class MessageHandler(stream: KafkaStream[K, V])
-    extends Runnable {
-    def run() {
-      logInfo("Starting MessageHandler.")
-      try {
-        val streamIterator = stream.iterator()
-        while (streamIterator.hasNext()) {
-          val msgAndMetadata = streamIterator.next()
-          store((msgAndMetadata.key, msgAndMetadata.message))
-        }
-      } catch {
-        case e: Throwable => reportError("Error handling message; exiting", e)
-      }
+      new ReliableKafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel, useWhiteListTopicFilter)
     }
   }
 }
