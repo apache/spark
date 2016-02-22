@@ -536,8 +536,8 @@ setMethod("factorial",
 #'
 #' Aggregate function: returns the first value in a group.
 #'
-#' The function by default returns the first values it sees. It will return the first non-NA
-#' value it sees when ignoreNAs is set to true. If all values are NA, then NA is returned.
+#' The function by default returns the first values it sees. It will return the first non-missing
+#' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
 #' @rdname first
 #' @name first
@@ -550,13 +550,13 @@ setMethod("factorial",
 #' }
 setMethod("first",
           signature(x = "characterOrColumn"),
-          function(x, ignoreNAs = FALSE) {
+          function(x, na.rm = FALSE) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
               x
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "first", col, ignoreNAs)
+            jc <- callJStatic("org.apache.spark.sql.functions", "first", col, na.rm)
             column(jc)
           })
 
@@ -675,8 +675,8 @@ setMethod("kurtosis",
 #'
 #' Aggregate function: returns the last value in a group.
 #'
-#' The function by default returns the last values it sees. It will return the last non-NA
-#' value it sees when ignoreNAs is set to true. If all values are NA, then NA is returned.
+#' The function by default returns the last values it sees. It will return the last non-missing
+#' value it sees when na.rm is set to true. If all values are missing, then NA is returned.
 #'
 #' @rdname last
 #' @name last
@@ -689,13 +689,13 @@ setMethod("kurtosis",
 #' }
 setMethod("last",
           signature(x = "characterOrColumn"),
-          function(x, ignoreNAs = FALSE) {
+          function(x, na.rm = FALSE) {
             col <- if (class(x) == "Column") {
               x@jc
             } else {
               x
             }
-            jc <- callJStatic("org.apache.spark.sql.functions", "last", col, ignoreNAs)
+            jc <- callJStatic("org.apache.spark.sql.functions", "last", col, na.rm)
             column(jc)
           })
 
