@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.sql.SQLContext
 
-object DataSourceDetection extends Logging {
+private[sql] object DataSourceDetection extends Logging {
   /** A map to detect data sources by the extensions of given files. */
   private val extensionDatasourceMap = Map(
     "csv" -> "csv",
@@ -52,7 +52,7 @@ object DataSourceDetection extends Logging {
     //  1. Firstly, this tries to check if one of the given paths has the extension. If it has,
     //   it detects data source based on that.
     //  2. If the path does not have an extension, then it tries to find a single leaf file from
-    //   the gien path and then it tries to find an extension. If it has, it detects data source
+    //   the given path and then it tries to find an extension. If it has, it detects data source
     //   based on that.
     //  3. If this even fails, then it tries to read Parquet "magic number" to decide.
     val rootExtension = FilenameUtils.getExtension(path).toLowerCase
@@ -74,7 +74,7 @@ object DataSourceDetection extends Logging {
           defaultDataSourceName
         } else {
           throw new SparkException(s"Detected data source was [$defaultDataSourceName] but" +
-            s"it does not have a file format for this")
+            s"it does not have a file format for this. Please provide data source.")
         }
       } else {
         extensionDatasourceMap

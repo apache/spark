@@ -140,8 +140,8 @@ object ResolvedDataSource extends Logging {
       caseInsensitiveOptions.get("paths")
         .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
         .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
-        throw new IllegalArgumentException("'path' is not specified")
-      })))
+          throw new IllegalArgumentException("'path' is not specified")
+        })))
         .flatMap{ pathString =>
         val hdfsPath = new Path(pathString)
         val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
