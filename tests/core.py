@@ -487,95 +487,41 @@ class CoreTest(unittest.TestCase):
         assert "{AIRFLOW_HOME}" not in cfg
         assert "{FERNET_KEY}" not in cfg
 
-    def test_config_works_without_original_but_has_fallback(self):
-        # initial assumption
-        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
-        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
-
-        SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
-        BROKER_URL = configuration.get('celery', 'BROKER_URL')
-        CELERY_RESULT_BACKEND = configuration.get('celery',
-                                                  'CELERY_RESULT_BACKEND')
-
-        # testing condition
-        configuration.set("core", "SQL_ALCHEMY_CONN_CMD",
-                          "printf sqlite:///random_string/unittests.db")
-        configuration.set("celery", "BROKER_URL_CMD",
-                          "printf sqlite:///BROKER_URL_CMD/unittests.db")
-        configuration.set("celery", "CELERY_RESULT_BACKEND_CMD",
-                          "printf sqlite:///CELERY_RESULT/unittests.db")
-
-        assert configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
-
-        configuration.remove_option("core", "SQL_ALCHEMY_CONN")
-        configuration.remove_option("celery", "BROKER_URL")
-        configuration.remove_option("celery", "CELERY_RESULT_BACKEND")
-
-        FALLBACK_SQL_ALCHEMY = configuration.get("core",
-                                                 "SQL_ALCHEMY_CONN")
-        FALLBACK_BROKER_URL = configuration.get("celery",
-                                                "BROKER_URL")
-        FALLBACK_CELERY = configuration.get("celery",
-                                            "CELERY_RESULT_BACKEND")
-
-        assert FALLBACK_SQL_ALCHEMY == b"sqlite:///random_string/unittests.db"
-        assert FALLBACK_BROKER_URL == b"sqlite:///BROKER_URL_CMD/unittests.db"
-        assert FALLBACK_CELERY == b"sqlite:///CELERY_RESULT/unittests.db"
-
-        # restore the conf back to the original state
-        configuration.set("core", "SQL_ALCHEMY_CONN", SQL_ALCHEMY_CONN)
-        configuration.set("celery", "BROKER_URL", BROKER_URL)
-        configuration.set("celery", "CELERY_RESULT_BACKEND",
-                          CELERY_RESULT_BACKEND)
-
-        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
-
-        configuration.remove_option("core", "SQL_ALCHEMY_CONN_CMD")
-        configuration.remove_option("celery", "BROKER_URL_CMD")
-        configuration.remove_option("celery", "CELERY_RESULT_BACKEND_CMD")
-
-        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
-
-        NEW_SQL_ALCHEMY_CONN = configuration.get("core","SQL_ALCHEMY_CONN")
-
-        assert NEW_SQL_ALCHEMY_CONN == SQL_ALCHEMY_CONN
-
     def test_config_use_original_when_original_and_fallback_are_present(self):
-        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
-        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
+        assert configuration.has_option("core", "FERNET_KEY")
+        assert not configuration.has_option("core", "FERNET_KEY_CMD")
 
-        SQL_ALCHEMY_CONN = configuration.get('core', 'SQL_ALCHEMY_CONN')
+        FERNET_KEY = configuration.get('core', 'FERNET_KEY')
 
-        configuration.set("core", "SQL_ALCHEMY_CONN_CMD",
-                          "printf sqlite:///random_string/unittests.db")
+        configuration.set("core", "FERNET_KEY_CMD", "printf HELLO")
 
-        FALLBACK_SQL_ALCHEMY_CONN = configuration.get(
+        FALLBACK_FERNET_KEY = configuration.get(
             "core",
-            "SQL_ALCHEMY_CONN"
+            "FERNET_KEY"
         )
 
-        assert FALLBACK_SQL_ALCHEMY_CONN == SQL_ALCHEMY_CONN
+        assert FALLBACK_FERNET_KEY == FERNET_KEY
 
         # restore the conf back to the original state
-        configuration.remove_option("core", "SQL_ALCHEMY_CONN_CMD")
+        configuration.remove_option("core", "FERNET_KEY_CMD")
 
     def test_config_throw_error_when_original_and_fallback_is_absent(self):
-        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
-        assert not configuration.has_option("core", "SQL_ALCHEMY_CONN_CMD")
+        assert configuration.has_option("core", "FERNET_KEY")
+        assert not configuration.has_option("core", "FERNET_KEY_CMD")
 
-        SQL_ALCHEMY_CONN = configuration.get("core", "SQL_ALCHEMY_CONN")
-        configuration.remove_option("core", "SQL_ALCHEMY_CONN")
+        FERNET_KEY = configuration.get("core", "FERNET_KEY")
+        configuration.remove_option("core", "FERNET_KEY")
 
         with self.assertRaises(AirflowConfigException) as cm:
-            configuration.get("core", "SQL_ALCHEMY_CONN")
+            configuration.get("core", "FERNET_KEY")
 
         exception = str(cm.exception)
-        message = "section/key [core/sql_alchemy_conn] not found in config"
+        message = "section/key [core/fernet_key] not found in config"
         assert exception == message
 
         # restore the conf back to the original state
-        configuration.set("core", "SQL_ALCHEMY_CONN", SQL_ALCHEMY_CONN)
-        assert configuration.has_option("core", "SQL_ALCHEMY_CONN")
+        configuration.set("core", "FERNET_KEY", FERNET_KEY)
+        assert configuration.has_option("core", "FERNET_KEY")
 
     def test_class_with_logger_should_have_logger_with_correct_name(self):
 
