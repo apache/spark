@@ -225,23 +225,24 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
     * Returns the sequence of labels in ascending order
     */
   @Since("1.6.0")
-  def Kappa(weights: String): Double = {
-    weightedKappa("default")
+  def Kappa(): Double = {
+    kappa("default")
   }
 
   /**
     * Returns the sequence of labels in ascending order
     */
   @Since("1.6.0")
-  def weightedKappa(weights: String): Double = {
+  def kappa(weights: String): Double = {
+
     val wFunc = weights match {
       case "linear" =>
-        (i: Int, j:Int) => Math.abs(i - j).toDouble
+        (i: Int, j: Int) => Math.abs(i - j).toDouble
       case "quadratic" =>
-        (i: Int, j:Int) => (i - j) * (i - j).toDouble
+        (i: Int, j: Int) => (i - j).toDouble * (i - j)
       case "default" =>
-        (i: Int, j:Int) => {
-          if(i == j) {
+        (i: Int, j: Int) => {
+          if (i == j) {
             0.0
           } else {
             1.0
@@ -252,7 +253,7 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
           s"weightedKappa only supports {linear, quadratic, default} but got type ${t}.")
     }
 
-    weightedKappa(wFunc)
+    kappa(wFunc)
   }
 
 
@@ -260,7 +261,7 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
     * Returns the sequence of labels in ascending order
     */
   @Since("1.6.0")
-  def weightedKappa(weights: Matrix): Double = {
+  def kappa(weights: Matrix): Double = {
     val n = labels.size
     require(weights.numRows == n)
     require(weights.numCols == n)
@@ -272,14 +273,14 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
     val wFunc = (i: Int, j: Int) => weights(i, j)
 
-    weightedKappa(wFunc)
+    kappa(wFunc)
   }
 
   /**
     * Returns the sequence of labels in ascending order
     */
   @Since("1.6.0")
-  def weightedKappa(weights: (Int, Int) => Double): Double = {
+  def kappa(weights: (Int, Int) => Double): Double = {
     val mat = confusionMatrix
     val n = mat.numRows
 
@@ -294,23 +295,21 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
         sum += v
     }
 
-    // weighted observed proportional agreement
-    var po = 0.0
-    // weighted proportional agreement expected just by chance
-    var pe = 0.0
+    var numerator = 0.0
+    var denominator = 0.0
 
     mat.foreachActive {
       case (i, j, v) =>
         val w = weights(i, j)
         require(w >= 0, s"weight for (${i}, ${j}) must be no less than 0 but got ${w}")
-
-        po += w * v
-        pe += w * sumByRows(i) * sumByCols(j)
+        numerator += w * v
+        denominator += w * sumByRows(i) * sumByCols(j) / sum
     }
 
-    po /= sum
-    pe /= sum * sum
-
-    (po - pe) / (1 - pe)
+    if (denominator > 0) {
+      1 - numerator / denominator
+    } else {
+      1.0
+    }
   }
 }
