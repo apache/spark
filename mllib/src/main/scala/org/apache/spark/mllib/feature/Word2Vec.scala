@@ -76,6 +76,18 @@ class Word2Vec extends Serializable with Logging {
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
   private var minCount = 5
+  private var maxSentenceLength = 1000
+
+  /**
+   * Sets the maximum length (in words) of each sentence in the input data.
+   * Any sentence longer than this threshold will be divided into chunks of
+   * up to `maxSentenceLength` size (default: 1000)
+   */
+  @Since("2.0.0")
+  def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
+    this.maxSentenceLength = maxSentenceLength
+    this
+  }
 
   /**
    * Sets vector size (default: 100).
@@ -146,7 +158,6 @@ class Word2Vec extends Serializable with Logging {
   private val EXP_TABLE_SIZE = 1000
   private val MAX_EXP = 6
   private val MAX_CODE_LENGTH = 40
-  private val MAX_SENTENCE_LENGTH = 1000
 
   /** context words from [-window, window] */
   private var window = 5
@@ -156,7 +167,9 @@ class Word2Vec extends Serializable with Logging {
   @transient private var vocab: Array[VocabWord] = null
   @transient private var vocabHash = mutable.HashMap.empty[String, Int]
 
-  private def learnVocab(words: RDD[String]): Unit = {
+  private def learnVocab[S <: Iterable[String]](dataset: RDD[S]): Unit = {
+    val words = dataset.flatMap(x => x)
+
     vocab = words.map(w => (w, 1))
       .reduceByKey(_ + _)
       .filter(_._2 >= minCount)
@@ -272,15 +285,14 @@ class Word2Vec extends Serializable with Logging {
 
   /**
    * Computes the vector representation of each word in vocabulary.
-   * @param dataset an RDD of words
+   * @param dataset an RDD of sentences,
+   *                each sentence is expressed as an iterable collection of words
    * @return a Word2VecModel
    */
   @Since("1.1.0")
   def fit[S <: Iterable[String]](dataset: RDD[S]): Word2VecModel = {
 
-    val words = dataset.flatMap(x => x)
-
-    learnVocab(words)
+    learnVocab(dataset)
 
     createBinaryTree()
 
@@ -289,25 +301,15 @@ class Word2Vec extends Serializable with Logging {
     val expTable = sc.broadcast(createExpTable())
     val bcVocab = sc.broadcast(vocab)
     val bcVocabHash = sc.broadcast(vocabHash)
-
-    val sentences: RDD[Array[Int]] = words.mapPartitions { iter =>
-      new Iterator[Array[Int]] {
-        def hasNext: Boolean = iter.hasNext
-
-        def next(): Array[Int] = {
-          val sentence = ArrayBuilder.make[Int]
-          var sentenceLength = 0
-          while (iter.hasNext && sentenceLength < MAX_SENTENCE_LENGTH) {
-            val word = bcVocabHash.value.get(iter.next())
-            word match {
-              case Some(w) =>
-                sentence += w
-                sentenceLength += 1
-              case None =>
-            }
-          }
-          sentence.result()
-        }
+    // each partition is a collection of sentences,
+    // will be translated into arrays of Index integer
+    val sentences: RDD[Array[Int]] = dataset.mapPartitions { sentenceIter =>
+      // Each sentence will map to 0 or more Array[Int]
+      sentenceIter.flatMap { sentence =>
+        // Sentence of words, some of which map to a word index
+        val wordIndexes = sentence.flatMap(bcVocabHash.value.get)
+        // break wordIndexes into trunks of maxSentenceLength when has more
+        wordIndexes.grouped(maxSentenceLength).map(_.toArray)
       }
     }
 
@@ -477,15 +479,6 @@ class Word2VecModel private[spark] (
     this(Word2VecModel.buildWordIndex(model), Word2VecModel.buildWordVectors(model))
   }
 
-  private def cosineSimilarity(v1: Array[Float], v2: Array[Float]): Double = {
-    require(v1.length == v2.length, "Vectors should have the same length")
-    val n = v1.length
-    val norm1 = blas.snrm2(n, v1, 1)
-    val norm2 = blas.snrm2(n, v2, 1)
-    if (norm1 == 0 || norm2 == 0) return 0.0
-    blas.sdot(n, v1, 1, v2, 1) / norm1 / norm2
-  }
-
   override protected def formatVersion = "1.0"
 
   @Since("1.4.0")
@@ -542,6 +535,7 @@ class Word2VecModel private[spark] (
     // Need not divide with the norm of the given vector since it is constant.
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
+    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
     while (ind < numWords) {
       val norm = wordVecNorms(ind)
       if (norm == 0.0) {
@@ -551,12 +545,17 @@ class Word2VecModel private[spark] (
       }
       ind += 1
     }
-    wordList.zip(cosVec)
+    var topResults = wordList.zip(cosVec)
       .toSeq
-      .sortBy(- _._2)
+      .sortBy(-_._2)
       .take(num + 1)
       .tail
-      .toArray
+    if (vecNorm != 0.0f) {
+      topResults = topResults.map { case (word, cosVal) =>
+        (word, cosVal / vecNorm)
+      }
+    }
+    topResults.toArray
   }
 
   /**
@@ -568,6 +567,7 @@ class Word2VecModel private[spark] (
       (word, wordVectors.slice(vectorSize * ind, vectorSize * ind + vectorSize))
     }
   }
+
 }
 
 @Since("1.4.0")
