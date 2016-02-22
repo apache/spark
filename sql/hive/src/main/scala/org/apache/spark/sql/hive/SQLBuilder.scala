@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * supported by this builder (yet).
  */
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
-  require(logicalPlan.resolved, "SQLBuilder only supports resloved logical query plans")
+  require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
 
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 
@@ -98,9 +98,19 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       }
       build(toSQL(p.child), whereOrHaving, p.condition.sql)
 
+    case p @ Distinct(u: Union) if u.children.length > 1 =>
+      val childrenSql = u.children.map(c => s"(${toSQL(c)})")
+      childrenSql.mkString(" UNION DISTINCT ")
+
     case p: Union if p.children.length > 1 =>
-      val childrenSql = p.children.map(toSQL(_))
+      val childrenSql = p.children.map(c => s"(${toSQL(c)})")
       childrenSql.mkString(" UNION ALL ")
+
+    case p: Intersect =>
+      build("(" + toSQL(p.left), ") INTERSECT (", toSQL(p.right) + ")")
+
+    case p: Except =>
+      build("(" + toSQL(p.left), ") EXCEPT (", toSQL(p.right) + ")")
 
     case p: SubqueryAlias =>
       p.child match {
