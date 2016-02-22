@@ -56,7 +56,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SimrSchedulerBackend,
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
@@ -2453,12 +2453,6 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case SIMR_REGEX(simrUrl) =>
-        val scheduler = new TaskSchedulerImpl(sc)
-        val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
-        scheduler.initialize(backend)
-        (backend, scheduler)
-
       case zkUrl if zkUrl.startsWith("zk://") =>
         logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
           "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
@@ -2484,8 +2478,6 @@ private object SparkMasterRegex {
   val SPARK_REGEX = """spark://(.*)""".r
   // Regular expression for connection to Mesos cluster by mesos:// or mesos://zk:// url
   val MESOS_REGEX = """mesos://(.*)""".r
-  // Regular expression for connection to Simr cluster
-  val SIMR_REGEX = """simr://(.*)""".r
 }
 
 /**
