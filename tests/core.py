@@ -331,6 +331,14 @@ class CoreTest(unittest.TestCase):
             dag=self.dag)
         t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
 
+    def test_bash_operator_multi_byte_output(self):
+        t = operators.BashOperator(
+                task_id='test_multi_byte_bash_operator',
+                bash_command=u"echo \u2600",
+                dag=self.dag,
+                output_encoding='utf-8')
+        t.run(start_date=DEFAULT_DATE, end_date=DEFAULT_DATE, force=True)
+
     def test_trigger_dagrun(self):
         def trigga(context, obj):
             if True:
