@@ -39,6 +39,16 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def usedInputs: AttributeSet = {
+    // only the attributes those are used at least twice should be evaluated before this plan,
+    // otherwise we could defer the evaluation until output attribute is actually used.
+    val usedExprIds = projectList.flatMap(_.collect {
+      case a: Attribute => a.exprId
+    })
+    val usedMoreThanOnce = usedExprIds.groupBy(id => id).filter(_._2.size > 1).keySet
+    references.filter(a => usedMoreThanOnce.contains(a.exprId))
+  }
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))

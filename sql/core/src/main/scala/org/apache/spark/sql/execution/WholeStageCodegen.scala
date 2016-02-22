@@ -80,7 +80,7 @@ trait CodegenSupport extends SparkPlan {
     ctx.freshNamePrefix = variablePrefix
     waitForSubqueries()
     s"""
-       |/*** PRODUCE: ${commentSafe(this.simpleString)} */
+       |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -142,9 +142,10 @@ trait CodegenSupport extends SparkPlan {
     evaluateVars
   }
 
-  protected def commentSafe(s: String): String = {
-    s.replace("*/", "\\*\\/").replace("\\u", "\\\\u")
-  }
+  /**
+   * The subset of inputSet those should be evaluated before this plan.
+   */
+  def usedInputs: AttributeSet = references
 
   /**
     * Consume the columns generated from it's child, call doConsume() or emit the rows.
@@ -167,8 +168,8 @@ trait CodegenSupport extends SparkPlan {
       }
     s"""
        |
-       |/*** CONSUME: ${commentSafe(this.simpleString)} */
-       |${evaluateRequiredVariables(child.output, inputVars, references)}
+       |/*** CONSUME: ${toCommentSafeString(this.simpleString)} */
+       |${evaluateRequiredVariables(child.output, inputVars, usedInputs)}
        |${doConsume(ctx, inputVars)}
      """.stripMargin
   }
@@ -292,11 +293,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
       }
 
       /** Codegened pipeline for:
-<<<<<<< HEAD
-        * ${commentSafe(plan.treeString.trim)}
-=======
         * ${toCommentSafeString(plan.treeString.trim)}
->>>>>>> 00461bb911c31aff9c945a14e23df2af4c280c23
         */
       class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
@@ -358,11 +355,12 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable)
         }
+        val evaluateInputs = evaluateVariables(input)
         // generate the code to create a UnsafeRow
         ctx.currentVars = input
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
-           |${evaluateVariables(input)}
+           |$evaluateInputs
            |${code.code.trim}
            |currentRows.add(${code.value}.copy());
          """.stripMargin

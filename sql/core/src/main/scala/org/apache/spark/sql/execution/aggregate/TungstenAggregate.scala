@@ -116,13 +116,7 @@ case class TungstenAggregate(
   // all the mode of aggregate expressions
   private val modes = aggregateExpressions.map(_.mode).distinct
 
-  override def references: AttributeSet = {
-    AttributeSet(groupingExpressions.flatMap(_.references) ++ aggregateExpressions.flatMap {
-      case AggregateExpression(f, Final | PartialMerge, _) => f.inputAggBufferAttributes
-      case AggregateExpression(f, Partial | Complete, _) => f.references
-    })
-    child.outputSet
-  }
+  override def usedInputs: AttributeSet = inputSet
 
   override def supportCodegen: Boolean = {
     // ImperativeAggregate is not supported right now
@@ -387,15 +381,18 @@ case class TungstenAggregate(
       val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).gen(ctx)
       }
+      val evaluateKeyVars = evaluateVariables(keyVars)
       ctx.INPUT_ROW = bufferTerm
       val bufferVars = aggregateBufferAttributes.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).gen(ctx)
       }
+      val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
       val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
         BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
       }
+      val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
@@ -403,9 +400,9 @@ case class TungstenAggregate(
         BindReferences.bindReference(e, inputAttrs).gen(ctx)
       }
       s"""
-       ${evaluateVariables(keyVars)}
-       ${evaluateVariables(bufferVars)}
-       ${evaluateVariables(aggResults)}
+       $evaluateKeyVars
+       $evaluateBufferVars
+       $evaluateAggResults
        ${consume(ctx, resultVars)}
        """
 
