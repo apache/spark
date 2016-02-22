@@ -351,9 +351,6 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case j @ Join(left, right, LeftSemi, condition) =>
       j.copy(right = prunedChild(right, j.references))
 
-    // Eliminate no-op Projects
-    case p @ Project(projectList, child) if child.outputSet == p.outputSet => child
-
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p
     case p @ Project(_, _: Distinct) => p
@@ -361,12 +358,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, l: LeafNode) => p
 
+    // Eliminate no-op Projects
+    case p @ Project(projectList, child) if child.output == p.output => child
+
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
-      val allAttributes = child.children.flatMap(_.outputSet).toSet
       val required = child.references ++ p.references
-      if ((allAttributes -- required).nonEmpty) {
-        val newChildren = child.children.map(c => prunedChild(c, required))
+      if ((child.inputSet -- required).nonEmpty) {
+        val newChildren = child.children.map(c => prunedChild(c, p.references))
         p.copy(child = child.withNewChildren(newChildren))
       } else {
         p
