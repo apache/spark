@@ -242,7 +242,7 @@ private[hive] trait HiveClient {
   def addJar(path: String): Unit
 
   /** Return a [[HiveClient]] as new session, that will share the class loader and Hive client */
-  def newSession(): HiveClient
+  def newSession(userName: String = null): HiveClient
 
   /** Run a function within Hive state (SessionState, HiveConf, Hive client and class loader) */
   def withHiveState[A](f: => A): A

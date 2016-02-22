@@ -59,6 +59,7 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  *                        this [[HiveClientImpl]].
  */
 private[hive] class HiveClientImpl(
+    val userName: String = null,
     override val version: HiveVersion,
     config: Map[String, String],
     initClassLoader: ClassLoader,
@@ -120,13 +121,14 @@ private[hive] class HiveClientImpl(
         }
         initialConf.set(k, v)
       }
-      val state = new SessionState(initialConf)
+      val state = new SessionState(initialConf, userName)
       if (clientLoader.cachedHive != null) {
         Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
       }
       SessionState.start(state)
       state.out = new PrintStream(outputBuffer, true, "UTF-8")
       state.err = new PrintStream(outputBuffer, true, "UTF-8")
+      state.setIsHiveServerQuery(true)
       state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
@@ -430,13 +432,15 @@ private[hive] class HiveClientImpl(
    */
   protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = withHiveState {
     logDebug(s"Running hiveql '$cmd'")
-    if (cmd.toLowerCase.startsWith("set")) { logDebug(s"Changing config: $cmd") }
+    if (cmd.toLowerCase.startsWith("set") && !cmd.toLowerCase.startsWith("set role ")) {
+      logDebug(s"Changing config: $cmd")
+    }
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc = shim.getCommandProcessor(tokens(0), conf)
+      val proc = shim.getCommandProcessor(tokens, conf)
       proc match {
         case driver: Driver =>
           val response: CommandProcessorResponse = driver.run(cmd)
@@ -567,8 +571,8 @@ private[hive] class HiveClientImpl(
     runSqlHive(s"ADD JAR $path")
   }
 
-  def newSession(): HiveClientImpl = {
-    clientLoader.createClient().asInstanceOf[HiveClientImpl]
+  def newSession(userName: String = null): HiveClientImpl = {
+    clientLoader.createClient(userName).asInstanceOf[HiveClientImpl]
   }
 
   def reset(): Unit = withHiveState {

@@ -67,7 +67,7 @@ private[client] sealed abstract class Shim {
 
   def getPartitionsByFilter(hive: Hive, table: Table, predicates: Seq[Expression]): Seq[Partition]
 
-  def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
+  def getCommandProcessor(token: Array[String], conf: HiveConf): CommandProcessor
 
   def getDriverResults(driver: Driver): Seq[String]
 
@@ -213,8 +213,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     getAllPartitions(hive, table)
   }
 
-  override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
-    getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
+  override def getCommandProcessor(token: Array[String], conf: HiveConf): CommandProcessor =
+    getCommandProcessorMethod.invoke(null, token(0), conf).asInstanceOf[CommandProcessor]
 
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[String]()
@@ -357,8 +357,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     partitions.asScala.toSeq
   }
 
-  override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
-    getCommandProcessorMethod.invoke(null, Array(token), conf).asInstanceOf[CommandProcessor]
+  override def getCommandProcessor(token: Array[String], conf: HiveConf): CommandProcessor =
+    getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
 
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[Object]()

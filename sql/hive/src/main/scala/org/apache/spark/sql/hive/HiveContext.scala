@@ -100,12 +100,16 @@ class HiveContext private[hive](
    * and Hive client (both of execution and metadata) with existing HiveContext.
    */
   override def newSession(): HiveContext = {
+    newSession()
+  }
+
+  def newSession(userName: String = null): HiveContext = {
     new HiveContext(
       sc = sc,
       cacheManager = cacheManager,
       listener = listener,
-      execHive = executionHive.newSession(),
-      metaHive = metadataHive.newSession(),
+      execHive = executionHive.newSession(userName),
+      metaHive = metadataHive.newSession(userName),
       isRootContext = false)
   }
 
