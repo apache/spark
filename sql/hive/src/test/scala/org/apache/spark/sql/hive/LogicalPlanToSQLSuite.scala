@@ -199,32 +199,32 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     //   GROUP BY (`t1`.`key` % CAST(5 AS BIGINT))
     //   GROUPING SETS (((`t1`.`key` % CAST(5 AS BIGINT))), ())
     checkHiveQl(
-      "SELECT count(*) as cnt, key % 5, grouping_id() FROM t1 GROUP BY key % 5 WITH ROLLUP")
+      "SELECT count(*) as cnt, key%5, grouping_id() FROM parquet_t1 GROUP BY key % 5 WITH ROLLUP")
     checkHiveQl(
-      "SELECT count(*) as cnt, key % 5, grouping_id() FROM t1 GROUP BY key % 5 WITH CUBE")
+      "SELECT count(*) as cnt, key%5, grouping_id() FROM parquet_t1 GROUP BY key % 5 WITH CUBE")
   }
 
   test("rollup/cube #2") {
-    checkHiveQl("SELECT key, value, count(value) FROM t1 GROUP BY key, value WITH ROLLUP")
-    checkHiveQl("SELECT key, value, count(value) FROM t1 GROUP BY key, value WITH CUBE")
+    checkHiveQl("SELECT key, value, count(value) FROM parquet_t1 GROUP BY key, value WITH ROLLUP")
+    checkHiveQl("SELECT key, value, count(value) FROM parquet_t1 GROUP BY key, value WITH CUBE")
   }
 
   test("rollup/cube #3") {
     checkHiveQl(
-      "SELECT key, count(value), grouping_id() FROM t1 GROUP BY key, value WITH ROLLUP")
+      "SELECT key, count(value), grouping_id() FROM parquet_t1 GROUP BY key, value WITH ROLLUP")
     checkHiveQl(
-      "SELECT key, count(value), grouping_id() FROM t1 GROUP BY key, value WITH CUBE")
+      "SELECT key, count(value), grouping_id() FROM parquet_t1 GROUP BY key, value WITH CUBE")
   }
 
   test("rollup/cube #4") {
     checkHiveQl(
       s"""
-        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM t1
+        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM parquet_t1
         |GROUP BY key % 5, key - 5 WITH ROLLUP
       """.stripMargin)
     checkHiveQl(
       s"""
-        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM t1
+        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM parquet_t1
         |GROUP BY key % 5, key - 5 WITH CUBE
       """.stripMargin)
   }
@@ -233,45 +233,48 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       s"""
         |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id(key % 5, key - 5) AS k3
-        |FROM (SELECT key, key%2, key - 5 FROM t1) t GROUP BY key%5, key-5
+        |FROM (SELECT key, key%2, key - 5 FROM parquet_t1) t GROUP BY key%5, key-5
         |WITH ROLLUP
       """.stripMargin)
     checkHiveQl(
       s"""
         |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id(key % 5, key - 5) AS k3
-        |FROM (SELECT key, key % 2, key - 5 FROM t1) t GROUP BY key % 5, key - 5
+        |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
         |WITH CUBE
       """.stripMargin)
   }
 
   test("rollup/cube #6") {
-    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
-    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY CUBE(a, b) ORDER BY a, b")
-    checkHiveQl("SELECT a, b, sum(a) FROM t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
-    checkHiveQl("SELECT a, b, sum(a) FROM t2 GROUP BY CUBE(a, b) ORDER BY a, b")
-    checkHiveQl("SELECT a + b, b, sum(a - b) FROM t2 GROUP BY a + b, b WITH ROLLUP")
-    checkHiveQl("SELECT a + b, b, sum(a - b) FROM t2 GROUP BY a + b, b WITH CUBE")
+    checkHiveQl("SELECT a, b, sum(c) FROM parquet_t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(c) FROM parquet_t2 GROUP BY CUBE(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(a) FROM parquet_t2 GROUP BY ROLLUP(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a, b, sum(a) FROM parquet_t2 GROUP BY CUBE(a, b) ORDER BY a, b")
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH ROLLUP")
+    checkHiveQl("SELECT a + b, b, sum(a - b) FROM parquet_t2 GROUP BY a + b, b WITH CUBE")
   }
 
   test("rollup/cube #7") {
-    checkHiveQl("SELECT a, b, grouping_id(a, b) FROM t2 GROUP BY cube(a, b)")
-    checkHiveQl("SELECT a, b, grouping(b) FROM t2 GROUP BY cube(a, b)")
-    checkHiveQl("SELECT a, b, grouping(a) FROM t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping_id(a, b) FROM parquet_t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping(b) FROM parquet_t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping(a) FROM parquet_t2 GROUP BY cube(a, b)")
   }
 
   test("grouping sets #1") {
     checkHiveQl(
       s"""
          |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id() AS k3
-         |FROM (SELECT key, key % 2, key - 5 FROM t1) t GROUP BY key % 5, key - 5
+         |FROM (SELECT key, key % 2, key - 5 FROM parquet_t1) t GROUP BY key % 5, key - 5
          |GROUPING SETS (key % 5, key - 5)
       """.stripMargin)
   }
 
   test("grouping sets #2") {
-    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY a, b GROUPING SETS (a, b) ORDER BY a, b")
-    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY a, b GROUPING SETS (a) ORDER BY a, b")
-    checkHiveQl("SELECT a, b, sum(c) FROM t2 GROUP BY a, b GROUPING SETS (b) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a, b) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (b) ORDER BY a, b")
   }
 
   test("cluster by") {
