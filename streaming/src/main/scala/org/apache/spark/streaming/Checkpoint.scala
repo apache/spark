@@ -41,13 +41,9 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
   val sparkConfPairs = ssc.conf.getAll
-  @transient val recoverableAccuNameToId = ssc.recoverableAccuNameToId
-
-  // initialize from ssc.context after SPARK-13051
-  val trackedAccs: Array[AccumulableCheckpoint[_, _]] = Accumulators.originals.filter(ele =>
-    recoverableAccuNameToId.values.toSet.contains(ele._1)).map{
-    case (id, weakRef) => new AccumulableCheckpoint(weakRef.get.get)
-  }.toArray
+  
+  val trackedAccs: Array[AccumulableCheckpoint[_, _]] =
+    ssc.recoverableAccuNameToAcc.values.map(new AccumulableCheckpoint(_)).toArray
 
   def createSparkConf(): SparkConf = {
 

@@ -270,14 +270,8 @@ class StreamingContext private[streaming] (
     RDDOperationScope.withScope(sc, name, allowNesting = false, ignoreParent = false)(body)
   }
 
-  private[streaming] val recoverableAccuNameToId: mutable.Map[String, Long] = {
-    if (isCheckpointPresent) {
-      // accumulators created by StreamingContext must provide name, so it's safe to call name.get
-      mutable.Map(_cp.trackedAccs.map(accCP => (accCP.name, -1L)).toSeq: _*)
-    } else {
-      mutable.Map.empty
-    }
-  }
+  private[streaming] val recoverableAccuNameToAcc: mutable.Map[String, Accumulable[_, _]] =
+    mutable.Map.empty
 
   /**
     * Different from accumulator in SparkContext, it will first try to recover from Checkpoint
@@ -292,7 +286,7 @@ class StreamingContext private[streaming] (
 
     def registerNewAccumulator(_initialV: T) : Accumulator[T] = {
       val acc = sc.accumulator(_initialV, name)
-      recoverableAccuNameToId(name) = acc.id
+      recoverableAccuNameToAcc(name) = acc
       acc
     }
 
