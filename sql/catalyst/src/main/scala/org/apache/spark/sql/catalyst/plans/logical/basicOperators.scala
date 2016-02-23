@@ -176,6 +176,13 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       Some(children.flatMap(_.maxRows).min)
     }
   }
+
+  override def statistics: Statistics = {
+    val leftSize = left.statistics.sizeInBytes
+    val rightSize = right.statistics.sizeInBytes
+    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -188,6 +195,10 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+
+  override def statistics: Statistics = {
+    Statistics(sizeInBytes = left.statistics.sizeInBytes)
+  }
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -426,6 +437,14 @@ case class Aggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+
+  override def statistics: Statistics = {
+    if (groupingExpressions.isEmpty) {
+      Statistics(sizeInBytes = 1)
+    } else {
+      super.statistics
+    }
+  }
 }
 
 case class Window(
@@ -521,9 +540,7 @@ case class Expand(
     AttributeSet(projections.flatten.flatMap(_.references))
 
   override def statistics: Statistics = {
-    // TODO shouldn't we factor in the size of the projection versus the size of the backing child
-    //      row?
-    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
 }
@@ -648,6 +665,17 @@ case class Sample(
     val isTableSample: java.lang.Boolean = false) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+
+  override def statistics: Statistics = {
+    val ratio = upperBound - lowerBound
+    // BigInt can't multiply with Double
+    var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
+    if (sizeInBytes == 0) {
+      sizeInBytes = 1
+    }
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
 }
 
