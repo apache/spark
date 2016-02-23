@@ -110,7 +110,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
     val totalSamples = dataset.count()
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
-    val requiredSamples = math.max(numBins * numBins, 10000)
+    val requiredSamples = math.max(numBins * numBins, 10000.0)
     val fraction = math.min(requiredSamples / dataset.count(), 1.0)
     dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
   }
