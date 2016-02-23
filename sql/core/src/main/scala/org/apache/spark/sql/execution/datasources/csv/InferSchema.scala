@@ -187,7 +187,6 @@ private[csv] object CSVTypeCast {
           throw new SparkException(s"[$datum] could not be converted to [$castType].")
         }
         catalystConvertedValue
-      case _ => null
     }
     convertedValue
   }
