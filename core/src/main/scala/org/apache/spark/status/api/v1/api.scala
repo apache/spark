@@ -33,6 +33,9 @@ class ApplicationInfo private[spark](
 
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
+    val startTimeL: Long,
+    val endTimeL: Long,
+    val lastUpdatedL: Long,
     val startTime: Date,
     val endTime: Date,
     val lastUpdated: Date,
