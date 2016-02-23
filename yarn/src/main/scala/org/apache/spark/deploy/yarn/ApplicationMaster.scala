@@ -129,8 +129,9 @@ private[spark] class ApplicationMaster(
         // other spark processes running on the same box
         System.setProperty("spark.ui.port", "0")
 
-        // Set the master property to match the requested mode.
-        System.setProperty("spark.master", "yarn-cluster")
+        // Set the master and deploy mode property to match the requested mode.
+        System.setProperty("spark.master", "yarn")
+        System.setProperty("spark.submit.deployMode", "cluster")
 
         // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())

@@ -150,12 +150,6 @@ The master URL passed to Spark can be in one of the following formats:
         <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
         The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
 </td></tr>
-<tr><td> <code>yarn-client</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode client</code>,
-        which is preferred to `yarn-client`
-</td></tr>
-<tr><td> <code>yarn-cluster</code> </td><td> Equivalent to <code>yarn</code> with <code>--deploy-mode cluster</code>,
-        which is preferred to `yarn-cluster`
-</td></tr>
 </table>
 
 
