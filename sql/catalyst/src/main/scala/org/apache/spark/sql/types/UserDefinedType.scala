@@ -71,9 +71,6 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   def userClass: java.lang.Class[UserType]
 
-  /**
-   * The default size of a value of the UserDefinedType is 4096 bytes.
-   */
   override def defaultSize: Int = sqlType.defaultSize
 
   /**
