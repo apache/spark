@@ -30,9 +30,9 @@ import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.Utils
 
 /**
- * BlacklistTracker is design to track problematic executors and node on application level.
- * It is shared by all TaskSet, so that once a new TaskSet coming, it could be benefit from
- * previous experience of other TaskSet.
+ * BlacklistTracker is designed to track problematic executors and nodes. It belongs to
+ * SparkContext as an centralized and unified collection for all tasks with same SparkContext.
+ * So that a new TaskSet could be benefit from previous experiences of other TaskSets.
  *
  * Once task finished, the callback method in TaskSetManager should update
  * executorIdToFailureStatus Map.
@@ -40,11 +40,12 @@ import org.apache.spark.util.Utils
 private[spark] class BlacklistTracker(
     sparkConf: SparkConf,
     clock: Clock = new SystemClock()) extends BlacklistCache{
+
   // maintain a ExecutorId --> FailureStatus HashMap
   private val executorIdToFailureStatus: mutable.HashMap[String, FailureStatus] = mutable.HashMap()
-
   // Apply Strategy pattern here to change different blacklist detection logic
   private val strategy = BlacklistStrategy(sparkConf)
+
 
   // A daemon thread to expire blacklist executor periodically
   private val scheduler = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
@@ -68,7 +69,6 @@ private[spark] class BlacklistTracker(
   }
 
   // The actual implementation is delegated to strategy
-  /** VisibleForTesting */
   private[scheduler] def expireExecutorsInBlackList(): Unit = synchronized {
     val updated = strategy.expireExecutorsInBlackList(executorIdToFailureStatus, clock)
     if (updated) {
@@ -76,17 +76,50 @@ private[spark] class BlacklistTracker(
     }
   }
 
+  // The actual implementation is delegated to strategy
+  def executorBlacklist(
+      sched: TaskSchedulerImpl, stageId: Int, partition: Int): Set[String] = synchronized {
+    val atomTask = StageAndPartition(stageId, partition)
+    if (!isBlacklistExecutorCacheValid) {
+      reEvaluateExecutorBlacklistAndUpdateCache(sched, atomTask, clock)
+    } else {
+      getExecutorBlacklistFromCache(atomTask).getOrElse {
+        reEvaluateExecutorBlacklistAndUpdateCache(sched, atomTask, clock)
+      }
+    }
+  }
+
+  // The actual implementation is delegated to strategy
+  def nodeBlacklist(): Set[String] = synchronized {
+    if (isBlacklistNodeCacheValid) {
+      getNodeBlacklistFromCache
+    } else {
+      val nodes = strategy.getNodeBlacklist(executorIdToFailureStatus, clock)
+      updateBlacklistNodeCache(nodes)
+      nodes
+    }
+  }
+
+  // The actual implementation is delegated to strategy
+  def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
+    if (isBlacklistNodeForStageCacheValid) {
+      getNodeBlacklistForStageFromCache(stageId).getOrElse(
+        reEvaluateNodeBlacklistForStageAndUpdateCache(stageId))
+    } else {
+      reEvaluateNodeBlacklistForStageAndUpdateCache(stageId)
+    }
+  }
+
   def updateFailedExecutors(
-      stageId: Int,
-      partation: Int,
+      stageId: Int, partition: Int,
       info: TaskInfo,
       reason: TaskEndReason) : Unit = synchronized {
 
-    val atomTask = StageAndPartition(stageId, partation)
+    val atomTask = StageAndPartition(stageId, partition)
     reason match {
       // If the task succeeded, remove related record from executorIdToFailureStatus
       case Success =>
-        removeFailedExecutorsForTaskId(info.executorId, stageId, partation)
+        removeFailedExecutorsForTaskId(info.executorId, stageId, partition)
 
       // If the task failed, update latest failure time and failedTaskIds
       case _ =>
@@ -119,8 +152,8 @@ private[spark] class BlacklistTracker(
   def removeFailedExecutorsForTaskId(
       executorId: String,
       stageId: Int,
-      partation: Int) : Unit = synchronized {
-    val atomTask = StageAndPartition(stageId, partation)
+      partition: Int) : Unit = synchronized {
+    val atomTask = StageAndPartition(stageId, partition)
     executorIdToFailureStatus.get(executorId).map{ fs =>
       fs.numFailuresPerTask.remove(atomTask)
       if (fs.numFailuresPerTask.isEmpty) {
@@ -134,9 +167,9 @@ private[spark] class BlacklistTracker(
       executorId: String,
       sched: TaskSchedulerImpl,
       stageId: Int,
-      partation: Int) : Boolean = {
+      partition: Int) : Boolean = {
 
-    executorBlacklist(sched, stageId, partation).contains(executorId)
+    executorBlacklist(sched, stageId, partition).contains(executorId)
   }
 
   // If the node is in blacklist, all executors allocated on that node will
@@ -148,18 +181,6 @@ private[spark] class BlacklistTracker(
         .getOrElse(Set.empty[String])).toSet
   }
 
-  def executorBlacklist(
-      sched: TaskSchedulerImpl, stageId: Int, partation: Int): Set[String] = synchronized {
-    val atomTask = StageAndPartition(stageId, partation)
-    if (!isBlacklistExecutorCacheValid) {
-      reEvaluateExecutorBlacklistAndUpdateCache(sched, atomTask, clock)
-    } else {
-      getExecutorBlacklistFromCache(atomTask).getOrElse {
-        reEvaluateExecutorBlacklistAndUpdateCache(sched, atomTask, clock)
-      }
-    }
-  }
-
   private def reEvaluateExecutorBlacklistAndUpdateCache(
       sched: TaskSchedulerImpl,
       atomTask: StageAndPartition,
@@ -168,27 +189,6 @@ private[spark] class BlacklistTracker(
       strategy.getExecutorBlacklist(executorIdToFailureStatus, atomTask, clock)
     updateBlacklistExecutorCache(atomTask, executors)
     executors
-  }
-
-  // The actual implementation is delegated to strategy
-  def nodeBlacklist(): Set[String] = synchronized {
-    if (isBlacklistNodeCacheValid) {
-      getNodeBlacklistFromCache
-    } else {
-      val nodes = strategy.getNodeBlacklist(executorIdToFailureStatus, clock)
-      updateBlacklistNodeCache(nodes)
-      nodes
-    }
-  }
-
-  // The actual implementation is delegated to strategy
-  def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
-    if (isBlacklistNodeForStageCacheValid) {
-      getNodeBlacklistForStageFromCache(stageId).getOrElse(
-          reEvaluateNodeBlacklistForStageAndUpdateCache(stageId))
-    } else {
-      reEvaluateNodeBlacklistForStageAndUpdateCache(stageId)
-    }
   }
 
   private def reEvaluateNodeBlacklistForStageAndUpdateCache(stageId: Int): Set[String] = {
@@ -283,4 +283,4 @@ private[scheduler] final class FailureStatus(
   def totalNumFailures : Int = numFailuresPerTask.values.sum
 }
 
-private[scheduler] case class StageAndPartition(val stageId: Int, val partation: Int)
+private[scheduler] case class StageAndPartition(val stageId: Int, val partition: Int)

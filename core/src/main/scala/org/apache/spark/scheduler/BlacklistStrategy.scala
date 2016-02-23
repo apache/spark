@@ -25,7 +25,7 @@ import org.apache.spark.util.Clock
 /**
  * The interface to determine executor blacklist and node blacklist.
  */
-private [scheduler] trait BlacklistStrategy {
+private[scheduler] trait BlacklistStrategy {
   /** Define a time interval to expire failure information of executors */
   val expireTimeInMilliseconds: Long
 
@@ -40,8 +40,9 @@ private [scheduler] trait BlacklistStrategy {
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       clock: Clock): Set[String]
 
-  /** Return all nodes in blacklist for specified stage. By default it returns the same result as
-   *  getNodeBlacklist. It could be override in strategy implementation.
+  /**
+   * Return all nodes in blacklist for specified stage. By default it returns the same result as
+   * getNodeBlacklist. It could be override in strategy implementation.
    */
   def getNodeBlacklistForStage(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
@@ -56,6 +57,7 @@ private [scheduler] trait BlacklistStrategy {
   def expireExecutorsInBlackList(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       clock: Clock): Boolean = {
+
     val now = clock.getTimeMillis()
     val expiredKey = executorIdToFailureStatus.filter {
       case (executorid, failureStatus) => {
@@ -73,52 +75,10 @@ private [scheduler] trait BlacklistStrategy {
 }
 
 /**
- * This strategy adds an executor to the blacklist for all tasks when the executor has too many
- * task failures. An executor is placed in the blacklist when there are more than
- * [[maxFailedTasks]] failed tasks. Furthermore, all executors in one node are put into the
- * blacklist if there are more than [[maxBlacklistedExecutors]] blacklisted executors on one node.
- * The benefit of this strategy is that different taskSets can learn experience from other taskSet
- * to avoid allocating tasks on problematic executors.
- */
-private[scheduler] class ExecutorAndNodeStrategy(
-    maxFailedTasks: Int,
-    maxBlacklistedExecutors: Int,
-    val expireTimeInMilliseconds: Long
-  ) extends BlacklistStrategy {
-
-  private def getExecutorBlacklistInfo(
-      executorIdToFailureStatus: mutable.HashMap[String, FailureStatus]) = {
-    executorIdToFailureStatus.filter{
-      case (id, failureStatus) => failureStatus.totalNumFailures > maxFailedTasks
-    }
-  }
-
-  // As this is a task unrelated strategy, the input StageAndPartition info will be ignored
-  def getExecutorBlacklist(
-      executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
-      atomTask: StageAndPartition,
-      clock: Clock): Set[String] = {
-    getExecutorBlacklistInfo(executorIdToFailureStatus).keys.toSet
-  }
-
-  def getNodeBlacklist(
-      executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
-      clock: Clock): Set[String] = {
-    getExecutorBlacklistInfo(executorIdToFailureStatus)
-      .groupBy{case (id, failureStatus) => failureStatus.host}
-      .filter {case (host, executorIdToFailureStatus) =>
-        executorIdToFailureStatus.size > maxBlacklistedExecutors}
-      .keys.toSet
-  }
-}
-
-/**
- * This strategy is applied as default to keep the same semantics as original. It's an task
- * related strategy. If an executor failed running "task A", then we think this executor is
- * blacked for "task A". And we think the executor is still healthy for other task. node blacklist
- * is always empty.
+ * This strategy is applied to keep the same semantics as standard behavior before spark 1.6.
  *
- * It was the standard behavior before spark 1.6
+ * If an executor failed running "task A", then we think this executor is blacked for "task A",
+ * but at the same time. it is still healthy for other task. Node blacklist is always empty.
  */
 private[scheduler] class SingleTaskStrategy(
     val expireTimeInMilliseconds: Long) extends BlacklistStrategy {
@@ -138,9 +98,9 @@ private[scheduler] class SingleTaskStrategy(
 }
 
 /**
- * Support getNodeBlacklistForStage. With this strategy, once executor failed running a task, we
- * put all executors on the same node into blacklist, so all tasks on the same stage will not be
- * allocated to that node.
+ * Comparing to SingleTaskStrategy, it supports node blacklist. With this strategy, once more than
+ * one executor failed running for specific stage, we put all executors on the same node into
+ * blacklist. So all tasks from the same stage will not be allocated to that node.
  */
 private[scheduler] class AdvancedSingleTaskStrategy(
     expireTimeInMilliseconds: Long) extends SingleTaskStrategy(expireTimeInMilliseconds) {
@@ -149,11 +109,27 @@ private[scheduler] class AdvancedSingleTaskStrategy(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       stageId: Int,
       clock: Clock): Set[String] = {
-    executorIdToFailureStatus.filter{
+    val nodes = executorIdToFailureStatus.filter{
       case (_, failureStatus) =>
         failureStatus.numFailuresPerTask.keySet.map(_.stageId).contains(stageId) &&
         clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
-    }.values.map(_.host).toSet
+    }.values.map(_.host)
+    getDuplicateElem(nodes, 1)
+  }
+
+  override def getNodeBlacklist(
+      executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
+      clock: Clock): Set[String] = {
+    // resolve a nodes sequence from failure status.
+    val nodes = executorIdToFailureStatus.values.map(_.host)
+    getDuplicateElem(nodes, 1)
+  }
+
+  // A help function to find hosts which have more than "depTimes" executors on it in blacklist
+  private def getDuplicateElem(ndoes: Iterable[String], dupTimes: Int): Set[String] = {
+    ndoes.groupBy(identity).mapValues(_.size)  // resolve map (nodeName => occurred times)
+      .filter(ele => ele._2 > dupTimes)        // return nodes which occurred more than dupTimes.
+      .keys.toSet
   }
 }
 
@@ -164,19 +140,10 @@ private[scheduler] object BlacklistStrategy {
   def apply(sparkConf: SparkConf): BlacklistStrategy = {
     val timeout = sparkConf.getTimeAsMs("spark.scheduler.blacklist.timeout",
         sparkConf.getLong("spark.scheduler.executorTaskBlacklistTime", 0L).toString() + "ms")
-    sparkConf.get("spark.scheduler.blacklist.strategy", "singleTask") match {
-      case "singleTask" =>
-        new SingleTaskStrategy(timeout)
-      case "advancedSingleTask" =>
-        new AdvancedSingleTaskStrategy(timeout)
-      case "executorAndNode" =>
-        new ExecutorAndNodeStrategy(
-            sparkConf.getInt("spark.scheduler.blacklist.executorAndNode.maxFailedTasks", 3),
-            sparkConf.getInt(
-                "spark.scheduler.blacklist.executorAndNode.maxBlacklistedExecutors", 3),
-            timeout)
-      case unsupported =>
-        throw new IllegalArgumentException(s"No matching blacklist strategy for: $unsupported")
+
+    sparkConf.getBoolean("spark.scheduler.blacklist.advancedStrategy", false) match {
+      case false => new SingleTaskStrategy(timeout)
+      case true => new AdvancedSingleTaskStrategy(timeout)
     }
   }
 }
