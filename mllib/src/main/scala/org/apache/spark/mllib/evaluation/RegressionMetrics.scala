@@ -45,7 +45,7 @@ class RegressionMetrics @Since("2.0.0") (
    * @param predictionAndObservations a DataFrame with two double columns:
    *                                  prediction and observation
    */
-  def this(predictionAndObservations: DataFrame) =
+  private[mllib] def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
