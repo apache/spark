@@ -43,11 +43,13 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the name of family which is a description of the error distribution
    * to be used in the model.
    * Supported options: "gaussian", "binomial", "poisson" and "gamma".
+   * Default is "gaussian".
    * @group param
    */
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
-    "the name of family which is a description of the error distribution to be used in the model",
+    "The name of family which is a description of the error distribution to be used in the " +
+      "model. Supported options: gaussian(default), binomial, poisson and gamma.",
     ParamValidators.inArray[String](GeneralizedLinearRegression.supportedFamilyNames.toArray))
 
   /** @group getParam */
@@ -55,12 +57,16 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   def getFamily: String = $(family)
 
   /**
-   * Param for the name of the model link function.
+   * Param for the name of the model link function which provides the relationship
+   * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
    * @group param
    */
   @Since("2.0.0")
-  final val link: Param[String] = new Param(this, "link", "the name of the model link function",
+  final val link: Param[String] = new Param(this, "link", "The name of the model link function " +
+    "which provides the relationship between the linear predictor and the mean of the " +
+    "distribution function. Supported options: identity, log, inverse, logit, probit, cloglog " +
+    "and sqrt.",
     ParamValidators.inArray[String](GeneralizedLinearRegression.supportedLinkNames.toArray))
 
   /** @group getParam */
@@ -74,6 +80,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 
   @Since("2.0.0")
   override def validateParams(): Unit = {
+    if ($(solver) == "irls") {
+      setDefault(maxIter -> 25)
+    }
     if (isDefined(link)) {
       import GeneralizedLinearRegression._
       require(supportedFamilyAndLinkParis.contains(familyObj -> linkObj),
@@ -87,8 +96,15 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
  * :: Experimental ::
  *
  * Fit a Generalized Linear Model ([[https://en.wikipedia.org/wiki/Generalized_linear_model]])
- * specified by giving a symbolic description of the linear predictor and
- * a description of the error distribution.
+ * specified by giving a symbolic description of the linear predictor (link function) and
+ * a description of the error distribution (family).
+ * It supports "gaussian", "binomial", "poisson" and "gamma" as family.
+ * Valid link functions for each family is listed below. The first link function of each family
+ * is the default one.
+ *  - "gaussian" -> "identity", "log", "inverse"
+ *  - "binomial" -> "logit", "probit", "cloglog"
+ *  - "poisson"  -> "log", "identity", "sqrt"
+ *  - "gamma"    -> "inverse", "identity", "log"
  */
 @Experimental
 @Since("2.0.0")
@@ -101,10 +117,12 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   /**
    * Sets the value of param [[family]].
+   * Default is "gaussian".
    * @group setParam
    */
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
+  setDefault(family -> "gaussian")
 
   /**
    * Sets the value of param [[link]].
@@ -114,7 +132,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setLink(value: String): this.type = set(link, value)
 
   /**
-   * Set if we should fit the intercept.
+   * Sets if we should fit the intercept.
    * Default is true.
    * @group setParam
    */
@@ -122,16 +140,15 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
 
   /**
-   * Set the maximum number of iterations.
-   * Default is 100.
+   * Sets the maximum number of iterations.
+   * Default is 25 if the solver algorithm is "irls".
    * @group setParam
    */
   @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
-   * Set the convergence tolerance of iterations.
+   * Sets the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
    * @group setParam
@@ -141,7 +158,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(tol -> 1E-6)
 
   /**
-   * Set the regularization parameter.
+   * Sets the regularization parameter.
    * Default is 0.0.
    * @group setParam
    */
@@ -150,7 +167,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(regParam -> 0.0)
 
   /**
-   * Sets [[weightCol]].
+   * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is empty, so all instances have weight one.
    * @group setParam
@@ -160,7 +177,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(weightCol -> "")
 
   /**
-   * Set the solver algorithm used for optimization.
+   * Sets the solver algorithm used for optimization.
    * Currently only support "irls" which is also the default solver.
    * @group setParam
    */
@@ -239,23 +256,9 @@ private[ml] object GeneralizedLinearRegression {
   val epsilon: Double = 1E-16
 
   /**
-   * One wrapper of family and link instance to be used in the model.
-   * @param family the family instance
-   * @param link the link instance
+   * Wrapper of family and link instance.
    */
   private[ml] class FamilyAndLink(val family: Family, var link: Link) extends Serializable {
-
-    /** Weights for IRLS steps. */
-    def weights(mu: Double): Double = {
-      val x = family.clean(mu)
-      1.0 / (math.pow(this.link.deriv(x), 2.0) * family.variance(x))
-    }
-
-    /** The adjusted response variable. */
-    def adjusted(y: Double, mu: Double, eta: Double): Double = {
-      val x = family.clean(mu)
-      eta + (y - x) * link.deriv(x)
-    }
 
     /** Linear predictor based on given mu. */
     def predict(mu: Double): Double = link.link(family.clean(mu))
@@ -267,8 +270,8 @@ private[ml] object GeneralizedLinearRegression {
       (instance: Instance, model: WeightedLeastSquaresModel) => {
         val eta = model.predict(instance.features)
         val mu = fitted(eta)
-        val z = adjusted(instance.label, mu, eta)
-        val w = weights(mu) * instance.weight
+        val z = eta + (instance.label - mu) * link.deriv(mu)
+        val w = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
         (z, w)
       }
     }

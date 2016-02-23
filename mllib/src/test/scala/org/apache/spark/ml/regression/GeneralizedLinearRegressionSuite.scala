@@ -128,7 +128,6 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     assert(glr.getFeaturesCol === "features")
     assert(glr.getPredictionCol === "prediction")
     assert(glr.getFitIntercept)
-    assert(glr.getMaxIter === 100)
     assert(glr.getTol === 1E-6)
     assert(glr.getWeightCol === "")
     assert(glr.getRegParam === 0.0)
