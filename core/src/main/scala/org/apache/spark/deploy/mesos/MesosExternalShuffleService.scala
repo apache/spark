@@ -36,7 +36,8 @@ import org.apache.spark.util.ThreadUtils
  * It detects driver termination and calls the cleanup callback to [[ExternalShuffleService]].
  */
 private[mesos] class MesosExternalShuffleBlockHandler(
-  transportConf: TransportConf, cleanerIntervalS: Long)
+    transportConf: TransportConf,
+    cleanerIntervalS: Long)
   extends ExternalShuffleBlockHandler(transportConf, null) with Logging {
 
   ThreadUtils.newDaemonSingleThreadScheduledExecutor("shuffle-cleaner-watcher")
