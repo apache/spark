@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.cli.CliSessionState
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceUri}
@@ -31,7 +32,6 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Tab
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
@@ -105,29 +105,39 @@ private[hive] class HiveClientImpl(
     }
 
     val ret = try {
-      val initialConf = new HiveConf(classOf[SessionState])
-      // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-      // the initial value will be the current thread's context class loader
-      // (i.e. initClassLoader at here).
-      // We call initialConf.setClassLoader(initClassLoader) at here to make
-      // this action explicit.
-      initialConf.setClassLoader(initClassLoader)
-      config.foreach { case (k, v) =>
-        if (k.toLowerCase.contains("password")) {
-          logDebug(s"Hive Config: $k=xxx")
-        } else {
-          logDebug(s"Hive Config: $k=$v")
+      // originState will be created if not exists, will never be null
+      val originalState = SessionState.get()
+      if (originalState.isInstanceOf[CliSessionState]) {
+        // In `SparkSQLCLIDriver`, we have already started a `CliSessionState`,
+        // which contains information like configurations from command line. Later
+        // we call `SparkSQLEnv.init()` there, which would run into this part again.
+        // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
+        originalState
+      } else {
+        val initialConf = new HiveConf(classOf[SessionState])
+        // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+        // the initial value will be the current thread's context class loader
+        // (i.e. initClassLoader at here).
+        // We call initialConf.setClassLoader(initClassLoader) at here to make
+        // this action explicit.
+        initialConf.setClassLoader(initClassLoader)
+        config.foreach { case (k, v) =>
+          if (k.toLowerCase.contains("password")) {
+            logDebug(s"Hive Config: $k=xxx")
+          } else {
+            logDebug(s"Hive Config: $k=$v")
+          }
+          initialConf.set(k, v)
         }
-        initialConf.set(k, v)
+        val state = new SessionState(initialConf)
+        if (clientLoader.cachedHive != null) {
+          Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
+        }
+        SessionState.start(state)
+        state.out = new PrintStream(outputBuffer, true, "UTF-8")
+        state.err = new PrintStream(outputBuffer, true, "UTF-8")
+        state
       }
-      val state = new SessionState(initialConf)
-      if (clientLoader.cachedHive != null) {
-        Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
-      }
-      SessionState.start(state)
-      state.out = new PrintStream(outputBuffer, true, "UTF-8")
-      state.err = new PrintStream(outputBuffer, true, "UTF-8")
-      state
     } finally {
       Thread.currentThread().setContextClassLoader(original)
     }
