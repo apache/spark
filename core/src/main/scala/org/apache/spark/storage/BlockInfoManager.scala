@@ -164,6 +164,12 @@ private[storage] class BlockInfoManager extends Logging {
   /**
    * Lock a block for reading and return its metadata.
    *
+   * If another task has already locked this block for reading, then the read lock will be
+   * immediately granted to the calling task and its lock count will be incremented.
+   *
+   * If another task has locked this block for reading, then this call will block until the write
+   * lock is released or will return immediately if `blocking = false`.
+   *
    * A single task can lock a block multiple times for reading, in which case each lock will need
    * to be released separately.
    *
@@ -192,6 +198,9 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Lock a block for writing and return its metadata.
+   *
+   * If another task has already locked this block for either reading or writing, then this call
+   * will block until the other locks are released or will return immediately if `blocking = false`.
    *
    * If this is called by a task which already holds the block's exclusive write lock, then this
    * will return success but will not further increment any lock counts (so both write-lock
@@ -223,9 +232,10 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Get a block's metadata without acquiring any locks.
+   * Get a block's metadata without acquiring any locks. This method is only exposed for use by
+   * [[BlockManager.getStatus()]] and should not be called by other code outside of this class.
    */
-  def get(blockId: BlockId): Option[BlockInfo] = synchronized {
+  private[storage] def get(blockId: BlockId): Option[BlockInfo] = synchronized {
     infos.get(blockId)
   }
 
@@ -266,7 +276,8 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Atomically create metadata for a non-existent block.
+   * Atomically create metadata for a block and acquire a write lock for it, if it doesn't already
+   * exist.
    *
    * @param blockId the block id.
    * @param newBlockInfo the block info for the new block.
@@ -357,7 +368,7 @@ private[storage] class BlockInfoManager extends Logging {
   }
 
   /**
-   * Removes the given block and automatically drops all locks on it.
+   * Removes the given block and releases the write lock on it.
    *
    * This can only be called while holding a write lock on the given block.
    */
