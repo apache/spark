@@ -517,6 +517,11 @@ private[spark] class BlockManager(
             }
           }
         } else {
+          // This branch represents a case where the BlockInfoManager contained an entry for
+          // the block but the block could not be found in any of the block stores. This case
+          // should never occur, but for completeness's sake we address it here.
+          logError(
+            s"Block $blockId is supposedly stored locally but was not found in any block store")
           releaseLock(blockId)
           None
         }
