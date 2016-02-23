@@ -234,8 +234,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
 
   override def prettyName: String = "hash"
 
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")}, $seed)"
-
   override def eval(input: InternalRow): Any = {
     var hash = seed
     var i = 0

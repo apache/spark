@@ -1972,7 +1972,7 @@ object functions extends LegacyFunctions {
   def crc32(e: Column): Column = withExpr { Crc32(e.expr) }
 
   /**
-   * Calculates the hash code of given columns, and returns the result as a int column.
+   * Calculates the hash code of given columns, and returns the result as an int column.
    *
    * @group misc_funcs
    * @since 2.0

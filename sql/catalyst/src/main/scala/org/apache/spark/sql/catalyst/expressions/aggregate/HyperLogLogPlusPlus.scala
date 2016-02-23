@@ -68,6 +68,8 @@ case class HyperLogLogPlusPlus(
       inputAggBufferOffset = 0)
   }
 
+  override def prettyName: String = "approx_count_distinct"
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
