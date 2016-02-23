@@ -17,14 +17,16 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+
 // $example on$
-import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.KMeans;
 import org.apache.spark.mllib.clustering.KMeansModel;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.SparkConf;
 // $example off$
 
 public class JavaKMeansExample {
@@ -38,15 +40,15 @@ public class JavaKMeansExample {
     String path = "data/mllib/kmeans_data.txt";
     JavaRDD<String> data = jsc.textFile(path);
     JavaRDD<Vector> parsedData = data.map(
-            new Function<String, Vector>() {
-                public Vector call(String s) {
-                    String[] sarray = s.split(" ");
-                    double[] values = new double[sarray.length];
-                    for (int i = 0; i < sarray.length; i++)
-                        values[i] = Double.parseDouble(sarray[i]);
-                    return Vectors.dense(values);
-                }
-            }
+      new Function<String, Vector>() {
+        public Vector call(String s) {
+          String[] sarray = s.split(" ");
+          double[] values = new double[sarray.length];
+          for (int i = 0; i < sarray.length; i++)
+            values[i] = Double.parseDouble(sarray[i]);
+          return Vectors.dense(values);
+        }
+      }
     );
     parsedData.cache();
 
@@ -66,5 +68,5 @@ public class JavaKMeansExample {
     // $example off$
 
     jsc.stop();
-}
+  }
 }
