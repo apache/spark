@@ -206,7 +206,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
   }
 
   /**
-   * Recommends topK products for all users.
+   * Recommends top products for all users.
    *
    * @param num how many products to return for every user.
    * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array of
@@ -224,7 +224,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
 
 
   /**
-   * Recommends topK users for all products.
+   * Recommends top users for all products.
    *
    * @param num how many users to return for every product.
    * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array

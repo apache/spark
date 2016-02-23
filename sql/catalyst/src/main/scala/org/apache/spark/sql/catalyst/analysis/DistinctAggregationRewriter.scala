@@ -88,7 +88,7 @@ import org.apache.spark.sql.types.IntegerType
  *    this aggregate consists of the original group by clause, all the requested distinct columns
  *    and the group id. Both de-duplication of distinct column and the aggregation of the
  *    non-distinct group take advantage of the fact that we group by the group id (gid) and that we
- *    have nulled out all non-relevant columns for the the given group.
+ *    have nulled out all non-relevant columns the given group.
  * 3. Aggregating the distinct groups and combining this with the results of the non-distinct
  *    aggregation. In this step we use the group id to filter the inputs for the aggregate
  *    functions. The result of the non-distinct group are 'aggregated' by using the first operator,

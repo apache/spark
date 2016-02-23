@@ -479,7 +479,7 @@ def round(col, scale=0):
 
 @since(1.5)
 def shiftLeft(col, numBits):
-    """Shift the the given value numBits left.
+    """Shift the given value numBits left.
 
     >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
     [Row(r=42)]
@@ -490,7 +490,7 @@ def shiftLeft(col, numBits):
 
 @since(1.5)
 def shiftRight(col, numBits):
-    """Shift the the given value numBits right.
+    """Shift the given value numBits right.
 
     >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
     [Row(r=21)]
@@ -502,7 +502,7 @@ def shiftRight(col, numBits):
 
 @since(1.5)
 def shiftRightUnsigned(col, numBits):
-    """Unsigned shift the the given value numBits right.
+    """Unsigned shift the given value numBits right.
 
     >>> df = sqlContext.createDataFrame([(-42,)], ['a'])
     >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
