@@ -447,17 +447,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       "list2memory", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.putIteratorAndReleaseLock(
       "list2disk", list2.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
-    val list1Get = store.getAndReleaseLock("list1")
+    val list1Get = store.get("list1")
     assert(list1Get.isDefined, "list1 expected to be in store")
     assert(list1Get.get.data.size === 2)
     assert(list1Get.get.bytes === list1SizeEstimate)
     assert(list1Get.get.readMethod === DataReadMethod.Memory)
-    val list2MemoryGet = store.getAndReleaseLock("list2memory")
+    val list2MemoryGet = store.get("list2memory")
     assert(list2MemoryGet.isDefined, "list2memory expected to be in store")
     assert(list2MemoryGet.get.data.size === 3)
     assert(list2MemoryGet.get.bytes === list2SizeEstimate)
     assert(list2MemoryGet.get.readMethod === DataReadMethod.Memory)
-    val list2DiskGet = store.getAndReleaseLock("list2disk")
+    val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
@@ -651,19 +651,19 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putIteratorAndReleaseLock(
       "list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
-    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
-    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.get("list3").get.data.size === 2)
     assert(store.getAndReleaseLock("list1") === None, "list1 was in store")
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
-    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.get("list2").get.data.size === 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
     store.putIteratorAndReleaseLock(
       "list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     assert(store.getAndReleaseLock("list1").isDefined, "list1 was not in store")
-    assert(store.getAndReleaseLock("list1").get.data.size === 2)
+    assert(store.get("list1").get.data.size === 2)
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
-    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.getAndReleaseLock("list3") === None, "list1 was in store")
   }
 
@@ -685,27 +685,27 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val listSize = SizeEstimator.estimate(listForSizeEstimate)
     // At this point LRU should not kick in because list3 is only on disk
     assert(store.getAndReleaseLock("list1").isDefined, "list1 was not in store")
-    assert(store.getAndReleaseLock("list1").get.data.size === 2)
+    assert(store.get("list1").get.data.size === 2)
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
-    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
-    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.get("list3").get.data.size === 2)
     assert(store.getAndReleaseLock("list1").isDefined, "list1 was not in store")
-    assert(store.getAndReleaseLock("list1").get.data.size === 2)
+    assert(store.get("list1").get.data.size === 2)
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
-    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
-    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.get("list3").get.data.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.putIteratorAndReleaseLock(
       "list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
     assert(store.getAndReleaseLock("list1") === None, "list1 was in store")
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
-    assert(store.getAndReleaseLock("list2").get.data.size === 2)
+    assert(store.get("list2").get.data.size === 2)
     assert(store.getAndReleaseLock("list3").isDefined, "list3 was not in store")
-    assert(store.getAndReleaseLock("list3").get.data.size === 2)
+    assert(store.get("list3").get.data.size === 2)
     assert(store.getAndReleaseLock("list4").isDefined, "list4 was not in store")
-    assert(store.getAndReleaseLock("list4").get.data.size === 2)
+    assert(store.get("list4").get.data.size === 2)
   }
 
   test("negative byte values in ByteBufferInputStream") {

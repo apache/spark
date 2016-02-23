@@ -19,7 +19,6 @@ package org.apache.spark
 
 import scala.collection.mutable
 
-import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.util.CompletionIterator
@@ -48,14 +47,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
         existingMetrics.incBytesReadInternal(blockResult.bytes)
 
-        val iter = {
-          val dataIter = blockResult.data.asInstanceOf[Iterator[T]]
-          if (blockResult.readMethod != DataReadMethod.Network) {
-            CompletionIterator[T, Iterator[T]](dataIter, blockManager.releaseLock(key))
-          } else {
-            dataIter
-          }
-        }
+        val iter = blockResult.data.asInstanceOf[Iterator[T]]
+
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsReadInternal(1)
@@ -67,9 +60,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         // If another thread already holds the lock, wait for it to finish return its results
         val storedValues = acquireLockForPartition[T](key)
         if (storedValues.isDefined) {
-          val iter =
-            CompletionIterator[T, Iterator[T]](storedValues.get, blockManager.releaseLock(key))
-          return new InterruptibleIterator[T](context, iter)
+          return new InterruptibleIterator[T](context, storedValues.get)
         }
 
         // Otherwise, we have to load the partition ourselves
@@ -147,13 +138,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
        */
       blockManager.putIterator(key, values, level, tellMaster = true, effectiveStorageLevel)
       blockManager.get(key) match {
-        case Some(v) =>
-          val iter = v.data.asInstanceOf[Iterator[T]]
-          if (v.readMethod != DataReadMethod.Network) {
-            CompletionIterator[T, Iterator[T]](iter, blockManager.releaseLock(key))
-          } else {
-            iter
-          }
+        case Some(v) => v.data.asInstanceOf[Iterator[T]]
         case None =>
           logInfo(s"Failure to store $key")
           throw new BlockException(key, s"Block manager failed to return cached value for $key!")

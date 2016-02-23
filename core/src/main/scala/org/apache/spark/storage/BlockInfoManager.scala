@@ -202,7 +202,8 @@ private[storage] class BlockInfoManager extends Logging {
     logTrace(s"Task $currentTaskAttemptId downgrading write lock for $blockId")
     val info = get(blockId).get
     require(info.writerTask == currentTaskAttemptId,
-      s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold")
+      s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold on" +
+        s" block $blockId")
     unlock(blockId)
     lockForReading(blockId, blocking = false)
     notifyAll()

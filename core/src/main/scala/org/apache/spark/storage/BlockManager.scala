@@ -439,7 +439,10 @@ private[spark] class BlockManager(
         if (level.useMemory) {
           logDebug(s"Getting block $blockId from memory")
           val result = if (asBlockResult) {
-            memoryStore.getValues(blockId).map(new BlockResult(_, DataReadMethod.Memory, info.size))
+            memoryStore.getValues(blockId).map { iter =>
+              val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
+              new BlockResult(ci, DataReadMethod.Memory, info.size)
+            }
           } else {
             memoryStore.getBytes(blockId)
           }
@@ -466,8 +469,9 @@ private[spark] class BlockManager(
           if (!level.useMemory) {
             // If the block shouldn't be stored in memory, we can just return it
             if (asBlockResult) {
-              return Some(new BlockResult(dataDeserialize(blockId, bytes), DataReadMethod.Disk,
-                info.size))
+              val iter = CompletionIterator[Any, Iterator[Any]](
+                dataDeserialize(blockId, bytes), releaseLock(blockId))
+              return Some(new BlockResult(iter, DataReadMethod.Disk, info.size))
             } else {
               return Some(bytes)
             }
@@ -499,13 +503,15 @@ private[spark] class BlockManager(
                 // space to unroll the block. Either way, the put here should return an iterator.
                 putResult.data match {
                   case Left(it) =>
-                    return Some(new BlockResult(it, DataReadMethod.Disk, info.size))
+                    val ci = CompletionIterator[Any, Iterator[Any]](it, releaseLock(blockId))
+                    return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
                   case _ =>
                     // This only happens if we dropped the values back to disk (which is never)
                     throw new SparkException("Memory store did not return an iterator!")
                 }
               } else {
-                return Some(new BlockResult(values, DataReadMethod.Disk, info.size))
+                val ci = CompletionIterator[Any, Iterator[Any]](values, releaseLock(blockId))
+                return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
               }
             }
           }
@@ -588,7 +594,8 @@ private[spark] class BlockManager(
    * Get a block from the block manager (either local or remote).
    *
    * This acquires a read lock on the block if the block was stored locally and does not acquire
-   * any locks if the block was fetched from a remote block manager.
+   * any locks if the block was fetched from a remote block manager. The read lock will
+   * automatically be freed once the result's `data` iterator is fully consumed.
    */
   def get(blockId: BlockId): Option[BlockResult] = {
     val local = getLocal(blockId)
