@@ -50,19 +50,14 @@ class HadoopCombineRDD[K, V](
       new CombineSplitInputFormat(inputFormat, mapperSplitSize)
   }
 
-  override protected def registMetricsReadCallback(
-      split: HadoopPartition,
-      inputMetrics: InputMetrics) = {
+  override protected def registMetricsReadCallback(split: HadoopPartition) = {
     // Find a function that will return the FileSystem bytes read by this thread. Do this before
     // creating RecordReader, because RecordReader's constructor might read some bytes
-    val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
-      split.inputSplit.value match {
-        case _: FileSplit | _: CombineFileSplit | _: CombineSplit =>
-          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-        case _ => None
-      }
+    val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
+      case _: FileSplit | _: CombineFileSplit =>
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+      case _ => None
     }
-    inputMetrics.setBytesReadCallback(bytesReadCallback)
-    bytesReadCallback
+    getBytesReadCallback
   }
 }
