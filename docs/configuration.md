@@ -1145,24 +1145,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.blacklist.strategy</code></td>
-  <td>singleTask</td>
+  <td><code>spark.scheduler.blacklist.advancedStrategy</code></td>
+  <td>false</td>
   <td>
-    The strategy to determine executor blacklist and node blacklist. There are "singleTask" strategy which is the srandard behavior before spark 1.6 and "executorAndNode" strategy which is taskId unrelated and can learn experience from other taskSet to avoid allocating tasks on problematic executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.blacklist.executorAndNode.maxFailedTasks</code></td>
-  <td>3</td>
-  <td>
-    It is used in "executorAndNode" blacklist strategy. If failure task number is more than maxFailedTasks on same executor, then the executor will be in blacklist
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.blacklist.executorAndNode.maxBlacklistedExecutors</code></td>
-  <td>3</td>
-  <td>
-    It is used in "executorAndNode" blacklist strategy. If failure executor number is more than maxBlacklistedExecutors on same node, then the node will be in blacklist
+    set to tree to enable experimental advanced blacklist strategy. Comparing with the standard behavior before spark 1.6, it enables blacklist on node level.
   </td>
 </tr>
 <tr>
