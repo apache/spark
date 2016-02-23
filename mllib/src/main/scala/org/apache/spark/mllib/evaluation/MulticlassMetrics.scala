@@ -24,12 +24,12 @@ import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
-/**
-  * ::Experimental::
-  * Evaluator for multiclass classification.
-  *
-  * @param predictionAndLabels an RDD of (prediction, label) pairs.
-  */
+  /**
+    * ::Experimental::
+    * Evaluator for multiclass classification.
+    *
+    * @param predictionAndLabels an RDD of (prediction, label) pairs.
+    */
 @Since("1.1.0")
 class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double)]) {
 
