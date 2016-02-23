@@ -25,22 +25,22 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 /**
- * This integration suite is created as part of Pull request(11306) and is used for the fix 
+ * This integration suite is created as part of Pull request(11306) and is used for the fix
  * SPARK-12941, creating a data type mapping to Oracle for the corresponding data type
- * "Stringtype" from dataframe. This PR is for the master branch fix, where as another PR 
+ * "Stringtype" from dataframe. This PR is for the master branch fix, where as another PR
  * is already tested with the branch 1.4
  *
  * This patch was tested using the Oracle docker.Created this integration suite for the same.
- * The ojdbc6-11.2.0.2.0.jar was to be downloaded from the maven repository.Since there was 
- * no jdbc jar available in the maven repository, the jar was downloaded from oracle site 
+ * The ojdbc6-11.2.0.2.0.jar was to be downloaded from the maven repository.Since there was
+ * no jdbc jar available in the maven repository, the jar was downloaded from oracle site
  * manually and installed in the local; thus tested. So, for SparkQA test case run, the
  * ojdbc jar might be manually placed in the local maven repository(com/oracle/ojdbc6/11.2.0.2.0)
  * while Spark QA test run
- * 
+ *
  * The following would be the steps to test this
  * 1. Pull oracle 11g image - docker pull wnameless/oracle-xe-11g
  * 2. Start docker - sudo service docker start
- * 3. Download oracle 11g driver jar and put it in maven local repo: 
+ * 3. Download oracle 11g driver jar and put it in maven local repo:
  *    (com/oracle/ojdbc6/11.2.0.2.0/ojdbc6-11.2.0.2.0.jar)
  * 4. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
@@ -61,7 +61,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
 
   override def dataPreparation(conn: Connection): Unit = {
   }
-  
+
   /**
    * For SparkQA test case run, the ojdbc6-11.2.0.2.0.jar would be required to be manually
    * placed in the local maven repository(com/oracle/ojdbc6/11.2.0.2.0) while Spark QA test
