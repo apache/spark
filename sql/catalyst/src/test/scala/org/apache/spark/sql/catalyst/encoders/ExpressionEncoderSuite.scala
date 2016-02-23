@@ -23,12 +23,14 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, StructType}
+import org.apache.spark.sql.types.{ArrayType, ObjectType, StructType}
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -74,7 +76,7 @@ class JavaSerializable(val value: Int) extends Serializable {
   }
 }
 
-class ExpressionEncoderSuite extends SparkFunSuite {
+class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
   implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
@@ -304,6 +306,15 @@ class ExpressionEncoderSuite extends SparkFunSuite {
               |
             """.stripMargin, e)
       }
+
+      // Test the correct resolution of serialization / deserialization.
+      val attr = AttributeReference("obj", ObjectType(encoder.clsTag.runtimeClass))()
+      val inputPlan = LocalRelation(attr)
+      val plan =
+        Project(Alias(encoder.fromRowExpression, "obj")() :: Nil,
+          Project(encoder.namedExpressions,
+            inputPlan))
+      assertAnalysisSuccess(plan)
 
       val isCorrect = (input, convertedBack) match {
         case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)

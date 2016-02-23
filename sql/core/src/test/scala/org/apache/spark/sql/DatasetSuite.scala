@@ -613,6 +613,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         " - Input schema: struct<a:string,b:int>\n" +
         " - Target schema: struct<_1:string>")
   }
+
+  test("SPARK-13440: Resolving option fields") {
+    val df = Seq(1, 2, 3).toDS()
+    val ds = df.as[Option[Int]]
+    checkAnswer(
+      ds.filter(_ => true),
+      Some(1), Some(2), Some(3))
+  }
 }
 
 class OuterClass extends Serializable {

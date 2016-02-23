@@ -60,7 +60,18 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    analyzer.checkAnalysis(analyzer.execute(inputPlan))
+    val analysisAttempt = analyzer.execute(inputPlan)
+    try analyzer.checkAnalysis(analysisAttempt) catch {
+      case a: AnalysisException =>
+        fail(
+          s"""
+            |Failed to Analyze Plan
+            |$inputPlan
+            |
+            |Partial Analysis
+            |$analysisAttempt
+          """.stripMargin, a)
+    }
   }
 
   protected def assertAnalysisError(
