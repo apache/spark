@@ -455,12 +455,12 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       val coalesced2 = data2.coalesce(partitions)
 
       // test that we have 10000 partitions
-      assert(coalesced2.partitions.size == 10000, "Expected 10000 partitions, but got " + 
+      assert(coalesced2.partitions.size == 10000, "Expected 10000 partitions, but got " +
         coalesced2.partitions.size)
 
       // test that we have 100 partitions
       val coalesced3 = data2.coalesce(numMachines * 2)
-      assert(coalesced3.partitions.size == 100, "Expected 100 partitions, but got " + 
+      assert(coalesced3.partitions.size == 100, "Expected 100 partitions, but got " +
         coalesced3.partitions.size)
 
       // test that the groups are load balanced with 100 +/- 20 elements in each
