@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Explode, Literal}
-import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.StringType
@@ -123,32 +123,6 @@ class ColumnPruningSuite extends PlanTest {
             input))).analyze
 
     comparePlans(optimized, expected)
-  }
-
-  test("Keep broadcast hint when pruning on Join") {
-    val input = LocalRelation('key.int, 'value.string)
-
-    val query =
-      Project(Seq($"x.key", $"y.key"),
-        Join(
-          SubqueryAlias("x", input),
-          BroadcastHint(SubqueryAlias("y", input)), Inner, None)).analyze
-
-    val optimized = Optimize.execute(query)
-
-    val expected =
-      Project(Seq($"x.key", $"y.key"),
-        Join(
-          Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"),
-            BroadcastHint(SubqueryAlias("y", input))),
-          Inner, None)).analyze
-
-    comparePlans(optimized, expected)
-
-    assert(optimized.collect {
-      case b @ BroadcastHint(_) if b.statistics.sizeInBytes == 1 => 1
-    }.nonEmpty)
   }
 
   // todo: add more tests for column pruning
