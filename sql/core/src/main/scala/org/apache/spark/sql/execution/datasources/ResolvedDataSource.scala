@@ -24,7 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.compress.{CompressionCodec, CompressionCodecFactory}
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
@@ -287,15 +287,17 @@ object ResolvedDataSource extends Logging {
           bucketSpec,
           caseInsensitiveOptions)
 
+        val codec = options
+          .get("compressionCodec")
+          .map { codecName =>
+            val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+            Option(new CompressionCodecFactory(hadoopConf).getCodecClassByName(codecName))
+          }
+          .getOrElse(None)
+
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
-
-        val codec = options.get("compression.codec").flatMap(e =>
-          Some(new CompressionCodecFactory(sqlContext.sparkContext.hadoopConfiguration)
-            .getCodecClassByName(e).asInstanceOf[Class[CompressionCodec]])
-        )
-
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,

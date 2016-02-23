@@ -19,11 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.{Date, UUID}
 
-import scala.collection.JavaConverters._
-
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.io.compress.{CompressionCodec, SnappyCodec}
+import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter => MapReduceFileOutputCommitter}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -212,10 +209,10 @@ private[sql] abstract class BaseWriterContainer(
     serializableConf.value.set("mapred.task.id", taskAttemptId.toString)
     serializableConf.value.setBoolean("mapred.task.is.map", true)
     serializableConf.value.setInt("mapred.task.partition", 0)
-    codec.foreach { c =>
+    codec.map { codecClass =>
       serializableConf.value.set("mapred.output.compress", "true")
-      serializableConf.value.set("mapred.output.compression.codec", c.getCanonicalName)
-      serializableConf.value.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
+      serializableConf.value.set("mapred.output.compression.codec", codecClass.getCanonicalName)
+      serializableConf.value.set("mapred.output.compression.type", "BLOCK")
     }
   }
 

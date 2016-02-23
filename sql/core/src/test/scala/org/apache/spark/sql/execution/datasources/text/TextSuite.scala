@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import com.google.common.io.Files
-import org.apache.hadoop.io.compress.GzipCodec
-
-import org.apache.spark.sql._
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -61,9 +58,9 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("compression") {
-    val tempDirPath = Files.createTempDir().getAbsolutePath;
+    val tempDirPath = Utils.createTempDir().getAbsolutePath
     val df = sqlContext.read.text(testFile)
-    df.write.compress(classOf[GzipCodec]).mode(SaveMode.Overwrite).text(tempDirPath)
+    df.write.option("compressionCodec", "GzipCodec").mode(SaveMode.Overwrite).text(tempDirPath)
     verifyFrame(sqlContext.read.text(tempDirPath))
   }
 
