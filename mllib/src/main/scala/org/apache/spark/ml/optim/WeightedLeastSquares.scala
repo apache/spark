@@ -156,6 +156,8 @@ private[ml] class WeightedLeastSquares(
 
 private[ml] object WeightedLeastSquares {
 
+  val MaxNumFeatures: Int = 4096
+
   /**
    * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
    */
@@ -174,8 +176,8 @@ private[ml] object WeightedLeastSquares {
     private var aaSum: DenseVector = _
 
     private def init(k: Int): Unit = {
-      require(k <= 4096, "In order to take the normal equation approach efficiently, " +
-        s"we set the max number of features to 4096 but got $k.")
+      require(k <= MaxNumFeatures, "In order to take the normal equation approach efficiently, " +
+        s"we set the max number of features to $MaxNumFeatures but got $k.")
       this.k = k
       triK = k * (k + 1) / 2
       count = 0L

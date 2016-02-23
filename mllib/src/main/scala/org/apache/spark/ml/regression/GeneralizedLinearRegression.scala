@@ -35,7 +35,7 @@ import org.apache.spark.sql.functions._
 /**
  * Params for Generalized Linear Regression.
  */
-private[regression] trait GeneralizedLinearRegressionParams extends PredictorParams
+private[regression] trait GeneralizedLinearRegressionBase extends PredictorParams
   with HasFitIntercept with HasMaxIter with HasTol with HasRegParam with HasWeightCol
   with HasSolver with Logging {
 
@@ -48,7 +48,7 @@ private[regression] trait GeneralizedLinearRegressionParams extends PredictorPar
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
     "the name of family which is a description of the error distribution to be used in the model",
-    ParamValidators.inArray[String](GeneralizedLinearRegression.supportedFamilies.toArray))
+    ParamValidators.inArray[String](GeneralizedLinearRegression.supportedFamilyNames.toArray))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -61,16 +61,22 @@ private[regression] trait GeneralizedLinearRegressionParams extends PredictorPar
    */
   @Since("2.0.0")
   final val link: Param[String] = new Param(this, "link", "the name of the model link function",
-    ParamValidators.inArray[String](GeneralizedLinearRegression.supportedLinks.toArray))
+    ParamValidators.inArray[String](GeneralizedLinearRegression.supportedLinkNames.toArray))
 
   /** @group getParam */
   @Since("2.0.0")
   def getLink: String = $(link)
 
+  import GeneralizedLinearRegression._
+  protected lazy val familyObj = Family.fromName($(family))
+  protected lazy val linkObj = if (isDefined(link)) Link.fromName($(link)) else familyObj.defaultLink
+  protected lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
+
   @Since("2.0.0")
   override def validateParams(): Unit = {
     if (isDefined(link)) {
-      require(GeneralizedLinearRegression.supportedFamilyLinkPairs.contains($(family) -> $(link)),
+      import GeneralizedLinearRegression._
+      require(supportedFamilyAndLinkParis.contains(familyObj -> linkObj),
         s"Generalized Linear Regression with ${$(family)} family does not support ${$(link)} " +
           s"link function.")
     }
@@ -88,21 +94,20 @@ private[regression] trait GeneralizedLinearRegressionParams extends PredictorPar
 @Since("2.0.0")
 class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   extends Regressor[Vector, GeneralizedLinearRegression, GeneralizedLinearRegressionModel]
-  with GeneralizedLinearRegressionParams with Logging {
+  with GeneralizedLinearRegressionBase with Logging {
 
   @Since("2.0.0")
-  def this() = this(Identifiable.randomUID("genLinReg"))
+  def this() = this(Identifiable.randomUID("glm"))
 
   /**
-   * Set the name of family which is a description of the error distribution
-   * to be used in the model.
+   * Sets the value of param [[family]].
    * @group setParam
    */
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
 
   /**
-   * Set the name of the model link function.
+   * Sets the value of param [[link]].
    * @group setParam
    */
   @Since("2.0.0")
@@ -115,7 +120,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Set the maximum number of iterations.
@@ -146,8 +150,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(regParam -> 0.0)
 
   /**
-   * Whether to over-/under-sample training instances according to the given weights in weightCol.
-   * If empty, all instances are treated equally (weight 1.0).
+   * Sets [[weightCol]].
+   * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is empty, so all instances have weight one.
    * @group setParam
    */
@@ -165,64 +169,49 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(solver -> "irls")
 
   override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
-    val familyLink = $(family) match {
-      case "gaussian" => if (isDefined(link)) Gaussian($(link)) else Gaussian("identity")
-      case "binomial" => if (isDefined(link)) Binomial($(link)) else Binomial("logit")
-      case "poisson" => if (isDefined(link)) Poisson($(link)) else Poisson("log")
-      case "gamma" => if (isDefined(link)) Gamma($(link)) else Gamma("inverse")
-    }
-
     val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
       case Row(features: Vector) => features.size
     }.first()
-    if (numFeatures > 4096) {
+    if (numFeatures > WeightedLeastSquares.MaxNumFeatures) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
         s" <= 4096. Found $numFeatures in the input dataset."
       throw new SparkException(msg)
     }
 
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(
-      col($(labelCol)), w, col($(featuresCol))).map {
-      case Row(label: Double, weight: Double, features: Vector) =>
+    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol)))
+      .map { case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
-    }
+      }
 
     if ($(family) == "gaussian" && $(link) == "identity") {
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances)
-      val model = copyValues(new GeneralizedLinearRegressionModel(uid,
-        wlsModel.coefficients, wlsModel.intercept).setParent(this))
+      val model = copyValues(
+        new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
+          .setParent(this))
       return model
     }
 
     val newInstances = instances.map { instance =>
-      val mu = familyLink.initialize(instance.label, instance.weight)
-      val eta = familyLink.predict(mu)
+      val mu = familyObj.initialize(instance.label, instance.weight)
+      val eta = familyAndLink.predict(mu)
       Instance(eta, instance.weight, instance.features)
     }
 
     val initialModel = new WeightedLeastSquares($(fitIntercept), $(regParam),
-      standardizeFeatures = true, standardizeLabel = true).fit(newInstances)
+      standardizeFeatures = true, standardizeLabel = true)
+      .fit(newInstances)
 
-    val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double) = {
-      (instance: Instance, model: WeightedLeastSquaresModel) => {
-        val eta = model.predict(instance.features)
-        val mu = familyLink.fitted(eta)
-        val z = familyLink.adjusted(instance.label, mu, eta)
-        val w = familyLink.weights(mu) * instance.weight
-        (z, w)
-      }
-    }
-
-    val optimizer = new IterativelyReweightedLeastSquares(initialModel, reweightFunc,
+    val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
       $(fitIntercept), $(regParam), $(maxIter), $(tol))
 
     val irlsModel = optimizer.fit(instances)
 
-    val model = copyValues(new GeneralizedLinearRegressionModel(uid,
-      irlsModel.coefficients, irlsModel.intercept).setParent(this))
+    val model = copyValues(
+      new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
+        .setParent(this))
     model
   }
 
@@ -231,22 +220,299 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 }
 
 @Since("2.0.0")
-object GeneralizedLinearRegression {
-
-  /** Set of families that GeneralizedLinearRegression supports */
-  private[ml] val supportedFamilies = Set("gaussian", "binomial", "poisson", "gamma")
-
-  /** Set of links that GeneralizedLinearRegression supports */
-  private[ml] val supportedLinks = Set("identity", "log", "inverse", "logit", "probit",
-    "cloglog", "sqrt")
+private[ml] object GeneralizedLinearRegression {
 
   /** Set of family and link pairs that GeneralizedLinearRegression supports */
-  private[ml] val supportedFamilyLinkPairs = Set(
-    "gaussian" -> "identity", "gaussian" -> "log", "gaussian" -> "inverse",
-    "binomial" -> "logit", "binomial" -> "probit", "binomial" -> "cloglog",
-    "poisson" -> "log", "poisson" -> "identity", "poisson" -> "sqrt",
-    "gamma" -> "inverse", "gamma" -> "identity", "gamma" -> "log"
+  lazy val supportedFamilyAndLinkParis = Set(
+    Gaussian -> Identity, Gaussian -> Log, Gaussian -> Inverse,
+    Binomial -> Logit, Binomial -> Probit, Binomial -> CLogLog,
+    Poisson -> Log, Poisson -> Identity, Poisson -> Sqrt,
+    Gamma -> Inverse, Gamma -> Identity, Gamma -> Log
   )
+
+  /** Set of families that GeneralizedLinearRegression supports */
+  lazy val supportedFamilyNames = supportedFamilyAndLinkParis.map(_._1.name)
+
+  /** Set of links that GeneralizedLinearRegression supports */
+  lazy val supportedLinkNames = supportedFamilyAndLinkParis.map(_._2.name)
+
+  val epsilon: Double = 1E-16
+
+  /**
+   * One wrapper of family and link instance to be used in the model.
+   * @param family the family instance
+   * @param link the link instance
+   */
+  private[ml] class FamilyAndLink(val family: Family, var link: Link) extends Serializable {
+
+    /** Weights for IRLS steps. */
+    def weights(mu: Double): Double = {
+      val x = family.clean(mu)
+      1.0 / (math.pow(this.link.deriv(x), 2.0) * family.variance(x))
+    }
+
+    /** The adjusted response variable. */
+    def adjusted(y: Double, mu: Double, eta: Double): Double = {
+      val x = family.clean(mu)
+      eta + (y - x) * link.deriv(x)
+    }
+
+    /** Linear predictor based on given mu. */
+    def predict(mu: Double): Double = link.link(family.clean(mu))
+
+    /** Fitted value based on linear predictor eta. */
+    def fitted(eta: Double): Double = family.clean(link.unlink(eta))
+
+    val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double) = {
+      (instance: Instance, model: WeightedLeastSquaresModel) => {
+        val eta = model.predict(instance.features)
+        val mu = fitted(eta)
+        val z = adjusted(instance.label, mu, eta)
+        val w = weights(mu) * instance.weight
+        (z, w)
+      }
+    }
+  }
+
+  /**
+   * A description of the error distribution to be used in the model.
+   * @param name the name of the family
+   */
+  private[ml] abstract class Family(val name: String) extends Serializable {
+
+    /** The default link instance of this family. */
+    val defaultLink: Link
+
+    /** Initialize the starting value for mu. */
+    def initialize(y: Double, weight: Double): Double
+
+    /** The variance of the endogenous variable's mean, given the value mu. */
+    def variance(mu: Double): Double
+
+    /** Trim the fitted value so that it will be in valid range. */
+    def clean(mu: Double): Double = mu
+  }
+
+  private[ml] object Family {
+
+    /**
+     * Gets the [[Family]] object from its name.
+     * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
+     */
+    def fromName(name: String): Family = {
+      name match {
+        case Gaussian.name => Gaussian
+        case Binomial.name => Binomial
+        case Poisson.name => Poisson
+        case Gamma.name => Gamma
+      }
+    }
+  }
+
+  /**
+   * Gaussian exponential family distribution.
+   * The default link for the Gaussian family is the identity link.
+   */
+  private[ml] object Gaussian extends Family("gaussian") {
+
+    val defaultLink: Link = Identity
+
+    override def initialize(y: Double, weight: Double): Double = y
+
+    def variance(mu: Double): Double = 1.0
+
+    override def clean(mu: Double): Double = {
+      if (mu.isNegInfinity) {
+        Double.MinValue
+      } else if (mu.isPosInfinity) {
+        Double.MaxValue
+      } else {
+        mu
+      }
+    }
+  }
+
+  /**
+   * Binomial exponential family distribution.
+   * The default link for the Binomial family is the logit link.
+   */
+  private[ml] object Binomial extends Family("binomial") {
+
+    val defaultLink: Link = Logit
+
+    override def initialize(y: Double, weight: Double): Double = {
+      val mu = (weight * y + 0.5) / (weight + 1.0)
+      require(mu > 0.0 && mu < 1.0, "The response variable of Binomial family" +
+        s"should be in range (0, 1), but got $mu")
+      mu
+    }
+
+    override def variance(mu: Double): Double = mu * (1.0 - mu)
+
+    override def clean(mu: Double): Double = {
+      if (mu < epsilon) {
+        epsilon
+      } else if (mu > 1.0 - epsilon) {
+        1.0 - epsilon
+      } else {
+        mu
+      }
+    }
+  }
+
+  /**
+   * Poisson exponential family distribution.
+   * The default link for the Poisson family is the log link.
+   */
+  private[ml] object Poisson extends Family("poisson") {
+
+    val defaultLink: Link = Log
+
+    override def initialize(y: Double, weight: Double): Double = {
+      require(y > 0.0, "The response variable of Poisson family " +
+        s"should be positive, but got $y")
+      y
+    }
+
+    override def variance(mu: Double): Double = mu
+
+    override def clean(mu: Double): Double = {
+      if (mu < epsilon) {
+        epsilon
+      } else if (mu.isInfinity) {
+        Double.MaxValue
+      } else {
+        mu
+      }
+    }
+  }
+
+  /**
+   * Gamma exponential family distribution.
+   * The default link for the Gamma family is the inverse link.
+   */
+  private[ml] object Gamma extends Family("gamma") {
+
+    val defaultLink: Link = Inverse
+
+    override def initialize(y: Double, weight: Double): Double = {
+      require(y > 0.0, "The response variable of Gamma family " +
+        s"should be positive, but got $y")
+      y
+    }
+
+    override def variance(mu: Double): Double = math.pow(mu, 2.0)
+
+    override def clean(mu: Double): Double = {
+      if (mu < epsilon) {
+        epsilon
+      } else if (mu.isInfinity) {
+        Double.MaxValue
+      } else {
+        mu
+      }
+    }
+  }
+
+  /**
+   * A description of the link function to be used in the model.
+   * The link function provides the relationship between the linear predictor
+   * and the mean of the distribution function.
+   * @param name the name of link function
+   */
+  private[ml] abstract class Link(val name: String) extends Serializable {
+
+    /** The link function. */
+    def link(mu: Double): Double
+
+    /** Derivative of the link function. */
+    def deriv(mu: Double): Double
+
+    /** The inverse link function. */
+    def unlink(eta: Double): Double
+  }
+
+  private[ml] object Link {
+
+    /**
+     * Gets the [[Link]] object from its name.
+     * @param name link name: "identity", "logit", "log", "inverse", "probit", "cloglog" or "sqrt".
+     */
+    def fromName(name: String): Link = {
+      name match {
+        case Identity.name => Identity
+        case Logit.name => Logit
+        case Log.name => Log
+        case Inverse.name => Inverse
+        case Probit.name => Probit
+        case CLogLog.name => CLogLog
+        case Sqrt.name => Sqrt
+      }
+    }
+  }
+
+  private[ml] object Identity extends Link("identity") {
+
+    override def link(mu: Double): Double = mu
+
+    override def deriv(mu: Double): Double = 1.0
+
+    override def unlink(eta: Double): Double = eta
+  }
+
+  private[ml] object Logit extends Link("logit") {
+
+    override def link(mu: Double): Double = math.log(mu / (1.0 - mu))
+
+    override def deriv(mu: Double): Double = 1.0 / (mu * (1.0 - mu))
+
+    override def unlink(eta: Double): Double = 1.0 / (1.0 + math.exp(-1.0 * eta))
+  }
+
+  private[ml] object Log extends Link("log") {
+
+    override def link(mu: Double): Double = math.log(mu)
+
+    override def deriv(mu: Double): Double = 1.0 / mu
+
+    override def unlink(eta: Double): Double = math.exp(eta)
+  }
+
+  private[ml] object Inverse extends Link("inverse") {
+
+    override def link(mu: Double): Double = 1.0 / mu
+
+    override def deriv(mu: Double): Double = -1.0 * math.pow(mu, -2.0)
+
+    override def unlink(eta: Double): Double = 1.0 / eta
+  }
+
+  private[ml] object Probit extends Link("probit") {
+
+    override def link(mu: Double): Double = GD(0.0, 1.0).icdf(mu)
+
+    override def deriv(mu: Double): Double = 1.0 / GD(0.0, 1.0).pdf(GD(0.0, 1.0).icdf(mu))
+
+    override def unlink(eta: Double): Double = GD(0.0, 1.0).cdf(eta)
+  }
+
+  private[ml] object CLogLog extends Link("cloglog") {
+
+    override def link(mu: Double): Double = math.log(-1.0 * math.log(1 - mu))
+
+    override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log(1.0 - mu))
+
+    override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
+  }
+
+  private[ml] object Sqrt extends Link("sqrt") {
+
+    override def link(mu: Double): Double = math.sqrt(mu)
+
+    override def deriv(mu: Double): Double = 1.0 / (2.0 * math.sqrt(mu))
+
+    override def unlink(eta: Double): Double = math.pow(eta, 2.0)
+  }
 }
 
 /**
@@ -260,18 +526,11 @@ class GeneralizedLinearRegressionModel private[ml] (
     @Since("2.0.0") val coefficients: Vector,
     @Since("2.0.0") val intercept: Double)
   extends RegressionModel[Vector, GeneralizedLinearRegressionModel]
-  with GeneralizedLinearRegressionParams {
-
-  private lazy val familyLink = $(family) match {
-    case "gaussian" => if (isDefined(link)) Gaussian($(link)) else Gaussian("identity")
-    case "binomial" => if (isDefined(link)) Binomial($(link)) else Binomial("logit")
-    case "poisson" => if (isDefined(link)) Poisson($(link)) else Poisson("log")
-    case "gamma" => if (isDefined(link)) Gamma($(link)) else Gamma("inverse")
-  }
+  with GeneralizedLinearRegressionBase {
 
   override protected def predict(features: Vector): Double = {
     val eta = BLAS.dot(features, coefficients) + intercept
-    familyLink.fitted(eta)
+    familyAndLink.fitted(eta)
   }
 
   @Since("2.0.0")
@@ -279,269 +538,4 @@ class GeneralizedLinearRegressionModel private[ml] (
     copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept), extra)
       .setParent(parent)
   }
-}
-
-/**
- * A description of the error distribution and link function to be used in the model.
- * @param link a link function instance
- */
-private[ml] abstract class Family(val link: Link) extends Serializable {
-
-  /** Initialize the starting value for mu. */
-  def initialize(y: Double, weight: Double): Double
-
-  /** The variance of the endogenous variable's mean, given the value mu. */
-  def variance(mu: Double): Double
-
-  /** Weights for IRLS steps. */
-  def weights(mu: Double): Double = {
-    val x = clean(mu)
-    1.0 / (math.pow(this.link.deriv(x), 2.0) * this.variance(x))
-  }
-
-  /** The adjusted response variable. */
-  def adjusted(y: Double, mu: Double, eta: Double): Double = {
-    val x = clean(mu)
-    eta + (y - x) * link.deriv(x)
-  }
-
-  /** Linear predictor based on given mu. */
-  def predict(mu: Double): Double = this.link.link(clean(mu))
-
-  /** Fitted value based on linear predictor eta. */
-  def fitted(eta: Double): Double = clean(this.link.unlink(eta))
-
-  /** Trim the fitted value so that it will be in valid range. */
-  def clean(mu: Double): Double = mu
-
-  val epsilon: Double = 1E-16
-}
-
-/**
- * Gaussian exponential family distribution.
- * The default link for the Gaussian family is the identity link.
- * @param link a link function instance
- */
-private[ml] class Gaussian(link: Link = Identity) extends Family(link) {
-
-  override def initialize(y: Double, weight: Double): Double = {
-    if (link == Log) {
-      require(y > 0.0, "The response variable of Gaussian family with Log link " +
-        s"should be positive, but got $y")
-    }
-    y
-  }
-
-  def variance(mu: Double): Double = 1.0
-
-  override def clean(mu: Double): Double = {
-    if (mu.isNegInfinity) {
-      Double.MinValue
-    } else if (mu.isPosInfinity) {
-      Double.MaxValue
-    } else {
-      mu
-    }
-  }
-}
-
-private[ml] object Gaussian {
-
-  def apply(link: String): Gaussian = {
-    link match {
-      case "identity" => new Gaussian(Identity)
-      case "log" => new Gaussian(Log)
-      case "inverse" => new Gaussian(Inverse)
-    }
-  }
-}
-
-/**
- * Binomial exponential family distribution.
- * The default link for the Binomial family is the logit link.
- * @param link a link function instance
- */
-private[ml] class Binomial(link: Link = Logit) extends Family(link) {
-
-  override def initialize(y: Double, weight: Double): Double = {
-    val mu = (weight * y + 0.5) / (weight + 1.0)
-    require(mu > 0.0 && mu < 1.0, "The response variable of Binomial family" +
-      s"should be in range (0, 1), but got $mu")
-    mu
-  }
-
-  override def variance(mu: Double): Double = mu * (1.0 - mu)
-
-  override def clean(mu: Double): Double = {
-    if (mu < epsilon) {
-      epsilon
-    } else if (mu > 1.0 - epsilon) {
-      1.0 - epsilon
-    } else {
-      mu
-    }
-  }
-}
-
-private[ml] object Binomial {
-
-  def apply(link: String): Binomial = {
-    link match {
-      case "logit" => new Binomial(Logit)
-      case "probit" => new Binomial(Probit)
-      case "cloglog" => new Binomial(CLogLog)
-    }
-  }
-}
-
-/**
- * Poisson exponential family distribution.
- * The default link for the Poisson family is the log link.
- * @param link a link function instance
- */
-private[ml] class Poisson(link: Link = Log) extends Family(link) {
-
-  override def initialize(y: Double, weight: Double): Double = {
-    require(y > 0.0, "The response variable of Poisson family " +
-      s"should be positive, but got $y")
-    y
-  }
-
-  override def variance(mu: Double): Double = mu
-
-  override def clean(mu: Double): Double = {
-    if (mu < epsilon) {
-      epsilon
-    } else if (mu.isInfinity) {
-      Double.MaxValue
-    } else {
-      mu
-    }
-  }
-}
-
-private[ml] object Poisson {
-
-  def apply(link: String): Poisson = {
-    link match {
-      case "log" => new Poisson(Log)
-      case "sqrt" => new Poisson(Sqrt)
-      case "identity" => new Poisson(Identity)
-    }
-  }
-}
-
-/**
- * Gamma exponential family distribution.
- * The default link for the Gamma family is the inverse link.
- * @param link a link function instance
- */
-private[ml] class Gamma(link: Link = Inverse) extends Family(link) {
-
-  override def initialize(y: Double, weight: Double): Double = {
-    require(y > 0.0, "The response variable of Gamma family " +
-      s"should be positive, but got $y")
-    y
-  }
-
-  override def variance(mu: Double): Double = math.pow(mu, 2.0)
-
-  override def clean(mu: Double): Double = {
-    if (mu < epsilon) {
-      epsilon
-    } else if (mu.isInfinity) {
-      Double.MaxValue
-    } else {
-      mu
-    }
-  }
-}
-
-private[ml] object Gamma {
-
-  def apply(link: String): Gamma = {
-    link match {
-      case "inverse" => new Gamma(Inverse)
-      case "identity" => new Gamma(Identity)
-      case "log" => new Gamma(Log)
-    }
-  }
-}
-
-/**
- * A description of the link function to be used in the model.
- */
-private[ml] trait Link extends Serializable {
-
-  /** The link function. */
-  def link(mu: Double): Double
-
-  /** Derivative of the link function. */
-  def deriv(mu: Double): Double
-
-  /** The inverse link function. */
-  def unlink(eta: Double): Double
-}
-
-private[ml] object Identity extends Link {
-
-  override def link(mu: Double): Double = mu
-
-  override def deriv(mu: Double): Double = 1.0
-
-  override def unlink(eta: Double): Double = eta
-}
-
-private[ml] object Logit extends Link {
-
-  override def link(mu: Double): Double = math.log(mu / (1.0 - mu))
-
-  override def deriv(mu: Double): Double = 1.0 / (mu * (1.0 - mu))
-
-  override def unlink(eta: Double): Double = 1.0 / (1.0 + math.exp(-1.0 * eta))
-}
-
-private[ml] object Log extends Link {
-
-  override def link(mu: Double): Double = math.log(mu)
-
-  override def deriv(mu: Double): Double = 1.0 / mu
-
-  override def unlink(eta: Double): Double = math.exp(eta)
-}
-
-private[ml] object Inverse extends Link {
-
-  override def link(mu: Double): Double = 1.0 / mu
-
-  override def deriv(mu: Double): Double = -1.0 * math.pow(mu, -2.0)
-
-  override def unlink(eta: Double): Double = 1.0 / eta
-}
-
-private[ml] object Probit extends Link {
-
-  override def link(mu: Double): Double = GD(0.0, 1.0).icdf(mu)
-
-  override def deriv(mu: Double): Double = 1.0 / GD(0.0, 1.0).pdf(GD(0.0, 1.0).icdf(mu))
-
-  override def unlink(eta: Double): Double = GD(0.0, 1.0).cdf(eta)
-}
-
-private[ml] object CLogLog extends Link {
-
-  override def link(mu: Double): Double = math.log(-1.0 * math.log(1 - mu))
-
-  override def deriv(mu: Double): Double = 1.0 / ((mu - 1.0) * math.log(1.0 - mu))
-
-  override def unlink(eta: Double): Double = 1.0 - math.exp(-1.0 * math.exp(eta))
-}
-
-private[ml] object Sqrt extends Link {
-
-  override def link(mu: Double): Double = math.sqrt(mu)
-
-  override def deriv(mu: Double): Double = 1.0 / (2.0 * math.sqrt(mu))
-
-  override def unlink(eta: Double): Double = math.pow(eta, 2.0)
 }

@@ -192,6 +192,8 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
       Vectors.dense(0.0, 2.3010179, 0.8198976),
       Vectors.dense(2.4108902, 2.2130248, 0.6086152))
 
+    import GeneralizedLinearRegression._
+
     var idx = 0
     for ((link, dataset) <- Seq(("identity", datasetGaussianIdentity), ("log", datasetGaussianLog),
       ("inverse", datasetGaussianInverse))) {
@@ -202,7 +204,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~== expected(idx) absTol 1e-4)
 
-        val familyLink = Gaussian(link)
+        val familyLink = new FamilyAndLink(Gaussian, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
@@ -254,6 +256,8 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
       Vectors.dense(0.0, -0.2832198, 0.8434144, -0.2524727, -0.5293452),
       Vectors.dense(1.5063590, -0.4038015, 0.6133664, -0.2687882, -0.5541758))
 
+    import GeneralizedLinearRegression._
+
     var idx = 0
     for ((link, dataset) <- Seq(("logit", datasetBinomial), ("probit", datasetBinomial),
       ("cloglog", datasetBinomial))) {
@@ -265,7 +269,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
           model.coefficients(2), model.coefficients(3))
         assert(actual ~== expected(idx) absTol 1e-4)
 
-        val familyLink = Binomial(link)
+        val familyLink = new FamilyAndLink(Binomial, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
@@ -319,6 +323,8 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
       Vectors.dense(0.0, 2.2958947, 0.8090515),
       Vectors.dense(2.5000480, 2.1999972, 0.5999968))
 
+    import GeneralizedLinearRegression._
+
     var idx = 0
     for ((link, dataset) <- Seq(("log", datasetPoissonLog), ("identity", datasetPoissonIdentity),
       ("sqrt", datasetPoissonSqrt))) {
@@ -329,7 +335,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~== expected(idx) absTol 1e-4)
 
-        val familyLink = Poisson(link)
+        val familyLink = new FamilyAndLink(Poisson, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
@@ -383,6 +389,8 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
       Vectors.dense(0.0, 0.22958970, 0.08091066),
       Vectors.dense(0.25003210, 0.21996957, 0.06000215))
 
+    import GeneralizedLinearRegression._
+
     var idx = 0
     for ((link, dataset) <- Seq(("inverse", datasetGammaInverse),
       ("identity", datasetGammaIdentity), ("log", datasetGammaLog))) {
@@ -393,7 +401,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
         assert(actual ~== expected(idx) absTol 1e-4)
 
-        val familyLink = Gamma(link)
+        val familyLink = new FamilyAndLink(Gamma, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
