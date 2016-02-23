@@ -73,6 +73,7 @@ Currently **officially** using Airflow:
 * [SimilarWeb](https://www.similarweb.com/) [[@similarweb](https://github.com/similarweb)]
 * [SmartNews](https://www.smartnews.com/) [[@takus](https://github.com/takus)]
 * Stripe [@jbalogh]
+* [Thumbtack](https://www.thumbtack.com/) [[@natekupp](https://github.com/natekupp)]
 * [WeTransfer](https://github.com/WeTransfer) [[@jochem](https://github.com/jochem)]
 * Wooga
 * Xoom [[@gepser](https://github.com/gepser) & [@omarvides](https://github.com/omarvides)]
