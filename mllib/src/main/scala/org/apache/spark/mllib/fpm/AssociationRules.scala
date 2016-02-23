@@ -30,12 +30,12 @@ import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.rdd.RDD
 
 /**
-  * :: Experimental ::
-  *
-  * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
-  * association rules whose consequent's length are no longer than maxConsequent.
-  *
-  */
+ * :: Experimental ::
+ *
+ * Generates association rules from a [[RDD[FreqItemset[Item]]]. This method only generates
+ * association rules whose consequent's length are no greater than maxConsequent.
+ *
+ */
 @Since("1.5.0")
 @Experimental
 class AssociationRules private[fpm](
@@ -43,14 +43,14 @@ class AssociationRules private[fpm](
   private var maxConsequent: Int = 1) extends Logging with Serializable {
 
   /**
-    * Constructs a default instance with default parameters {minConfidence = 0.8}.
-    */
+   * Constructs a default instance with default parameters {minConfidence = 0.8}.
+   */
   @Since("1.5.0")
   def this() = this(0.8, 1)
 
   /**
-    * Sets the minimal confidence (default: `0.8`).
-    */
+   * Sets the minimal confidence (default: `0.8`).
+   */
   @Since("1.5.0")
   def setMinConfidence(minConfidence: Double): this.type = {
     require(minConfidence >= 0.0 && minConfidence <= 1.0)
@@ -59,8 +59,8 @@ class AssociationRules private[fpm](
   }
 
   /**
-    * Sets the maximum size of consequents used by Apriori Algorithm (default: `1`).
-    */
+   * Sets the maximum size of consequents used by Apriori Algorithm (default: `1`).
+   */
   @Since("1.5.0")
   def setMaxConsequent(maxConsequent: Int): this.type = {
     this.maxConsequent = maxConsequent
@@ -68,12 +68,12 @@ class AssociationRules private[fpm](
   }
 
   /**
-    * Computes the association rules with confidence above [[minConfidence]].
-    *
-    * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
-    * @return a [[Set[Rule[Item]]] containing the assocation rules.
-    *
-    */
+   * Computes the association rules with confidence above [[minConfidence]].
+   *
+   * @param freqItemsets frequent itemset model obtained from [[FPGrowth]]
+   * @return a [[Set[Rule[Item]]] containing the assocation rules.
+   *
+   */
   @Since("1.5.0")
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
 
@@ -112,14 +112,14 @@ class AssociationRules private[fpm](
   }
 
   /**
-    * Computes the union seq.
-    *
-    * @param freqItemIndices Frequent Items with Integer Indices.
-    * @param minConfidence   minConfidence.
-    * @param maxConsequent   maxConsequent.
-    * @return an ordered union Seq of s1 and s2.
-    *
-    */
+   * Computes the union seq.
+   *
+   * @param freqItemIndices Frequent Items with Integer Indices.
+   * @param minConfidence   minConfidence.
+   * @param maxConsequent   maxConsequent.
+   * @return an ordered union Seq of s1 and s2.
+   *
+   */
   @Since("1.5.0")
   private def genRules(freqItemIndices: RDD[(Seq[Int], Long)],
                        minConfidence: Double,
@@ -204,13 +204,13 @@ class AssociationRules private[fpm](
   }
 
   /**
-    * Computes the union seq of two sorted seq.
-    *
-    * @param s1 ordered Seq1
-    * @param s2 ordered Seq2
-    * @return an ordered union Seq of s1 and s2.
-    *
-    */
+   * Computes the union seq of two sorted seq.
+   *
+   * @param s1 ordered Seq1
+   * @param s2 ordered Seq2
+   * @return an ordered union Seq of s1 and s2.
+   *
+   */
   @Since("1.5.0")
   private def seqAdd(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
     var i1 = 0
@@ -247,13 +247,13 @@ class AssociationRules private[fpm](
   }
 
   /**
-    * Computes the complementary seq of two sorted seq.
-    *
-    * @param s1 ordered Seq1
-    * @param s2 ordered Seq2, must be a sub-sequence of s1
-    * @return an ordered Seq, which equals to s1 -- s2.
-    *
-    */
+   * Computes the complementary seq of two sorted seq.
+   *
+   * @param s1 ordered Seq1
+   * @param s2 ordered Seq2, must be a sub-sequence of s1
+   * @return an ordered Seq, which equals to s1 -- s2.
+   *
+   */
   @Since("1.5.0")
   private def seqMinus(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
     var i1 = 0
@@ -293,17 +293,17 @@ class AssociationRules private[fpm](
 object AssociationRules {
 
   /**
-    * :: Experimental ::
-    *
-    * An association rule between sets of items.
-    *
-    * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
-    *                   instead.
-    * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
-    *                   instead.
-    * @tparam Item item type
-    *
-    */
+   * :: Experimental ::
+   *
+   * An association rule between sets of items.
+   *
+   * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
+   *                   instead.
+   * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
+   *                   instead.
+   * @tparam Item item type
+   *
+   */
   @Since("1.5.0")
   @Experimental
   class Rule[Item] private[fpm](
@@ -313,9 +313,9 @@ object AssociationRules {
                                  freqAntecedent: Double) extends Serializable {
 
     /**
-      * Returns the confidence of the rule.
-      *
-      */
+     * Returns the confidence of the rule.
+     *
+     */
     @Since("1.5.0")
     def confidence: Double = freqUnion.toDouble / freqAntecedent
 
@@ -326,18 +326,18 @@ object AssociationRules {
     })
 
     /**
-      * Returns antecedent in a Java List.
-      *
-      */
+     * Returns antecedent in a Java List.
+     *
+     */
     @Since("1.5.0")
     def javaAntecedent: java.util.List[Item] = {
       antecedent.toList.asJava
     }
 
     /**
-      * Returns consequent in a Java List.
-      *
-      */
+     * Returns consequent in a Java List.
+     *
+     */
     @Since("1.5.0")
     def javaConsequent: java.util.List[Item] = {
       consequent.toList.asJava
