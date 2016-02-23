@@ -89,6 +89,21 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object SmallerThanBroadcastThreshold {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+      case p if sqlContext.conf.autoBroadcastJoinThreshold > 0 &&
+        p.statistics.sizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold => Some(p)
+      case _ => None
+    }
+  }
+
+  object ShouldBroadcast {
+    def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+      case BroadcastHint(p) => Some(p)
+      case _ => None
+    }
+  }
+
   /**
    * Uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the predicates
    * can be evaluated by matching join keys.
@@ -250,12 +265,26 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BroadcastNestedLoop extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      // If joinType is Inner or condition is None, we will not use BroadcastNestedLoop
+      // but faster CartesianProduct
       case logical.Join(
-             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemi =>
+             SmallerThanBroadcastThreshold(left), right, joinType, condition)
+             if joinType != LeftSemi && joinType != Inner && condition != None =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
       case logical.Join(
-             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemi =>
+             ShouldBroadcast(left), right, joinType, condition)
+             if joinType != LeftSemi =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
+      case logical.Join(
+             left, SmallerThanBroadcastThreshold(right), joinType, condition)
+             if joinType != LeftSemi && joinType != Inner && condition != None =>
+        execution.joins.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
+      case logical.Join(
+             left, ShouldBroadcast(right), joinType, condition)
+             if joinType != LeftSemi =>
         execution.joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
       case _ => Nil

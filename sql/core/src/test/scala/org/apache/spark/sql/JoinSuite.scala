@@ -444,7 +444,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     sql("UNCACHE TABLE testData")
   }
 
-  test("cross join with broadcast") {
+  test("cross join with cartisian product") {
     sql("CACHE TABLE testData")
 
     val sizeInByteOfTestData = statisticSizeInByte(sqlContext.table("testData"))
@@ -465,31 +465,31 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
           classOf[LeftSemiJoinBNL]),
         ("SELECT * FROM testData JOIN testData2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData LEFT JOIN testData2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData RIGHT JOIN testData2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData JOIN testData2 WHERE key > a",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData left JOIN testData2 WHERE (key * a != key + a)",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData right JOIN testData2 WHERE (key * a != key + a)",
-          classOf[BroadcastNestedLoopJoin]),
+          classOf[CartesianProduct]),
         ("SELECT * FROM testData full JOIN testData2 WHERE (key * a != key + a)",
-          classOf[BroadcastNestedLoopJoin])
+          classOf[CartesianProduct])
       ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
 
       checkAnswer(

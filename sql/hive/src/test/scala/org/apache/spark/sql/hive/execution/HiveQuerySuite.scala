@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.hive.test.TestHive._
@@ -111,8 +112,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     spark_10484_4)
 
   test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
-    def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
-      assert(sql(sqlText).queryExecution.sparkPlan.collect {
+    val df = sql("SELECT * FROM src").toDF()
+    val srcDF = df.as("a")
+    val broadcastedSrc = broadcast(df.as("b"))
+
+    val spark_10484_1 = srcDF.join(broadcastedSrc, $"a.key" > ($"b.key" + 300), "left_outer")
+      .select($"a.key", $"b.key")
+    val spark_10484_2 = srcDF.join(broadcastedSrc, $"a.key" > ($"b.key" + 300), "right_outer")
+      .select($"a.key", $"b.key")
+    val spark_10484_3 =
+      srcDF.join(broadcastedSrc, $"a.key" > ($"b.key" + 300), "outer").select($"a.key", $"b.key")
+    val spark_10484_4 =
+      srcDF.join(broadcastedSrc, $"a.key" > ($"b.key" + 300), "inner").select($"a.key", $"b.key")
+
+    def assertBroadcastNestedLoopJoin(df: DataFrame): Unit = {
+      assert(df.queryExecution.sparkPlan.collect {
         case _: BroadcastNestedLoopJoin => 1
       }.nonEmpty)
     }

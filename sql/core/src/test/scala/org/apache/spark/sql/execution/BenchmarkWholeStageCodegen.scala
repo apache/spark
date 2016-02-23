@@ -125,6 +125,33 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     */
   }
 
+  ignore("broadcast hash join vs. cartisian product") {
+    val N = 1 << 10
+    val benchmark = new Benchmark("BroadcastHashJoin vs. CartisianProduct", N)
+
+    val broadcastedDim =
+      broadcast(sqlContext.range(1 << 10).selectExpr("id as k", "cast(id as string) as v"))
+    val dim = sqlContext.range(1 << 10).selectExpr("id as k", "cast(id as string) as v")
+
+    benchmark.addCase("Join w long with broadcast hash") { iter =>
+      sqlContext.range(N).join(broadcastedDim).count()
+    }
+
+    benchmark.addCase("Join w long with cartisian product") { iter =>
+      sqlContext.range(N).join(dim).count()
+    }
+
+    benchmark.run()
+
+    /*
+    model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    BroadcastHashJoin vs. CartisianProduct: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    Join w long with broadcast hash           325 /  442          0.0      316962.6       1.0X
+    Join w long with cartisian product        270 /  302          0.0      263644.3       1.2X
+    */
+  }
+
   ignore("broadcast hash join") {
     val N = 100 << 20
     val M = 1 << 16
