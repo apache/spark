@@ -28,10 +28,13 @@ import scala.collection.immutable.HashMap
 object PivotFirst {
   def apply(pivotColumn: Expression,
             valueColumn: Expression,
-            pivotValues: Seq[Literal]): PivotFirst = {
-    val pivotIndex = HashMap(pivotValues.map(_.value).zipWithIndex: _*)
+            pivotValues: Seq[Any]): PivotFirst = {
+    val pivotIndex = HashMap(pivotValues.zipWithIndex: _*)
     PivotFirst(pivotColumn, valueColumn, pivotIndex)
   }
+
+  val supportedDataTypes = DoubleType :: IntegerType :: LongType :: FloatType :: BooleanType ::
+    ShortType :: ByteType :: DecimalType :: Nil
 }
 
 case class PivotFirst(pivotColumn: Expression,
@@ -44,10 +47,13 @@ case class PivotFirst(pivotColumn: Expression,
   val indexSize = pivotIndex.size
 
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
-    val index = mutableAggBufferOffset + pivotIndex(pivotColumn.eval(inputRow))
-    val value = valueColumn.eval(inputRow)
-    // Can't do this with UnsafeRow: mutableAggBuffer.update(index, value)
-    updateRow(mutableAggBuffer, index, value)
+    val pivotColValue = pivotColumn.eval(inputRow)
+    if (pivotColValue != null) {
+      val index = mutableAggBufferOffset + pivotIndex(pivotColValue)
+      val value = valueColumn.eval(inputRow)
+      // Can't do this with UnsafeRow: mutableAggBuffer.update(index, value)
+      updateRow(mutableAggBuffer, index, value)
+    }
   }
 
   override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
@@ -86,19 +92,19 @@ case class PivotFirst(pivotColumn: Expression,
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
 
-  override val aggBufferAttributes: Seq[AttributeReference] =
+  override lazy val aggBufferAttributes: Seq[AttributeReference] =
     (0 until indexSize).map(i => AttributeReference("agg_" + i, valueDataType)())
 
-  override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
+  override lazy val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  override val inputAggBufferAttributes: Seq[AttributeReference] =
+  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
 
   override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
 
   override val nullable: Boolean = false
 
-  override val dataType: DataType = ArrayType(valueDataType)
+  override lazy val dataType: DataType = ArrayType(valueDataType)
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 

@@ -291,35 +291,58 @@ class Analyzer(
       case p: Pivot if !p.childrenResolved | !p.aggregates.forall(_.resolved) => p
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
-        val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
-          def ifExpr(expr: Expression) = {
-            If(EqualTo(pivotColumn, value), expr, Literal(null))
+        // TODO: change length threshold and add unit tests
+        if (singleAgg && pivotValues.length >= 1
+          && PivotFirst.supportedDataTypes.contains(aggregates.head.dataType)) {
+          // Since evaluating |pivotValues| if statements for each input row can get slow this is an
+          // alternate plan that instead uses two steps of aggregation.
+          val namedAggExp: NamedExpression = Alias(aggregates.head, "agg")()
+          val namedPivotCol = Alias(pivotColumn, "pivot_col")() // dont do this
+          val bigGroup = groupByExprs :+ namedPivotCol
+          val firstAgg = Aggregate(bigGroup, bigGroup :+ namedAggExp, child)
+          val castPivotValues = pivotValues.map(Cast(_, pivotColumn.dataType).eval(EmptyRow))
+          val pivotAgg = Alias(
+            PivotFirst(namedPivotCol.toAttribute, namedAggExp.toAttribute, castPivotValues)
+              .toAggregateExpression()
+            , "pivot")()
+          val secondAgg =
+            Aggregate(groupByExprs, groupByExprs :+ pivotAgg, Subquery("foobar", firstAgg))
+          val pivotAggAttribute = pivotAgg.toAttribute
+          val pivotOutputs = pivotValues.zipWithIndex.map { case (Literal(label, _), i) =>
+            Alias(ExtractValue(pivotAggAttribute, Literal(i), resolver), label.toString)()
           }
-          aggregates.map { aggregate =>
-            val filteredAggregate = aggregate.transformDown {
-              // Assumption is the aggregate function ignores nulls. This is true for all current
-              // AggregateFunction's with the exception of First and Last in their default mode
-              // (which we handle) and possibly some Hive UDAF's.
-              case First(expr, _) =>
-                First(ifExpr(expr), Literal(true))
-              case Last(expr, _) =>
-                Last(ifExpr(expr), Literal(true))
-              case a: AggregateFunction =>
-                a.withNewChildren(a.children.map(ifExpr))
+          Project(groupByExprs ++ pivotOutputs, secondAgg)
+        } else {
+          val pivotAggregates: Seq[NamedExpression] = pivotValues.flatMap { value =>
+            def ifExpr(expr: Expression) = {
+              If(EqualTo(pivotColumn, value), expr, Literal(null))
             }
-            if (filteredAggregate.fastEquals(aggregate)) {
-              throw new AnalysisException(
-                s"Aggregate expression required for pivot, found '$aggregate'")
+            aggregates.map { aggregate =>
+              val filteredAggregate = aggregate.transformDown {
+                // Assumption is the aggregate function ignores nulls. This is true for all current
+                // AggregateFunction's with the exception of First and Last in their default mode
+                // (which we handle) and possibly some Hive UDAF's.
+                case First(expr, _) =>
+                  First(ifExpr(expr), Literal(true))
+                case Last(expr, _) =>
+                  Last(ifExpr(expr), Literal(true))
+                case a: AggregateFunction =>
+                  a.withNewChildren(a.children.map(ifExpr))
+              }
+              if (filteredAggregate.fastEquals(aggregate)) {
+                throw new AnalysisException(
+                  s"Aggregate expression required for pivot, found '$aggregate'")
+              }
+              val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+              Alias(filteredAggregate, name)()
             }
-            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
-            Alias(filteredAggregate, name)()
           }
+          val newGroupByExprs = groupByExprs.map {
+            case UnresolvedAlias(e, _) => e
+            case e => e
+          }
+          Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
         }
-        val newGroupByExprs = groupByExprs.map {
-          case UnresolvedAlias(e, _) => e
-          case e => e
-        }
-        Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
     }
   }
 
