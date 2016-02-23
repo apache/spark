@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Explode, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Explode, Literal, SortOrder}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -151,6 +152,91 @@ class ColumnPruningSuite extends PlanTest {
     val query = Project('a :: Nil, Project(Seq('a, 'b), input)).analyze
     val expected = Project(Seq('a), input).analyze
     comparePlans(Optimize.execute(query), expected)
+  }
+
+  test("column pruning for group") {
+    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val originalQuery =
+      testRelation
+        .groupBy('a)('a, count('b))
+        .select('a)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .groupBy('a)('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for group with alias") {
+    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+    val originalQuery =
+      testRelation
+        .groupBy('a)('a as 'c, count('b))
+        .select('c)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .groupBy('a)('a as 'c).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for Project(ne, Limit)") {
+    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+
+    val originalQuery =
+      testRelation
+        .select('a, 'b)
+        .limit(2)
+        .select('a)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .limit(2).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("push down project past sort") {
+    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val x = testRelation.subquery('x)
+
+    // push down valid
+    val originalQuery = {
+      x.select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .select('a)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      x.select('a)
+        .sortBy(SortOrder('a, Ascending)).analyze
+
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+
+    // push down invalid
+    val originalQuery1 = {
+      x.select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .select('b)
+    }
+
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 =
+      x.select('a, 'b)
+        .sortBy(SortOrder('a, Ascending))
+        .select('b).analyze
+
+    comparePlans(optimized1, analysis.EliminateSubqueryAliases(correctAnswer1))
   }
 
   test("Column pruning on Union") {
