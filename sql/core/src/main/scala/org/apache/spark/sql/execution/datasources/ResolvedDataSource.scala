@@ -131,7 +131,7 @@ object ResolvedDataSource extends Logging {
       bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
-    val paths = {
+    lazy val paths = {
       val caseInsensitiveOptions = new CaseInsensitiveMap(options)
       if (caseInsensitiveOptions.contains("paths") &&
         caseInsensitiveOptions.contains("path")) {
