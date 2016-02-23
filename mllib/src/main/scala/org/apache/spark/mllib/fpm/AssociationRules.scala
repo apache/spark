@@ -296,7 +296,6 @@ object AssociationRules {
    * :: Experimental ::
    *
    * An association rule between sets of items.
-   *
    * @param antecedent hypotheses of the rule. Java users should call [[Rule#javaAntecedent]]
    *                   instead.
    * @param consequent conclusion of the rule. Java users should call [[Rule#javaConsequent]]
@@ -348,5 +347,4 @@ object AssociationRules {
         s"${consequent.mkString("{", ",", "}")}: ${confidence}"
     }
   }
-
 }
