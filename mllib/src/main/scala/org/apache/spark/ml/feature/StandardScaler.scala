@@ -87,7 +87,7 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
 
   override def fit(dataset: DataFrame): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
     copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))

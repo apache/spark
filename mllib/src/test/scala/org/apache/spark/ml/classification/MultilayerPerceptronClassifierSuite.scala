@@ -77,7 +77,7 @@ class MultilayerPerceptronClassifierSuite extends SparkFunSuite with MLlibTestSp
     val numFeatures = dataFrame.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
     val mlpPredictionAndLabels = model.transform(dataFrame).select("prediction", "label")
-      .map { case Row(p: Double, l: Double) => (p, l) }
+      .rdd.map { case Row(p: Double, l: Double) => (p, l) }
     // train multinomial logistic regression
     val lr = new LogisticRegressionWithLBFGS()
       .setIntercept(true)

@@ -392,7 +392,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
       .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
-      .map { row =>
+      .rdd.map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
