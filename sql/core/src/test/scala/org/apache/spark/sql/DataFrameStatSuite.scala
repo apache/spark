@@ -134,14 +134,20 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val epsilons = List(0.1, 0.05, 0.001)
 
     for (epsilon <- epsilons) {
-      val result1 = df.stat.approxQuantile("singles", 0.5, epsilon)
-      val result2 = df.stat.approxQuantile("doubles", 0.8, epsilon)
+      val Array(result1) = df.stat.approxQuantile("singles", Array(0.5), epsilon)
+      val Array(result2) = df.stat.approxQuantile("doubles", Array(0.8), epsilon)
+      // Also make sure there is no regression by computing multiple quantiles at once.
+      val Array(r1, r2) = df.stat.approxQuantile("doubles", Array(0.5, 0.8), epsilon)
+      println(s"quantiles: $r1 $r2 $result1 $result2")
 
       val error_1 = 2 * 1000 * epsilon
       val error_2 = 2 * 2000 * epsilon
 
       assert(math.abs(result1 - expected_1) < error_1)
       assert(math.abs(result2 - expected_2) < error_2)
+      assert(math.abs(r1 - expected_1) < error_1)
+      assert(math.abs(r2 - expected_2) < error_2)
+
     }
   }
 
@@ -296,9 +302,9 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Logging {
 
   // Turn on this test if you want to test the performance of approximate quantiles.
-  ignore("describe() should not be slowed down too much by quantiles") {
+  ignore("computing quantiles should not take much longer than describe()") {
     val df = sqlContext.range(5000000L).toDF("col1").cache()
-    def millis(f: => Any): Double = {
+    def seconds(f: => Any): Double = {
       // Do some warmup
       logDebug("warmup...")
       for (i <- 1 to 10) {
@@ -314,15 +320,14 @@ class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Loggin
         (end - start) / 1e9
       }
       logDebug("execute done")
-      times.sum.toDouble / times.length.toDouble
-
+      times.sum / times.length.toDouble
     }
 
     logDebug("*** Normal describe ***")
-    val t1 = millis { df.describe() }
+    val t1 = seconds { df.describe() }
     logDebug(s"T1 = $t1")
     logDebug("*** Just quantiles ***")
-    val t2 = millis {
+    val t2 = seconds {
       StatFunctions.multipleApproxQuantiles(df, Seq("col1"), Seq(0.1, 0.25, 0.5, 0.75, 0.9), 0.01)
     }
     logDebug(s"T1 = $t1, T2 = $t2")
