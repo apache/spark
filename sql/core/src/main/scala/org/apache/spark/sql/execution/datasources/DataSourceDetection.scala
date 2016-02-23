@@ -73,7 +73,7 @@ private[sql] object DataSourceDetection extends Logging {
         if (checkParquetFile(sqlContext, targetPath)) {
           defaultDataSourceName
         } else {
-          throw new SparkException(s"Detected data source was [$defaultDataSourceName] but" +
+          throw new SparkException(s"Detected data source was [$defaultDataSourceName] but " +
             s"it does not have a file format for this. Please provide data source.")
         }
       } else {
