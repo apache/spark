@@ -396,9 +396,15 @@ private[storage] class BlockInfoManager extends Logging {
    * Delete all state. Called during shutdown.
    */
   def clear(): Unit = synchronized {
+    infos.valuesIterator.foreach { blockInfo =>
+      blockInfo.readerCount = 0
+      blockInfo.writerTask = BlockInfo.NO_WRITER
+      blockInfo.removed = true
+    }
     infos.clear()
     readLocksByTask.invalidateAll()
     writeLocksByTask.clear()
+    notifyAll()
   }
 
 }
