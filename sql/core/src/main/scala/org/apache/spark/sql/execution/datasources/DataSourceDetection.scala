@@ -63,7 +63,7 @@ private[sql] object DataSourceDetection extends Logging {
             s" [$rootExtension]. Known extensions are" +
             s" ${extensionDatasourceMap.keys.mkString(", ")}. Please provide data source."))
     } else {
-      val status = headLeafFile(sqlContext, path).getOrElse {
+      val status = headLeafFile(sqlContext, new Path(path)).getOrElse {
         throw new SparkException(s"Failed to pick a file to detect data source detection. " +
           s"Please provide data source.")
       }
@@ -95,10 +95,9 @@ private[sql] object DataSourceDetection extends Logging {
     buffer.sameElements(parquetMagicNumber)
   }
 
-  private def headLeafFile(sqlContext: SQLContext, path: String): Option[FileStatus] = {
+  private def headLeafFile(sqlContext: SQLContext, hdfsPath: Path): Option[FileStatus] = {
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
     val statuses = {
-      val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
       logInfo(s"Listing $qualified on driver")
@@ -121,7 +120,7 @@ private[sql] object DataSourceDetection extends Logging {
     } else if (dirs.isEmpty) {
       None
     } else {
-      headLeafFile(sqlContext, dirs.head.toString)
+      headLeafFile(sqlContext, dirs.head.getPath)
     }
   }
 }

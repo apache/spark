@@ -620,7 +620,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(sqlContext.read.load(dir.toString).select(fields: _*), row)
+      checkAnswer(sqlContext.read.parquet(dir.toString).select(fields: _*), row)
     }
   }
 
