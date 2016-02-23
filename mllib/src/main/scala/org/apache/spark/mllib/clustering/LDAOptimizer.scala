@@ -25,7 +25,6 @@ import breeze.stats.distributions.{Gamma, RandBasis}
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.{DenseVector, Matrices, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
@@ -186,7 +185,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
       graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
         .mapValues(_._2)
     // Update the vertex descriptors with the new counts.
-    val newGraph = GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
+    val newGraph = Graph(docTopicDistributions, graph.edges)
     graph = newGraph
     graphCheckpointer.update(newGraph)
     globalTopicTotals = computeGlobalTopicTotals()
