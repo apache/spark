@@ -39,25 +39,35 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
   /**
    * Calculates the approximate quantiles of a numerical column of a DataFrame.
    *
-   * Note on the target error:
-   *
    * The result of this algorithm has the following deterministic bound:
-   * if the DataFrame has N elements and if we request the quantile `phi` up to error `epsi`,
-   * then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
-   * of `x` is close to (phi * N). More precisely:
+   * If the DataFrame has N elements and if we request the quantile at probability `p` up to error
+   * `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` is close to (p * N).
+   * More precisely,
    *
-   *   floor((phi - epsi) * N) <= rank(x) <= ceil((phi + epsi) * N)
+   *   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
    *
+   * This method implements a variation of the Greenwald-Khanna algorithm (with some speed
+   * optimizations).
+   * The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670 Space-efficient
+   * Online Computation of Quantile Summaries]] by Greenwald and Khanna.
    *
-   * @param col the name of the column
-   * @param quantiles a list of quantiles to approximate. Each number must belong to [0, 1]. For example 0 is the
-   *                  minimum, 0.5 is the median, 1 is the maximum.
-   * @param relativeError (>= 0). The relative target precision to achieve. If set to zero, the exact quantile is
-   *                      computed. Note that values greater than 1 are accepted but give the same result as 1.
-   * @return the approximate quantiles, in the same order as the relative errors
+   * @param col the name of the numerical column
+   * @param probabilities a list of quantile probabilities
+   *   Each number must belong to [0, 1].
+   *   For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError The relative target precision to achieve (>= 0).
+   *   If set to zero, the exact quantiles are computed, which could be very expensive.
+   *   Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles at the given probabilities
+   *
+   * @since 2.0.0
    */
-  def approxQuantile(col: String, quantiles: Array[Double], relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, Seq(col), quantiles, relativeError).head.toArray
+  def approxQuantile(
+      col: String,
+      probabilities: Array[Double],
+      relativeError: Double): Array[Double] = {
+    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
   }
 
   /**
