@@ -252,7 +252,7 @@ Nodes in the output layer use softmax function:
 \]`
 The number of nodes `$N$` in the output layer corresponds to the number of classes. 
 
-MLPC employes backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
+MLPC employs backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
 
 **Example**
 
