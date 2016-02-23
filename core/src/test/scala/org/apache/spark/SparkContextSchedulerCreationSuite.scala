@@ -20,7 +20,7 @@ package org.apache.spark
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
+import org.apache.spark.scheduler.cluster.SparkDeploySchedulerBackend
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.util.Utils
@@ -111,13 +111,6 @@ class SparkContextSchedulerCreationSuite
 
     sched.backend match {
       case s: LocalBackend => assert(s.defaultParallelism() === 16)
-      case _ => fail()
-    }
-  }
-
-  test("simr") {
-    createTaskScheduler("simr://uri").backend match {
-      case s: SimrSchedulerBackend => // OK
       case _ => fail()
     }
   }

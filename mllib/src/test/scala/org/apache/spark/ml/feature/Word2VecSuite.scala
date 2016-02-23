@@ -133,7 +133,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .fit(docDF)
 
-    val expectedSimilarity = Array(0.18032623242822343, -0.5717976464798823)
+    val expectedSimilarity = Array(0.2608488929093532, -0.8271274846926078)
     val (synonyms, similarity) = model.findSynonyms("a", 2).map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
