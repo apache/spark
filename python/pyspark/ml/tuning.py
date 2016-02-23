@@ -25,11 +25,11 @@ from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.util import keyword_only
 from pyspark.sql.functions import rand
 
-__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel']
+__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit', 'TrainValidationSplitModel']
 
 
 class ParamGridBuilder(object):
-    r"""
+    """
     Builder for a param grid used in grid search-based model selection.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -287,6 +287,167 @@ class CrossValidatorModel(Model):
             extra = dict()
         return CrossValidatorModel(self.bestModel.copy(extra))
 
+
+class TrainValidationSplit(Estimator, HasSeed):
+    # TODO: add since keyword to functions
+
+
+    estimator = Param(Params._dummy(), "estimator", "estimator to be tested")
+    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
+    evaluator = Param(
+        Params._dummy(), "evaluator",
+        "evaluator used to select hyper-parameters that maximize the metric")
+    trainRatio = Param(Params._dummy(), "trainRatio", "proportion for train-validation ratio")
+
+    @keyword_only
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,
+                 seed=None):
+        """
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,\
+                 seed=None)
+        """
+        super(TrainValidationSplit, self).__init__()
+        self._setDefault(trainRatio= 0.75)
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @keyword_only
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,
+                  seed=None):
+        """
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,\
+                  seed=None):
+        Sets params for the train validation split.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        self._paramMap[self.estimator] = value
+        return self
+
+    def getEstimator(self):
+        """
+        Gets the value of estimator or its default value.
+        """
+        return self.getOrDefault(self.estimator)
+
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        self._paramMap[self.estimatorParamMaps] = value
+        return self
+
+    def getEstimatorParamMaps(self):
+        """
+        Gets the value of estimatorParamMaps or its default value.
+        """
+        return self.getOrDefault(self.estimatorParamMaps)
+
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        self._paramMap[self.evaluator] = value
+        return self
+
+    def getEvaluator(self):
+        """
+        Gets the value of evaluator or its default value.
+        """
+        return self.getOrDefault(self.evaluator)
+
+    def setTrainRatio(self, value):
+        """
+        Sets the value of :py:attr:`trainRatio`.
+        """
+        self._paramMap[self.trainRatio] = value
+        return self
+
+    @since("1.4.0")
+    def getTrainRatio(self):
+        """
+        Gets the value of trainRatio or its default value.
+        """
+        return self.getOrDefault(self.trainRatio)
+
+    def _fit(self, dataset):
+        est = self.getOrDefault(self.estimator)
+        epm = self.getOrDefault(self.estimatorParamMaps)
+        numModels = len(epm)
+        eva = self.getOrDefault(self.evaluator)
+        tRatio = self.getOrDefault(self.trainRatio)
+        seed = self.getOrDefault(self.seed)
+        randCol = self.uid + "_rand"
+        df = dataset.select("*", rand(seed).alias(randCol))
+        metrics = np.zeros(numModels)
+        condition = (df[randCol] >= tRatio)
+        validation = df.filter(condition)
+        train = df.filter(~condition)
+        for j in range(numModels):
+            model = est.fit(train, epm[j])
+            metric = eva.evaluate(model.transform(validation, epm[j]))
+            metrics[j] += metric
+        if eva.isLargerBetter():
+            bestIndex = np.argmax(metrics)
+        else:
+            bestIndex = np.argmin(metrics)
+        bestModel = est.fit(dataset, epm[bestIndex])
+        return TrainValidationSplitModel(bestModel)
+
+    @since("1.4.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        newCV = Params.copy(self, extra)
+        if self.isSet(self.estimator):
+            newCV.setEstimator(self.getEstimator().copy(extra))
+        # estimatorParamMaps remain the same
+        
+        if self.isSet(self.evaluator):
+            newCV.setEvaluator(self.getEvaluator().copy(extra))
+        return newCV
+
+
+class TrainValidationSplitModel(Model):
+    """
+    Model from train validation split.
+    """
+
+    def __init__(self, bestModel):
+        super(TrainValidationSplitModel, self).__init__()
+        #: best model from cross validation
+        self.bestModel = bestModel
+        
+
+    def _transform(self, dataset):
+        return self.bestModel.transform(dataset)
+
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies the underlying bestModel,
+        creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        return TrainValidationSplitModel(self. .copy(extra))
 
 if __name__ == "__main__":
     import doctest
