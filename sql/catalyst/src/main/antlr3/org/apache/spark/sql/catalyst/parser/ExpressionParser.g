@@ -205,6 +205,8 @@ atomExpression
     | whenExpression
     | (functionName LPAREN) => function
     | tableOrColumn
+    | (LPAREN KW_SELECT) => subQueryExpression
+      -> ^(TOK_SUBQUERY_EXPR ^(TOK_SUBQUERY_OP) subQueryExpression)
     | LPAREN! expression RPAREN!
     ;
 

@@ -24,10 +24,11 @@ import scala.util.control.NonFatal
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, NonSQLExpression, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 
 /**
@@ -37,11 +38,21 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * supported by this builder (yet).
  */
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
+  require(logicalPlan.resolved, "SQLBuilder only supports resloved logical query plans")
+
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
     try {
+      canonicalizedPlan.transformAllExpressions {
+        case e: NonSQLExpression =>
+          throw new UnsupportedOperationException(
+            s"Expression $e doesn't have a SQL representation"
+          )
+        case e => e
+      }
+
       val generatedSQL = toSQL(canonicalizedPlan)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
@@ -91,14 +102,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       val childrenSql = p.children.map(toSQL(_))
       childrenSql.mkString(" UNION ALL ")
 
-    case p: Subquery =>
+    case p: SubqueryAlias =>
       p.child match {
         // Persisted data source relation
         case LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-          s"`$database`.`$table`"
+          s"${quoteIdentifier(database)}.${quoteIdentifier(table)}"
         // Parentheses is not used for persisted data source relations
         // e.g., select x.c1 from (t1) as x inner join (t1) as y on x.c1 = y.c1
-        case Subquery(_, _: LogicalRelation | _: MetastoreRelation) =>
+        case SubqueryAlias(_, _: LogicalRelation | _: MetastoreRelation) =>
           build(toSQL(p.child), "AS", p.alias)
         case _ =>
           build("(" + toSQL(p.child) + ")", "AS", p.alias)
@@ -114,8 +125,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case p: MetastoreRelation =>
       build(
-        s"`${p.databaseName}`.`${p.tableName}`",
-        p.alias.map(a => s" AS `$a`").getOrElse("")
+        s"${quoteIdentifier(p.databaseName)}.${quoteIdentifier(p.tableName)}",
+        p.alias.map(a => s" AS ${quoteIdentifier(a)}").getOrElse("")
       )
 
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
@@ -148,7 +159,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
    * The segments are trimmed so only a single space appears in the separation.
    * For example, `build("a", " b ", " c")` becomes "a b c".
    */
-  private def build(segments: String*): String = segments.map(_.trim).mkString(" ")
+  private def build(segments: String*): String =
+    segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
     build(
@@ -203,7 +215,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           wrapChildWithSubquery(plan)
 
         case plan @ Project(_,
-          _: Subquery
+          _: SubqueryAlias
             | _: Filter
             | _: Join
             | _: MetastoreRelation
@@ -225,7 +237,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
               a.withQualifiers(alias :: Nil)
           }.asInstanceOf[NamedExpression])
 
-          Project(aliasedProjectList, Subquery(alias, child))
+          Project(aliasedProjectList, SubqueryAlias(alias, child))
       }
     }
   }

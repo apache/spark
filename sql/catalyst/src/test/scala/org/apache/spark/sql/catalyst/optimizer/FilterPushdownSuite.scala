@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -32,7 +32,7 @@ class FilterPushdownSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
-        EliminateSubQueries) ::
+        EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", Once,
         SamplePushDown,
         CombineFilters,
@@ -481,7 +481,7 @@ class FilterPushdownSuite extends PlanTest {
     }
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    comparePlans(analysis.EliminateSubQueries(originalQuery.analyze), optimized)
+    comparePlans(analysis.EliminateSubqueryAliases(originalQuery.analyze), optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -500,7 +500,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
   test("joins: conjunctive predicates #2") {
@@ -519,7 +519,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
   test("joins: conjunctive predicates #3") {
@@ -543,7 +543,7 @@ class FilterPushdownSuite extends PlanTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
@@ -619,7 +619,7 @@ class FilterPushdownSuite extends PlanTest {
       x.select('a)
        .sortBy(SortOrder('a, Ascending)).analyze
 
-    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
 
     // push down invalid
     val originalQuery1 = {
@@ -634,7 +634,7 @@ class FilterPushdownSuite extends PlanTest {
        .sortBy(SortOrder('a, Ascending))
        .select('b).analyze
 
-    comparePlans(optimized1, analysis.EliminateSubQueries(correctAnswer1))
+    comparePlans(optimized1, analysis.EliminateSubqueryAliases(correctAnswer1))
   }
 
   test("push project and filter down into sample") {
@@ -642,7 +642,8 @@ class FilterPushdownSuite extends PlanTest {
     val originalQuery =
       Sample(0.0, 0.6, false, 11L, x).select('a)
 
-    val originalQueryAnalyzed = EliminateSubQueries(analysis.SimpleAnalyzer.execute(originalQuery))
+    val originalQueryAnalyzed =
+      EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
 
     val optimized = Optimize.execute(originalQueryAnalyzed)
 
