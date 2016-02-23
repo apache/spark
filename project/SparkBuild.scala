@@ -25,6 +25,7 @@ import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
+import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
@@ -400,7 +401,9 @@ object OldDeps {
 }
 
 object Catalyst {
-  lazy val settings = Seq(
+  lazy val settings = antlr4Settings ++ Seq(
+    antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser.ng"),
+
     // ANTLR code-generation step.
     //
     // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
@@ -413,7 +416,7 @@ object Catalyst {
         "SparkSqlLexer.g",
         "SparkSqlParser.g")
       val sourceDir = (sourceDirectory in Compile).value / "antlr3"
-      val targetDir = (sourceManaged in Compile).value
+      val targetDir = (sourceManaged in Compile).value / "antlr3"
 
       // Create default ANTLR Tool.
       val antlr = new org.antlr.Tool
