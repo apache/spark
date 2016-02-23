@@ -37,13 +37,27 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
-   * Calculate the approximate quantile of numerical column of a DataFrame.
+   * Calculates the approximate quantiles of a numerical column of a DataFrame.
+   *
+   * Note on the target error:
+   *
+   * The result of this algorithm has the following deterministic bound:
+   * if the DataFrame has N elements and if we request the quantile `phi` up to error `epsi`,
+   * then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
+   * of `x` is close to (phi * N). More precisely:
+   *
+   *   floor((phi - epsi) * N) <= rank(x) <= ceil((phi + epsi) * N)
+   *
+   *
    * @param col the name of the column
-   * @param quantile the quantile number
-   * @return the approximate quantile
+   * @param quantiles a list of quantiles to approximate. Each number must belong to [0, 1]. For example 0 is the
+   *                  minimum, 0.5 is the median, 1 is the maximum.
+   * @param relativeError (>= 0). The relative target precision to achieve. If set to zero, the exact quantile is
+   *                      computed. Note that values greater than 1 are accepted but give the same result as 1.
+   * @return the approximate quantiles, in the same order as the relative errors
    */
-  def approxQuantile(col: String, quantile: Double, epsilon: Double): Double = {
-    StatFunctions.approxQuantile(df, col, quantile, epsilon)
+  def approxQuantile(col: String, quantiles: Array[Double], relativeError: Double): Array[Double] = {
+    StatFunctions.multipleApproxQuantiles(df, Seq(col), quantiles, relativeError).head.toArray
   }
 
   /**

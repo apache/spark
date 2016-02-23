@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.stat
 
-import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Logging
@@ -33,59 +32,37 @@ private[sql] object StatFunctions extends Logging {
   import QuantileSummaries.Stats
 
   /**
-   * Calculates the approximate quantile for the given column.
+   * Calculates the approximate quantile for the given columns.
    *
-   * If you need to compute multiple quantiles at once, you should use [[multipleApproxQuantiles]]
-   *
-   * Note on the target error.
+   * Note on the target error:
    *
    * The result of this algorithm has the following deterministic bound:
    * if the DataFrame has N elements and if we request the quantile `phi` up to error `epsi`,
    * then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
-   * of `x` close to (phi * N). More precisely:
+   * of `x` is close to (phi * N). More precisely:
    *
    *   floor((phi - epsi) * N) <= rank(x) <= ceil((phi + epsi) * N)
    *
-   * Note on the algorithm used.
+   * Note on the algorithm used:
    *
    * This method implements a variation of the Greenwald-Khanna algorithm
    * (with some speed optimizations). The algorithm was first present in the following article:
    * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
-   * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
+   * and Khanna, Sanjeev. (http://dx.doi.org/10.1145/375663.375670)
    *
    * The performance optimizations are detailed in the comments of the implementation.
-   *
-   * @param df the dataframe to estimate quantiles on
-   * @param col the name of the column
-   * @param quantile the target quantile of interest
-   * @param epsilon the target error. Should be >= 0.
-   * */
-  def approxQuantile(
-      df: DataFrame,
-      col: String,
-      quantile: Double,
-      epsilon: Double = QuantileSummaries.defaultEpsilon): Double = {
-    require(quantile >= 0.0 && quantile <= 1.0, "Quantile must be in the range of (0.0, 1.0).")
-    val Seq(Seq(res)) = multipleApproxQuantiles(df, Seq(col), Seq(quantile), epsilon)
-    res
-  }
-
-  /**
-   * Runs multiple quantile computations in a single pass, with the same target error.
-   *
-   * See [[approxQuantile)]] for more details on the approximation guarantees.
    *
    * @param df the dataframe
    * @param cols columns of the dataframe
    * @param quantiles target quantiles to compute
-   * @param epsilon the precision to achieve
+   * @param relativeError the precision to achieve
    * @return for each column, returns the requested approximations
    */
   def multipleApproxQuantiles(
       df: DataFrame,
       cols: Seq[String],
       quantiles: Seq[Double],
-      epsilon: Double): Seq[Seq[Double]] = {
+      relativeError: Double): Seq[Seq[Double]] = {
     val columns: Seq[Column] = cols.map { colName =>
       val field = df.schema(colName)
       require(field.dataType.isInstanceOf[NumericType],
@@ -94,7 +71,7 @@ private[sql] object StatFunctions extends Logging {
       Column(Cast(Column(colName).expr, DoubleType))
     }
     val emptySummaries = Array.fill(cols.size)(
-      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, epsilon))
+      new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, relativeError))
 
     // Note that it works more or less by accident as `rdd.aggregate` is not a pure function:
     // this function returns the same array as given in the input (because `aggregate` reuses
@@ -122,7 +99,7 @@ private[sql] object StatFunctions extends Logging {
    * Helper class to compute approximate quantile summary.
    * This implementation is based on the algorithm proposed in the paper:
    * "Space-efficient Online Computation of Quantile Summaries" by Greenwald, Michael
-   * and Khanna, Sanjeev. (http://dl.acm.org/citation.cfm?id=375670)
+   * and Khanna, Sanjeev. (http://dx.doi.org/10.1145/375663.375670)
    *
    * In order to optimize for speed, it maintains an internal buffer of the last seen samples,
    * and only inserts them after crossing a certain size threshold. This guarantees a near-constant
@@ -130,7 +107,7 @@ private[sql] object StatFunctions extends Logging {
    *
    * @param compressThreshold the compression threshold: after the internal buffer of statistics
    *                          crosses this size, it attempts to compress the statistics together
-   * @param epsilon the target precision
+   * @param relativeError the target relative error. It is uniform across the complete range of values.
    * @param sampled a buffer of quantile statistics. See the G-K article for more details
    * @param count the count of all the elements *inserted in the sampled buffer*
    *              (excluding the head buffer)
@@ -138,17 +115,23 @@ private[sql] object StatFunctions extends Logging {
    */
   class QuantileSummaries(
       val compressThreshold: Int,
-      val epsilon: Double,
+      val relativeError: Double,
       val sampled: ArrayBuffer[Stats] = ArrayBuffer.empty,
       private[stat] var count: Long = 0L,
       val headSampled: ArrayBuffer[Double] = ArrayBuffer.empty) extends Serializable {
 
     import QuantileSummaries._
 
+    /**
+     * Returns a summary with the given observation inserted into the summary. This method may either modify in place
+     * the current summary (and return the same summary, modified in place), or it may create a new summary from
+     * scratch it necessary.
+     * @param x the new observation to insert into the summary
+     */
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
       if (headSampled.size >= defaultHeadSize) {
-        this.withHeadInserted
+        this.withHeadBufferInserted
       } else {
         this
       }
@@ -162,7 +145,7 @@ private[sql] object StatFunctions extends Logging {
      *
      * @return a new quantile summary object.
      */
-    private def withHeadInserted: QuantileSummaries = {
+    private def withHeadBufferInserted: QuantileSummaries = {
       if (headSampled.isEmpty) {
         return this
       }
@@ -187,7 +170,7 @@ private[sql] object StatFunctions extends Logging {
           if (newSamples.isEmpty || (sampleIdx == sampled.size && opsIdx == sorted.length - 1)) {
             0
           } else {
-            math.floor(2 * epsilon * currentCount).toInt
+            math.floor(2 * relativeError * currentCount).toInt
           }
 
         val tuple = Stats(currentSample, 1, delta)
@@ -200,67 +183,76 @@ private[sql] object StatFunctions extends Logging {
         newSamples.append(sampled(sampleIdx))
         sampleIdx += 1
       }
-      new QuantileSummaries(compressThreshold, epsilon, newSamples, currentCount)
+      new QuantileSummaries(compressThreshold, relativeError, newSamples, currentCount)
     }
 
+    /**
+     * Returns a new summary that compresses the summary statistics and the head buffer.
+     *
+     * This implements the COMPRESS function of the GK algorithm. It does not modify the object.
+     *
+     * @return a new summary object with compressed statistics
+     */
     def compress(): QuantileSummaries = {
       // Inserts all the elements first
-      val inserted = this.withHeadInserted
+      val inserted = this.withHeadBufferInserted
       assert(inserted.headSampled.isEmpty)
       assert(inserted.count == count + headSampled.size)
       val compressed =
-        compressImmut(inserted.sampled, mergeThreshold = 2 * epsilon * inserted.count)
-      new QuantileSummaries(compressThreshold, epsilon, compressed, inserted.count)
+        compressImmut(inserted.sampled, mergeThreshold = 2 * relativeError * inserted.count)
+      new QuantileSummaries(compressThreshold, relativeError, compressed, inserted.count)
     }
 
+    private def shallowCopy: QuantileSummaries = {
+      new QuantileSummaries(compressThreshold, relativeError, sampled, count, headSampled)
+    }
+
+    /**
+     * Merges two (compressed) summaries together.
+     *
+     * Returns a new summary.
+     */
     def merge(other: QuantileSummaries): QuantileSummaries = {
+      require(headSampled.isEmpty, "Current buffer needs to be compressed before merge")
+      require(other.headSampled.isEmpty, "Other buffer needs to be compressed before merge")
       if (other.count == 0) {
-        this
+        this.shallowCopy
       } else if (count == 0) {
-        other
+        other.shallowCopy
       } else {
-        // We rely on the fact that they are ordered to efficiently interleave them.
-        val thisSampled = sampled.toList
-        val otherSampled = other.sampled.toList
-        val res: ArrayBuffer[Stats] = ArrayBuffer.empty
-
-        @tailrec
-        def mergeCurrent(
-            thisList: List[Stats],
-            otherList: List[Stats]): Unit = (thisList, otherList) match {
-          case (Nil, l) =>
-            res.appendAll(l)
-          case (l, Nil) =>
-            res.appendAll(l)
-          case (h1 :: t1, h2 :: t2) if h1.value > h2.value =>
-            mergeCurrent(otherList, thisList)
-          case (h1 :: t1, l) =>
-            // We know that h1.value <= all values in l
-            // TODO(thunterdb) do we need to adjust g and delta?
-            res.append(h1)
-            mergeCurrent(t1, l)
-        }
-
-        mergeCurrent(thisSampled, otherSampled)
-        val comp = compressImmut(res, mergeThreshold = 2 * epsilon * count)
-        new QuantileSummaries(other.compressThreshold, other.epsilon, comp, other.count + count)
+        // Merge the two buffers.
+        // The GK algorithm is a bit unclear about it, but it seems there is no need to adjust the statistics during the
+        // merging: the invariants are still respected after the merge.
+        // TODO(thunterdb) could replace full sort by ordered merge, the two lists are known to be sorted already.
+        val res = (sampled ++ other.sampled).sortBy(_.value)
+        val comp = compressImmut(res, mergeThreshold = 2 * relativeError * count)
+        new QuantileSummaries(other.compressThreshold, other.relativeError, comp, other.count + count)
       }
     }
 
+    /**
+     * Runs a query for a given quantile. The result follows the approximation guarantees detailed above.
+     *
+     * The query can only be run on a compressed summary: you need to call compress() before using it.
+     *
+     * @param quantile the target quantile
+     * @return
+     */
     def query(quantile: Double): Double = {
       require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
+      require(headSampled.isEmpty, "Cannot operate on an uncompressed summary, call compress() first")
 
-      if (quantile <= epsilon) {
+      if (quantile <= relativeError) {
         return sampled.head.value
       }
 
-      if (quantile >= 1 - epsilon) {
+      if (quantile >= 1 - relativeError) {
         return sampled.last.value
       }
 
       // Target rank
       val rank = math.ceil(quantile * count).toInt
-      val targetError = math.ceil(epsilon * count)
+      val targetError = math.ceil(relativeError * count)
       // Minimum rank at current sample
       var minRank = 0
       var i = 1
@@ -291,9 +283,10 @@ private[sql] object StatFunctions extends Logging {
     val defaultHeadSize: Int = 50000
 
     /**
-     * The default value for epsilon.
+     * The default value for the relative error (1%). With this value, the best extreme percentiles that can be
+     * approximated are 1% and 99%.
      */
-    val defaultEpsilon: Double = 0.01
+    val defaultRelativeError: Double = 0.01
 
     /**
      * Statisttics from the Greenwald-Khanna paper.
