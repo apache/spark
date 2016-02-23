@@ -306,9 +306,9 @@ private[storage] class BlockInfoManager extends Logging {
       blockId: BlockId,
       newBlockInfo: BlockInfo): Boolean = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to put $blockId")
-    val actualInfo = infos.getOrElseUpdate(blockId, newBlockInfo)
-    if (actualInfo eq newBlockInfo) {
-      actualInfo.writerTask = currentTaskAttemptId
+    if (!infos.contains(blockId)) {
+      infos(blockId) = newBlockInfo
+      newBlockInfo.writerTask = currentTaskAttemptId
       writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
       true
     } else {
