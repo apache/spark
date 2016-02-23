@@ -31,7 +31,7 @@ import org.apache.spark.tags.DockerTest
  * is already tested with the branch 1.4
  *
  * This patch was tested using the Oracle docker.Created this integration suite for the same.
- * The ojdbc6.jar was to be downloaded from the maven repository.Since there was 
+ * The ojdbc6-11.2.0.2.0.jar was to be downloaded from the maven repository.Since there was 
  * no jdbc jar available in the maven repository, the jar was downloaded from oracle site 
  * manually and installed in the local; thus tested. So, for SparkQA test case run, the
  * ojdbc jar might be manually placed in the local maven repository(com/oracle/ojdbc6/11.2.0.2.0)
