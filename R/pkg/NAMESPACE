@@ -13,7 +13,9 @@ export("print.jobj")
 # MLlib integration
 exportMethods("glm",
               "predict",
-              "summary")
+              "summary",
+              "kmeans",
+              "fitted")
 
 # Job group lifecycle management methods
 export("setJobGroup",

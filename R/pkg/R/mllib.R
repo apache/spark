@@ -104,11 +104,11 @@ setMethod("predict", signature(object = "PipelineModel"),
 setMethod("summary", signature(object = "PipelineModel"),
           function(object, ...) {
             modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelName", object@model)
+                                     "getModelName", object@model)
             features <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelFeatures", object@model)
+                                    "getModelFeatures", object@model)
             coefficients <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                   "getModelCoefficients", object@model)
+                                        "getModelCoefficients", object@model)
             if (modelName == "LinearRegressionModel") {
               devianceResiduals <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                                "getModelDevianceResiduals", object@model)
@@ -119,10 +119,76 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate", "Std. Error", "t value", "Pr(>|t|)")
               rownames(coefficients) <- unlist(features)
               return(list(devianceResiduals = devianceResiduals, coefficients = coefficients))
-            } else {
+            } else if (modelName == "LogisticRegressionModel") {
               coefficients <- as.matrix(unlist(coefficients))
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
               return(list(coefficients = coefficients))
+            } else if (modelName == "KMeansModel") {
+              modelSize <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                       "getKMeansModelSize", object@model)
+              cluster <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                     "getKMeansCluster", object@model, "classes")
+              k <- unlist(modelSize)[1]
+              size <- unlist(modelSize)[-1]
+              coefficients <- t(matrix(coefficients, ncol = k))
+              colnames(coefficients) <- unlist(features)
+              rownames(coefficients) <- 1:k
+              return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+            } else {
+              stop(paste("Unsupported model", modelName, sep = " "))
+            }
+          })
+
+#' Fit a k-means model
+#'
+#' Fit a k-means model, similarly to R's kmeans().
+#'
+#' @param x DataFrame for training
+#' @param centers Number of centers
+#' @param iter.max Maximum iteration number
+#' @param algorithm Algorithm choosen to fit the model
+#' @return A fitted k-means model
+#' @rdname kmeans
+#' @export
+#' @examples
+#'\dontrun{
+#' model <- kmeans(x, centers = 2, algorithm="random")
+#'}
+setMethod("kmeans", signature(x = "DataFrame"),
+          function(x, centers, iter.max = 10, algorithm = c("random", "k-means||")) {
+            columnNames <- as.array(colnames(x))
+            algorithm <- match.arg(algorithm)
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitKMeans", x@sdf,
+                                 algorithm, iter.max, centers, columnNames)
+            return(new("PipelineModel", model = model))
+         })
+
+#' Get fitted result from a model
+#'
+#' Get fitted result from a model, similarly to R's fitted().
+#'
+#' @param object A fitted MLlib model
+#' @return DataFrame containing fitted values
+#' @rdname fitted
+#' @export
+#' @examples
+#'\dontrun{
+#' model <- kmeans(trainingData, 2)
+#' fitted.model <- fitted(model)
+#' showDF(fitted.model)
+#'}
+setMethod("fitted", signature(object = "PipelineModel"),
+          function(object, method = c("centers", "classes"), ...) {
+            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                     "getModelName", object@model)
+
+            if (modelName == "KMeansModel") {
+              method <- match.arg(method)
+              fittedResult <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                          "getKMeansCluster", object@model, method)
+              return(dataFrame(fittedResult))
+            } else {
+              stop(paste("Unsupported model", modelName, sep = " "))
             }
           })
