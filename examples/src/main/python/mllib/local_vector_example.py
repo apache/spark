@@ -20,6 +20,7 @@ from __future__ import print_function
 # $example on$
 import numpy as np
 import scipy.sparse as sps
+
 from pyspark.mllib.linalg import Vectors
 # $example off$
 
