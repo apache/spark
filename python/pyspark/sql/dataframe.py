@@ -291,17 +291,6 @@ class DataFrame(object):
         # TODO: should we throw exception instead?
         return self
 
-        if isinstance(self, PipelinedDataFrame):
-            if schema is None:
-                from pyspark.sql.types import _infer_type, _merge_type
-                # If no schema is specified, infer it from the whole data set.
-                jrdd = self._prev_jdf.javaToPython()
-                rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
-                schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
-            return PipelinedDataFrame(self, output_schema=schema)
-        else:
-            return self
-
     @ignore_unicode_prefix
     @since(2.0)
     def mapPartitions2(self, func):
