@@ -37,6 +37,16 @@ import org.apache.spark.util.sketch.{BloomFilter, CountMinSketch}
 final class DataFrameStatFunctions private[sql](df: DataFrame) {
 
   /**
+   * Calculate the approximate quantile of numerical column of a DataFrame.
+   * @param col the name of the column
+   * @param quantile the quantile number
+   * @return the approximate quantile
+   */
+  def approxQuantile(col: String, quantile: Double, epsilon: Double): Double = {
+    StatFunctions.approxQuantile(df, col, quantile, epsilon)
+  }
+
+  /**
    * Calculate the sample covariance of two numerical columns of a DataFrame.
    * @param col1 the name of the first column
    * @param col2 the name of the second column
