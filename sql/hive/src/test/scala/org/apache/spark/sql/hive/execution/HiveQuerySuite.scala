@@ -664,12 +664,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
-      .map { case Row(i: Int) => i }
+      .rdd.map { case Row(i: Int) => i }
       .collect()
       .toSet
 
     val expected = sql("SELECT key FROM src")
-      .map { case Row(i: Int) => i }
+      .rdd.map { case Row(i: Int) => i }
       .collect()
       .toSet
 

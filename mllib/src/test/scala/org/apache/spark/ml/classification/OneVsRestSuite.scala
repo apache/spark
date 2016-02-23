@@ -83,7 +83,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val ovaResults = transformedDataset
       .select("prediction", "label")
-      .map(row => (row.getDouble(0), row.getDouble(1)))
+      .rdd.map(row => (row.getDouble(0), row.getDouble(1)))
 
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)

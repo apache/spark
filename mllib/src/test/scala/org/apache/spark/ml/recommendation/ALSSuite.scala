@@ -344,7 +344,7 @@ class ALSSuite
     val model = als.fit(training.toDF())
     val predictions = model.transform(test.toDF())
       .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
+      .rdd.map { case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)
       }
     val rmse =
