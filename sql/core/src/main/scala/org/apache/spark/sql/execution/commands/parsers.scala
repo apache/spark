@@ -120,7 +120,7 @@ object AlterTableCommandParser {
       val (buckets, noClustered, noSorted) = clusterAndSoryByArgs match {
         case Token("TOK_ALTERTABLE_BUCKETS", bucketArgsHead :: bucketArgs) =>
           val bucketCols = bucketArgsHead.children.map(_.text)
-        
+
           val (sortCols, sortDirections, numBuckets) = {
             if (bucketArgs.head.text == "TOK_TABCOLNAME") {
               val (cols, directions) = bucketArgs.head.children.map {
@@ -134,7 +134,7 @@ object AlterTableCommandParser {
               (Nil, Nil, bucketArgs.head.text.toInt)
             }
           }
-        
+
           (Some(BucketSpec(numBuckets, bucketCols, sortCols, sortDirections)),
             false, false)
         case Token("TOK_NOT_CLUSTERED", Nil) =>

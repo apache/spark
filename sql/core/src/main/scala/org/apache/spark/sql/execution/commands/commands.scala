@@ -97,7 +97,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
         }
       }
       (keyValueOutput, runFunc)
- 
+
     case Some((key, Some(value))) if deprecatedProperties.contains(key) =>
       (keyValueOutput, deprecatedProperties(key))
 

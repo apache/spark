@@ -37,7 +37,7 @@ object ParserSupport {
   private[sql] def cleanIdentifier(ident: String): String = ident match {
     case escapedIdentifier(i) => i
     case plainIdent => plainIdent
-  } 
+  }
 
   private[sql] def cleanAndUnquoteString(str: String): String = {
     cleanIdentifier(unquoteString(str))
