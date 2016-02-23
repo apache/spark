@@ -250,7 +250,7 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
     val model = new KMeansModel(uid, parentModel)
-    copyValues(model)
+    copyValues(model.setParent(this))
   }
 
   @Since("1.5.0")

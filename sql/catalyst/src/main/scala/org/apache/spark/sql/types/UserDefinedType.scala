@@ -86,6 +86,11 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
     this.getClass == dataType.getClass
 
   override def sql: String = sqlType.sql
+
+  override def equals(other: Any): Boolean = other match {
+    case that: UserDefinedType[_] => this.acceptsType(that)
+    case _ => false
+  }
 }
 
 /**
@@ -111,5 +116,10 @@ private[sql] class PythonUserDefinedType(
       ("pyClass" -> pyUDT) ~
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: PythonUserDefinedType => this.pyUDT.equals(that.pyUDT)
+    case _ => false
   }
 }

@@ -114,24 +114,37 @@ class AnalysisErrorSuite extends AnalysisTest {
   val dateLit = Literal.create(null, DateType)
 
   errorTest(
+    "scalar subquery with 2 columns",
+     testRelation.select(
+       (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
+     "Scalar subquery must return only one column, but got 2" :: Nil)
+
+  errorTest(
+    "scalar subquery with no column",
+    testRelation.select(ScalarSubquery(LocalRelation()).as('a)),
+    "Scalar subquery must return only one column, but got 0" :: Nil)
+
+  errorTest(
     "single invalid type, single arg",
     testRelation.select(TestFunction(dateLit :: Nil, IntegerType :: Nil).as('a)),
-    "cannot resolve" :: "testfunction" :: "argument 1" :: "requires int type" ::
-    "'null' is of date type" :: Nil)
+    "cannot resolve" :: "testfunction(CAST(NULL AS DATE))" :: "argument 1" :: "requires int type" ::
+    "'CAST(NULL AS DATE)' is of date type" :: Nil)
 
   errorTest(
     "single invalid type, second arg",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, DateType :: IntegerType :: Nil).as('a)),
-    "cannot resolve" :: "testfunction" :: "argument 2" :: "requires int type" ::
-    "'null' is of date type" :: Nil)
+    "cannot resolve" :: "testfunction(CAST(NULL AS DATE), CAST(NULL AS DATE))" ::
+      "argument 2" :: "requires int type" ::
+      "'CAST(NULL AS DATE)' is of date type" :: Nil)
 
   errorTest(
     "multiple invalid type",
     testRelation.select(
       TestFunction(dateLit :: dateLit :: Nil, IntegerType :: IntegerType :: Nil).as('a)),
-    "cannot resolve" :: "testfunction" :: "argument 1" :: "argument 2" ::
-    "requires int type" :: "'null' is of date type" :: Nil)
+    "cannot resolve" :: "testfunction(CAST(NULL AS DATE), CAST(NULL AS DATE))" ::
+      "argument 1" :: "argument 2" :: "requires int type" ::
+      "'CAST(NULL AS DATE)' is of date type" :: Nil)
 
   errorTest(
     "invalid window function",
@@ -194,6 +207,11 @@ class AnalysisErrorSuite extends AnalysisTest {
     "sort" :: "type" :: "map<int,int>" :: Nil)
 
   errorTest(
+    "sorting by attributes are not from grouping expressions",
+    testRelation2.groupBy('a, 'c)('a, 'c, count('a).as("a3")).orderBy('b.asc),
+    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, c, a3]" :: Nil)
+
+  errorTest(
     "non-boolean filters",
     testRelation.where(Literal(1)),
     "filter" :: "'1'" :: "not a boolean" :: Literal(1).dataType.simpleString :: Nil)
@@ -206,7 +224,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "missing group by",
     testRelation2.groupBy('a)('b),
-    "'b'" :: "group by" :: Nil
+    "'`b`'" :: "group by" :: Nil
   )
 
   errorTest(
@@ -254,7 +272,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
-    "cannot resolve 'bad_column'" :: Nil)
+    "cannot resolve '`bad_column`'" :: Nil)
 
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
@@ -295,7 +313,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         case true =>
           assertAnalysisSuccess(plan, true)
         case false =>
-          assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
+          assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
       }
     }
 
@@ -356,7 +374,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
           AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
 
-    assertAnalysisError(plan, "binary type expression a cannot be used in join conditions" :: Nil)
+    assertAnalysisError(plan, "binary type expression `a` cannot be used in join conditions" :: Nil)
 
     val plan2 =
       Join(
@@ -370,6 +388,6 @@ class AnalysisErrorSuite extends AnalysisTest {
         Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 
-    assertAnalysisError(plan2, "map type expression a cannot be used in join conditions" :: Nil)
+    assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
   }
 }

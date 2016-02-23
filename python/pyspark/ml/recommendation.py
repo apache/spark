@@ -82,14 +82,12 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     Row(user=1, item=0, prediction=2.6258413791656494)
     >>> predictions[2]
     Row(user=2, item=0, prediction=-1.5018409490585327)
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> als_path = path + "/als"
+    >>> als_path = temp_path + "/als"
     >>> als.save(als_path)
     >>> als2 = ALS.load(als_path)
     >>> als.getMaxIter()
     5
-    >>> model_path = path + "/als_model"
+    >>> model_path = temp_path + "/als_model"
     >>> model.save(model_path)
     >>> model2 = ALSModel.load(model_path)
     >>> model.rank == model2.rank
@@ -98,11 +96,6 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     True
     >>> sorted(model.itemFactors.collect()) == sorted(model2.itemFactors.collect())
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -340,7 +333,17 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)

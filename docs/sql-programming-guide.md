@@ -1372,7 +1372,7 @@ Hive metastore Parquet table to a Spark SQL Parquet table. The reconciliation ru
 1. The reconciled schema contains exactly those fields defined in Hive metastore schema.
 
    - Any fields that only appear in the Parquet schema are dropped in the reconciled schema.
-   - Any fileds that only appear in the Hive metastore schema are added as nullable field in the
+   - Any fields that only appear in the Hive metastore schema are added as nullable field in the
      reconciled schema.
 
 #### Metadata Refreshing

@@ -25,12 +25,11 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
+import org.apache.spark.sql.execution.{SparkPlan, SparkSqlSerializer}
 import org.apache.spark.sql.execution.local.LocalNode
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.unsafe.memory.MemoryLocation
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -675,3 +674,20 @@ private[joins] object LongHashedRelation {
     }
   }
 }
+
+/** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
+private[execution] case class HashedRelationBroadcastMode(
+    canJoinKeyFitWithinLong: Boolean,
+    keys: Seq[Expression],
+    attributes: Seq[Attribute]) extends BroadcastMode {
+
+  def transform(rows: Array[InternalRow]): HashedRelation = {
+    val generator = UnsafeProjection.create(keys, attributes)
+    if (canJoinKeyFitWithinLong) {
+      LongHashedRelation(rows.iterator, generator, rows.length)
+    } else {
+      HashedRelation(rows.iterator, generator, rows.length)
+    }
+  }
+}
+
