@@ -171,6 +171,7 @@ class AssociationRules private[fpm] (
         } else if (lenConsequent == maxConsequent) {
           sc.union(rules, newRules)
         } else {
+          val numPairs = (lenConsequent + 1) * lenConsequent / 2
           val newCandidates = newRules.filter{
             // rules whose antecendent's length equals to 1 can not be used to generate new rules
             case (antecendent, consequent, freqUnion, freqAntecedent) =>
@@ -195,8 +196,6 @@ class AssociationRules private[fpm] (
                   newConsequentCount.update(newConsequent, cnt + 1)
                 }
               }
-
-              val numPairs = (lenConsequent + 1) * lenConsequent / 2
 
               newConsequentCount.filter{
                 // Rule pruning. For a (lenConsequent + 1)-consequent rules, all its
