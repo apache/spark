@@ -305,11 +305,11 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
     val sumByCols = Array.fill(n)(0.0)
     var sum = 0.0
 
-    for (i <- 0 until n; j <- 0 until n) {
-      val v = mat(i, j)
-      sumByRows(i) += v
-      sumByCols(j) += v
-      sum += v
+    mat.foreachActive {
+      case (i, j, v) =>
+        sumByRows(i) += v
+        sumByCols(j) += v
+        sum += v
     }
 
     var numerator = 0.0
