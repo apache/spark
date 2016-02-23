@@ -37,8 +37,6 @@ case class SortMergeJoin(
     right: SparkPlan) extends BinaryNode {
 
   override private[sql] lazy val metrics = Map(
-    "numLeftRows" -> SQLMetrics.createLongMetric(sparkContext, "number of left rows"),
-    "numRightRows" -> SQLMetrics.createLongMetric(sparkContext, "number of right rows"),
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = left.output ++ right.output
@@ -60,8 +58,6 @@ case class SortMergeJoin(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val numLeftRows = longMetric("numLeftRows")
-    val numRightRows = longMetric("numRightRows")
     val numOutputRows = longMetric("numOutputRows")
 
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
@@ -89,9 +85,7 @@ case class SortMergeJoin(
           rightKeyGenerator,
           keyOrdering,
           RowIterator.fromScala(leftIter),
-          numLeftRows,
-          RowIterator.fromScala(rightIter),
-          numRightRows
+          RowIterator.fromScala(rightIter)
         )
         private[this] val joinRow = new JoinedRow
         private[this] val resultProjection: (InternalRow) => InternalRow =
@@ -157,9 +151,7 @@ private[joins] class SortMergeJoinScanner(
     bufferedKeyGenerator: Projection,
     keyOrdering: Ordering[InternalRow],
     streamedIter: RowIterator,
-    numStreamedRows: LongSQLMetric,
-    bufferedIter: RowIterator,
-    numBufferedRows: LongSQLMetric) {
+    bufferedIter: RowIterator) {
   private[this] var streamedRow: InternalRow = _
   private[this] var streamedRowKey: InternalRow = _
   private[this] var bufferedRow: InternalRow = _
@@ -284,7 +276,6 @@ private[joins] class SortMergeJoinScanner(
     if (streamedIter.advanceNext()) {
       streamedRow = streamedIter.getRow
       streamedRowKey = streamedKeyGenerator(streamedRow)
-      numStreamedRows += 1
       true
     } else {
       streamedRow = null
@@ -302,7 +293,6 @@ private[joins] class SortMergeJoinScanner(
     while (!foundRow && bufferedIter.advanceNext()) {
       bufferedRow = bufferedIter.getRow
       bufferedRowKey = bufferedKeyGenerator(bufferedRow)
-      numBufferedRows += 1
       foundRow = !bufferedRowKey.anyNull
     }
     if (!foundRow) {

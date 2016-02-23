@@ -135,7 +135,7 @@ Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspa
 ## Power iteration clustering (PIC)
 
 Power iteration clustering (PIC) is a scalable and efficient algorithm for clustering vertices of a
-graph given pairwise similarties as edge properties,
+graph given pairwise similarities as edge properties,
 described in [Lin and Cohen, Power Iteration Clustering](http://www.icml2010.org/papers/387.pdf).
 It computes a pseudo-eigenvector of the normalized affinity matrix of the graph via
 [power iteration](http://en.wikipedia.org/wiki/Power_iteration)  and uses it to cluster vertices.

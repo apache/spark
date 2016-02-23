@@ -74,6 +74,7 @@ class Dataset[T] private[sql](
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
+  unresolvedTEncoder.validate(logicalPlan.output)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
@@ -85,7 +86,7 @@ class Dataset[T] private[sql](
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
-  private implicit def classTag = resolvedTEncoder.clsTag
+  private implicit def classTag = unresolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
@@ -141,7 +142,7 @@ class Dataset[T] private[sql](
    * the same name after two Datasets have been joined.
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T] = withPlan(Subquery(alias, _))
+  def as(alias: String): Dataset[T] = withPlan(SubqueryAlias(alias, _))
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe.  In contrast to the

@@ -157,22 +157,11 @@ private[spark] object UIUtils extends Logging {
   def commonHeaderNodes: Seq[Node] = {
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
     <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet"
-          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
-    <link rel="stylesheet"
-          href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
     <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri("/static/sorttable.js")} ></script>
     <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
-    <script src={prependBaseUri("/static/jsonFormatter.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.mustache.js")}></script>
     <script src={prependBaseUri("/static/vis.min.js")}></script>
     <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
     <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
@@ -187,6 +176,20 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
     <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
     <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
+  }
+
+  def dataTablesHeaderNodes: Seq[Node] = {
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
+    <script src={prependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
+    <script src={prependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
+    <script src={prependBaseUri("/static/jsonFormatter.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.mustache.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -244,10 +247,14 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Returns a page with the spark css/js and a simple format. Used for scheduler UI. */
-  def basicSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
+  def basicSparkPage(
+      content: => Seq[Node],
+      title: String,
+      useDataTables: Boolean = false): Seq[Node] = {
     <html>
       <head>
         {commonHeaderNodes}
+        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
         <title>{title}</title>
       </head>
       <body>

@@ -626,7 +626,10 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
           sql(
             s"""CREATE TABLE array_of_struct
                |STORED AS PARQUET LOCATION '$path'
-               |AS SELECT '1st', '2nd', ARRAY(NAMED_STRUCT('a', 'val_a', 'b', 'val_b'))
+               |AS SELECT
+               |  '1st' AS a,
+               |  '2nd' AS b,
+               |  ARRAY(NAMED_STRUCT('a', 'val_a', 'b', 'val_b')) AS c
              """.stripMargin)
 
           checkAnswer(

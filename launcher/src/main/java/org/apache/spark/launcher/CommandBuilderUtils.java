@@ -322,11 +322,9 @@ class CommandBuilderUtils {
     if (getJavaVendor() == JavaVendor.IBM) {
       return;
     }
-    String[] version = System.getProperty("java.version").split("\\.");
-    if (Integer.parseInt(version[0]) > 1 || Integer.parseInt(version[1]) > 7) {
+    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
       return;
     }
-
     for (String arg : cmd) {
       if (arg.startsWith("-XX:MaxPermSize=")) {
         return;
@@ -336,4 +334,20 @@ class CommandBuilderUtils {
     cmd.add("-XX:MaxPermSize=256m");
   }
 
+  /**
+   * Get the major version of the java version string supplied. This method
+   * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
+   * version strings such as 1.7.0_79
+   */
+  static int javaMajorVersion(String javaVersion) {
+    String[] version = javaVersion.split("[+.\\-]+");
+    int major = Integer.parseInt(version[0]);
+    // if major > 1, we're using the JEP-223 version string, e.g., 9-ea, 9+120
+    // otherwise the second number is the major version
+    if (major > 1) {
+      return major;
+    } else {
+      return Integer.parseInt(version[1]);
+    }
+  }
 }

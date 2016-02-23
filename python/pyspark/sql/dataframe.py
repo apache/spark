@@ -262,7 +262,7 @@ class DataFrame(object):
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
         with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.EvaluatePython.takeAndServe(
+            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
                 self._jdf, num)
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
@@ -739,6 +739,9 @@ class DataFrame(object):
     def head(self, n=None):
         """Returns the first ``n`` rows.
 
+        Note that this method should only be used if the resulting array is expected
+        to be small, as all the data is loaded into the driver's memory.
+
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
             If n is 1, return a single Row.
@@ -884,8 +887,8 @@ class DataFrame(object):
         [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
         >>> sorted(df.groupBy(df.name).avg().collect())
         [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
-        >>> df.groupBy(['name', df.age]).count().collect()
-        [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
+        >>> sorted(df.groupBy(['name', df.age]).count().collect())
+        [Row(name=u'Alice', age=2, count=1), Row(name=u'Bob', age=5, count=1)]
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
@@ -897,15 +900,15 @@ class DataFrame(object):
         Create a multi-dimensional rollup for the current :class:`DataFrame` using
         the specified columns, so we can run aggregation on them.
 
-        >>> df.rollup('name', df.age).count().show()
+        >>> df.rollup("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        |Alice|   2|    1|
-        |  Bob|   5|    1|
-        |  Bob|null|    1|
         | null|null|    2|
         |Alice|null|    1|
+        |Alice|   2|    1|
+        |  Bob|null|    1|
+        |  Bob|   5|    1|
         +-----+----+-----+
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
@@ -918,17 +921,17 @@ class DataFrame(object):
         Create a multi-dimensional cube for the current :class:`DataFrame` using
         the specified columns, so we can run aggregation on them.
 
-        >>> df.cube('name', df.age).count().show()
+        >>> df.cube("name", df.age).count().orderBy("name", "age").show()
         +-----+----+-----+
         | name| age|count|
         +-----+----+-----+
-        | null|   2|    1|
-        |Alice|   2|    1|
-        |  Bob|   5|    1|
-        | null|   5|    1|
-        |  Bob|null|    1|
         | null|null|    2|
+        | null|   2|    1|
+        | null|   5|    1|
         |Alice|null|    1|
+        |Alice|   2|    1|
+        |  Bob|null|    1|
+        |  Bob|   5|    1|
         +-----+----+-----+
         """
         jgd = self._jdf.cube(self._jcols(*cols))
@@ -1329,6 +1332,9 @@ class DataFrame(object):
     @since(1.3)
     def toPandas(self):
         """Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
+
+        Note that this method should only be used if the resulting Pandas's DataFrame is expected
+        to be small, as all the data is loaded into the driver's memory.
 
         This is only available if Pandas is installed and available.
 

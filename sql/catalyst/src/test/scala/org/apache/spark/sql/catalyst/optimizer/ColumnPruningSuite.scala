@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Explode
+import org.apache.spark.sql.catalyst.expressions.{Explode, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.StringType
 
@@ -94,6 +94,35 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer = input.select('a, 'b).orderBy('b.asc).select('a).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Column pruning for Expand") {
+    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val query =
+      Aggregate(
+        Seq('aa, 'gid),
+        Seq(sum('c).as("sum")),
+        Expand(
+          Seq(
+            Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
+            Seq('a, 'b, 'c, 'a, 2)),
+          Seq('a, 'b, 'c, 'aa.int, 'gid.int),
+          input)).analyze
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      Aggregate(
+        Seq('aa, 'gid),
+        Seq(sum('c).as("sum")),
+        Expand(
+          Seq(
+            Seq('c, Literal.create(null, StringType), 1),
+            Seq('c, 'a, 2)),
+          Seq('c, 'aa.int, 'gid.int),
+          Project(Seq('c, 'a),
+            input))).analyze
+
+    comparePlans(optimized, expected)
   }
 
   // todo: add more tests for column pruning

@@ -26,16 +26,22 @@ class ExpressionSQLBuilderSuite extends SQLBuilderTest {
   test("literal") {
     checkSQL(Literal("foo"), "\"foo\"")
     checkSQL(Literal("\"foo\""), "\"\\\"foo\\\"\"")
-    checkSQL(Literal(1: Byte), "CAST(1 AS TINYINT)")
-    checkSQL(Literal(2: Short), "CAST(2 AS SMALLINT)")
+    checkSQL(Literal(1: Byte), "1Y")
+    checkSQL(Literal(2: Short), "2S")
     checkSQL(Literal(4: Int), "4")
-    checkSQL(Literal(8: Long), "CAST(8 AS BIGINT)")
+    checkSQL(Literal(8: Long), "8L")
     checkSQL(Literal(1.5F), "CAST(1.5 AS FLOAT)")
-    checkSQL(Literal(2.5D), "2.5")
+    checkSQL(Literal(2.5D), "2.5D")
     checkSQL(
-      Literal(Timestamp.valueOf("2016-01-01 00:00:00")),
-      "TIMESTAMP('2016-01-01 00:00:00.0')")
+      Literal(Timestamp.valueOf("2016-01-01 00:00:00")), "TIMESTAMP('2016-01-01 00:00:00.0')")
     // TODO tests for decimals
+  }
+
+  test("attributes") {
+    checkSQL('a.int, "`a`")
+    checkSQL(Symbol("foo bar").int, "`foo bar`")
+    // Keyword
+    checkSQL('int.int, "`int`")
   }
 
   test("binary comparisons") {

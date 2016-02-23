@@ -35,6 +35,8 @@
     <sbt.project.name>network-yarn</sbt.project.name>
     <!-- Make sure all Hadoop dependencies are provided to avoid repackaging. -->
     <hadoop.deps.scope>provided</hadoop.deps.scope>
+    <shuffle.jar>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</shuffle.jar>
+    <shade>org/spark-project/</shade>
   </properties>
 
   <dependencies>
@@ -70,7 +72,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-${project.version}-yarn-shuffle.jar</outputFile>
+          <outputFile>${shuffle.jar}</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -86,6 +88,15 @@
               </excludes>
             </filter>
           </filters>
+          <relocations>
+            <relocation>
+              <pattern>com.fasterxml.jackson</pattern>
+              <shadedPattern>org.spark-project.com.fasterxml.jackson</shadedPattern>
+              <includes>
+                <include>com.fasterxml.jackson.**</include>
+              </includes>
+            </relocation>
+          </relocations>
         </configuration>
         <executions>
           <execution>
@@ -93,6 +104,42 @@
             <goals>
               <goal>shade</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- probes to validate that those dependencies which must be shaded are  -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-antrun-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>verify</phase>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <configuration>
+              <target>
+                <macrodef name="shaded">
+                  <attribute name="resource"/>
+                  <sequential>
+                    <fail message="Not found ${shade}@{resource}">
+                      <condition>
+                        <not>
+                          <resourceexists>
+                            <zipentry zipfile="${shuffle.jar}" name="${shade}@{resource}"/>
+                          </resourceexists>
+                        </not>
+                      </condition>
+                    </fail>
+                  </sequential>
+                </macrodef>
+                <echo>Verifying dependency shading</echo>
+                <shaded resource="com/fasterxml/jackson/core/JsonParser.class" />
+                <shaded resource="com/fasterxml/jackson/annotation/JacksonAnnotation.class" />
+                <shaded resource="com/fasterxml/jackson/databind/JsonSerializer.class" />
+              </target>
+            </configuration>
           </execution>
         </executions>
       </plugin>

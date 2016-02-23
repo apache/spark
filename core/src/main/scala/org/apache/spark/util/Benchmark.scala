@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.lang3.SystemUtils
 
@@ -34,7 +35,8 @@ import org.apache.commons.lang3.SystemUtils
  * If outputPerIteration is true, the timing for each run will be printed to stdout.
  */
 private[spark] class Benchmark(
-    name: String, valuesPerIteration: Long,
+    name: String,
+    valuesPerIteration: Long,
     iters: Int = 5,
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
@@ -59,17 +61,20 @@ private[spark] class Benchmark(
     }
     println
 
-    val firstRate = results.head.avgRate
+    val firstBest = results.head.bestMs
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
-    printf("%-30s %16s %16s %14s\n", name + ":", "Avg Time(ms)", "Avg Rate(M/s)", "Relative Rate")
-    println("-------------------------------------------------------------------------------")
-    results.zip(benchmarks).foreach { r =>
-      printf("%-30s %16s %16s %14s\n",
-        r._2.name,
-        "%10.2f" format r._1.avgMs,
-        "%10.2f" format r._1.avgRate,
-        "%6.2f X" format (r._1.avgRate / firstRate))
+    printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+      "Per Row(ns)", "Relative")
+    println("-----------------------------------------------------------------------------------" +
+      "--------")
+    results.zip(benchmarks).foreach { case (result, benchmark) =>
+      printf("%-35s %16s %12s %13s %10s\n",
+        benchmark.name,
+        "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
+        "%10.1f" format result.bestRate,
+        "%6.1f" format (1000 / result.bestRate),
+        "%3.1fX" format (firstBest / result.bestMs))
     }
     println
     // scalastyle:on
@@ -78,7 +83,7 @@ private[spark] class Benchmark(
 
 private[spark] object Benchmark {
   case class Case(name: String, fn: Int => Unit)
-  case class Result(avgMs: Double, avgRate: Double)
+  case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
 
   /**
    * This should return a user helpful processor information. Getting at this depends on the OS.
@@ -99,22 +104,27 @@ private[spark] object Benchmark {
    * the rate of the function.
    */
   def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Int => Unit): Result = {
-    var totalTime = 0L
+    val runTimes = ArrayBuffer[Long]()
     for (i <- 0 until iters + 1) {
       val start = System.nanoTime()
 
       f(i)
 
       val end = System.nanoTime()
-      if (i != 0) totalTime += end - start
+      val runTime = end - start
+      if (i > 0) {
+        runTimes += runTime
+      }
 
       if (outputPerIteration) {
         // scalastyle:off
-        println(s"Iteration $i took ${(end - start) / 1000} microseconds")
+        println(s"Iteration $i took ${runTime / 1000} microseconds")
         // scalastyle:on
       }
     }
-    Result(totalTime.toDouble / 1000000 / iters, num * iters / (totalTime.toDouble / 1000))
+    val best = runTimes.min
+    val avg = runTimes.sum / iters
+    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
   }
 }
 
