@@ -101,7 +101,7 @@ class PolynomialExpansionSuite
       .setOutputCol("polyFeatures")
       .setDegree(1)
 
-    polynomialExpansion.transform(df).select("polyFeatures", "features").collect().foreach {
+    polynomialExpansion.transform(df).select("polyFeatures", "expected").collect().foreach {
       case Row(expanded: Vector, expected: Vector) =>
         assert(expanded ~== expected absTol 1e-1)
       case _ =>
