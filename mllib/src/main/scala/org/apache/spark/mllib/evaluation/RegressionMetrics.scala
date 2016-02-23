@@ -45,7 +45,7 @@ class RegressionMetrics @Since("2.0.0") (
    * @param predictionAndObservations a DataFrame with two double columns:
    *                                  prediction and observation
    */
-  private[mllib] def this(predictionAndObservations: DataFrame) =
+  def this(predictionAndObservations: DataFrame) =
     this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
@@ -53,7 +53,8 @@ class RegressionMetrics @Since("2.0.0") (
    */
   private lazy val summary: MultivariateStatisticalSummary = {
     val summary: MultivariateStatisticalSummary = predictionAndObservations.map {
-      case (prediction, observation) => Vectors.dense(observation, observation - prediction)
+      case (prediction, observation) => Vectors.dense(observation, observation - prediction,
+        math.log(prediction + 1) - math.log(observation + 1))
     }.aggregate(new MultivariateOnlineSummarizer())(
         (summary, v) => summary.add(v),
         (sum1, sum2) => sum1.merge(sum2)
@@ -63,6 +64,7 @@ class RegressionMetrics @Since("2.0.0") (
 
   private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
+  private lazy val SSlogerr = math.pow(summary.normL2(2), 2)
   private lazy val SStot = summary.variance(0) * (summary.count - 1)
   private lazy val SSreg = {
     val yMean = summary.mean(0)
@@ -106,6 +108,14 @@ class RegressionMetrics @Since("2.0.0") (
   @Since("1.2.0")
   def rootMeanSquaredError: Double = {
     math.sqrt(this.meanSquaredError)
+  }
+
+  @Since("2.0.0")
+  /**
+   * Returns the root mean squared log error.
+   */
+  def rootMeanSquaredLogError: Double = {
+    math.sqrt(SSlogerr / summary.count)
   }
 
   /**

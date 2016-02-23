@@ -50,6 +50,9 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         r2 = summary(model)$r.squared
         r2
         [1] 0.89968225
+        rmsle = sqrt(mean((log(preds + 1) - log(y + 1)) ^ 2))
+        rmsle
+        [1] 0.057325677
      */
     val preds = List(72.08, 91.88, 65.48, 52.28, 62.18, 81.98, 58.88, 78.68, 55.58)
     val predictionAndObservations = sc.parallelize(preds.zip(obs), 2)
@@ -61,6 +64,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.rootMeanSquaredError ~== 4.18802 absTol eps,
       "root mean squared error mismatch")
     assert(metrics.r2 ~== 0.89968225 absTol eps, "r2 score mismatch")
+    assert(metrics.rootMeanSquaredLogError ~== 0.057325677 absTol eps, "mean squared log error mismatch")
   }
 
   test("regression metrics for biased (no intercept term) predictor") {
@@ -89,6 +93,9 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         r2 = summary(model)$r.squared
         r2
         [1] 0.99185395
+        rmsle = sqrt(mean((log(preds + 1) - log(y + 1)) ^ 2))
+        rmsle
+        [1] 0.091265679
      */
     val preds = List(72.12, 99.17, 63.11, 45.08, 58.6, 85.65, 54.09, 81.14, 49.58)
     val predictionAndObservations = sc.parallelize(preds.zip(obs), 2)
@@ -100,6 +107,7 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.rootMeanSquaredError ~== 6.3212903 absTol eps,
       "root mean squared error mismatch")
     assert(metrics.r2 ~== 0.99185395 absTol eps, "r2 score mismatch")
+    assert(metrics.rootMeanSquaredLogError ~== 0.091265679 absTol eps, "mean squared log error mismatch")
   }
 
   test("regression metrics with complete fitting") {
@@ -121,6 +129,9 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
         r2 = 1 - sum((preds - y)^2)/sum((y - mean(y))^2)
         r2
         [1] 1
+        rmsle = sqrt(mean((log(preds + 1) - log(y + 1)) ^ 2))
+        rmsle
+        [1] 0
      */
     val preds = obs
     val predictionAndObservations = sc.parallelize(preds.zip(obs), 2)
@@ -132,5 +143,6 @@ class RegressionMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.rootMeanSquaredError ~== 0.0 absTol eps,
       "root mean squared error mismatch")
     assert(metrics.r2 ~== 1.0 absTol eps, "r2 score mismatch")
+    assert(metrics.rootMeanSquaredLogError ~== 0.0 absTol eps, "mean squared log error mismatch")
   }
 }
