@@ -327,7 +327,7 @@ class LogisticRegressionWithLBFGS(object):
     @classmethod
     @since('1.2.0')
     def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
-              intercept=False, corrections=10, tolerance=1e-4, validateData=True, numClasses=2):
+              intercept=False, corrections=10, tolerance=1e-6, validateData=True, numClasses=2):
         """
         Train a logistic regression model on the given data.
 
@@ -359,7 +359,7 @@ class LogisticRegressionWithLBFGS(object):
           (default: 10)
         :param tolerance:
           The convergence tolerance of iterations for L-BFGS.
-          (default: 1e-4)
+          (default: 1e-6)
         :param validateData:
           Boolean parameter which indicates if the algorithm should
           validate data before training.
