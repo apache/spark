@@ -43,40 +43,62 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   /**
    * The size of the block (in bytes)
    */
-  var size: Long = 0
+  def size: Long = _size
+  def size_=(s: Long): Unit = {
+    _size = s
+    checkInvariants()
+  }
+  private[this] var _size: Long = 0
 
   /**
    * The number of times that this block has been locked for reading.
    */
-  var readerCount: Int = 0
+  def readerCount: Int = _readerCount
+  def readerCount_=(c: Int): Unit = {
+    _readerCount = c
+    checkInvariants()
+  }
+  private[this] var _readerCount: Int = 0
 
   /**
    * The task attempt id of the task which currently holds the write lock for this block, or -1
    * if this block is not locked for writing.
    */
-  var writerTask: Long = -1
-
-  // Invariants:
-  //     (writerTask != -1) implies (readerCount == 0)
-  //     (readerCount != 0) implies (writerTask == -1)
-  // TODO: add assertions around every method
+  def writerTask: Long = _writerTask
+  def writerTask_=(t: Long): Unit = {
+    _writerTask = t
+    checkInvariants()
+  }
+  private[this] var _writerTask: Long = 0
 
   /**
    * True if this block has been removed from the BlockManager and false otherwise.
    * This field is used to communicate block deletion to blocked readers / writers (see its usage
    * in [[BlockInfoManager]]).
    */
-  var removed: Boolean = false
+  def removed: Boolean = _removed
+  def removed_=(r: Boolean): Unit = {
+    _removed = r
+    checkInvariants()
+  }
+  private[this] var _removed: Boolean = false
 
-  // TODO: Add timestamps on lock acquisitions
+  private def checkInvariants(): Unit = {
+    // A block's reader count must be non-negative:
+    assert(_readerCount >= 0)
+    // A block is either locked for reading or for writing, but not for both at the same time:
+    assert(!(_readerCount != 0 && _writerTask != -1))
+    // If a block is removed then it is not locked:
+    assert(!_removed || (_readerCount == 0 && _writerTask == -1))
+  }
+
+  checkInvariants()
 }
-// In debugging mode, check that locks haven't been held for too long.
-// Every few minutes, dump debug info.
 
 /**
  * Component of the [[BlockManager]] which tracks metadata for blocks and manages block locking.
  *
- * The locking interface exposed by this class is readers-writers lock. Every lock acquisition is
+ * The locking interface exposed by this class is readers-writer lock. Every lock acquisition is
  * automatically associated with a running task and locks are automatically released upon task
  * completion or failure.
  *
@@ -336,6 +358,8 @@ private[storage] class BlockInfoManager extends Logging {
             s"Task $currentTaskAttemptId called remove() on block $blockId without a write lock")
         } else {
           infos.remove(blockId)
+          blockInfo.readerCount = 0
+          blockInfo.writerTask = -1
           blockInfo.removed = true
         }
       case None =>
