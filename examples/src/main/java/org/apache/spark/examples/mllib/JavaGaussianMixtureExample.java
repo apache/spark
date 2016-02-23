@@ -61,7 +61,7 @@ public class JavaGaussianMixtureExample {
       "target/org.apache.spark.JavaGaussianMixtureExample/GaussianMixtureModel");
 
     // Output the parameters of the mixture model
-    for(int j=0; j<gmm.k(); j++) {
+    for (int j = 0; j < gmm.k(); j++) {
       System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
         gmm.weights()[j], gmm.gaussians()[j].mu(), gmm.gaussians()[j].sigma());
     }
