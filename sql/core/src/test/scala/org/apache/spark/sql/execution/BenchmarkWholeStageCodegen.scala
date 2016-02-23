@@ -38,6 +38,7 @@ import org.apache.spark.util.Benchmark
 class BenchmarkWholeStageCodegen extends SparkFunSuite {
   lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
     .set("spark.sql.shuffle.partitions", "1")
+    .set("spark.sql.autoBroadcastJoinThreshold", "0")
   lazy val sc = SparkContext.getOrCreate(conf)
   lazy val sqlContext = SQLContext.getOrCreate(sc)
 
@@ -184,6 +185,39 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     -------------------------------------------------------------------------------------------
     outer join w long codegen=false        15280 / 16497          6.9         145.7       1.0X
     outer join w long codegen=true            769 /  796        136.3           7.3      19.9X
+      */
+  }
+
+  ignore("sort merge join") {
+    val N = 2 << 20
+    runBenchmark("merge join", N) {
+      val df1 = sqlContext.range(N).selectExpr(s"id * 2 as k1")
+      val df2 = sqlContext.range(N).selectExpr(s"id * 3 as k2")
+      df1.join(df2, col("k1") === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    merge join:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    merge join codegen=false                 1588 / 1880          1.3         757.1       1.0X
+    merge join codegen=true                  1477 / 1531          1.4         704.2       1.1X
+      */
+
+    runBenchmark("sort merge join", N) {
+      val df1 = sqlContext.range(N)
+        .selectExpr(s"(id * 15485863) % ${N*10} as k1")
+      val df2 = sqlContext.range(N)
+        .selectExpr(s"(id * 15485867) % ${N*10} as k2")
+      df1.join(df2, col("k1") === col("k2")).count()
+    }
+
+    /**
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    sort merge join:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    -------------------------------------------------------------------------------------------
+    sort merge join codegen=false            3626 / 3667          0.6        1728.9       1.0X
+    sort merge join codegen=true             3405 / 3438          0.6        1623.8       1.1X
       */
   }
 
