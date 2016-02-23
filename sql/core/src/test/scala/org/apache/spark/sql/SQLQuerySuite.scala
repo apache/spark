@@ -1946,11 +1946,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
     // CreateStruct and CreateArray in project list (unresolved alias)
     assert(structDf.select(struct($"record.*")).first() == Row(Row(1, 1)))
-    assert(structDf.select(array($"record.*")).first().getAs[Seq[Int]](0) === Array(1, 1))
+    assert(structDf.select(array($"record.*")).first().getAs[Seq[Int]](0) === Seq(1, 1))
 
     // CreateStruct and CreateArray in project list (alias)
     assert(structDf.select(struct($"record.*").as("a")).first() == Row(Row(1, 1)))
-    assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Array(1, 1))
+    assert(structDf.select(array($"record.*").as("a")).first().getAs[Seq[Int]](0) === Seq(1, 1))
   }
 
   test("Common subexpression elimination") {
