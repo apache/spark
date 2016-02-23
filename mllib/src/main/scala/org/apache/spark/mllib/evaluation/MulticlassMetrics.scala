@@ -1,3 +1,4 @@
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -24,18 +25,17 @@ import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
- /**
-   * ::Experimental::
-   * Evaluator for multiclass classification.
-   *
-   * @param predictionAndLabels an RDD of (prediction, label) pairs.
-   */
+/**
+  * ::Experimental::
+  * Evaluator for multiclass classification.
+  *
+  * @param predictionAndLabels an RDD of (prediction, label) pairs.
+  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double)]) {
+class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Double)]) {
 
   /**
     * An auxiliary constructor taking a DataFrame.
-    *
     * @param predictionAndLabels a DataFrame with two double columns: prediction and label
     */
   private[mllib] def this(predictionAndLabels: DataFrame) =
@@ -83,7 +83,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns true positive rate for a given label (category)
-    *
     * @param label the label.
     */
   @Since("1.1.0")
@@ -91,7 +90,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns false positive rate for a given label (category)
-    *
     * @param label the label.
     */
   @Since("1.1.0")
@@ -102,7 +100,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns precision for a given label (category)
-    *
     * @param label the label.
     */
   @Since("1.1.0")
@@ -114,7 +111,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns recall for a given label (category)
-    *
     * @param label the label.
     */
   @Since("1.1.0")
@@ -122,9 +118,8 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns f-measure for a given label (category)
-    *
     * @param label the label.
-    * @param beta  the beta parameter.
+    * @param beta the beta parameter.
     */
   @Since("1.1.0")
   def fMeasure(label: Double, beta: Double): Double = {
@@ -136,7 +131,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns f1-measure for a given label (category)
-    *
     * @param label the label.
     */
   @Since("1.1.0")
@@ -198,7 +192,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
 
   /**
     * Returns weighted averaged f-measure
-    *
     * @param beta the beta parameter.
     */
   @Since("1.1.0")
@@ -219,7 +212,6 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
     */
   @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
-
 
   /**
     * Returns unweighted Cohen's Kappa
