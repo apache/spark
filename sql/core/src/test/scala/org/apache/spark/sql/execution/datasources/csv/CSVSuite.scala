@@ -28,6 +28,7 @@ import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsFile = "cars.csv"
+  private val carsMalformedFile = "cars-malformed.csv"
   private val carsFile8859 = "cars_iso-8859-1.csv"
   private val carsTsvFile = "cars.tsv"
   private val carsAltFile = "cars-alternative.csv"
@@ -55,7 +56,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val numRows = if (withHeader) numCars else numCars + 1
     // schema
     assert(df.schema.fieldNames.length === numColumns)
-    assert(df.collect().length === numRows)
+    assert(df.count === numRows)
 
     if (checkHeader) {
       if (withHeader) {
@@ -86,6 +87,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .format("csv")
       .option("header", "false")
       .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("simple csv test with calling another function to load") {
+    val cars = sqlContext
+      .read
+      .option("header", "false")
+      .csv(testFile(carsFile))
 
     verifyCars(cars, withHeader = false, checkTypes = false)
   }
@@ -189,6 +199,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
 
     assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
+  }
+
+  test("test for tokens more than the fields in the schema") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", "false")
+      .option("comment", "~")
+      .load(testFile(carsMalformedFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 
   test("test with null quote character") {

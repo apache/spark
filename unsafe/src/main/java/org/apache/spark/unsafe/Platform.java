@@ -27,9 +27,13 @@ public final class Platform {
 
   public static final int BYTE_ARRAY_OFFSET;
 
+  public static final int SHORT_ARRAY_OFFSET;
+
   public static final int INT_ARRAY_OFFSET;
 
   public static final int LONG_ARRAY_OFFSET;
+
+  public static final int FLOAT_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
 
@@ -168,13 +172,17 @@ public final class Platform {
 
     if (_UNSAFE != null) {
       BYTE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(byte[].class);
+      SHORT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(short[].class);
       INT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(int[].class);
       LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
+      FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
     } else {
       BYTE_ARRAY_OFFSET = 0;
+      SHORT_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;
       LONG_ARRAY_OFFSET = 0;
+      FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
     }
   }

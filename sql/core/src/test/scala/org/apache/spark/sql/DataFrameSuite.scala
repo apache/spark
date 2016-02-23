@@ -26,8 +26,8 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
-import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
@@ -109,6 +109,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       unionDF.agg(avg('key), max('key), min('key), sum('key)),
       Row(50.5, 100, 1, 25250) :: Nil
+    )
+  }
+
+  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
+    val rowRDD1 = sparkContext.parallelize(Seq(Row(1, new ExamplePoint(1.0, 2.0))))
+    val schema1 = StructType(Array(StructField("label", IntegerType, false),
+                    StructField("point", new ExamplePointUDT(), false)))
+    val rowRDD2 = sparkContext.parallelize(Seq(Row(2, new ExamplePoint(3.0, 4.0))))
+    val schema2 = StructType(Array(StructField("label", IntegerType, false),
+                    StructField("point", new ExamplePointUDT(), false)))
+    val df1 = sqlContext.createDataFrame(rowRDD1, schema1)
+    val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
+
+    checkAnswer(
+      df1.unionAll(df2).orderBy("label"),
+      Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
     )
   }
 
@@ -954,6 +970,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(expected === actual)
   }
 
+  test("Sorting columns are not in Filter and Project") {
+    checkAnswer(
+      upperCaseData.filter('N > 1).select('N).filter('N < 6).orderBy('L.asc),
+      Row(2) :: Row(3) :: Row(4) :: Row(5) :: Nil)
+  }
+
   test("SPARK-9323: DataFrame.orderBy should support nested column name") {
     val df = sqlContext.read.json(sparkContext.makeRDD(
       """{"a": {"b": 1}}""" :: Nil))
@@ -992,12 +1014,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-10034: Sort on Aggregate with aggregation expression named 'aggOrdering'") {
+  test("Alias uses internally generated names 'aggOrder' and 'havingCondition'") {
     val df = Seq(1 -> 2).toDF("i", "j")
-    val query = df.groupBy('i)
-      .agg(max('j).as("aggOrdering"))
+    val query1 = df.groupBy('i)
+      .agg(max('j).as("aggOrder"))
       .orderBy(sum('j))
-    checkAnswer(query, Row(1, 2))
+    checkAnswer(query1, Row(1, 2))
+
+    // In the plan, there are two attributes having the same name 'havingCondition'
+    // One is a user-provided alias name; another is an internally generated one.
+    val query2 = df.groupBy('i)
+      .agg(max('j).as("havingCondition"))
+      .where(sum('j) > 0)
+      .orderBy('havingCondition.asc)
+    checkAnswer(query2, Row(1, 2))
   }
 
   test("SPARK-10316: respect non-deterministic expressions in PhysicalOperation") {
@@ -1105,7 +1135,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         }
         atFirstAgg = true
       }
-      case e: Exchange => atFirstAgg = false
+      case e: ShuffleExchange => atFirstAgg = false
       case _ =>
     }
   }
@@ -1290,5 +1320,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       Seq(1 -> "a").toDF("i", "j").filter($"i".cast(StringType) === "1"),
       Row(1, "a"))
+  }
+
+  test("SPARK-12982: Add table name validation in temp table registration") {
+    val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
+    // invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("t~"))
+    // valid table name test as below
+    df.registerTempTable("table1")
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    // another invalid table name test as below
+    intercept[AnalysisException](df.registerTempTable("table!#"))
   }
 }

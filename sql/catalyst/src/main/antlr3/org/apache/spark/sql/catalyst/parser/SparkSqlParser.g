@@ -96,6 +96,10 @@ TOK_RIGHTOUTERJOIN;
 TOK_FULLOUTERJOIN;
 TOK_UNIQUEJOIN;
 TOK_CROSSJOIN;
+TOK_NATURALJOIN;
+TOK_NATURALLEFTOUTERJOIN;
+TOK_NATURALRIGHTOUTERJOIN;
+TOK_NATURALFULLOUTERJOIN;
 TOK_LOAD;
 TOK_EXPORT;
 TOK_IMPORT;
@@ -142,6 +146,7 @@ TOK_UNIONTYPE;
 TOK_COLTYPELIST;
 TOK_CREATEDATABASE;
 TOK_CREATETABLE;
+TOK_CREATETABLEUSING;
 TOK_TRUNCATETABLE;
 TOK_CREATEINDEX;
 TOK_CREATEINDEX_INDEXTBLNAME;
@@ -371,6 +376,10 @@ TOK_TXN_READ_WRITE;
 TOK_COMMIT;
 TOK_ROLLBACK;
 TOK_SET_AUTOCOMMIT;
+TOK_REFRESHTABLE;
+TOK_TABLEPROVIDER;
+TOK_TABLEOPTIONS;
+TOK_TABLEOPTION;
 TOK_CACHETABLE;
 TOK_UNCACHETABLE;
 TOK_CLEARCACHE;
@@ -660,6 +669,12 @@ import java.util.HashMap;
   }
   private char [] excludedCharForColumnName = {'.', ':'};
   private boolean containExcludedCharForCreateTableColumnName(String input) {
+    if (input.length() > 0) {
+      if (input.charAt(0) == '`' && input.charAt(input.length() - 1) == '`') {
+        // When column name is backquoted, we don't care about excluded chars.
+        return false;
+      }
+    }
     for(char c : excludedCharForColumnName) {
       if(input.indexOf(c)>-1) {
         return true;
@@ -706,6 +721,18 @@ statement
     | KW_DFS -> ^(TOK_DFS)
     | (KW_SET)=> KW_SET -> ^(TOK_SETCONFIG)
 	;
+
+// Rule for expression parsing
+singleNamedExpression
+    :
+    namedExpression EOF
+    ;
+
+// Rule for table name parsing
+singleTableName
+    :
+    tableName EOF
+    ;
 
 explainStatement
 @init { pushMsg("explain statement", state); }
@@ -781,6 +808,7 @@ ddlStatement
     | truncateTableStatement
     | alterStatement
     | descStatement
+    | refreshStatement
     | showStatement
     | metastoreCheck
     | createViewStatement
@@ -907,12 +935,31 @@ createTableStatement
 @init { pushMsg("create table statement", state); }
 @after { popMsg(state); }
     : KW_CREATE (temp=KW_TEMPORARY)? (ext=KW_EXTERNAL)? KW_TABLE ifNotExists? name=tableName
-      (  like=KW_LIKE likeName=tableName
+      (
+         like=KW_LIKE likeName=tableName
          tableRowFormat?
          tableFileFormat?
          tableLocation?
          tablePropertiesPrefixed?
+      -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+         ^(TOK_LIKETABLE $likeName?)
+         tableRowFormat?
+         tableFileFormat?
+         tableLocation?
+         tablePropertiesPrefixed?
+         )
+      |
+         (tableProvider) => tableProvider
+         tableOpts?
+         (KW_AS selectStatementWithCTE)?
+      -> ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+          tableProvider
+          tableOpts?
+          selectStatementWithCTE?
+          )
        | (LPAREN columnNameTypeList RPAREN)?
+         (p=tableProvider?)
+         tableOpts?
          tableComment?
          tablePartition?
          tableBuckets?
@@ -922,8 +969,15 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          (KW_AS selectStatementWithCTE)?
-      )
-    -> ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
+      -> {p != null}?
+         ^(TOK_CREATETABLEUSING $name $temp? ifNotExists?
+         columnNameTypeList?
+         $p
+         tableOpts?
+         selectStatementWithCTE?
+         )
+      ->
+         ^(TOK_CREATETABLE $name $temp? $ext? ifNotExists?
          ^(TOK_LIKETABLE $likeName?)
          columnNameTypeList?
          tableComment?
@@ -935,7 +989,8 @@ createTableStatement
          tableLocation?
          tablePropertiesPrefixed?
          selectStatementWithCTE?
-        )
+         )
+      )
     ;
 
 truncateTableStatement
@@ -1379,6 +1434,13 @@ tabPartColTypeExpr
     :  tableName partitionSpec? extColumnName? -> ^(TOK_TABTYPE tableName partitionSpec? extColumnName?)
     ;
 
+refreshStatement
+@init { pushMsg("refresh statement", state); }
+@after { popMsg(state); }
+    :
+    KW_REFRESH KW_TABLE tableName -> ^(TOK_REFRESHTABLE tableName)
+    ;
+
 descStatement
 @init { pushMsg("describe statement", state); }
 @after { popMsg(state); }
@@ -1774,6 +1836,30 @@ showStmtIdentifier
     | StringLiteral
     ;
 
+tableProvider
+@init { pushMsg("table's provider", state); }
+@after { popMsg(state); }
+    :
+      KW_USING Identifier (DOT Identifier)*
+    -> ^(TOK_TABLEPROVIDER Identifier+)
+    ;
+
+optionKeyValue
+@init { pushMsg("table's option specification", state); }
+@after { popMsg(state); }
+    :
+       (looseIdentifier (DOT looseIdentifier)*) StringLiteral
+    -> ^(TOK_TABLEOPTION looseIdentifier+ StringLiteral)
+    ;
+
+tableOpts
+@init { pushMsg("table's options", state); }
+@after { popMsg(state); }
+    :
+      KW_OPTIONS LPAREN optionKeyValue (COMMA optionKeyValue)* RPAREN
+    -> ^(TOK_TABLEOPTIONS optionKeyValue+)
+    ;
+
 tableComment
 @init { pushMsg("table's comment", state); }
 @after { popMsg(state); }
@@ -2132,7 +2218,7 @@ structType
 mapType
 @init { pushMsg("map type", state); }
 @after { popMsg(state); }
-    : KW_MAP LESSTHAN left=primitiveType COMMA right=type GREATERTHAN
+    : KW_MAP LESSTHAN left=type COMMA right=type GREATERTHAN
     -> ^(TOK_MAP $left $right)
     ;
 
@@ -2234,6 +2320,26 @@ regularBody[boolean topLevel]
    )
    |
    selectStatement[topLevel]
+   |
+   (LPAREN selectStatement0[true]) => nestedSetOpSelectStatement[topLevel]
+   ;
+
+nestedSetOpSelectStatement[boolean topLevel]
+   :
+   (
+   LPAREN s=selectStatement0[topLevel] RPAREN -> {$s.tree}
+   )
+   (set=setOpSelectStatement[$nestedSetOpSelectStatement.tree, topLevel])
+   -> {set == null}?
+      {$nestedSetOpSelectStatement.tree}
+   -> {$set.tree}
+   ;
+
+selectStatement0[boolean topLevel]
+   :
+   (selectStatement[true]) => selectStatement[topLevel]
+   |
+   (nestedSetOpSelectStatement[true]) => nestedSetOpSelectStatement[topLevel]
    ;
 
 selectStatement[boolean topLevel]
@@ -2284,34 +2390,8 @@ setOpSelectStatement[CommonTree t, boolean topLevel]
     u=setOperator LPAREN b=simpleSelectStatement RPAREN
     |
     u=setOperator b=simpleSelectStatement)
-   -> {$setOpSelectStatement.tree != null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_QUERY
-          ^(TOK_FROM
-            ^(TOK_SUBQUERY
-              ^($u {$setOpSelectStatement.tree} $b)
-              {adaptor.create(Identifier, generateUnionAlias())}
-             )
-          )
-          ^(TOK_INSERT
-             ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
-             ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
-          )
-       )
-   -> {$setOpSelectStatement.tree != null && $u.tree.getType()!=SparkSqlParser.TOK_UNIONDISTINCT}?
+   -> {$setOpSelectStatement.tree != null}?
       ^($u {$setOpSelectStatement.tree} $b)
-   -> {$setOpSelectStatement.tree == null && $u.tree.getType()==SparkSqlParser.TOK_UNIONDISTINCT}?
-      ^(TOK_QUERY
-          ^(TOK_FROM
-            ^(TOK_SUBQUERY
-              ^($u {$t} $b)
-              {adaptor.create(Identifier, generateUnionAlias())}
-             )
-           )
-          ^(TOK_INSERT
-            ^(TOK_DESTINATION ^(TOK_DIR TOK_TMP_FILE))
-            ^(TOK_SELECTDI ^(TOK_SELEXPR TOK_ALLCOLREF))
-         )
-       )
    -> ^($u {$t} $b)
    )+
    o=orderByClause?

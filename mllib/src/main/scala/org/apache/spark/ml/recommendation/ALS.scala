@@ -496,7 +496,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     }
 
     /**
-     * Solves a nonnegative least squares problem with L2 regularizatin:
+     * Solves a nonnegative least squares problem with L2 regularization:
      *
      *   min_x_  norm(A x - b)^2^ + lambda * n * norm(x)^2^
      *   subject to x >= 0
@@ -1301,7 +1301,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * Partitioner used by ALS. We requires that getPartition is a projection. That is, for any key k,
-   * we have getPartition(getPartition(k)) = getPartition(k). Since the the default HashPartitioner
+   * we have getPartition(getPartition(k)) = getPartition(k). Since the default HashPartitioner
    * satisfies this requirement, we simply use a type alias here.
    */
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner

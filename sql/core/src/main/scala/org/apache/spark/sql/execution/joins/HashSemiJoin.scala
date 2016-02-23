@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.LongSQLMetric
 
@@ -42,56 +43,18 @@ trait HashSemiJoin {
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  protected def buildKeyHashSet(
-      buildIter: Iterator[InternalRow], numBuildRows: LongSQLMetric): java.util.Set[InternalRow] = {
-    val hashSet = new java.util.HashSet[InternalRow]()
-
-    // Create a Hash set of buildKeys
-    val rightKey = rightKeyGenerator
-    while (buildIter.hasNext) {
-      val currentRow = buildIter.next()
-      numBuildRows += 1
-      val rowKey = rightKey(currentRow)
-      if (!rowKey.anyNull) {
-        val keyExists = hashSet.contains(rowKey)
-        if (!keyExists) {
-          hashSet.add(rowKey.copy())
-        }
-      }
-    }
-
-    hashSet
-  }
-
-  protected def hashSemiJoin(
-    streamIter: Iterator[InternalRow],
-    numStreamRows: LongSQLMetric,
-    hashSet: java.util.Set[InternalRow],
-    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
-    val joinKeys = leftKeyGenerator
-    streamIter.filter(current => {
-      numStreamRows += 1
-      val key = joinKeys(current)
-      val r = !key.anyNull && hashSet.contains(key)
-      if (r) numOutputRows += 1
-      r
-    })
-  }
-
   protected def hashSemiJoin(
       streamIter: Iterator[InternalRow],
-      numStreamRows: LongSQLMetric,
       hashedRelation: HashedRelation,
       numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
     val joinKeys = leftKeyGenerator
     val joinedRow = new JoinedRow
     streamIter.filter { current =>
-      numStreamRows += 1
       val key = joinKeys(current)
       lazy val rowBuffer = hashedRelation.get(key)
-      val r = !key.anyNull && rowBuffer != null && rowBuffer.exists {
+      val r = !key.anyNull && rowBuffer != null && (condition.isEmpty || rowBuffer.exists {
         (row: InternalRow) => boundCondition(joinedRow(current, row))
-      }
+      })
       if (r) numOutputRows += 1
       r
     }

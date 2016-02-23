@@ -447,7 +447,23 @@ class StandaloneDynamicAllocationSuite
     apps = getApplications()
     // kill executor successfully
     assert(apps.head.executors.size === 1)
+  }
 
+  test("initial executor limit") {
+    val initialExecutorLimit = 1
+    val myConf = appConf
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.shuffle.service.enabled", "true")
+      .set("spark.dynamicAllocation.initialExecutors", initialExecutorLimit.toString)
+    sc = new SparkContext(myConf)
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === initialExecutorLimit)
+      assert(apps.head.getExecutorLimit === initialExecutorLimit)
+    }
   }
 
   // ===============================
@@ -540,7 +556,6 @@ class StandaloneDynamicAllocationSuite
     val missingExecutors = masterExecutors.toSet.diff(driverExecutors.toSet).toSeq.sorted
     missingExecutors.foreach { id =>
       // Fake an executor registration so the driver knows about us
-      val port = System.currentTimeMillis % 65536
       val endpointRef = mock(classOf[RpcEndpointRef])
       val mockAddress = mock(classOf[RpcAddress])
       when(endpointRef.address).thenReturn(mockAddress)

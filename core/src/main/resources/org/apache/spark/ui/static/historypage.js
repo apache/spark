@@ -118,6 +118,7 @@ $(document).ready(function() {
                         {name: 'seventh'},
                         {name: 'eighth'},
                     ],
+                    "autoWidth": false
         };
 
         var rowGroupConf = {

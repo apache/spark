@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
@@ -58,6 +61,9 @@ public final class ColumnarBatch {
 
   // Total number of rows that have been filtered.
   private int numRowsFiltered = 0;
+
+  // Staging row returned from getRow.
+  final Row row;
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
     return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
@@ -120,24 +126,36 @@ public final class ColumnarBatch {
 
     @Override
     /**
-     * Revisit this. This is expensive.
+     * Revisit this. This is expensive. This is currently only used in test paths.
      */
     public final InternalRow copy() {
-      UnsafeRow row = new UnsafeRow(numFields());
-      row.pointTo(new byte[fixedLenRowSize], fixedLenRowSize);
+      GenericMutableRow row = new GenericMutableRow(columns.length);
       for (int i = 0; i < numFields(); i++) {
         if (isNullAt(i)) {
           row.setNullAt(i);
         } else {
           DataType dt = columns[i].dataType();
-          if (dt instanceof IntegerType) {
+          if (dt instanceof BooleanType) {
+            row.setBoolean(i, getBoolean(i));
+          } else if (dt instanceof IntegerType) {
             row.setInt(i, getInt(i));
           } else if (dt instanceof LongType) {
             row.setLong(i, getLong(i));
+          } else if (dt instanceof FloatType) {
+              row.setFloat(i, getFloat(i));
           } else if (dt instanceof DoubleType) {
             row.setDouble(i, getDouble(i));
+          } else if (dt instanceof StringType) {
+            row.update(i, getUTF8String(i));
+          } else if (dt instanceof BinaryType) {
+            row.update(i, getBinary(i));
+          } else if (dt instanceof DecimalType) {
+            DecimalType t = (DecimalType)dt;
+            row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
+          } else if (dt instanceof DateType) {
+            row.setInt(i, getInt(i));
           } else {
-            throw new RuntimeException("Not implemented.");
+            throw new RuntimeException("Not implemented. " + dt);
           }
         }
       }
@@ -150,44 +168,40 @@ public final class ColumnarBatch {
     }
 
     @Override
-    public final boolean isNullAt(int ordinal) {
-      return columns[ordinal].getIsNull(rowId);
-    }
+    public final boolean isNullAt(int ordinal) { return columns[ordinal].getIsNull(rowId); }
 
     @Override
-    public final boolean getBoolean(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final boolean getBoolean(int ordinal) { return columns[ordinal].getBoolean(rowId); }
 
     @Override
     public final byte getByte(int ordinal) { return columns[ordinal].getByte(rowId); }
 
     @Override
-    public final short getShort(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final short getShort(int ordinal) { return columns[ordinal].getShort(rowId); }
 
     @Override
-    public final int getInt(int ordinal) {
-      return columns[ordinal].getInt(rowId);
-    }
+    public final int getInt(int ordinal) { return columns[ordinal].getInt(rowId); }
 
     @Override
     public final long getLong(int ordinal) { return columns[ordinal].getLong(rowId); }
 
     @Override
-    public final float getFloat(int ordinal) {
-      throw new NotImplementedException();
-    }
+    public final float getFloat(int ordinal) { return columns[ordinal].getFloat(rowId); }
 
     @Override
-    public final double getDouble(int ordinal) {
-      return columns[ordinal].getDouble(rowId);
-    }
+    public final double getDouble(int ordinal) { return columns[ordinal].getDouble(rowId); }
 
     @Override
     public final Decimal getDecimal(int ordinal, int precision, int scale) {
-      throw new NotImplementedException();
+      if (precision <= Decimal.MAX_LONG_DIGITS()) {
+        return Decimal.apply(getLong(ordinal), precision, scale);
+      } else {
+        // TODO: best perf?
+        byte[] bytes = getBinary(ordinal);
+        BigInteger bigInteger = new BigInteger(bytes);
+        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+        return Decimal.apply(javaDecimal, precision, scale);
+      }
     }
 
     @Override
@@ -198,12 +212,17 @@ public final class ColumnarBatch {
 
     @Override
     public final byte[] getBinary(int ordinal) {
-      throw new NotImplementedException();
+      ColumnVector.Array array = columns[ordinal].getByteArray(rowId);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
     }
 
     @Override
     public final CalendarInterval getInterval(int ordinal) {
-      throw new NotImplementedException();
+      final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
+      final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
+      return new CalendarInterval(months, microseconds);
     }
 
     @Override
@@ -312,6 +331,16 @@ public final class ColumnarBatch {
   public ColumnVector column(int ordinal) { return columns[ordinal]; }
 
   /**
+   * Returns the row in this batch at `rowId`. Returned row is reused across calls.
+   */
+  public ColumnarBatch.Row getRow(int rowId) {
+    assert(rowId >= 0);
+    assert(rowId < numRows);
+    row.rowId = rowId;
+    return row;
+  }
+
+  /**
    * Marks this row as being filtered out. This means a subsequent iteration over the rows
    * in this batch will not include this row.
    */
@@ -331,5 +360,7 @@ public final class ColumnarBatch {
       StructField field = schema.fields()[i];
       columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
     }
+
+    this.row = new Row(this);
   }
 }

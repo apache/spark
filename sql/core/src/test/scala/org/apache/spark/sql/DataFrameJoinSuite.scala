@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -40,6 +42,22 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.join(df2, Seq("int", "int2")),
       Row(1, 2, "1", "2") :: Row(2, 3, "2", "3") :: Row(3, 4, "3", "4") :: Nil)
+  }
+
+  test("join - sorted columns not in join's outputSet") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str_sort").as('df1)
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as('df2)
+    val df3 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as('df3)
+
+    checkAnswer(
+      df.join(df2, $"df1.int" === $"df2.int", "outer").select($"df1.int", $"df2.int2")
+        .orderBy('str_sort.asc, 'str.asc),
+      Row(null, 6) :: Row(1, 3) :: Row(3, null) :: Nil)
+
+    checkAnswer(
+      df2.join(df3, $"df2.int" === $"df3.int", "inner")
+        .select($"df2.int", $"df3.int").orderBy($"df2.str".desc),
+      Row(5, 5) :: Row(1, 1) :: Nil)
   }
 
   test("join - join using multiple columns and specifying join type") {
@@ -139,5 +157,51 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
       val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
       assert(df1.join(broadcast(pf1)).count() === 4)
     }
+  }
+
+  test("join - outer join conversion") {
+    val df = Seq((1, 2, "1"), (3, 4, "3")).toDF("int", "int2", "str").as("a")
+    val df2 = Seq((1, 3, "1"), (5, 6, "5")).toDF("int", "int2", "str").as("b")
+
+    // outer -> left
+    val outerJoin2Left = df.join(df2, $"a.int" === $"b.int", "outer").where($"a.int" === 3)
+    assert(outerJoin2Left.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, _, LeftOuter, _) => j }.size === 1)
+    checkAnswer(
+      outerJoin2Left,
+      Row(3, 4, "3", null, null, null) :: Nil)
+
+    // outer -> right
+    val outerJoin2Right = df.join(df2, $"a.int" === $"b.int", "outer").where($"b.int" === 5)
+    assert(outerJoin2Right.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, _, RightOuter, _) => j }.size === 1)
+    checkAnswer(
+      outerJoin2Right,
+      Row(null, null, null, 5, 6, "5") :: Nil)
+
+    // outer -> inner
+    val outerJoin2Inner = df.join(df2, $"a.int" === $"b.int", "outer").
+      where($"a.int" === 1 && $"b.int2" === 3)
+    assert(outerJoin2Inner.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, _, Inner, _) => j }.size === 1)
+    checkAnswer(
+      outerJoin2Inner,
+      Row(1, 2, "1", 1, 3, "1") :: Nil)
+
+    // right -> inner
+    val rightJoin2Inner = df.join(df2, $"a.int" === $"b.int", "right").where($"a.int" === 1)
+    assert(rightJoin2Inner.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, _, Inner, _) => j }.size === 1)
+    checkAnswer(
+      rightJoin2Inner,
+      Row(1, 2, "1", 1, 3, "1") :: Nil)
+
+    // left -> inner
+    val leftJoin2Inner = df.join(df2, $"a.int" === $"b.int", "left").where($"b.int2" === 3)
+    assert(leftJoin2Inner.queryExecution.optimizedPlan.collect {
+      case j @ Join(_, _, Inner, _) => j }.size === 1)
+    checkAnswer(
+      leftJoin2Inner,
+      Row(1, 2, "1", 1, 3, "1") :: Nil)
   }
 }

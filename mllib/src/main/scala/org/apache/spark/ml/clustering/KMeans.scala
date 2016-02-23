@@ -270,7 +270,7 @@ class KMeans @Since("1.5.0") (
       .setSeed($(seed))
       .setEpsilon($(tol))
     val parentModel = algo.run(rdd)
-    val model = copyValues(new KMeansModel(uid, parentModel))
+    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(model.transform(dataset), $(predictionCol), $(featuresCol))
     model.setSummary(summary)
   }

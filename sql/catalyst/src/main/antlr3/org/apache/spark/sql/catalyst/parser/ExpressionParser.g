@@ -205,6 +205,8 @@ atomExpression
     | whenExpression
     | (functionName LPAREN) => function
     | tableOrColumn
+    | (LPAREN KW_SELECT) => subQueryExpression
+      -> ^(TOK_SUBQUERY_EXPR ^(TOK_SUBQUERY_OP) subQueryExpression)
     | LPAREN! expression RPAREN!
     ;
 
@@ -493,6 +495,16 @@ descFuncNames
     | functionIdentifier
     ;
 
+//We are allowed to use From and To in CreateTableUsing command's options (actually seems we can use any string as the option key). But we can't simply add them into nonReserved because by doing that we mess other existing rules. So we create a looseIdentifier and looseNonReserved here.
+looseIdentifier
+    :
+    Identifier
+    | looseNonReserved -> Identifier[$looseNonReserved.text]
+    // If it decides to support SQL11 reserved keywords, i.e., useSQL11ReservedKeywordsForIdentifier()=false,
+    // the sql11keywords in existing q tests will NOT be added back.
+    | {useSQL11ReservedKeywordsForIdentifier()}? sql11ReservedKeywordsUsedAsIdentifier -> Identifier[$sql11ReservedKeywordsUsedAsIdentifier.text]
+    ;
+
 identifier
     :
     Identifier
@@ -514,6 +526,10 @@ principalIdentifier
 @after { gParent.popMsg(state); }
     : identifier
     | QuotedIdentifier
+    ;
+
+looseNonReserved
+    : nonReserved | KW_FROM | KW_TO
     ;
 
 //The new version of nonReserved + sql11ReservedKeywordsUsedAsIdentifier = old version of nonReserved

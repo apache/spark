@@ -127,7 +127,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val param = AccumulatorParam.LongAccumulatorParam
     val acc1 = new Accumulator(0L, param, Some("x"), internal = false, countFailedValues = true)
     val acc2 = new Accumulator(0L, param, Some("y"), internal = false, countFailedValues = false)
-    val initialAccums = InternalAccumulator.create()
+    val initialAccums = InternalAccumulator.createAll()
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
     val task = new Task[Int](0, 0, 0, Seq.empty[Accumulator[_]]) {
