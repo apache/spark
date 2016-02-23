@@ -44,7 +44,6 @@ class KinesisConfigSuite extends KinesisFunSuite {
     assert(kclConfig.getStreamName() == kinesisStreamName)
     assert(kclConfig.getInitialPositionInStream() == streamPosition)
     assert(kclConfig.getApplicationName() == kinesisAppName)
-    assert(kclConfig.getRegionName() == regionName)
     assert(kclConfig.getKinesisEndpoint() == endpointUrl)
   }
 

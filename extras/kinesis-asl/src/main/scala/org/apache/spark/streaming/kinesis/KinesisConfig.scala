@@ -64,7 +64,7 @@ case class KinesisConfig(
     awsCredentialsOption: Option[SerializableAWSCredentials] = None,
     dynamoEndpointUrl: Option[String] = None,
     dynamoCredentials: Option[SerializableAWSCredentials] = None
-    ) {
+    ) extends Serializable {
 
   /**
    * Builds a KinesisClientLibConfiguration object, which contains all the configuration options
@@ -86,7 +86,6 @@ case class KinesisConfig(
       .withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream)
       .withTaskBackoffTimeMillis(500)
-      .withRegionName(regionName)
     return kinesisClientLibConfiguration
 
   }
@@ -101,11 +100,12 @@ case class KinesisConfig(
     } else {
       new AmazonDynamoDBClient(resolveAWSCredentialsProvider())
     }
-    client.setRegion(region)
+
     if (dynamoEndpointUrl.isDefined) {
-      client.setEndpoint(dynamoEndpointUrl.get)
+      client.withEndpoint(dynamoEndpointUrl.get)
+    } else {
+      client.withRegion(region)
     }
-    client
   }
 
   /**
@@ -113,9 +113,7 @@ case class KinesisConfig(
    */
   def buildKinesisClient(): AmazonKinesisClient = {
     val client = new AmazonKinesisClient(resolveAWSCredentialsProvider())
-    client.setRegion(region)
-    client.setEndpoint(endpointUrl)
-    client
+    client.withEndpoint(endpointUrl)
 
   }
 
@@ -124,9 +122,7 @@ case class KinesisConfig(
    */
   def buildCloudwatchClient(): AmazonCloudWatchClient = {
     val client = new AmazonCloudWatchClient(resolveAWSCredentialsProvider())
-    client.setRegion(region)
-    client
-
+    client.withRegion(region)
   }
 
   /**

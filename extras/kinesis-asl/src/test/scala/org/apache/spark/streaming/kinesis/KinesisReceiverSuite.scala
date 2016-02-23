@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions._
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.types.{ShutdownReason, InitializationInput, ProcessRecordsInput, ShutdownInput}
 import com.amazonaws.services.kinesis.model.Record
 import org.mockito.Matchers._
 import org.mockito.Matchers.{eq => meq}
@@ -53,6 +53,14 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   val record2 = new Record()
   record2.setData(ByteBuffer.wrap("Learning Spark".getBytes(StandardCharsets.UTF_8)))
   val batch = Arrays.asList(record1, record2)
+  val initInput = new InitializationInput()
+  .withShardId(shardId)
+
+  var recordInput = new ProcessRecordsInput()
+  .withRecords(batch)
+
+  var shutdownInput = new ShutdownInput()
+  .withShutdownReason(ShutdownReason.TERMINATE)
 
   var receiverMock: KinesisReceiver[Array[Byte]] = _
   var checkpointerMock: IRecordProcessorCheckpointer = _
@@ -60,6 +68,8 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
   override def beforeFunction(): Unit = {
     receiverMock = mock[KinesisReceiver[Array[Byte]]]
     checkpointerMock = mock[IRecordProcessorCheckpointer]
+    recordInput = recordInput.withCheckpointer(checkpointerMock)
+    shutdownInput = shutdownInput.withCheckpointer(checkpointerMock)
   }
 
   test("check serializability of SerializableAWSCredentials") {
@@ -71,8 +81,8 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.isStopped()).thenReturn(false)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    recordProcessor.initialize(initInput)
+    recordProcessor.processRecords(recordInput)
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, times(1)).addRecords(shardId, batch)
@@ -83,7 +93,7 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.isStopped()).thenReturn(true)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.processRecords(batch, checkpointerMock)
+    recordProcessor.processRecords(recordInput)
 
     verify(receiverMock, times(1)).isStopped()
     verify(receiverMock, never).addRecords(anyString, anyListOf(classOf[Record]))
@@ -98,8 +108,8 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
 
     intercept[RuntimeException] {
       val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-      recordProcessor.initialize(shardId)
-      recordProcessor.processRecords(batch, checkpointerMock)
+      recordProcessor.initialize(initInput)
+      recordProcessor.processRecords(recordInput)
     }
 
     verify(receiverMock, times(1)).isStopped()
@@ -111,8 +121,8 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.shutdown(checkpointerMock, ShutdownReason.TERMINATE)
+    recordProcessor.initialize(initInput)
+    recordProcessor.shutdown(shutdownInput)
 
     verify(receiverMock, times(1)).removeCheckpointer(meq(shardId), meq(checkpointerMock))
   }
@@ -122,9 +132,9 @@ class KinesisReceiverSuite extends TestSuiteBase with Matchers with BeforeAndAft
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     val recordProcessor = new KinesisRecordProcessor(receiverMock, workerId)
-    recordProcessor.initialize(shardId)
-    recordProcessor.shutdown(checkpointerMock, ShutdownReason.ZOMBIE)
-    recordProcessor.shutdown(checkpointerMock, null)
+    recordProcessor.initialize(initInput)
+    recordProcessor.shutdown(shutdownInput.withShutdownReason(ShutdownReason.ZOMBIE))
+    recordProcessor.shutdown(shutdownInput.withShutdownReason(null))
 
     verify(receiverMock, times(2)).removeCheckpointer(meq(shardId),
       meq[IRecordProcessorCheckpointer](null))

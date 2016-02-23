@@ -132,8 +132,6 @@ class KinesisSequenceRangeIterator(
   private var lastSeqNumber: String = null
   private var internalIterator: Iterator[Record] = null
 
-  client.setEndpoint(config.endpointUrl)
-
   override protected def getNext(): Record = {
     var nextRecord: Record = null
     if (toSeqNumberReceived) {

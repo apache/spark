@@ -23,7 +23,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.v2.{IRecordProcessor, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
 import com.amazonaws.services.kinesis.model.Record
 
@@ -32,7 +33,6 @@ import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
 import org.apache.spark.Logging
-
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
@@ -60,7 +60,7 @@ import org.apache.spark.Logging
  * @param storageLevel Storage level to use for storing the received objects
  */
 private[kinesis] class KinesisReceiver[T](
-    config: KinesisConfig,
+    val config: KinesisConfig,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T)
@@ -132,8 +132,14 @@ private[kinesis] class KinesisReceiver[T](
         new KinesisRecordProcessor(receiver, workerId)
     }
 
-    worker = new Worker(recordProcessorFactory, config.buildKCLConfig(workerId),
-        config.buildKinesisClient(), config.buildDynamoClient(), config.buildCloudwatchClient())
+    worker = new Worker.Builder()
+      .recordProcessorFactory(recordProcessorFactory)
+      .config(config.buildKCLConfig(workerId))
+      .kinesisClient(config.buildKinesisClient())
+      .dynamoDBClient(config.buildDynamoClient())
+      .cloudWatchClient(config.buildCloudwatchClient())
+      .build()
+
     workerThread = new Thread() {
       override def run(): Unit = {
         try {
