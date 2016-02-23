@@ -288,6 +288,11 @@ However, it is also a well-established method for choosing parameters which is m
 {% include_example python/ml/cross_validator.py %}
 </div>
 
+<div data-lang="python">
+
+{% include_example python/ml/cross_validator.py %}
+</div>
+
 </div>
 
 ## Example: model selection via train validation split
