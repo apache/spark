@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
+
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.tags.DockerTest
@@ -39,7 +40,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
   }
 
-  test("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
+  ignore("SPARK-12941: String datatypes to be mapped to Varchar in Oracle") {
     // create a sample dataframe with string type
     val df1 = sparkContext.parallelize(Seq(("foo"))).toDF("x")
     // write the dataframe to the oracle table tbl
