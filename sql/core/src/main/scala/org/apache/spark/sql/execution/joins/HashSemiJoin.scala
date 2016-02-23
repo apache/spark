@@ -43,24 +43,6 @@ trait HashSemiJoin {
   @transient private lazy val boundCondition =
     newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
 
-  protected def buildKeyHashSet(
-      buildIter: Iterator[InternalRow]): java.util.Set[InternalRow] = {
-    HashSemiJoin.buildKeyHashSet(rightKeys, right.output, buildIter)
-  }
-
-  protected def hashSemiJoin(
-    streamIter: Iterator[InternalRow],
-    hashSet: java.util.Set[InternalRow],
-    numOutputRows: LongSQLMetric): Iterator[InternalRow] = {
-    val joinKeys = leftKeyGenerator
-    streamIter.filter(current => {
-      val key = joinKeys(current)
-      val r = !key.anyNull && hashSet.contains(key)
-      if (r) numOutputRows += 1
-      r
-    })
-  }
-
   protected def hashSemiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation,
@@ -70,44 +52,11 @@ trait HashSemiJoin {
     streamIter.filter { current =>
       val key = joinKeys(current)
       lazy val rowBuffer = hashedRelation.get(key)
-      val r = !key.anyNull && rowBuffer != null && rowBuffer.exists {
+      val r = !key.anyNull && rowBuffer != null && (condition.isEmpty || rowBuffer.exists {
         (row: InternalRow) => boundCondition(joinedRow(current, row))
-      }
+      })
       if (r) numOutputRows += 1
       r
     }
-  }
-}
-
-private[execution] object HashSemiJoin {
-  def buildKeyHashSet(
-    keys: Seq[Expression],
-    attributes: Seq[Attribute],
-    rows: Iterator[InternalRow]): java.util.HashSet[InternalRow] = {
-    val hashSet = new java.util.HashSet[InternalRow]()
-
-    // Create a Hash set of buildKeys
-    val key = UnsafeProjection.create(keys, attributes)
-    while (rows.hasNext) {
-      val currentRow = rows.next()
-      val rowKey = key(currentRow)
-      if (!rowKey.anyNull) {
-        val keyExists = hashSet.contains(rowKey)
-        if (!keyExists) {
-          hashSet.add(rowKey.copy())
-        }
-      }
-    }
-    hashSet
-  }
-}
-
-/** HashSetBroadcastMode requires that the input rows are broadcasted as a set. */
-private[execution] case class HashSetBroadcastMode(
-    keys: Seq[Expression],
-    attributes: Seq[Attribute]) extends BroadcastMode {
-
-  override def transform(rows: Array[InternalRow]): java.util.HashSet[InternalRow] = {
-    HashSemiJoin.buildKeyHashSet(keys, attributes, rows.iterator)
   }
 }
