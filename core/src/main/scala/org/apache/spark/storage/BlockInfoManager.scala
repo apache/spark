@@ -304,7 +304,7 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * @return the ids of blocks whose pins were released
    */
-  def unlockAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
+  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
     synchronized {
       writeLocksByTask.remove(taskAttemptId).foreach { locks =>

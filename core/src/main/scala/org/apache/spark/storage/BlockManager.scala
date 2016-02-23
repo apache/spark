@@ -631,7 +631,7 @@ private[spark] class BlockManager(
    * @return the blocks whose locks were released.
    */
   def releaseAllLocksForTask(taskAttemptId: Long): Seq[BlockId] = {
-    blockInfoManager.unlockAllLocksForTask(taskAttemptId)
+    blockInfoManager.releaseAllLocksForTask(taskAttemptId)
   }
 
   /**

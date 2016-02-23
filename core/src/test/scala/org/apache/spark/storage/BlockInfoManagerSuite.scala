@@ -252,7 +252,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
     assert(blockInfoManager.getNumberOfMapEntries === 3)
-    blockInfoManager.unlockAllLocksForTask(0)
+    blockInfoManager.releaseAllLocksForTask(0)
     assert(blockInfoManager.getNumberOfMapEntries === 1)
   }
 }
