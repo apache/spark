@@ -143,11 +143,11 @@ object ResolvedDataSource extends Logging {
           throw new IllegalArgumentException("'path' is not specified")
         })))
         .flatMap{ pathString =>
-        val hdfsPath = new Path(pathString)
-        val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
-      }
+          val hdfsPath = new Path(pathString)
+          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
+        }
     }
     val safeProvider = Option(provider)
       .getOrElse(DataSourceDetection.detect(sqlContext, paths.head))
