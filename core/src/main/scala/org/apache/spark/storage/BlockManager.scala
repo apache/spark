@@ -833,7 +833,7 @@ private[spark] class BlockManager(
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
-    if (blockWasSuccessfullyStored && putLevel.replication > 1) {
+    if (putLevel.replication > 1) {
       data match {
         case ByteBufferValues(bytes) =>
           if (replicationFuture != null) {
@@ -857,7 +857,7 @@ private[spark] class BlockManager(
 
     BlockManager.dispose(bytesAfterPut)
 
-    if (blockWasSuccessfullyStored && putLevel.replication > 1) {
+    if (putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     } else {
