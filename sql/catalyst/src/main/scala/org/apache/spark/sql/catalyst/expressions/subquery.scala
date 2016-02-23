@@ -45,8 +45,9 @@ abstract class SubqueryExpression extends LeafExpression {
 }
 
 /**
- * A subquery that will return only one row and one column. This will be converted into a physical
- * scalar subquery during planning.
+ * A subquery that will return only one row and one column.
+ *
+ * This will be converted into [[execution.ScalarSubquery]] during physical planning.
  *
  * Note: `exprId` is used to have unique name in explain string output.
  */

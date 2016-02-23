@@ -62,7 +62,7 @@ case class ScalarSubquery(
 /**
  * Convert the subquery from logical plan into executed plan.
  */
-case class PlanSubqueries(sqlContext: SQLContext) extends Rule[SparkPlan] {
+private[sql] case class PlanSubqueries(sqlContext: SQLContext) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     plan.transformAllExpressions {
       case subquery: expressions.ScalarSubquery =>
