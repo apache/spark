@@ -113,6 +113,7 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
+  // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
