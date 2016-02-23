@@ -570,7 +570,9 @@ class SchedulerJob(BaseJob):
                     self.logger.info("Pickling DAG {}".format(dag))
                     pickle_id = dag.pickle(session).id
 
-                if dag.dag_id in dag_blacklist or dag.concurrency_reached:
+                if dag.dag_id in dag_blacklist:
+                    continue
+                if dag.concurrency_reached:
                     dag_blacklist.add(dag.dag_id)
                     continue
                 if ti.are_dependencies_met():
