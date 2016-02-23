@@ -64,6 +64,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   override def toString: String = s"DecimalType($precision,$scale)"
 
+  override def sql: String = typeName.toUpperCase
+
   /**
    * Returns whether this DecimalType is wider than `other`. If yes, it means `other`
    * can be casted into `this` safely without losing any precision or range.

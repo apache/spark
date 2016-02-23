@@ -142,7 +142,7 @@ class Dataset[T] private[sql](
    * the same name after two Datasets have been joined.
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T] = withPlan(Subquery(alias, _))
+  def as(alias: String): Dataset[T] = withPlan(SubqueryAlias(alias, _))
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe.  In contrast to the

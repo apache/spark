@@ -56,7 +56,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SimrSchedulerBackend,
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
@@ -297,9 +297,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   val sparkUser = Utils.getCurrentUserName()
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
-  private[spark] def schedulerBackend_=(sb: SchedulerBackend): Unit = {
-    _schedulerBackend = sb
-  }
 
   private[spark] def taskScheduler: TaskScheduler = _taskScheduler
   private[spark] def taskScheduler_=(ts: TaskScheduler): Unit = {
@@ -321,8 +318,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def applicationId: String = _applicationId
   def applicationAttemptId: Option[String] = _applicationAttemptId
-
-  def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
   private[spark] def eventLogger: Option[EventLoggingListener] = _eventLogger
 
@@ -514,9 +509,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    metricsSystem.start()
+    _env.metricsSystem.start()
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
@@ -2453,12 +2448,6 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case SIMR_REGEX(simrUrl) =>
-        val scheduler = new TaskSchedulerImpl(sc)
-        val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
-        scheduler.initialize(backend)
-        (backend, scheduler)
-
       case zkUrl if zkUrl.startsWith("zk://") =>
         logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
           "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
@@ -2484,8 +2473,6 @@ private object SparkMasterRegex {
   val SPARK_REGEX = """spark://(.*)""".r
   // Regular expression for connection to Mesos cluster by mesos:// or mesos://zk:// url
   val MESOS_REGEX = """mesos://(.*)""".r
-  // Regular expression for connection to Simr cluster
-  val SIMR_REGEX = """simr://(.*)""".r
 }
 
 /**

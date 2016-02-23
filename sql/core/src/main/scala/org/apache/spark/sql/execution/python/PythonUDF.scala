@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.{Accumulator, Logging}
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.expressions.{Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, Unevaluable}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -36,9 +36,12 @@ case class PythonUDF(
     broadcastVars: java.util.List[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[java.util.List[Array[Byte]]],
     dataType: DataType,
-    children: Seq[Expression]) extends Expression with Unevaluable with Logging {
+    children: Seq[Expression])
+  extends Expression with Unevaluable with NonSQLExpression with Logging {
 
-  override def toString: String = s"PythonUDF#$name(${children.mkString(",")})"
+  override def toString: String = s"PythonUDF#$name(${children.mkString(", ")})"
 
   override def nullable: Boolean = true
+
+  override def sql: String = s"$name(${children.mkString(", ")})"
 }

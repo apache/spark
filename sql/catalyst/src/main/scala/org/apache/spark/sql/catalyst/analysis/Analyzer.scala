@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 
 /**
@@ -117,18 +118,17 @@ class Analyzer(
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(Subquery(_, relation))
+            val withAlias = u.alias.map(SubqueryAlias(_, relation))
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)
         case other =>
-          // This can't be done in ResolveSubquery because that does not know the CTE.
+          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
           other transformExpressions {
             case e: SubqueryExpression =>
               e.withNewPlan(substituteCTE(e.query, cteRelations))
           }
       }
-
     }
   }
 
@@ -165,7 +165,8 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case other => Alias(other, optionalAliasName.getOrElse(s"_c$i"))()
+              case e: ExtractValue => Alias(e, usePrettyExpression(e).sql)()
+              case e => Alias(e, optionalAliasName.getOrElse(usePrettyExpression(e).sql))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -328,7 +329,7 @@ class Analyzer(
               throw new AnalysisException(
                 s"Aggregate expression required for pivot, found '$aggregate'")
             }
-            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.sql
             Alias(filteredAggregate, name)()
           }
         }
@@ -355,7 +356,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubQueries(getTable(u)))
+        i.copy(table = EliminateSubqueryAliases(getTable(u)))
       case u: UnresolvedRelation =>
         try {
           getTable(u)
@@ -686,7 +687,7 @@ class Analyzer(
         resolved
       } else {
         plan match {
-          case u: UnaryNode if !u.isInstanceOf[Subquery] =>
+          case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
             resolveExpressionRecursively(resolved, u.child)
           case other => resolved
         }
@@ -1370,12 +1371,12 @@ class Analyzer(
 }
 
 /**
- * Removes [[Subquery]] operators from the plan. Subqueries are only required to provide
+ * Removes [[SubqueryAlias]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
  */
-object EliminateSubQueries extends Rule[LogicalPlan] {
+object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case Subquery(_, child) => child
+    case SubqueryAlias(_, child) => child
   }
 }
 
@@ -1456,7 +1457,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
  */
 object ResolveUpCast extends Rule[LogicalPlan] {
   private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-    throw new AnalysisException(s"Cannot up cast `${from.prettyString}` from " +
+    throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
       s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
       "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
       "You can either add an explicit cast to the input data or choose a higher precision " +
