@@ -316,11 +316,12 @@ private[spark] class BlockManager(
    * may not know of).
    */
   def getMatchingBlockIds(filter: BlockId => Boolean): Seq[BlockId] = {
-    val matches =
-      (blockInfoManager.entries.map(_._1) ++ diskBlockManager.getAllBlocks()).filter(filter)
     // The `toArray` is necessary here in order to force the list to be materialized so that we
     // don't try to serialize a lazy iterator when responding to client requests.
-    matches.toArray.toSeq
+    (blockInfoManager.entries.map(_._1) ++ diskBlockManager.getAllBlocks())
+      .filter(filter)
+      .toArray
+      .toSeq
   }
 
   /**
