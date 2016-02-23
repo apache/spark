@@ -440,19 +440,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            blockManager.dropFromMemory(blockId, () => data) match {
-              case Some(newEffectiveStorageLevel) =>
-                if (newEffectiveStorageLevel.isValid) {
-                  // The block is still present in at least one store, so release the lock
-                  // but don't delete the block info
-                  blockManager.releaseLock(blockId)
-                } else {
-                  // The block isn't present in any store, so delete the block info so that the
-                  // block can be stored again
-                  blockManager.blockInfoManager.removeBlock(blockId)
-                }
-              case None =>
-                throw new IllegalStateException("block should have existed prior to dropFromMemory")
+            val newEffectiveStorageLevel = blockManager.dropFromMemory(blockId, () => data)
+            if (newEffectiveStorageLevel.isValid) {
+              // The block is still present in at least one store, so release the lock
+              // but don't delete the block info
+              blockManager.releaseLock(blockId)
+            } else {
+              // The block isn't present in any store, so delete the block info so that the
+              // block can be stored again
+              blockManager.blockInfoManager.removeBlock(blockId)
             }
           }
         }

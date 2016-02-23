@@ -26,7 +26,7 @@ import scala.collection.mutable
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.ConcurrentHashMultiset
 
-import org.apache.spark.{Logging, TaskContext}
+import org.apache.spark.{Logging, SparkException, TaskContext}
 
 
 /**
@@ -202,8 +202,7 @@ private[storage] class BlockInfoManager extends Logging {
    * will block until the other locks are released or will return immediately if `blocking = false`.
    *
    * If this is called by a task which already holds the block's exclusive write lock, then this
-   * will return success but will not further increment any lock counts (so both write-lock
-   * acquisitions will be freed by the same [[unlock()]] or [[downgradeLock()]] call.
+   * method will throw an exception.
    *
    * @param blockId the block to lock.
    * @param blocking if true (default), this call will block until the lock is acquired. If false,
@@ -216,7 +215,10 @@ private[storage] class BlockInfoManager extends Logging {
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to acquire write lock for $blockId")
     infos.get(blockId).map { info =>
-      if (info.writerTask != currentTaskAttemptId) {
+      if (info.writerTask == currentTaskAttemptId) {
+        throw new IllegalStateException(
+          s"Task $currentTaskAttemptId has already locked $blockId for writing")
+      } else {
         while (info.writerTask != BlockInfo.NO_WRITER || info.readerCount != 0) {
           if (blocking) wait() else return None
         }
@@ -226,6 +228,24 @@ private[storage] class BlockInfoManager extends Logging {
       writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
       logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")
       info
+    }
+  }
+
+  /**
+   * Throws an exception if the current task does not hold a write lock on the given block.
+   * Otherwise, returns the block's BlockInfo.
+   */
+  def assertBlockIsLockedForWriting(blockId: BlockId): BlockInfo = synchronized {
+    infos.get(blockId) match {
+      case Some(info) =>
+        if (info.writerTask != currentTaskAttemptId) {
+          throw new SparkException(
+            s"Task $currentTaskAttemptId has not locked block $blockId for writing")
+        } else {
+          info
+        }
+      case None =>
+        throw new SparkException(s"Block $blockId does not exist")
     }
   }
 

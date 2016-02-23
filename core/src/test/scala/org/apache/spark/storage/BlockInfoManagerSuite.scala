@@ -23,7 +23,7 @@ import scala.language.implicitConversions
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkFunSuite, TaskContext, TaskContextImpl}
+import org.apache.spark.{SparkException, SparkFunSuite, TaskContext, TaskContextImpl}
 
 
 class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -128,6 +128,31 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     withTaskId(2) {
       assert(blockInfoManager.lockForWriting("block", blocking = false).isEmpty)
       assert(blockInfoManager.get("block").get.writerTask === 1)
+    }
+  }
+
+  test("cannot call lockForWriting while already holding a write lock") {
+    withTaskId(0) {
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      blockInfoManager.unlock("block")
+    }
+    withTaskId(1) {
+      assert(blockInfoManager.lockForWriting("block").isDefined)
+      intercept[IllegalStateException] {
+        blockInfoManager.lockForWriting("block")
+      }
+      blockInfoManager.assertBlockIsLockedForWriting("block")
+    }
+  }
+
+  test("assertBlockIsLockedForWriting throws exception if block is not locked") {
+    intercept[SparkException] {
+      blockInfoManager.assertBlockIsLockedForWriting("block")
+    }
+    withTaskId(BlockInfo.NON_TASK_WRITER) {
+      intercept[SparkException] {
+        blockInfoManager.assertBlockIsLockedForWriting("block")
+      }
     }
   }
 

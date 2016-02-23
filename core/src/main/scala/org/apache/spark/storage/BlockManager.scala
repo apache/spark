@@ -1003,55 +1003,50 @@ private[spark] class BlockManager(
    *
    * If `data` is not put on disk, it won't be created.
    *
-   * @return the block's new effective StorageLevel if the block existed, or None otherwise.
+   * The caller of this method must hold a write lock on the block before calling this method.
+   *
+   * @return the block's new effective StorageLevel.
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: () => Either[Array[Any], ByteBuffer]): Option[StorageLevel] = {
-
+      data: () => Either[Array[Any], ByteBuffer]): StorageLevel = {
     logInfo(s"Dropping block $blockId from memory")
-    // TODO: make lock holding a precondition of calling this method.
-    blockInfoManager.lockForWriting(blockId) match {
-      case None =>
-        logDebug(s"Block $blockId has already been dropped")
-        None
-      case Some(info) =>
-        var blockIsUpdated = false
-        val level = info.level
+    val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
+    var blockIsUpdated = false
+    val level = info.level
 
-        // Drop to disk, if storage level requires
-        if (level.useDisk && !diskStore.contains(blockId)) {
-          logInfo(s"Writing block $blockId to disk")
-          data() match {
-            case Left(elements) =>
-              diskStore.putArray(blockId, elements, level, returnValues = false)
-            case Right(bytes) =>
-              diskStore.putBytes(blockId, bytes, level)
-          }
-          blockIsUpdated = true
-        }
-
-        // Actually drop from memory store
-        val droppedMemorySize =
-          if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
-        val blockIsRemoved = memoryStore.remove(blockId)
-        if (blockIsRemoved) {
-          blockIsUpdated = true
-        } else {
-          logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
-        }
-
-        val status = getCurrentBlockStatus(blockId, info)
-        if (info.tellMaster) {
-          reportBlockStatus(blockId, info, status, droppedMemorySize)
-        }
-        if (blockIsUpdated) {
-          Option(TaskContext.get()).foreach { c =>
-            c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
-          }
-        }
-        Some(status.storageLevel)
+    // Drop to disk, if storage level requires
+    if (level.useDisk && !diskStore.contains(blockId)) {
+      logInfo(s"Writing block $blockId to disk")
+      data() match {
+        case Left(elements) =>
+          diskStore.putArray(blockId, elements, level, returnValues = false)
+        case Right(bytes) =>
+          diskStore.putBytes(blockId, bytes, level)
+      }
+      blockIsUpdated = true
     }
+
+    // Actually drop from memory store
+    val droppedMemorySize =
+      if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
+    val blockIsRemoved = memoryStore.remove(blockId)
+    if (blockIsRemoved) {
+      blockIsUpdated = true
+    } else {
+      logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
+    }
+
+    val status = getCurrentBlockStatus(blockId, info)
+    if (info.tellMaster) {
+      reportBlockStatus(blockId, info, status, droppedMemorySize)
+    }
+    if (blockIsUpdated) {
+      Option(TaskContext.get()).foreach { c =>
+        c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
+      }
+    }
+    status.storageLevel
   }
 
   /**
