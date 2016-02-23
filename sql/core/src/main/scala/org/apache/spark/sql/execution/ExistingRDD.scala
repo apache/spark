@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
 
@@ -110,9 +110,7 @@ private[sql] case class PhysicalRDD(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val conf = SQLContext.getActive().get
-    // The vectorized reader does not produce UnsafeRows. In this case we will convert.
-    val unsafeRow = if (isUnsafeRow && !conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)) {
+    val unsafeRow = if (isUnsafeRow) {
       rdd
     } else {
       rdd.mapPartitionsInternal { iter =>
@@ -142,12 +140,14 @@ private[sql] case class PhysicalRDD(
   override protected def doProduce(ctx: CodegenContext): String = {
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
+    val numOutputRows = metricTerm(ctx, "numOutputRows")
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
        | while (input.hasNext()) {
        |   InternalRow $row = (InternalRow) input.next();
+       |   $numOutputRows.add(1);
        |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
        |   if (shouldStop()) {
