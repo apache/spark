@@ -152,21 +152,25 @@ class AssociationRules private[fpm] (
 
       log.info(s"Candidates for ${lenConsequent}-consequent rules : ${numCandidates}")
 
-      if (numCandidates == 0 || lenConsequent > maxConsequent) rules
-      else {
-        val newRules = candidates.join(freqItemIndices).flatMap {
-          case (antecendent, ((consequent, freqUnion), freqAntecedent))
-            if freqUnion >= minConfidence * freqAntecedent =>
-            Some(antecendent, consequent, freqUnion, freqAntecedent)
-
-          case _ => None
-        }.cache()
+      if (numCandidates == 0 || lenConsequent > maxConsequent) {
+        rules
+      } else {
+        val newRules = candidates.join(freqItemIndices).filter{
+          case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
+            freqUnion >= minConfidence * freqAntecedent
+        }.map {
+          case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
+            (antecendent, consequent, freqUnion, freqAntecedent)
+        }
 
         val numNewRules = newRules.count()
         log.info(s"Generated ${lenConsequent}-consequent rules : ${numNewRules}")
 
-        if (lenConsequent == maxConsequent) sc.union(rules, newRules)
-        else {
+        if (numNewRules == 0) {
+          rules
+        } else if (lenConsequent == maxConsequent) {
+          sc.union(rules, newRules)
+        } else {
           val newCandidates = newRules.filter{
             // rules whose antecendent's length equals to 1 can not be used to generate new rules
             case (antecendent, consequent, freqUnion, freqAntecedent) =>
