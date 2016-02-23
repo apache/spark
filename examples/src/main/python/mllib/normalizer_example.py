@@ -19,8 +19,8 @@ from __future__ import print_function
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.util import MLUtils
 from pyspark.mllib.feature import Normalizer
+from pyspark.mllib.util import MLUtils
 # $example off$
 
 if __name__ == "__main__":
