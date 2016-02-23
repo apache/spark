@@ -179,7 +179,7 @@ class AssociationRules private[fpm] (
             // Rule pruning. For a (lenConsequent + 1)-consequent rules, at least
             // (lenConsequent + 1) lenConsequent-consequent rules are needed.
             case ((union, freqUnion), consequents) =>
-              consequents.size >= lenConsequent + 1
+              consequents.size > lenConsequent
           }.flatMap {
             case ((union, freqUnion), consequents) =>
               val array = consequents.toArray
