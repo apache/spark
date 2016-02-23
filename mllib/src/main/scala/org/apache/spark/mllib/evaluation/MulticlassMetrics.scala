@@ -247,6 +247,7 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
   def kappa(weights: String): Double = {
 
     val func = weights match {
+      // standard kappa without weighting
       case "default" =>
         (i: Int, j: Int) => {
           if (i == j) {
@@ -255,13 +256,20 @@ class MulticlassMetrics @Since("1.1.0")(predictionAndLabels: RDD[(Double, Double
             1.0
           }
         }
+      // linear weighted kappa
       case "linear" =>
-        (i: Int, j: Int) => Math.abs(i - j).toDouble
+        (i: Int, j: Int) =>
+          math.abs(i - j).toDouble
+      // quadratic weighted kappa
       case "quadratic" =>
-        (i: Int, j: Int) => (i - j).toDouble * (i - j)
+        (i: Int, j: Int) => {
+          val d = i - j
+          d.toDouble * d
+        }
+      // unknown weighting type
       case t =>
         throw new IllegalArgumentException(
-          s"kappa only supports {linear, quadratic, default} but got type ${t}.")
+          s"kappa only supports weighting type {linear, quadratic, default} but got type ${t}.")
     }
 
     kappa(func)
