@@ -2195,6 +2195,9 @@ private[spark] object Utils extends Logging {
     isInDirectory(parent, child.getParentFile)
   }
 
+  /**
+   * Return whether it is local mode
+   */
   def isLocal(conf: SparkConf): Boolean = {
     val master: String = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
@@ -2207,12 +2210,12 @@ private[spark] object Utils extends Logging {
    * the latter should override the former (SPARK-9092).
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
-    if (conf.getInt("spark.executor.instances", 0) != 0
-      && conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
+    val numExecutor = conf.getInt("spark.executor.instances", 0)
+    val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    if (numExecutor != 0 && dynamicAllocationEnabled) {
       logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
     }
-    conf.getBoolean("spark.dynamicAllocation.enabled", false) &&
-      conf.getInt("spark.executor.instances", 0) == 0 &&
+    numExecutor == 0 && dynamicAllocationEnabled &&
       (!isLocal(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
   }
 
