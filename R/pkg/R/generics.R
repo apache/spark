@@ -754,7 +754,7 @@ setGeneric("ceil", function(x) { standardGeneric("ceil") })
 
 #' @rdname col
 #' @export
-setGeneric("column", function(x) { standardGeneric("column") })
+setGeneric("column", function(x, df) { standardGeneric("column") })
 
 #' @rdname concat
 #' @export

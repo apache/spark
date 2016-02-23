@@ -811,9 +811,9 @@ test_that("select operators", {
   expect_is(df[[2]], "Column")
   expect_is(df[["age"]], "Column")
 
-  expect_is(df[,1], "DataFrame")
-  expect_equal(columns(df[,1]), c("name"))
-  expect_equal(columns(df[,"age"]), c("age"))
+  expect_is(df[,1,drop=F], "DataFrame")
+  expect_equal(columns(df[,1,drop=F]), c("name"))
+  expect_equal(columns(df[,"age",drop=F]), c("age"))
   df2 <- df[,c("age", "name")]
   expect_is(df2, "DataFrame")
   expect_equal(columns(df2), c("age", "name"))
@@ -878,13 +878,13 @@ test_that("subsetting", {
   expect_equal(columns(filtered), c("name", "age"))
   expect_equal(collect(filtered)$name, "Andy")
 
-  df2 <- df[df$age == 19, 1]
+  df2 <- df[df$age == 19, 1, drop=F]
   expect_is(df2, "DataFrame")
   expect_equal(count(df2), 1)
   expect_equal(columns(df2), c("name"))
   expect_equal(collect(df2)$name, "Justin")
 
-  df3 <- df[df$age > 20, 2]
+  df3 <- df[df$age > 20, 2, drop=F]
   expect_equal(count(df3), 1)
   expect_equal(columns(df3), c("age"))
 
@@ -900,7 +900,7 @@ test_that("subsetting", {
   expect_equal(count(df6), 1)
   expect_equal(columns(df6), c("name", "age"))
 
-  df7 <- subset(df, select = "name")
+  df7 <- subset(df, select = "name", drop=F)
   expect_equal(count(df7), 3)
   expect_equal(columns(df7), c("name"))
 
@@ -1047,13 +1047,13 @@ test_that("column functions", {
                         schema = c("a", "b", "c"))
   result <- collect(select(df, struct("a", "c")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
+  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
                                  listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
   result <- collect(select(df, struct(df$a, df$b)))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
+  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
                                  listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 
@@ -1813,7 +1813,7 @@ test_that("attach() on a DataFrame", {
   stat2 <- summary(age)
   expect_equal(collect(stat2)[5, "age"], "30")
   detach("df")
-  stat3 <- summary(df[, "age"])
+  stat3 <- summary(df[, "age", drop=F])
   expect_equal(collect(stat3)[5, "age"], "30")
   expect_error(age)
 })
@@ -1853,7 +1853,7 @@ test_that("Method coltypes() to get and set R's data types of a DataFrame", {
   df1 <- select(df, cast(df$age, "integer"))
   coltypes(df) <- c("character", "integer")
   expect_equal(dtypes(df), list(c("name", "string"), c("age", "int")))
-  value <- collect(df[, 2])[[3, 1]]
+  value <- collect(df[, 2, drop=F])[[3, 1]]
   expect_equal(value, collect(df1)[[3, 1]])
   expect_equal(value, 22)
 
@@ -1895,6 +1895,27 @@ test_that("Method str()", {
 
   # Test utils:::str
   expect_equal(capture.output(utils:::str(iris)), capture.output(str(iris)))
+})
+
+test_that("collect/show/head on Columns", {
+
+  # collect
+  x <- irisDF$Sepal_Length + 100
+  y <- cos(x + irisDF$Sepal_Width) ^ 2
+  z <- sin(x + irisDF$Sepal_Width) ^ 2
+  expect_equal(any(collect(y + z) == 1), TRUE)
+
+  # show and print
+  expect_equal(capture.output(show(z + y))[1], " [1] 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1")
+  expect_equal(capture.output(print(z + y))[1], " [1] 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1")
+
+  # head
+  expect_equal(all(round(head(z + y)) == 1), TRUE)
+  expect_equal(length(head(z + y, 100)), 100)
+
+  # Columns without parent DataFrame
+  expect_error(x <- collect(rand()),
+               "This column cannot be collected as it's not associated to any DataFrame.")
 })
 
 unlink(parquetPath)

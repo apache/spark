@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+setOldClass("DataFrame")
+setClassUnion("DataFrameOrNULL", c("DataFrame", "NULL"))
 
 # Column Class
 
@@ -29,24 +31,43 @@ setOldClass("jobj")
 #' @slot jc reference to JVM DataFrame column
 #' @export
 setClass("Column",
-         slots = list(jc = "jobj"))
+         slots = list(jc = "jobj", df = "DataFrameOrNULL"))
 
-setMethod("initialize", "Column", function(.Object, jc) {
+setMethod("initialize", "Column", function(.Object, jc, df) {
   .Object@jc <- jc
+
+  # Some Column objects don't have any referencing DataFrame. In such case, df will be NULL.
+  if (missing(df)) {
+    df <- NULL
+  }
+  .Object@df <- df
   .Object
+})
+
+setMethod("show", signature="Column", definition=function(object) {
+  MAX_ELEMENTS <- 20
+  show(head(object, MAX_ELEMENTS))
+  cat(paste0("\b...\nDisplaying up to ", as.character(MAX_ELEMENTS) ," elements only."))
+})
+
+setMethod("collect", signature="Column", definition=function(x) {
+  if (is.null(x@df)) {
+    stop("This column cannot be collected as it's not associated to any DataFrame.")
+  }
+  collect(select(x@df, x))[, 1]
+})
+
+setMethod("head", signature="Column", definition=function(x, n=6) {
+  if (is.null(x@df)) {
+    stop("This column cannot be collected as it's not associated to any DataFrame.")
+  }
+  head(select(x@df, x), n)[, 1]
 })
 
 setMethod("column",
           signature(x = "jobj"),
-          function(x) {
-            new("Column", x)
-          })
-
-#' @rdname show
-#' @name show
-setMethod("show", "Column",
-          function(object) {
-            cat("Column", callJMethod(object@jc, "toString"), "\n")
+          function(x, df=NA) {
+            new("Column", x, df)
           })
 
 operators <- list(
@@ -79,7 +100,7 @@ createOperator <- function(op) {
                   callJMethod(e1@jc, operators[[op]], e2)
                 }
               }
-              column(jc)
+              column(jc, e1@df)
             })
 }
 
@@ -87,7 +108,7 @@ createColumnFunction1 <- function(name) {
   setMethod(name,
             signature(x = "Column"),
             function(x) {
-              column(callJMethod(x@jc, name))
+              column(callJMethod(x@jc, name), x@df)
             })
 }
 
@@ -99,7 +120,7 @@ createColumnFunction2 <- function(name) {
                 data <- data@jc
               }
               jc <- callJMethod(x@jc, name, data)
-              column(jc)
+              column(jc, x@df)
             })
 }
 
@@ -129,7 +150,7 @@ setMethod("alias",
           signature(object = "Column"),
           function(object, data) {
             if (is.character(data)) {
-              column(callJMethod(object@jc, "as", data))
+              column(callJMethod(object@jc, "as", data), object@df)
             } else {
               stop("data should be character")
             }
@@ -148,7 +169,7 @@ setMethod("alias",
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
             jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
-            column(jc)
+            column(jc, x@df)
           })
 
 #' between
@@ -164,7 +185,7 @@ setMethod("between", signature(x = "Column"),
           function(x, bounds) {
             if (is.vector(bounds) && length(bounds) == 2) {
               jc <- callJMethod(x@jc, "between", bounds[1], bounds[2])
-              column(jc)
+              column(jc, x@df)
             } else {
               stop("bounds should be a vector of lower and upper bounds")
             }
@@ -184,11 +205,11 @@ setMethod("cast",
           signature(x = "Column"),
           function(x, dataType) {
             if (is.character(dataType)) {
-              column(callJMethod(x@jc, "cast", dataType))
+              column(callJMethod(x@jc, "cast", dataType), x@df)
             } else if (is.list(dataType)) {
               json <- tojson(dataType)
               jdataType <- callJStatic("org.apache.spark.sql.types.DataType", "fromJson", json)
-              column(callJMethod(x@jc, "cast", jdataType))
+              column(callJMethod(x@jc, "cast", jdataType), x@df)
             } else {
               stop("dataType should be character or list")
             }
@@ -210,7 +231,7 @@ setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
             jc <- callJMethod(x@jc, "isin", as.list(table))
-            return(column(jc))
+            column(jc, x@df)
           })
 
 #' otherwise
@@ -227,5 +248,5 @@ setMethod("otherwise",
           function(x, value) {
             value <- if (class(value) == "Column") { value@jc } else { value }
             jc <- callJMethod(x@jc, "otherwise", value)
-            column(jc)
+            column(jc, x@df)
           })

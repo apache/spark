@@ -1177,7 +1177,7 @@ setMethod("foreachPartition",
 ############################## SELECT ##################################
 
 getColumn <- function(x, c) {
-  column(callJMethod(x@sdf, "col", c))
+  column(callJMethod(x@sdf, "col", c), x)
 }
 
 #' @rdname select
