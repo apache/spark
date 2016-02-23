@@ -272,6 +272,9 @@ object MimaExcludes {
         // SPARK-13220 Deprecate yarn-client and yarn-cluster mode
         ProblemFilters.exclude[MissingMethodProblem](
           "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+      ) ++ Seq (
+        // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
