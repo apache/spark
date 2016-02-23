@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.duration._
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast
@@ -34,7 +32,6 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
@@ -131,49 +128,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private final def executeQuery[T](query: => T): T = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      waitForSubqueries()
       query
     }
-  }
-
-  // All the subqueries and their Future of results.
-  @transient private val queryResults = ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]()
-
-  /**
-   * Collects all the subqueries and create a Future to take the first two rows of them.
-   */
-  protected def prepareSubqueries(): Unit = {
-    val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
-    allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
-      val futureResult = Future {
-        // We only need the first row, try to take two rows so we can throw an exception if there
-        // are more than one rows returned.
-        e.executedPlan.executeTake(2)
-      }(SparkPlan.subqueryExecutionContext)
-      queryResults += e -> futureResult
-    }
-  }
-
-  /**
-   * Waits for all the subqueries to finish and updates the results.
-   */
-  protected def waitForSubqueries(): Unit = {
-    // fill in the result of subqueries
-    queryResults.foreach {
-      case (e, futureResult) =>
-        val rows = Await.result(futureResult, Duration.Inf)
-        if (rows.length > 1) {
-          sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
-        }
-        if (rows.length == 1) {
-          assert(rows(0).numFields == 1, "Analyzer should make sure this only returns one column")
-          e.updateResult(rows(0).get(0, e.dataType))
-        } else {
-          // There is no rows returned, the result should be null.
-          e.updateResult(null)
-        }
-    }
-    queryResults.clear()
   }
 
   /**
@@ -182,7 +138,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def prepare(): Unit = {
     if (prepareCalled.compareAndSet(false, true)) {
       doPrepare()
-      prepareSubqueries()
       children.foreach(_.prepare())
     }
   }
@@ -298,11 +253,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     }
     newOrdering(order, Seq.empty)
   }
-}
-
-object SparkPlan {
-  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
-    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
 }
 
 private[sql] trait LeafNode extends SparkPlan {
