@@ -95,11 +95,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * @return number of blocks this broadcast variable is divided into
    */
   private def writeBlocks(value: T): Int = {
+    import StorageLevel._
     // Store a copy of the broadcast variable in the driver so that tasks run on the driver
     // do not create a duplicate copy of the broadcast variable's value.
-    val storageLevel = StorageLevel.MEMORY_AND_DISK
     val blockManager = SparkEnv.get.blockManager
-    if (blockManager.putSingle(broadcastId, value, storageLevel, tellMaster = false)) {
+    if (blockManager.putSingle(broadcastId, value, MEMORY_AND_DISK, tellMaster = false)) {
       blockManager.releaseLock(broadcastId)
     } else {
       throw new SparkException(s"Failed to store $broadcastId in BlockManager")
@@ -108,7 +108,7 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
     blocks.zipWithIndex.foreach { case (block, i) =>
       val pieceId = BroadcastBlockId(id, "piece" + i)
-      if (blockManager.putBytes(pieceId, block, storageLevel, tellMaster = true)) {
+      if (blockManager.putBytes(pieceId, block, MEMORY_AND_DISK_SER, tellMaster = true)) {
         blockManager.releaseLock(pieceId)
       } else {
         throw new SparkException(s"Failed to store $pieceId of $broadcastId in local BlockManager")
