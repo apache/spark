@@ -78,9 +78,9 @@ private[sql] object DataSourceDetection extends Logging {
         }
       } else {
         extensionDatasourceMap
-          .getOrElse(rootExtension,
+          .getOrElse(childExtension,
             throw new SparkException(s"Failed to detect data source for extension" +
-              s" [$rootExtension]. Known extensions are" +
+              s" [$childExtension]. Known extensions are" +
               s" ${extensionDatasourceMap.keys.mkString(", ")}. Please provide data source."))
       }
     }
