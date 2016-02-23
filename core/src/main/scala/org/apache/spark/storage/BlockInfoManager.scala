@@ -185,7 +185,6 @@ private[storage] class BlockInfoManager extends Logging {
     logTrace(s"Task $currentTaskAttemptId trying to acquire read lock for $blockId")
     infos.get(blockId).map { info =>
       while (info.writerTask != BlockInfo.NO_WRITER) {
-        if (info.removed) return None
         if (blocking) wait() else return None
       }
       if (info.removed) return None
@@ -219,7 +218,6 @@ private[storage] class BlockInfoManager extends Logging {
     infos.get(blockId).map { info =>
       if (info.writerTask != currentTaskAttemptId) {
         while (info.writerTask != BlockInfo.NO_WRITER || info.readerCount != 0) {
-          if (info.removed) return None
           if (blocking) wait() else return None
         }
         if (info.removed) return None
