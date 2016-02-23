@@ -44,7 +44,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * The result of this algorithm has the following deterministic bound:
    * if the DataFrame has N elements and if we request the quantile `phi` up to error `epsi`,
    * then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
-   * of `x` close to (phi * N). More precisely:
+   * of `x` is close to (phi * N). More precisely:
    *
    *   floor((phi - epsi) * N) <= rank(x) <= ceil((phi + epsi) * N)
    *
