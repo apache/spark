@@ -17,11 +17,14 @@
 
 from __future__ import print_function
 
+# $example on$
+from numpy import array
+from math import sqrt
+# $example off$
+
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.clustering import KMeans, KMeansModel
-from numpy import array
-from math import sqrt
 # $example off$
 
 if __name__ == "__main__":
