@@ -37,8 +37,11 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   override protected def afterEach(): Unit = {
-    blockInfoManager = null
-    super.afterEach()
+    try {
+      blockInfoManager = null
+    } finally {
+      super.afterEach()
+    }
   }
 
   private implicit def stringToBlockId(str: String): BlockId = {
