@@ -120,7 +120,7 @@ class AssociationRules private[fpm] (
    * @return an ordered union Seq of s1 and s2.
    *
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   private def genRules(freqItemIndices: RDD[(Seq[Int], Long)],
                        minConfidence: Double,
                        maxConsequent: Int
@@ -211,7 +211,7 @@ class AssociationRules private[fpm] (
    * @return an ordered union Seq of s1 and s2.
    *
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   private def seqAdd(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
     var i1 = 0
     var i2 = 0
@@ -254,7 +254,7 @@ class AssociationRules private[fpm] (
    * @return an ordered Seq, which equals to s1 -- s2.
    *
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   private def seqMinus(s1: Seq[Int], s2: Seq[Int]): Seq[Int] = {
     var i1 = 0
     var i2 = 0
