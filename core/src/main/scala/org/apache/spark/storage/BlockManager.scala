@@ -526,7 +526,7 @@ private[spark] class BlockManager(
   /**
    * Get block from remote block managers.
    *
-   * This does not acquire a local lock on this block.
+   * This does not acquire a lock on this block in this JVM.
    */
   def getRemote(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting remote block $blockId")
