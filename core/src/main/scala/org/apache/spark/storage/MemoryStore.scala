@@ -95,7 +95,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
     } else {
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false)
+      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()))
     }
   }
@@ -127,11 +127,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       returnValues: Boolean): PutResult = {
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      tryToPut(blockId, values, sizeEstimate, deserialized = true)
+      tryToPut(blockId, () => values, sizeEstimate, deserialized = true)
       PutResult(sizeEstimate, Left(values.iterator))
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false)
+      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()))
     }
   }
@@ -329,14 +329,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     blockId.asRDDId.map(_.rddId)
   }
 
-  private def tryToPut(
-      blockId: BlockId,
-      value: Any,
-      size: Long,
-      deserialized: Boolean): Boolean = {
-    tryToPut(blockId, () => value, size, deserialized)
-  }
-
   /**
    * Try to put in a set of values, if we can free up enough space. The value should either be
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
@@ -445,7 +437,20 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            blockManager.dropFromMemory(blockId, () => data)
+            blockManager.dropFromMemory(blockId, () => data) match {
+              case Some(newEffectiveStorageLevel) =>
+                if (newEffectiveStorageLevel.isValid) {
+                  // The block is still present in at least one store, so release the lock
+                  // but don't delete the block info
+                  blockManager.releaseLock(blockId)
+                } else {
+                  // The block isn't present in any store, so delete the block info so that the
+                  // block can be stored again
+                  blockManager.blockInfoManager.removeBlock(blockId)
+                }
+              case None =>
+                throw new IllegalStateException("block should have existed prior to dropFromMemory")
+            }
           }
         }
         freedMemory

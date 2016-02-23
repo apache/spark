@@ -187,8 +187,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations("a3").size === 0, "master was told about a3")
 
     // Drop a1 and a2 from memory; this should be reported back to the master
-    store.dropFromMemory("a1", () => null: Either[Array[Any], ByteBuffer])
-    store.dropFromMemory("a2", () => null: Either[Array[Any], ByteBuffer])
+    store.dropFromMemoryAndReleaseLocks("a1", () => null: Either[Array[Any], ByteBuffer])
+    store.dropFromMemoryAndReleaseLocks("a2", () => null: Either[Array[Any], ByteBuffer])
     assert(store.getSingleAndReleaseLock("a1") === None, "a1 not removed from store")
     assert(store.getSingleAndReleaseLock("a2") === None, "a2 not removed from store")
     assert(master.getLocations("a1").size === 0, "master did not remove a1")
@@ -429,8 +429,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       t2.join()
       t3.join()
 
-      store.dropFromMemory("a1", () => null: Either[Array[Any], ByteBuffer])
-      store.dropFromMemory("a2", () => null: Either[Array[Any], ByteBuffer])
+      store.dropFromMemoryAndReleaseLocks("a1", () => null: Either[Array[Any], ByteBuffer])
+      store.dropFromMemoryAndReleaseLocks("a2", () => null: Either[Array[Any], ByteBuffer])
       store.waitForAsyncReregister()
     }
   }
@@ -1364,6 +1364,26 @@ private object BlockManagerSuite {
         tellMaster: Boolean): Unit = {
       if (store.putIterator(blockId, values, level, tellMaster)) {
         store.releaseLock(blockId)
+      }
+    }
+
+    def dropFromMemoryAndReleaseLocks(
+        blockId: BlockId,
+        data: () => Either[Array[Any], ByteBuffer]): Unit = {
+      store.dropFromMemory(blockId, data) match {
+        case Some(newEffectiveStorageLevel) =>
+          if (newEffectiveStorageLevel.isValid) {
+            // The block is still present in at least one store, so release the lock
+            // but don't delete the block info
+            store.releaseLock(blockId)
+          } else {
+            // The block isn't present in any store, so delete the block info so that the
+            // block can be stored again
+            store.blockInfoManager.removeBlock(blockId)
+          }
+        case None =>
+          // TODO: it's confusing why we have to do nothing here. I think this is only needed
+          // for the "re-registration doesn't deadlock" test, which is slightly confusing.
       }
     }
 

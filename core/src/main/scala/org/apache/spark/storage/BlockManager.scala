@@ -800,12 +800,11 @@ private[spark] class BlockManager(
         }
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-        if (putBlockStatus.storageLevel != StorageLevel.NONE) {
+        blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
+        if (blockWasSuccessfullyStored) {
           // Now that the block is in either the memory, externalBlockStore, or disk store,
           // let other threads read it, and tell the master about it.
-          blockWasSuccessfullyStored = true
           putBlockInfo.size = size
-          blockInfoManager.downgradeLock(blockId)
           if (tellMaster) {
             reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
           }
@@ -814,12 +813,10 @@ private[spark] class BlockManager(
           }
         }
       } finally {
-        if (!blockWasSuccessfullyStored) {
-          // Guard against the fact that MemoryStore might have already removed the block if the
-          // put() failed and the block could not be dropped to disk.
-          if (blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
-            blockInfoManager.removeBlock(blockId)
-          }
+        if (blockWasSuccessfullyStored) {
+          blockInfoManager.downgradeLock(blockId)
+        } else {
+          blockInfoManager.removeBlock(blockId)
           logWarning(s"Putting block $blockId failed")
         }
       }
@@ -828,7 +825,7 @@ private[spark] class BlockManager(
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
-    if (putLevel.replication > 1) {
+    if (blockWasSuccessfullyStored && putLevel.replication > 1) {
       data match {
         case ByteBufferValues(bytes) =>
           if (replicationFuture != null) {
@@ -852,7 +849,7 @@ private[spark] class BlockManager(
 
     BlockManager.dispose(bytesAfterPut)
 
-    if (putLevel.replication > 1) {
+    if (blockWasSuccessfullyStored && putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     } else {
@@ -997,15 +994,19 @@ private[spark] class BlockManager(
    * store reaches its limit and needs to free up space.
    *
    * If `data` is not put on disk, it won't be created.
+   *
+   * @return the block's new effective StorageLevel if the block existed, or None otherwise.
    */
   def dropFromMemory(
       blockId: BlockId,
-      data: () => Either[Array[Any], ByteBuffer]): Unit = {
+      data: () => Either[Array[Any], ByteBuffer]): Option[StorageLevel] = {
 
     logInfo(s"Dropping block $blockId from memory")
+    // TODO: make lock holding a precondition of calling this method.
     blockInfoManager.lockForWriting(blockId) match {
       case None =>
         logDebug(s"Block $blockId has already been dropped")
+        None
       case Some(info) =>
         var blockIsUpdated = false
         val level = info.level
@@ -1036,17 +1037,12 @@ private[spark] class BlockManager(
         if (info.tellMaster) {
           reportBlockStatus(blockId, info, status, droppedMemorySize)
         }
-        if (!level.useDisk) {
-          // The block is completely gone from this node; forget it so we can put() it again later.
-          blockInfoManager.removeBlock(blockId)
-        } else {
-          blockInfoManager.unlock(blockId)
-        }
         if (blockIsUpdated) {
           Option(TaskContext.get()).foreach { c =>
             c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, status)))
           }
         }
+        Some(status.storageLevel)
     }
   }
 
