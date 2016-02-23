@@ -26,8 +26,8 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * Build the right table's join keys into a HashSet, and iteratively go through the left
- * table, to find the if join keys are in the Hash set.
+ * Build the right table's join keys into a HashedRelation, and iteratively go through the left
+ * table, to find if the join keys are in the HashedRelation.
  */
 case class BroadcastLeftSemiJoinHash(
     leftKeys: Seq[Expression],
@@ -40,29 +40,18 @@ case class BroadcastLeftSemiJoinHash(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
-    val mode = if (condition.isEmpty) {
-      HashSetBroadcastMode(rightKeys, right.output)
-    } else {
-      HashedRelationBroadcastMode(canJoinKeyFitWithinLong = false, rightKeys, right.output)
-    }
+    val mode = HashedRelationBroadcastMode(canJoinKeyFitWithinLong = false, rightKeys, right.output)
     UnspecifiedDistribution :: BroadcastDistribution(mode) :: Nil
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
-    if (condition.isEmpty) {
-      val broadcastedRelation = right.executeBroadcast[java.util.Set[InternalRow]]()
-      left.execute().mapPartitionsInternal { streamIter =>
-        hashSemiJoin(streamIter, broadcastedRelation.value, numOutputRows)
-      }
-    } else {
-      val broadcastedRelation = right.executeBroadcast[HashedRelation]()
-      left.execute().mapPartitionsInternal { streamIter =>
-        val hashedRelation = broadcastedRelation.value
-        TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
-        hashSemiJoin(streamIter, hashedRelation, numOutputRows)
-      }
+    val broadcastedRelation = right.executeBroadcast[HashedRelation]()
+    left.execute().mapPartitionsInternal { streamIter =>
+      val hashedRelation = broadcastedRelation.value
+      TaskContext.get().taskMetrics().incPeakExecutionMemory(hashedRelation.getMemorySize)
+      hashSemiJoin(streamIter, hashedRelation, numOutputRows)
     }
   }
 }
