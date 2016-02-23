@@ -303,28 +303,8 @@ setMethod("colnames",
 #' @rdname columns
 #' @name colnames<-
 setMethod("colnames<-",
-          signature(x = "DataFrame"),
+          signature(x = "DataFrame", value = "character"),
           function(x, value) {
-
-            # Check parameter integrity
-            if (class(value) != "character") {
-              stop("Invalid column names.")
-            }
-
-            if (length(value) != ncol(x)) {
-              stop(
-                "Column names must have the same length as the number of columns in the dataset.")
-            }
-
-            if (any(is.na(value))) {
-              stop("Column names cannot be NA.")
-            }
-
-            # Check if the column names have . in it
-            if (any(regexec(".", value, fixed=TRUE)[[1]][1] != -1)) {
-              stop("Colum names cannot contain the '.' symbol.")
-            }
-
             sdf <- callJMethod(x@sdf, "toDF", as.list(value))
             dataFrame(sdf)
           })
@@ -1237,29 +1217,38 @@ setMethod("[[", signature(x = "DataFrame", i = "numericOrcharacter"),
 
 #' @rdname subset
 #' @name [
-setMethod("[", signature(x = "DataFrame", i = "missing"),
-          function(x, i, j, ...) {
-            if (is.numeric(j)) {
-              cols <- columns(x)
-              j <- cols[j]
-            }
-            if (length(j) > 1) {
-              j <- as.list(j)
-            }
-            select(x, j)
-          })
-
-#' @rdname subset
-#' @name [
-setMethod("[", signature(x = "DataFrame", i = "Column"),
-          function(x, i, j, ...) {
-            # It could handle i as "character" but it seems confusing and not required
-            # https://stat.ethz.ch/R-manual/R-devel/library/base/html/Extract.data.frame.html
-            filtered <- filter(x, i)
-            if (!missing(j)) {
-              filtered[, j, ...]
+setMethod("[", signature(x = "DataFrame"),
+          function(x, i, j, ..., drop=T) {
+            # Perform filtering first if needed
+            filtered <- if (missing(i)) {
+              x
             } else {
+              if (class(i) != "Column") {
+                stop(paste0("Expressions other than filtering predicates are not supported ",
+                      "in the first parameter of subsetting operator [."))
+              }
+              filter(x, i)
+            }
+
+            # If something is to be projected, then do so on the filtered DataFrame
+            if (missing(j)) {
               filtered
+            } else {
+              if (is.numeric(j)) {
+                cols <- columns(filtered)
+                j <- cols[j]
+              }
+              if (length(j) > 1) {
+                j <- as.list(j)
+              }
+              selected <- select(filtered, j)
+
+              # Acknowledge parameter drop. Return a Column or DataFrame accordingly
+              if (ncol(selected) == 1 & drop == T) {
+                getColumn(selected, names(selected))
+              } else {
+                selected
+              }
             }
           })
 
@@ -1291,12 +1280,8 @@ setMethod("[", signature(x = "DataFrame", i = "Column"),
 #'   subset(df, select = c(1,2))
 #' }
 setMethod("subset", signature(x = "DataFrame"),
-          function(x, subset, select, ...) {
-            if (missing(subset)) {
-              x[, select, ...]
-            } else {
-              x[subset, select, ...]
-            }
+          function(x, subset, select, drop=T, ...) {
+            x[subset, select, drop=drop]
           })
 
 #' Select
