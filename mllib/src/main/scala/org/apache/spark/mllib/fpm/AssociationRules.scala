@@ -167,32 +167,50 @@ class AssociationRules private[fpm] (
 
         if (lenConsequent == maxConsequent) sc.union(rules, newRules)
         else {
-
-          val newCandidates = newRules.flatMap {
-            case (antecendent, consequent, freqUnion, freqAntecedent) if antecendent.size > 1 =>
+          val newCandidates = newRules.filter{
+            // rules whose antecendent's length equals to 1 can not be used to generate new rules
+            case (antecendent, consequent, freqUnion, freqAntecedent) =>
+              antecendent.size > 1
+          }.map {
+            case (antecendent, consequent, freqUnion, freqAntecedent) =>
               val union = seqAdd(antecendent, consequent)
-              Some((union, freqUnion), consequent)
-
-            case _ => None
-
-          }.groupByKey().flatMap {
-
-            case ((union, freqUnion), consequents) if consequents.size > 1 =>
+              ((union, freqUnion), consequent)
+          }.groupByKey().filter {
+            // Rule pruning. For a (lenConsequent + 1)-consequent rules, at least
+            // (lenConsequent + 1) lenConsequent-consequent rules are needed.
+            case ((union, freqUnion), consequents) =>
+              consequents.size >= lenConsequent + 1
+          }.flatMap {
+            case ((union, freqUnion), consequents) =>
               val array = consequents.toArray
-              val newConsequents = collection.mutable.Set[Seq[Int]]()
+              val newConsequentCount = collection.mutable.Map[Seq[Int], Int]()
               for (i <- 0 until array.length; j <- i + 1 until array.length) {
                 val newConsequent = seqAdd(array(i), array(j))
                 if (newConsequent.length == lenConsequent + 1) {
-                  newConsequents.add(newConsequent)
+                  val cnt = newConsequentCount.getOrElse(newConsequent, 0)
+                  newConsequentCount.update(newConsequent, cnt + 1)
                 }
               }
-              newConsequents.map {
+
+              val numPairs = (lenConsequent + 1) * lenConsequent / 2
+
+              newConsequentCount.filter{
+                // Rule pruning. For a (lenConsequent + 1)-consequent rules, all its
+                // (lenConsequent + 1) lenConsequent-consequent rules must satisfy
+                // confidence condition. The number 'numPairs' is used to check this.
+                // For example, suppose union (1,2,3,4) generate two checked
+                // 2-consequent rules: (1,2) -> (3,4) and (1,3)->(2,4). Candidate
+                // rule: (1) -> (2,3,4) should be pruned, because (1,4) -> (2,3) do
+                // not satisfy confidence condition. If and only if all those three
+                // 2-consequent rules are available, the generated 3-consequent rule need
+                // to be checked in next iteration.
+                case (newConsequents, cnt) =>
+                  cnt == numPairs
+              }.keys.map {
                 newConsequent =>
                   val newAntecendent = seqMinus(union, newConsequent)
                   (newAntecendent, (newConsequent, freqUnion))
               }
-
-            case _ => None
           }
 
           loop(newCandidates, lenConsequent + 1, sc.union(rules, newRules))
