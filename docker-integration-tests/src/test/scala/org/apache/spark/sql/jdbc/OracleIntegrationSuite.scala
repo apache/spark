@@ -25,7 +25,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.tags.DockerTest
 
-
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
   import testImplicits._
