@@ -17,8 +17,9 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
 import numpy as np
+
+from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.stat import Statistics
 # $example off$

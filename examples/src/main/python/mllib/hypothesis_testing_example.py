@@ -18,9 +18,7 @@
 from __future__ import print_function
 
 from pyspark import SparkContext
-from pyspark.mllib.linalg import Vectors
 # $example on$
-from pyspark import SparkContext
 from pyspark.mllib.linalg import Vectors, Matrices
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
