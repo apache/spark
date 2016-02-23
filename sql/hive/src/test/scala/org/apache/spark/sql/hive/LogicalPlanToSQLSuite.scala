@@ -114,6 +114,27 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT id FROM t0 UNION ALL SELECT CAST(id AS INT) AS id FROM t0")
   }
 
+  test("union distinct") {
+    checkHiveQl("SELECT * FROM t0 UNION SELECT * FROM t0")
+  }
+
+  // Parser is unable to parse the following query:
+  // SELECT  `u_1`.`id`
+  // FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
+  // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`))
+  // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+  test("three-child union") {
+    checkHiveQl("SELECT id FROM t0 UNION ALL SELECT id FROM t0 UNION ALL SELECT id FROM t0")
+  }
+
+  test("intersect") {
+    checkHiveQl("SELECT * FROM t0 INTERSECT SELECT * FROM t0")
+  }
+
+  test("except") {
+    checkHiveQl("SELECT * FROM t0 EXCEPT SELECT * FROM t0")
+  }
+
   test("self join") {
     checkHiveQl("SELECT x.key FROM t1 x JOIN t1 y ON x.key = y.key")
   }
@@ -122,9 +143,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT x.key, COUNT(*) FROM t1 x JOIN t1 y ON x.key = y.key group by x.key")
   }
 
-  test("three-child union") {
-    checkHiveQl("SELECT id FROM t0 UNION ALL SELECT id FROM t0 UNION ALL SELECT id FROM t0")
-  }
 
   test("case") {
     checkHiveQl("SELECT CASE WHEN id % 2 > 0 THEN 0 WHEN id % 2 = 0 THEN 1 END FROM t0")
