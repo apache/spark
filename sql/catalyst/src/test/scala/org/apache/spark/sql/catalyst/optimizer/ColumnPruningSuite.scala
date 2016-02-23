@@ -146,10 +146,20 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(query3), query3)
   }
 
-  test("Column prunign on Project") {
+  test("Column pruning on Project") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val query = Project('a :: Nil, Project(Seq('a, 'b), input)).analyze
     val expected = Project(Seq('a), input).analyze
+    comparePlans(Optimize.execute(query), expected)
+  }
+
+  test("Column pruning on Union") {
+    val input1 = LocalRelation('a.int, 'b.string, 'c.double)
+    val input2 = LocalRelation('c.int, 'd.string, 'e.double)
+    val query = Project('b :: Nil,
+      Union(input1 :: input2 :: Nil)).analyze
+    val expected = Project('b :: Nil,
+      Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil)).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
