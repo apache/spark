@@ -20,10 +20,11 @@ package org.apache.spark.ui.scope
 import scala.collection.mutable
 import scala.collection.mutable.{ListBuffer, StringBuilder}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.Logging
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.CallSite
 
 /**
  * A representation of a generic cluster graph used for storing information on RDD operations.
@@ -183,7 +184,7 @@ private[ui] object RDDOperationGraph extends Logging {
   /** Return the dot representation of a node in an RDDOperationGraph. */
   private def makeDotNode(node: RDDOperationNode): String = {
     val label = s"${node.name} [${node.id}]\n${node.callsite}"
-    s"""${node.id} [label="$label"]"""
+    s"""${node.id} [label="${StringEscapeUtils.escapeJava(label)}"]"""
   }
 
   /** Update the dot representation of the RDDOperationGraph in cluster to subgraph. */
@@ -192,7 +193,7 @@ private[ui] object RDDOperationGraph extends Logging {
       cluster: RDDOperationCluster,
       indent: String): Unit = {
     subgraph.append(indent).append(s"subgraph cluster${cluster.id} {\n")
-    subgraph.append(indent).append(s"""  label="${cluster.name}";\n""")
+      .append(indent).append(s"""  label="${StringEscapeUtils.escapeJava(cluster.name)}";\n""")
     cluster.childNodes.foreach { node =>
       subgraph.append(indent).append(s"  ${makeDotNode(node)};\n")
     }
