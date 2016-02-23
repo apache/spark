@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.types.{ByteType, IntegerType}
 
 /**
  * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this
@@ -198,17 +199,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case a @ Alias(child, name) if !child.isInstanceOf[AttributeReference] => (a.toAttribute, a)
     })
 
-    val aggExprs = plan.aggregateExpressions.map{
-      // VirtualColumn.groupingIdName is added by Analyzer, and thus remove it.
-      case a @ Alias(child: AttributeReference, name)
-          if child.name == VirtualColumn.groupingIdName =>
-        Alias(GroupingID(Nil), name)()
-      case a @ Alias(child: AttributeReference, name) if aliasMap.contains(child) =>
-        aliasMap(child).child
-      case o => o
-    }
-
     val groupingExprs = plan.groupingExpressions.filterNot {
+      // VirtualColumn.groupingIdName is added by Analyzer, and thus remove it.
       case a: NamedExpression => a.name == VirtualColumn.groupingIdName
       case o => false
     }.map {
@@ -226,6 +218,28 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case a: AttributeReference if aliasMap.contains(a) => aliasMap(a).child
       case o => o
     })
+
+    val aggExprs = plan.aggregateExpressions.map {
+      case a @ Alias(child: AttributeReference, name)
+          if child.name == VirtualColumn.groupingIdName =>
+        // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
+        Alias(GroupingID(Nil), name)()
+      case a @ Alias(_ @ Cast(BitwiseAnd(
+        ShiftRight(ar: AttributeReference, _ @ Literal(value: Any, IntegerType)),
+        Literal(1, IntegerType)), ByteType), name)
+          if ar.name == VirtualColumn.groupingIdName =>
+        // for converting an expression to its original SQL format grouping(col)
+        val idx = groupingExprs.length - 1 - value.asInstanceOf[Int]
+        val groupingCol = groupingExprs.lift(idx)
+        if (groupingCol.isDefined) {
+          Grouping(groupingCol.get)
+        } else {
+          throw new UnsupportedOperationException(s"unsupported operator $a")
+        }
+      case a @ Alias(child: AttributeReference, name) if aliasMap.contains(child) =>
+        aliasMap(child).child
+      case o => o
+    }
 
     build(
       "SELECT",

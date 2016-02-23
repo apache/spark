@@ -185,23 +185,23 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin)
     checkHiveQl(
       s"""
-         |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM t1
-         |GROUP BY key % 5, key - 5 WITH CUBE
+        |SELECT count(*) as cnt, key % 5 as k1, key - 5 as k2, grouping_id() FROM t1
+        |GROUP BY key % 5, key - 5 WITH CUBE
       """.stripMargin)
   }
 
   test("rollup/cube #5") {
     checkHiveQl(
       s"""
-         |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-         |FROM (SELECT key, key%2, key - 5 FROM t1) t GROUP BY key%5, key-5
-         |WITH ROLLUP
+        |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id(key % 5, key - 5) AS k3
+        |FROM (SELECT key, key%2, key - 5 FROM t1) t GROUP BY key%5, key-5
+        |WITH ROLLUP
       """.stripMargin)
     checkHiveQl(
       s"""
-         |SELECT count(*) AS cnt, key % 5 AS k1, key-5 AS k2, grouping_id() AS k3
-         |FROM (SELECT key, key%2, key - 5 FROM t1) t GROUP BY key%5, key-5
-         |WITH CUBE
+        |SELECT count(*) AS cnt, key % 5 AS k1, key - 5 AS k2, grouping_id(key % 5, key - 5) AS k3
+        |FROM (SELECT key, key % 2, key - 5 FROM t1) t GROUP BY key % 5, key - 5
+        |WITH CUBE
       """.stripMargin)
   }
 
@@ -212,6 +212,12 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT a, b, sum(a) FROM t2 GROUP BY CUBE(a, b) ORDER BY a, b")
     checkHiveQl("SELECT a + b, b, sum(a - b) FROM t2 GROUP BY a + b, b WITH ROLLUP")
     checkHiveQl("SELECT a + b, b, sum(a - b) FROM t2 GROUP BY a + b, b WITH CUBE")
+  }
+
+  test("rollup/cube #7") {
+    checkHiveQl("SELECT a, b, grouping_id(a, b) FROM t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping(b) FROM t2 GROUP BY cube(a, b)")
+    checkHiveQl("SELECT a, b, grouping(a) FROM t2 GROUP BY cube(a, b)")
   }
 
   test("grouping sets #1") {
