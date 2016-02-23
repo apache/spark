@@ -126,28 +126,29 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   }
 
   test("approximate quantile") {
-    val df = Seq.tabulate(1000)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+    val n = 1000
+    val df = Seq.tabulate(n)(i => (i, 2.0 * i)).toDF("singles", "doubles")
 
-    val expected_1 = 500.0
-    val expected_2 = 1600.0
-
+    val q1 = 0.5
+    val q2 = 0.8
     val epsilons = List(0.1, 0.05, 0.001)
 
     for (epsilon <- epsilons) {
-      val Array(result1) = df.stat.approxQuantile("singles", Array(0.5), epsilon)
-      val Array(result2) = df.stat.approxQuantile("doubles", Array(0.8), epsilon)
+      val Array(single1) = df.stat.approxQuantile("singles", Array(q1), epsilon)
+      val Array(double2) = df.stat.approxQuantile("doubles", Array(q2), epsilon)
       // Also make sure there is no regression by computing multiple quantiles at once.
-      val Array(r1, r2) = df.stat.approxQuantile("doubles", Array(0.5, 0.8), epsilon)
-      println(s"quantiles: $r1 $r2 $result1 $result2")
+      val Array(d1, d2) = df.stat.approxQuantile("doubles", Array(q1, q2), epsilon)
+      val Array(s1, s2) = df.stat.approxQuantile("singles", Array(q1, q2), epsilon)
 
-      val error_1 = 2 * 1000 * epsilon
-      val error_2 = 2 * 2000 * epsilon
+      val error_single = 2 * 1000 * epsilon
+      val error_double = 2 * 2000 * epsilon
 
-      assert(math.abs(result1 - expected_1) < error_1)
-      assert(math.abs(result2 - expected_2) < error_2)
-      assert(math.abs(r1 - expected_1) < error_1)
-      assert(math.abs(r2 - expected_2) < error_2)
-
+      assert(math.abs(single1 - q1 * n) < error_single)
+      assert(math.abs(double2 - 2 * q2 * n) < error_double)
+      assert(math.abs(s1 - q1 * n) < error_single)
+      assert(math.abs(s2 - q2 * n) < error_single)
+      assert(math.abs(d1 - 2 * q1 * n) < error_double)
+      assert(math.abs(d2 - 2 * q2 * n) < error_double)
     }
   }
 
