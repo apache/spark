@@ -358,11 +358,11 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Returns an iterator over a snapshot of all blocks' metadata. Note that the individual entries
-   * is this iterator are mutable and thus may reflect blocks that are deleted while the iterator
+   * in this iterator are mutable and thus may reflect blocks that are deleted while the iterator
    * is being traversed.
    */
   def entries: Iterator[(BlockId, BlockInfo)] = synchronized {
-    infos.iterator.toArray.toIterator
+    infos.toArray.toIterator
   }
 
   /**
