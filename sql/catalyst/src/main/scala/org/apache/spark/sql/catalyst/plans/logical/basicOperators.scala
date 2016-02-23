@@ -260,26 +260,6 @@ case class Join(
     condition: Option[Expression])
   extends BinaryNode with PredicateHelper {
 
-  private var _broadcastHintLeft: Boolean = false
-  private var _broadcastHintRight: Boolean = false
-
-  if (left.isInstanceOf[BroadcastHint]) {
-    _broadcastHintLeft = true
-  }
-
-  if (right.isInstanceOf[BroadcastHint]) {
-    _broadcastHintRight = true
-  }
-
-  def broadcastHintLeft: Boolean = _broadcastHintLeft
-  def broadcastHintRight: Boolean = _broadcastHintRight
-
-  def copyBroadHintFrom(j: Join): Join = {
-    _broadcastHintLeft = j._broadcastHintLeft
-    _broadcastHintRight = j._broadcastHintRight
-    this
-  }
-
   override def output: Seq[Attribute] = {
     joinType match {
       case LeftSemi =>
@@ -341,6 +321,10 @@ case class Join(
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  // We manually set statistics of BroadcastHint to smallest value to make sure
+  // the plan wrapped by BroadcastHint will be considered to broadcast later.
+  override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
 case class InsertIntoTable(

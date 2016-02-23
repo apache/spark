@@ -146,10 +146,8 @@ class ColumnPruningSuite extends PlanTest {
 
     comparePlans(optimized, expected)
 
-    // Even BroadcastHint is pushed down after additional Project,
-    // We still know the right plan of Join is with broadcast hint.
     assert(optimized.collect {
-      case j @ Join(_, _, _, _) if j.broadcastHintRight == true => 1
+      case b @ BroadcastHint(_) if b.statistics.sizeInBytes == 1 => 1
     }.nonEmpty)
   }
 
