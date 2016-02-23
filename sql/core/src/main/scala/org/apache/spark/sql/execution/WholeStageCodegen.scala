@@ -188,7 +188,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
 
   override def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
-    // Right now, Range is only used when there is one upstream.
+    // Right now, InputAdapter is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
 
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
@@ -294,6 +294,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     CodeGenerator.compile(cleanedSource)
 
     val rdds = plan.upstreams()
+    assert(rdds.size <= 2, "Up to two upstream RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitions { iter =>
         val clazz = CodeGenerator.compile(cleanedSource)
