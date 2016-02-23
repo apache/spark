@@ -640,7 +640,7 @@ class FilterPushdownSuite extends PlanTest {
   test("push project and filter down into sample") {
     val x = testRelation.subquery('x)
     val originalQuery =
-      Sample(0.0, 0.6, false, 11L, x).select('a)
+      Sample(0.0, 0.6, false, 11L, x)().select('a)
 
     val originalQueryAnalyzed =
       EliminateSubqueryAliases(analysis.SimpleAnalyzer.execute(originalQuery))
@@ -648,7 +648,7 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQueryAnalyzed)
 
     val correctAnswer =
-      Sample(0.0, 0.6, false, 11L, x.select('a))
+      Sample(0.0, 0.6, false, 11L, x.select('a))()
 
     comparePlans(optimized, correctAnswer.analyze)
   }

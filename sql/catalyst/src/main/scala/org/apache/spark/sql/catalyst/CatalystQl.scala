@@ -499,12 +499,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               s"Sampling fraction ($fraction) must be on interval [0, 100]")
             Sample(0.0, fraction.toDouble / 100, withReplacement = false,
               (math.random * 1000).toInt,
-              relation)
+              relation)(
+              isTableSample = true)
           case Token("TOK_TABLEBUCKETSAMPLE",
           Token(numerator, Nil) ::
             Token(denominator, Nil) :: Nil) =>
             val fraction = numerator.toDouble / denominator.toDouble
-            Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)
+            Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)(
+              isTableSample = true)
           case a =>
             noParseRule("Sampling", a)
         }.getOrElse(relation)

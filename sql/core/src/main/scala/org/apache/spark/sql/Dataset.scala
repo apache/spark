@@ -564,7 +564,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
-    withPlan(Sample(0.0, fraction, withReplacement, seed, _))
+    withPlan(Sample(0.0, fraction, withReplacement, seed, _)())
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of records, using a random seed.
