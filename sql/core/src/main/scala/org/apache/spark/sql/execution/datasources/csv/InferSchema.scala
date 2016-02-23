@@ -172,20 +172,14 @@ private[csv] object CSVTypeCast {
       nullable: Boolean = true,
       nullValue: String = ""): Any = {
     val isNull =
-      datum == nullValue && nullable && !castType.isInstanceOf[StringType]
+      datum == null || datum == nullValue && nullable && !castType.isInstanceOf[StringType]
     val convertedValue = castType match {
       case _ if isNull => null
       case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
       case _: FloatType => Try(datum.toFloat)
-        .orElse(Try(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue()))
-        .getOrElse {
-          throw new SparkException(s"[$datum] could not be converted to [$castType].")
-        }
+        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
       case _: DoubleType => Try(datum.toDouble)
-        .orElse(Try(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue()))
-        .getOrElse {
-          throw new SparkException(s"[$datum] could not be converted to [$castType].")
-        }
+        .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
       case _ =>
         val castedValue = Cast(Literal(datum), castType).eval()
         val catalystConvertedValue = CatalystTypeConverters.convertToScala(castedValue, castType)
