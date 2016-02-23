@@ -46,8 +46,8 @@ object KMeansExample {
     println("Within Set Sum of Squared Errors = " + WSSSE)
 
     // Save and load model
-    clusters.save(sc, "myModelPath")
-    val sameModel = KMeansModel.load(sc, "myModelPath")
+    clusters.save(sc, "target/org/apache/spark/KMeansExample/KMeansModel")
+    val sameModel = KMeansModel.load(sc, "target/org/apache/spark/KMeansExample/KMeansModel")
     // $example off$
 
     sc.stop()

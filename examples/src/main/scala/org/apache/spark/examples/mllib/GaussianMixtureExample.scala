@@ -40,8 +40,9 @@ object GaussianMixtureExample {
     val gmm = new GaussianMixture().setK(2).run(parsedData)
 
     // Save and load model
-    gmm.save(sc, "myGMMModel")
-    val sameModel = GaussianMixtureModel.load(sc, "myGMMModel")
+    gmm.save(sc, "target/org/apache/spark/GaussianMixtureExample/GaussianMixtureModel")
+    val sameModel = GaussianMixtureModel.load(sc,
+      "target/org/apache/spark/GaussianMixtureExample/GaussianMixtureModel")
 
     // output parameters of max-likelihood model
     for (i <- 0 until gmm.k) {

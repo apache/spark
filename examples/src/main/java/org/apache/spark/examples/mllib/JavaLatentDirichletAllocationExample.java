@@ -78,8 +78,10 @@ public class JavaLatentDirichletAllocationExample {
         System.out.println();
     }
 
-    ldaModel.save(jsc.sc(), "myLDAModel");
-    DistributedLDAModel sameModel = DistributedLDAModel.load(jsc.sc(), "myLDAModel");
+    ldaModel.save(jsc.sc(),
+      "target/org/apache/spark/JavaLatentDirichletAllocationExample/LDAModel");
+    DistributedLDAModel sameModel = DistributedLDAModel.load(jsc.sc(),
+      "target/org/apache/spark/JavaLatentDirichletAllocationExample/LDAModel");
     // $example off$
 
     jsc.stop();

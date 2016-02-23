@@ -46,8 +46,9 @@ if __name__ == "__main__":
             print(" " + str(topics[word][topic]))
 
     # Save and load model
-    ldaModel.save(sc, "myModelPath")
-    sameModel = LDAModel.load(sc, "myModelPath")
+    ldaModel.save(sc, "target/org/apache/spark/PythonLatentDirichletAllocationExample/LDAModel")
+    sameModel = LDAModel\
+        .load(sc, "target/org/apache/spark/PythonLatentDirichletAllocationExample/LDAModel")
     # $example off$
 
     sc.stop()

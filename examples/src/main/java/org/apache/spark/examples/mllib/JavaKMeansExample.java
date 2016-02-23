@@ -60,8 +60,9 @@ public class JavaKMeansExample {
     System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
 
     // Save and load model
-    clusters.save(jsc.sc(), "myModelPath");
-    KMeansModel sameModel = KMeansModel.load(jsc.sc(), "myModelPath");
+    clusters.save(jsc.sc(), "target/org/apache/spark/JavaKMeansExample/KMeansModel");
+    KMeansModel sameModel = KMeansModel.load(jsc.sc(),
+      "target/org/apache/spark/JavaKMeansExample/KMeansModel");
     // $example off$
 
     jsc.stop();

@@ -19,7 +19,7 @@ from __future__ import print_function
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.clustering import GaussianMixture
+from pyspark.mllib.clustering import GaussianMixture, GaussianMixtureModel
 from numpy import array
 # $example off$
 
@@ -34,11 +34,15 @@ if __name__ == "__main__":
     # Build the model (cluster the data)
     gmm = GaussianMixture.train(parsedData, 2)
 
+    # Save and load model
+    gmm.save(sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
+    sameModel = GaussianMixtureModel\
+        .load(sc, "target/org/apache/spark/PythonGaussianMixtureExample/GaussianMixtureModel")
+
     # output parameters of model
     for i in range(2):
         print("weight = ", gmm.weights[i], "mu = ", gmm.gaussians[i].mu,
               "sigma = ", gmm.gaussians[i].sigma.toArray())
-
     # $example off$
 
     sc.stop()

@@ -36,8 +36,9 @@ if __name__ == "__main__":
     model.assignments().foreach(lambda x: print(str(x.id) + " -> " + str(x.cluster)))
 
     # Save and load model
-    model.save(sc, "myModelPath")
-    sameModel = PowerIterationClusteringModel.load(sc, "myModelPath")
+    model.save(sc, "target/org/apache/spark/PythonPowerIterationClusteringExample/PICModel")
+    sameModel = PowerIterationClusteringModel\
+        .load(sc, "target/org/apache/spark/PythonPowerIterationClusteringExample/PICModel")
     # $example off$
 
     sc.stop()

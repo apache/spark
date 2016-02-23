@@ -45,8 +45,8 @@ if __name__ == "__main__":
     print("Within Set Sum of Squared Error = " + str(WSSSE))
 
     # Save and load model
-    clusters.save(sc, "myModelPath")
-    sameModel = KMeansModel.load(sc, "myModelPath")
+    clusters.save(sc, "target/org/apache/spark/PythonKMeansExample/KMeansModel")
+    sameModel = KMeansModel.load(sc, "target/org/apache/spark/PythonKMeansExample/KMeansModel")
     # $example off$
 
     sc.stop()
