@@ -21,7 +21,14 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 
-
+/**
+ * This [[ManagedBuffer]] wraps a [[ByteBuffer]] which was retrieved from the [[BlockManager]]
+ * so that the corresponding block's read lock can be released once this buffer's references
+ * are released.
+ *
+ * This is effectively a wrapper / bridge to connect the BlockManager's notion of read locks
+ * to the network layer's notion of retain / release counts.
+ */
 private[storage] class BlockManagerManagedBuffer(
     blockManager: BlockManager,
     blockId: BlockId,
