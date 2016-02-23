@@ -61,8 +61,9 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   private[this] var _readerCount: Int = 0
 
   /**
-   * The task attempt id of the task which currently holds the write lock for this block, or -1
-   * if this block is not locked for writing.
+   * The task attempt id of the task which currently holds the write lock for this block, or
+   * [[BlockInfo.NON_TASK_WRITER]] if the write lock is held by non-task code, or
+   * [[BlockInfo.NO_WRITER]] if this block is not locked for writing.
    */
   def writerTask: Long = _writerTask
   def writerTask_=(t: Long): Unit = {
@@ -87,12 +88,26 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     // A block's reader count must be non-negative:
     assert(_readerCount >= 0)
     // A block is either locked for reading or for writing, but not for both at the same time:
-    assert(!(_readerCount != 0 && _writerTask != -1))
+    assert(!(_readerCount != 0 && _writerTask != BlockInfo.NO_WRITER))
     // If a block is removed then it is not locked:
-    assert(!_removed || (_readerCount == 0 && _writerTask == -1))
+    assert(!_removed || (_readerCount == 0 && _writerTask == BlockInfo.NO_WRITER))
   }
 
   checkInvariants()
+}
+
+private[storage] object BlockInfo {
+
+  /**
+   * Special task attempt id constant used to mark a block's write lock as being unlocked.
+   */
+  val NO_WRITER: Long = -1
+
+  /**
+   * Special task attempt id constant used to mark a block's write lock as being held by
+   * a non-task thread (e.g. by a driver thread or by unit test code).
+   */
+  val NON_TASK_WRITER: Long = -1024
 }
 
 /**
@@ -139,14 +154,11 @@ private[storage] class BlockInfoManager extends Logging {
   // ----------------------------------------------------------------------------------------------
 
   /**
-   * Returns the current tasks's task attempt id (which uniquely identifies the task), or -1024
-   * if called outside of a task (-1024 was chosen because it's different than the -1 which is used
-   * in [[BlockInfo.writerTask]] to denote the absence of a write lock).
+   * Returns the current task's task attempt id (which uniquely identifies the task), or
+   * [[BlockInfo.NON_TASK_WRITER]] if called by a non-task thread.
    */
   private def currentTaskAttemptId: TaskAttemptId = {
-    // TODO(josh): assert that this only happens on the driver?
-    // What about block transfer / getRemote()?
-    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(-1024L)
+    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(BlockInfo.NON_TASK_WRITER)
   }
 
   /**
@@ -166,7 +178,7 @@ private[storage] class BlockInfoManager extends Logging {
       blocking: Boolean = true): Option[BlockInfo] = synchronized {
     logTrace(s"Task $currentTaskAttemptId trying to acquire read lock for $blockId")
     infos.get(blockId).map { info =>
-      while (info.writerTask != -1) {
+      while (info.writerTask != BlockInfo.NO_WRITER) {
         if (info.removed) return None
         if (blocking) wait() else return None
       }
@@ -197,7 +209,7 @@ private[storage] class BlockInfoManager extends Logging {
     logTrace(s"Task $currentTaskAttemptId trying to acquire write lock for $blockId")
     infos.get(blockId).map { info =>
       if (info.writerTask != currentTaskAttemptId) {
-        while (info.writerTask != -1 || info.readerCount != 0) {
+        while (info.writerTask != BlockInfo.NO_WRITER || info.readerCount != 0) {
           if (info.removed) return None
           if (blocking) wait() else return None
         }
@@ -239,8 +251,8 @@ private[storage] class BlockInfoManager extends Logging {
     val info = get(blockId).getOrElse {
       throw new IllegalStateException(s"Block $blockId not found")
     }
-    if (info.writerTask != -1) {
-      info.writerTask = -1
+    if (info.writerTask != BlockInfo.NO_WRITER) {
+      info.writerTask = BlockInfo.NO_WRITER
       writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
     } else {
       assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
@@ -290,7 +302,7 @@ private[storage] class BlockInfoManager extends Logging {
         for (blockId <- locks) {
           infos.get(blockId).foreach { info =>
             assert(info.writerTask == taskAttemptId)
-            info.writerTask = -1
+            info.writerTask = BlockInfo.NO_WRITER
           }
           blocksWithReleasedLocks += blockId
         }
@@ -359,7 +371,7 @@ private[storage] class BlockInfoManager extends Logging {
         } else {
           infos.remove(blockId)
           blockInfo.readerCount = 0
-          blockInfo.writerTask = -1
+          blockInfo.writerTask = BlockInfo.NO_WRITER
           blockInfo.removed = true
         }
       case None =>

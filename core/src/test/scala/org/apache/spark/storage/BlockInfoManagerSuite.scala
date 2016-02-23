@@ -83,7 +83,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(blockInfo.writerTask === 1)
       blockInfoManager.unlock("block")
       assert(blockInfo.readerCount === 0)
-      assert(blockInfo.writerTask === -1)
+      assert(blockInfo.writerTask === BlockInfo.NO_WRITER)
     }
     assert(blockInfoManager.size === 1)
     assert(blockInfoManager.getNumberOfMapEntries === 1)
@@ -96,7 +96,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(blockInfoManager.lockForReading("block").isDefined)
       assert(blockInfoManager.lockForReading("block").isDefined)
       assert(blockInfoManager.get("block").get.readerCount === 2)
-      assert(blockInfoManager.get("block").get.writerTask === -1)
+      assert(blockInfoManager.get("block").get.writerTask === BlockInfo.NO_WRITER)
       blockInfoManager.unlock("block")
       assert(blockInfoManager.get("block").get.readerCount === 1)
       blockInfoManager.unlock("block")
@@ -140,7 +140,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(blockInfoManager.lockForReading("block").isDefined)
     }
     assert(blockInfoManager.get("block").get.readerCount === 2)
-    assert(blockInfoManager.get("block").get.writerTask === -1)
+    assert(blockInfoManager.get("block").get.writerTask === BlockInfo.NO_WRITER)
   }
 
   test("write lock will block readers") {
