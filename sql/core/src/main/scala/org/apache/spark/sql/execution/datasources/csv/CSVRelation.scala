@@ -37,9 +37,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
-private[csv] class CSVRelation(
+private[sql] class CSVRelation(
     private val inputRDD: Option[RDD[String]],
-    override val paths: Array[String],
+    override val paths: Array[String] = Array.empty[String],
     private val maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
     private val parameters: Map[String, String])
@@ -127,7 +127,7 @@ private[csv] class CSVRelation(
   }
 
   private def inferSchema(paths: Array[String]): StructType = {
-    val rdd = baseRdd(Array(paths.head))
+    val rdd = baseRdd(paths)
     val firstLine = findFirstLine(rdd)
     val firstRow = new LineCsvReader(params).parseLine(firstLine)
 
@@ -154,12 +154,14 @@ private[csv] class CSVRelation(
     */
   private def findFirstLine(rdd: RDD[String]): String = {
     if (params.isCommentSet) {
-      rdd.take(params.MAX_COMMENT_LINES_IN_HEADER)
-        .find(!_.startsWith(params.comment.toString))
-        .getOrElse(sys.error(s"No uncommented header line in " +
-          s"first ${params.MAX_COMMENT_LINES_IN_HEADER} lines"))
+      val comment = params.comment.toString
+      rdd.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(comment)
+      }.first()
     } else {
-      rdd.first()
+      rdd.filter { line =>
+        line.trim.nonEmpty
+      }.first()
     }
   }
 }
