@@ -248,7 +248,6 @@ private[storage] class BlockInfoManager extends Logging {
         s" block $blockId")
     unlock(blockId)
     lockForReading(blockId, blocking = false)
-    notifyAll()
   }
 
   /**
