@@ -786,12 +786,17 @@ class SQLTests(ReusedPySparkTestCase):
                                        noUse="this options will not be used in load.")
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
-                                                    "org.apache.spark.sql.parquet")
-        self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
-        actual = self.sqlCtx.read.load(path=tmpPath)
-        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
-        self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+        # Data source would be auto-detected and we will assume the default data source is Parquet.
+        # Namely `spark.sql.sources.default` will be dropped. The tests below are commented
+        # temporarily.
+        # See https://issues.apache.org/jira/browse/SPARK-8000
+
+        # defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+        #                                             "org.apache.spark.sql.parquet")
+        # self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+        # actual = self.sqlCtx.read.load(path=tmpPath)
+        # self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+        # self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         shutil.rmtree(tmpPath)
 
@@ -819,12 +824,17 @@ class SQLTests(ReusedPySparkTestCase):
                             .load(path=tmpPath, noUse="this options will not be used in load.")
         self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
 
-        defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
-                                                    "org.apache.spark.sql.parquet")
-        self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
-        actual = self.sqlCtx.read.load(path=tmpPath)
-        self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
-        self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
+        # Data source would be auto-detected and we will assume the default data source is Parquet.
+        # Namely `spark.sql.sources.default` will be dropped. The tests below are commented
+        # temporarily.
+        # See https://issues.apache.org/jira/browse/SPARK-8000
+
+        # defaultDataSourceName = self.sqlCtx.getConf("spark.sql.sources.default",
+        #                                             "org.apache.spark.sql.parquet")
+        # self.sqlCtx.sql("SET spark.sql.sources.default=org.apache.spark.sql.json")
+        # actual = self.sqlCtx.read.load(path=tmpPath)
+        # self.assertEqual(sorted(df.collect()), sorted(actual.collect()))
+        # self.sqlCtx.sql("SET spark.sql.sources.default=" + defaultDataSourceName)
 
         shutil.rmtree(tmpPath)
 
