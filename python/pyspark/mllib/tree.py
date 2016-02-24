@@ -60,8 +60,7 @@ class TreeEnsembleModel(JavaModelWrapper, JavaSaveable):
     @since("1.3.0")
     def totalNumNodes(self):
         """
-        Get total number of nodes, summed over all trees in the
-        ensemble.
+        Get total number of nodes, summed over all trees in the ensemble.
         """
         return self.call("totalNumNodes")
 
@@ -109,8 +108,9 @@ class DecisionTreeModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 
     @since("1.1.0")
     def depth(self):
-        """Get depth of tree.
-        E.g.: Depth 0 means 1 leaf node.  Depth 1 means 1 internal node and 2 leaf nodes.
+        """
+        Get depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+        means 1 internal node + 2 leaf nodes).
         """
         return self._java_model.depth()
 
@@ -156,29 +156,31 @@ class DecisionTree(object):
         Train a DecisionTreeModel for classification.
 
         :param data:
-          Training data: RDD of LabeledPoint. Labels are integers
-          {0,1,...,numClasses}.
+          Training data: RDD of LabeledPoint. Labels should take values
+          {0, 1, ..., numClasses-1}.
         :param numClasses:
           Number of classes for classification.
         :param categoricalFeaturesInfo:
-          Map from categorical feature index to number of categories. Any
-          feature not in this map is treated as continuous.
+          Map storing arity of categorical features. An entry (n -> k)
+          indicates that feature n is categorical with k categories
+          indexed from 0: {0, 1, ..., k-1}.
         :param impurity:
-          Supported values: "entropy" or "gini".
+          Criterion used for information gain calculation.
+          Supported values: "gini" or "entropy".
           (default: "gini")
         :param maxDepth:
-          Max depth of tree. E.g., depth 0 means 1 leaf node. Depth 1
-          means 1 internal node + 2 leaf nodes.
+          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+          means 1 internal node + 2 leaf nodes).
           (default: 5)
         :param maxBins:
           Number of bins used for finding splits at each node.
           (default: 32)
         :param minInstancesPerNode:
-          Min number of instances required at child nodes to create the
-          parent split.
+          Minimum number of instances required at child nodes to create
+          the parent split.
           (default: 1)
         :param minInfoGain:
-          Min info gain required to create a split.
+          Minimum info gain required to create a split.
           (default: 0.0)
         :return:
           DecisionTreeModel.
@@ -228,24 +230,26 @@ class DecisionTree(object):
         :param data:
           Training data: RDD of LabeledPoint. Labels are real numbers.
         :param categoricalFeaturesInfo:
-          Map from categorical feature index to number of categories. Any
-          feature not in this map is treated as continuous.
+          Map storing arity of categorical features. An entry (n -> k)
+          indicates that feature n is categorical with k categories
+          indexed from 0: {0, 1, ..., k-1}.
         :param impurity:
-          Supported values: "variance".
+          Criterion used for information gain calculation.
+          The only supported value for regression is "variance".
           (default: "variance")
         :param maxDepth:
-          Max depth of tree. E.g., depth 0 means 1 leaf node. Depth 1
-          means 1 internal node + 2 leaf nodes.
+          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+          means 1 internal node + 2 leaf nodes).
           (default: 5)
         :param maxBins:
           Number of bins used for finding splits at each node.
           (default: 32)
         :param minInstancesPerNode:
-          Min number of instances required at child nodes to create the
-          parent split.
+          Minimum number of instances required at child nodes to create
+          the parent split.
           (default: 1)
         :param minInfoGain:
-          Min info gain required to create a split.
+          Minimum info gain required to create a split.
           (default: 0.0)
         :return:
           DecisionTreeModel.
@@ -328,34 +332,36 @@ class RandomForest(object):
 
         :param data:
           Training dataset: RDD of LabeledPoint. Labels should take values
-          {0, 1, ..., numClasses-1}.:param numClasses: Number of classes
-          for classification.
+          {0, 1, ..., numClasses-1}.
+        :param numClasses:
+          Number of classes for classification.
         :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. E.g., an entry (n ->
-          k) indicates that feature n is categorical with k categories
+          Map storing arity of categorical features. An entry (n -> k)
+          indicates that feature n is categorical with k categories
           indexed from 0: {0, 1, ..., k-1}.
         :param numTrees:
           Number of trees in the random forest.
         :param featureSubsetStrategy:
           Number of features to consider for splits at each node.
-          Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+          Supported values: "auto", "all", "sqrt", "log2", "onethird".
           If "auto" is set, this parameter is set based on numTrees:
-            if numTrees == 1, set to "all";
-            if numTrees > 1 (forest) set to "sqrt".
+          if numTrees == 1, set to "all";
+          if numTrees > 1 (forest) set to "sqrt".
           (default: "auto")
         :param impurity:
-          Criterion used for information gain calculation. Supported
-          values: "gini" (recommended) or "entropy".
+          Criterion used for information gain calculation.
+          Supported values: "gini" or "entropy".
           (default: "gini")
         :param maxDepth:
-          Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
-          depth 1 means 1 internal node + 2 leaf nodes.
+          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+          means 1 internal node + 2 leaf nodes).
           (default: 4)
         :param maxBins:
           Maximum number of bins used for splitting features.
           (default: 32)
         :param seed:
           Random seed for bootstrapping and choosing feature subsets.
+          Set as None to generate seed based on system time.
           (default: None)
         :return:
           RandomForestModel that can be used for prediction.
@@ -417,31 +423,32 @@ class RandomForest(object):
         :param data:
           Training dataset: RDD of LabeledPoint. Labels are real numbers.
         :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. E.g., an entry (n ->
-          k) indicates that feature n is categorical with k categories
+          Map storing arity of categorical features. An entry (n -> k)
+          indicates that feature n is categorical with k categories
           indexed from 0: {0, 1, ..., k-1}.
         :param numTrees:
           Number of trees in the random forest.
         :param featureSubsetStrategy:
           Number of features to consider for splits at each node.
-          Supported: "auto", "all", "sqrt", "log2", "onethird".
+          Supported values: "auto", "all", "sqrt", "log2", "onethird".
           If "auto" is set, this parameter is set based on numTrees:
-            if numTrees == 1, set to "all";
-            if numTrees > 1 (forest) set to "onethird" for regression.
+          if numTrees == 1, set to "all";
+          if numTrees > 1 (forest) set to "onethird" for regression.
           (default: "auto")
         :param impurity:
-          Criterion used for information gain calculation. Supported
-          values: "variance".
+          Criterion used for information gain calculation.
+          The only supported value for regression is "variance".
           (default: "variance")
         :param maxDepth:
-          Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
-          depth 1 means 1 internal node + 2 leaf nodes.
+          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+          means 1 internal node + 2 leaf nodes).
           (default: 4)
         :param maxBins:
           Maximum number of bins used for splitting features.
           (default: 32)
         :param seed:
           Random seed for bootstrapping and choosing feature subsets.
+          Set as None to generate seed based on system time.
           (default: None)
         :return:
           RandomForestModel that can be used for prediction.
@@ -523,13 +530,13 @@ class GradientBoostedTrees(object):
           Training dataset: RDD of LabeledPoint. Labels should take values
           {0, 1}.
         :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. E.g., an entry (n ->
-          k) indicates that feature n is categorical with k categories
+          Map storing arity of categorical features. An entry (n -> k)
+          indicates that feature n is categorical with k categories
           indexed from 0: {0, 1, ..., k-1}.
         :param loss:
           Loss function used for minimization during gradient boosting.
-          Supported values: {"logLoss", "leastSquaresError",
-          "leastAbsoluteError"}.
+          Supported values: "logLoss", "leastSquaresError",
+          "leastAbsoluteError".
           (default: "logLoss")
         :param numIterations:
           Number of iterations of boosting.
@@ -539,12 +546,12 @@ class GradientBoostedTrees(object):
           The learning rate should be between in the interval (0, 1].
           (default: 0.1)
         :param maxDepth:
-          Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
-          depth 1 means 1 internal node + 2 leaf nodes.
+          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+          means 1 internal node + 2 leaf nodes).
           (default: 3)
         :param maxBins:
           Maximum number of bins used for splitting features. DecisionTree
-          requires maxBins >= max categories
+          requires maxBins >= max categories.
           (default: 32)
         :return:
           GradientBoostedTreesModel that can be used for prediction.
@@ -591,13 +598,13 @@ class GradientBoostedTrees(object):
         :param data:
           Training dataset: RDD of LabeledPoint. Labels are real numbers.
         :param categoricalFeaturesInfo:
-          Map storing arity of categorical features. E.g., an entry (n ->
-          k) indicates that feature n is categorical with k categories
+          Map storing arity of categorical features. An entry (n -> k)
+          indicates that feature n is categorical with k categories
           indexed from 0: {0, 1, ..., k-1}.
         :param loss:
           Loss function used for minimization during gradient boosting.
-          Supported values: {"logLoss", "leastSquaresError",
-          "leastAbsoluteError"}.
+          Supported values: "logLoss", "leastSquaresError",
+          "leastAbsoluteError".
           (default: "logLoss")
         :param numIterations:
           Number of iterations of boosting.
@@ -607,12 +614,12 @@ class GradientBoostedTrees(object):
           The learning rate should be between in the interval (0, 1].
           (default: 0.1)
         :param maxDepth:
-          Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
-          depth 1 means 1 internal node + 2 leaf nodes.
+          Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1
+          means 1 internal node + 2 leaf nodes).
           (default: 3)
         :param maxBins:
           Maximum number of bins used for splitting features. DecisionTree
-          requires maxBins >= max categories
+          requires maxBins >= max categories.
           (default: 32)
         :return:
           GradientBoostedTreesModel that can be used for prediction.
