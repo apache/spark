@@ -41,17 +41,11 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> sorted(model.freqItemsets().collect())
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> model.save(sc,path)
-    >>> sameModel = FPGrowthModel.load(sc,path)
+    >>> model_path = temp_path + "/fpg_model"
+    >>> model.save(sc, model_path)
+    >>> sameModel = FPGrowthModel.load(sc, model_path)
     >>> sorted(model.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -192,8 +186,19 @@ def _test():
     import pyspark.mllib.fpm
     globs = pyspark.mllib.fpm.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    import tempfile
+
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        globs['sc'].stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)
 
