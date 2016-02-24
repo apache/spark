@@ -102,7 +102,7 @@ fi
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 
 function LFTP {
-  COMMANDS="set sftp:auto-confirm true && connect -u $ASF_USERNAME,p sftp://home.apache.org && $@"
+  COMMANDS="connect -u $ASF_USERNAME,p sftp://home.apache.org && $@"
   lftp --norc -c "$COMMANDS"
 }
 export -f LFTP
