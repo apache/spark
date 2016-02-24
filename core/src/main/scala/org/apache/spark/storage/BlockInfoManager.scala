@@ -86,7 +86,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     // A block's reader count must be non-negative:
     assert(_readerCount >= 0)
     // A block is either locked for reading or for writing, but not for both at the same time:
-    assert(!(_readerCount != 0 && _writerTask != BlockInfo.NO_WRITER))
+    assert(_readerCount == 0 || _writerTask == BlockInfo.NO_WRITER)
     // If a block is removed then it is not locked:
     assert(!_removed || (_readerCount == 0 && _writerTask == BlockInfo.NO_WRITER))
   }
