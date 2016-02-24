@@ -255,3 +255,14 @@ case class Literal protected (value: Any, dataType: DataType)
     case _ => value.toString
   }
 }
+
+// TODO: Specialize
+case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
+  extends LeafExpression with CodegenFallback {
+
+  def update(expression: Expression, input: InternalRow): Unit = {
+    value = expression.eval(input)
+  }
+
+  override def eval(input: InternalRow): Any = value
+}

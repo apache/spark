@@ -90,19 +90,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
     Batch("Decimal Optimizations", FixedPoint(100),
       DecimalAggregates) ::
     Batch("LocalRelation", FixedPoint(100),
-      ConvertToLocalRelation) ::
-    Batch("Subquery", Once,
-      OptimizeSubqueries) :: Nil
-  }
-
-  /**
-   * Optimize all the subqueries inside expression.
-   */
-  object OptimizeSubqueries extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      case subquery: SubqueryExpression =>
-        subquery.withNewPlan(Optimizer.this.execute(subquery.query))
-    }
+      ConvertToLocalRelation) :: Nil
   }
 }
 

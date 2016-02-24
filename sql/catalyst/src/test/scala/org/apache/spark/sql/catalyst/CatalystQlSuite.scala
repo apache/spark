@@ -265,10 +265,4 @@ class CatalystQlSuite extends PlanTest {
 
     comparePlans(parsed2, expected2)
   }
-
-  test("subquery") {
-    parser.parsePlan("select (select max(b) from s) ss from t")
-    parser.parsePlan("select * from t where a = (select b from s)")
-    parser.parsePlan("select * from t group by g having a > (select b from s)")
-  }
 }

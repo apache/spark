@@ -81,7 +81,6 @@ class Analyzer(
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
-      ResolveSubquery ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalJoin ::
@@ -122,12 +121,6 @@ class Analyzer(
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)
-        case other =>
-          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
-          other transformExpressions {
-            case e: SubqueryExpression =>
-              e.withNewPlan(substituteCTE(e.query, cteRelations))
-          }
       }
     }
   }
@@ -721,30 +714,6 @@ class Analyzer(
                 case other => other
               }
             }
-        }
-    }
-  }
-
-  /**
-   * This rule resolve subqueries inside expressions.
-   *
-   * Note: CTE are handled in CTESubstitution.
-   */
-  object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
-
-    private def hasSubquery(e: Expression): Boolean = {
-      e.find(_.isInstanceOf[SubqueryExpression]).isDefined
-    }
-
-    private def hasSubquery(q: LogicalPlan): Boolean = {
-      q.expressions.exists(hasSubquery)
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
-        q transformExpressions {
-          case e: SubqueryExpression if !e.query.resolved =>
-            e.withNewPlan(execute(e.query))
         }
     }
   }
