@@ -804,7 +804,9 @@ object SimplifyFilters extends Rule[LogicalPlan] {
  */
 object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
+    case filter @ Filter(condition, project @ Project(fields, grandChild))
+      if fields.forall(_.deterministic) =>
+
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
       val aliasMap = AttributeMap(fields.collect {
