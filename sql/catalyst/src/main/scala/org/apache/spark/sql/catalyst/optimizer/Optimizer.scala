@@ -382,7 +382,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
       val required = child.references ++ p.references
       if ((child.inputSet -- required).nonEmpty) {
         val newChildren = child.children.map(c => prunedChild(c, required))
-        p.copy(child = child.withNewChildren(newChildren))
+        val newChild = child.withNewChildren(newChildren)
+        val sameOutput = newChild.output.size == p.output.size &&
+          newChild.output.zip(p.output).forall(pair => pair._1.semanticEquals(pair._2))
+        if (!sameOutput) {
+          p.copy(child = newChild)
+        } else {
+          newChild
+        }
       } else {
         p
       }
