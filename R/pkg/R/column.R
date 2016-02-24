@@ -66,8 +66,11 @@ setMethod("head", signature="Column", definition=function(x, n=6) {
 
 setMethod("column",
           signature(x = "jobj"),
-          function(x, df=NULL) {
-            new("Column", x, df)
+          function(x, df) {
+            if (missing(df)) {
+              df <- NULL
+            }
+            new("Column", jc=x, df=df)
           })
 
 operators <- list(

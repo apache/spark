@@ -1918,6 +1918,11 @@ test_that("collect/show/head on Columns", {
                "This column cannot be collected as it's not associated to any DataFrame.")
 })
 
+test_that("Minimal column test.", {
+  x <- column(irisDF$Sepal_Length@jc)
+  expect_equal(collect(select(irisDF, x))[1, 1], 5.1)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
