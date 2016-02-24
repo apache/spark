@@ -71,7 +71,7 @@ class QuantileDiscretizerSuite
     }
   }
 
-  test("Test splits on relatively large dataset") {
+  test("Test splits on dataset larger than minSamplesRequired") {
     val sqlCtx = SQLContext.getOrCreate(sc)
     import sqlCtx.implicits._
 
