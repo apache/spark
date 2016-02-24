@@ -17,13 +17,11 @@
 
 package org.apache.spark.storage
 
-import java.lang
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.collect.ConcurrentHashMultiset
 
 import org.apache.spark.{Logging, SparkException, TaskContext}
@@ -141,17 +139,28 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Tracks the set of blocks that each task has locked for reading, along with the number of times
-   * that a block has been locked (since our read locks are re-entrant). This is thread-safe.
+   * that a block has been locked (since our read locks are re-entrant).
    */
-  private[this] val readLocksByTask: LoadingCache[lang.Long, ConcurrentHashMultiset[BlockId]] = {
-    // We need to explicitly box as java.lang.Long to avoid a type mismatch error:
-    val loader = new CacheLoader[java.lang.Long, ConcurrentHashMultiset[BlockId]] {
-      override def load(t: java.lang.Long) = ConcurrentHashMultiset.create[BlockId]()
-    }
-    CacheBuilder.newBuilder().build(loader)
-  }
+  @GuardedBy("this")
+  private[this] val readLocksByTask =
+    new mutable.HashMap[TaskAttemptId, ConcurrentHashMultiset[BlockId]]
 
   // ----------------------------------------------------------------------------------------------
+
+  // Initialization for special task attempt ids:
+  registerTask(BlockInfo.NON_TASK_WRITER)
+
+  // ----------------------------------------------------------------------------------------------
+
+  /**
+   * Called at the start of a task in order to register that task with this [[BlockInfoManager]].
+   * This must be called prior to calling any other BlockInfoManager methods from that task.
+   */
+  def registerTask(taskAttemptId: TaskAttemptId): Unit = {
+    require(!readLocksByTask.contains(taskAttemptId),
+      s"Task attempt $taskAttemptId is already registered")
+    readLocksByTask(taskAttemptId) = ConcurrentHashMultiset.create()
+  }
 
   /**
    * Returns the current task's task attempt id (which uniquely identifies the task), or
@@ -284,7 +293,7 @@ private[storage] class BlockInfoManager extends Logging {
     } else {
       assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
       info.readerCount -= 1
-      val countsForTask = readLocksByTask.get(currentTaskAttemptId)
+      val countsForTask = readLocksByTask(currentTaskAttemptId)
       val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
       assert(newPinCountForTask >= 0,
         s"Task $currentTaskAttemptId release lock on block $blockId more times than it acquired it")
@@ -325,20 +334,21 @@ private[storage] class BlockInfoManager extends Logging {
    */
   def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
-    synchronized {
-      writeLocksByTask.remove(taskAttemptId).foreach { locks =>
-        for (blockId <- locks) {
-          infos.get(blockId).foreach { info =>
-            assert(info.writerTask == taskAttemptId)
-            info.writerTask = BlockInfo.NO_WRITER
-          }
-          blocksWithReleasedLocks += blockId
-        }
-      }
-      notifyAll()
+
+    val readLocks = synchronized {
+      readLocksByTask.remove(taskAttemptId).get
     }
-    val readLocks = readLocksByTask.get(taskAttemptId)
-    readLocksByTask.invalidate(taskAttemptId)
+    val writeLocks = synchronized {
+      writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
+    }
+
+    for (blockId <- writeLocks) {
+      infos.get(blockId).foreach { info =>
+        assert(info.writerTask == taskAttemptId)
+        info.writerTask = BlockInfo.NO_WRITER
+      }
+      blocksWithReleasedLocks += blockId
+    }
     readLocks.entrySet().iterator().asScala.foreach { entry =>
       val blockId = entry.getElement
       val lockCount = entry.getCount
@@ -350,6 +360,7 @@ private[storage] class BlockInfoManager extends Logging {
         }
       }
     }
+
     synchronized {
       notifyAll()
     }
@@ -369,8 +380,8 @@ private[storage] class BlockInfoManager extends Logging {
    */
   private[storage] def getNumberOfMapEntries: Long = synchronized {
     size +
-      readLocksByTask.size() +
-      readLocksByTask.asMap().asScala.map(_._2.size()).sum +
+      readLocksByTask.size +
+      readLocksByTask.map(_._2.size()).sum +
       writeLocksByTask.size +
       writeLocksByTask.map(_._2.size).sum
   }
@@ -419,7 +430,7 @@ private[storage] class BlockInfoManager extends Logging {
       blockInfo.removed = true
     }
     infos.clear()
-    readLocksByTask.invalidateAll()
+    readLocksByTask.clear()
     writeLocksByTask.clear()
     notifyAll()
   }

@@ -632,6 +632,13 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Registers a task with the BlockManager in order to initialize per-task bookkeeping structures.
+   */
+  def registerTask(taskAttemptId: Long): Unit = {
+    blockInfoManager.registerTask(taskAttemptId)
+  }
+
+  /**
    * Release all locks for the given task.
    *
    * @return the blocks whose locks were released.

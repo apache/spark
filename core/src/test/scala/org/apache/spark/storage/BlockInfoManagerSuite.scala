@@ -34,6 +34,9 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     blockInfoManager = new BlockInfoManager()
+    for (t <- 0 to 4) {
+      blockInfoManager.registerTask(t)
+    }
   }
 
   override protected def afterEach(): Unit = {
@@ -62,7 +65,6 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("initial memory usage") {
-    assert(blockInfoManager.getNumberOfMapEntries === 0)
     assert(blockInfoManager.size === 0)
   }
 
@@ -72,7 +74,8 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(blockInfoManager.lockForWriting("non-existent-block").isEmpty)
   }
 
-  test("basic putAndLockForWritingIfAbsent") {
+  test("basic lockNewBlockForWriting") {
+    val initialNumMapEntries = blockInfoManager.getNumberOfMapEntries
     val blockInfo = newBlockInfo()
     withTaskId(1) {
       assert(blockInfoManager.lockNewBlockForWriting("block", blockInfo))
@@ -86,7 +89,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(blockInfo.writerTask === BlockInfo.NO_WRITER)
     }
     assert(blockInfoManager.size === 1)
-    assert(blockInfoManager.getNumberOfMapEntries === 1)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 1)
   }
 
   test("read locks are reentrant") {
@@ -273,11 +276,12 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("releaseAllLocksForTask releases write locks") {
+    val initialNumMapEntries = blockInfoManager.getNumberOfMapEntries
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
     }
-    assert(blockInfoManager.getNumberOfMapEntries === 3)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 3)
     blockInfoManager.releaseAllLocksForTask(0)
-    assert(blockInfoManager.getNumberOfMapEntries === 1)
+    assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries)
   }
 }
