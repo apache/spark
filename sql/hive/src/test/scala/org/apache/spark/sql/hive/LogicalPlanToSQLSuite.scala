@@ -130,7 +130,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   // FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
   // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`))
   // UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
-  test("three-child union") {
+  ignore("three-child union") {
     checkHiveQl(
       """
         |SELECT id FROM parquet_t0
