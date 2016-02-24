@@ -34,18 +34,23 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
-from pyspark.sql import DataFrame, SQLContext, Row
-from pyspark.sql.functions import rand
+from shutil import rmtree
+import tempfile
+
+from pyspark.ml import Estimator, Model, Pipeline, Transformer
 from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
-from pyspark.ml.util import keyword_only
-from pyspark.ml import Estimator, Model, Pipeline, Transformer
-from pyspark.ml.feature import *
+from pyspark.ml.regression import LinearRegression
 from pyspark.ml.tuning import *
+from pyspark.ml.util import keyword_only
 from pyspark.mllib.linalg import DenseVector
+from pyspark.sql import DataFrame, SQLContext, Row
+from pyspark.sql.functions import rand
+from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 
 class MockDataset(DataFrame):
