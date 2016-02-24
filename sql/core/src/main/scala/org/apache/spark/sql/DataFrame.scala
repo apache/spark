@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonFunction, PythonRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -1752,9 +1752,13 @@ class DataFrame private[sql](
    * Converts a JavaRDD to a PythonRDD.
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val structType = schema  // capture it for closure
-    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
-    EvaluatePython.javaToPython(rdd)
+    if (EvaluatePython.isPickled(schema)) {
+      queryExecution.toRdd.map(_.getBinary(0))
+    } else {
+      val structType = schema  // capture it for closure
+      val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+      EvaluatePython.javaToPython(rdd)
+    }
   }
 
   protected[sql] def collectToPython(): Int = {
@@ -1762,6 +1766,49 @@ class DataFrame private[sql](
       PythonRDD.collectAndServe(javaToPython.rdd)
     }
   }
+
+  protected[sql] def pythonMapPartitions(func: PythonFunction): DataFrame = withPlan {
+    PythonMapPartitions(func, EvaluatePython.schemaOfPickled.toAttributes, logicalPlan)
+  }
+
+  protected[sql] def pythonMapPartitions(
+      func: PythonFunction,
+      schemaJson: String): DataFrame = withPlan {
+    val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
+    PythonMapPartitions(func, schema.toAttributes, logicalPlan)
+  }
+
+  protected[sql] def pythonGroupBy(
+      func: PythonFunction,
+      keyTypeJson: String): GroupedPythonDataset = {
+    val keyType = DataType.fromJson(keyTypeJson)
+    val isFlat = !keyType.isInstanceOf[StructType]
+    val keyAttributes = if (isFlat) {
+      Seq(AttributeReference("key", keyType)())
+    } else {
+      keyType.asInstanceOf[StructType].toAttributes
+    }
+
+    val inputPlan = queryExecution.analyzed
+    val withGroupingKey = PythonAppendColumns(func, keyAttributes, isFlat, inputPlan)
+    val executed = sqlContext.executePlan(withGroupingKey)
+
+    new GroupedPythonDataset(
+      executed,
+      withGroupingKey.newColumns,
+      inputPlan.output,
+      GroupedData.GroupByType)
+  }
+
+  protected[sql] def pythonGroupBy(cols: Column*): GroupedPythonDataset = {
+    new GroupedPythonDataset(
+      queryExecution,
+      cols.map(_.expr),
+      queryExecution.analyzed.output,
+      GroupedData.GroupByType)
+  }
+
+  protected[sql] def isPickled(): Boolean = EvaluatePython.isPickled(schema)
 
   /**
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with

@@ -30,6 +30,13 @@ import functools
 import time
 import datetime
 
+if sys.version >= '3':
+    basestring = unicode = str
+    long = int
+    from functools import reduce
+else:
+    from itertools import imap as map
+
 import py4j
 try:
     import xmlrunner
@@ -1170,6 +1177,97 @@ class SQLTests(ReusedPySparkTestCase):
 
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
+
+    def test_dataset(self):
+        data = [(i, str(i)) for i in range(100)]
+        ds = self.sqlCtx.createDataFrame(data, ("key", "value"))
+
+        def check_result(result, f):
+            expected_result = []
+            for k, v in data:
+                expected_result.append(f(k, v))
+            self.assertEqual(result, expected_result)
+
+        # convert row to python dict
+        ds2 = ds.map2(lambda row: {"key": row.key + 1, "value": row.value})
+        schema = StructType().add("key", IntegerType()).add("value", StringType())
+        ds3 = ds2.applySchema(schema)
+        result = ds3.select("key").collect()
+        check_result(result, lambda k, v: Row(key=k + 1))
+
+        # use a different but compatible schema
+        schema = StructType().add("value", StringType())
+        result = ds2.applySchema(schema).collect()
+        check_result(result, lambda k, v: Row(value=v))
+
+        # use a flat schema
+        ds2 = ds.map2(lambda row: row.key * 3)
+        result = ds2.applySchema(IntegerType()).collect()
+        check_result(result, lambda k, v: Row(value=k * 3))
+
+        # schema can be inferred automatically
+        result = ds.map2(lambda row: row.key + 10).applySchema().collect()
+        check_result(result, lambda k, v: Row(value=k + 10))
+
+        # If no schema is given, by default it's a single binary field struct type.
+        from pyspark.sql.functions import length
+        result = ds2.select(length("value")).collect()
+        self.assertEqual(len(result), 100)
+
+        # If no schema is given, collect will return custom objects instead of rows.
+        result = ds.map2(lambda row: row.value + "#").collect()
+        check_result(result, lambda k, v: v + "#")
+
+        # row count should be corrected even no schema is specified.
+        self.assertEqual(ds.map2(lambda row: row.key + 1).count(), 100)
+
+        # call cache() in the middle of 2 typed operations.
+        ds3 = ds.map2(lambda row: row.key * 2).cache().map2(lambda key: key + 1)
+        self.assertEqual(ds3.count(), 100)
+        result = ds3.collect()
+        check_result(result, lambda k, v: k * 2 + 1)
+
+    def test_typed_aggregate(self):
+        data = [(i, i * 2) for i in range(100)]
+        ds = self.sqlCtx.createDataFrame(data, ("i", "j"))
+        sum_tuple = lambda values: sum(map(lambda value: value[0] * value[1], values))
+
+        def get_python_result(data, key_func, agg_func):
+            data = sorted(data, key=key_func)
+            expected_result = []
+            import itertools
+            for key, values in itertools.groupby(data, key_func):
+                expected_result.append(agg_func(key, values))
+            return expected_result
+
+        grouped = ds.groupByKey(lambda row: row.i % 5, IntegerType())
+        agg_func = lambda key, values: str(key) + ":" + str(sum_tuple(values))
+        result = sorted(grouped.mapGroups(agg_func).collect())
+        expected_result = get_python_result(data, lambda i: i[0] % 5, agg_func)
+        self.assertEqual(result, expected_result)
+
+        # We can also call groupByKey on a Dataset of custom objects.
+        ds2 = ds.map2(lambda row: row.i)
+        grouped = ds2.groupByKey(lambda i: i % 5, IntegerType())
+        agg_func = lambda key, values: str(key) + ":" + str(sum(values))
+        result = sorted(grouped.mapGroups(agg_func).collect())
+        expected_result = get_python_result(range(100), lambda i: i % 5, agg_func)
+        self.assertEqual(result, expected_result)
+
+        # We can also apply typed aggregate after structured groupBy, the key is row object.
+        grouped = ds.groupBy(ds.i % 2, ds.i % 3)
+        agg_func = lambda key, values: str(key[0]) + str(key[1]) + ":" + str(sum_tuple(values))
+        result = sorted(grouped.mapGroups(agg_func).collect())
+        expected_result = get_python_result(data, lambda i: (i[0] % 2, i[0] % 3), agg_func)
+        self.assertEqual(result, expected_result)
+
+        # We can also apply structured aggregate after groupByKey
+        grouped = ds.groupByKey(lambda row: row.i % 5, IntegerType())
+        result = sorted(grouped.sum("j").collect())
+        get_sum = lambda key: sum(filter(lambda i: i % 5 == key, range(100))) * 2
+        result_row = Row("key", "sum(j)")
+        expected_result = [result_row(i, get_sum(i)) for i in range(5)]
+        self.assertEqual(result, expected_result)
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

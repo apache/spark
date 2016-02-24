@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{ObjectType, StructType}
+import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
 
 /**
  * A trait for logical operators that apply user defined functions to domain objects.
@@ -91,6 +92,13 @@ case class MapPartitions(
   override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
 }
 
+case class PythonMapPartitions(
+    func: PythonFunction,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def expressions: Seq[Expression] = Nil
+}
+
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
   def apply[T : Encoder, U : Encoder](
@@ -122,6 +130,17 @@ case class AppendColumns(
   def newColumns: Seq[Attribute] = serializer.map(_.toAttribute)
 
   override def deserializers: Seq[(Expression, Seq[Attribute])] = Seq(deserializer -> child.output)
+}
+
+case class PythonAppendColumns(
+    func: PythonFunction,
+    newColumns: Seq[Attribute],
+    isFlat: Boolean,
+    child: LogicalPlan) extends UnaryNode {
+
+  override def output: Seq[Attribute] = child.output ++ newColumns
+
+  override def expressions: Seq[Expression] = Nil
 }
 
 /** Factory for constructing new `MapGroups` nodes. */
@@ -162,6 +181,15 @@ case class MapGroups(
 
   override def deserializers: Seq[(Expression, Seq[Attribute])] =
     Seq(keyDeserializer -> groupingAttributes, valueDeserializer -> dataAttributes)
+}
+
+case class PythonMapGroups(
+    func: PythonFunction,
+    groupingExprs: Seq[Expression],
+    dataAttributes: Seq[Attribute],
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  override def expressions: Seq[Expression] = groupingExprs
 }
 
 /** Factory for constructing new `CoGroup` nodes. */
@@ -207,8 +235,6 @@ case class CoGroup(
     rightAttr: Seq[Attribute],
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectOperator {
-
-  override def producedAttributes: AttributeSet = outputSet
 
   override def deserializers: Seq[(Expression, Seq[Attribute])] =
     // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to resolve

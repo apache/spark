@@ -15,10 +15,19 @@
 # limitations under the License.
 #
 
+import sys
+
+if sys.version >= '3':
+    basestring = unicode = str
+    long = int
+    from functools import reduce
+else:
+    from itertools import imap as map
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
-from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.dataframe import DataFrame, PipelinedDataFrame
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -27,7 +36,7 @@ __all__ = ["GroupedData"]
 def dfapi(f):
     def _api(self):
         name = f.__name__
-        jdf = getattr(self._jdf, name)()
+        jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -37,7 +46,7 @@ def dfapi(f):
 def df_varargs_api(f):
     def _api(self, *args):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, args))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -54,9 +63,33 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
+    def __init__(self, jgd, sql_ctx, flat_key=False):
+        self._jgd = jgd
         self.sql_ctx = sql_ctx
+        if flat_key:
+            self._key_converter = lambda key: key[0]
+        else:
+            self._key_converter = lambda key: key
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def flatMapGroups(self, func):
+        """ TODO """
+        key_converter = self._key_converter
+
+        def process(inputs):
+            record_converter = lambda record: (key_converter(record[0]), record[1])
+            for key, values in GroupedIterator(map(record_converter, inputs)):
+                for output in func(key, values):
+                    yield output
+
+        return PipelinedDataFrame(self, process)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def mapGroups(self, func):
+        """ TODO """
+        return self.flatMapGroups(lambda key, values: iter([func(key, values)]))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -83,11 +116,11 @@ class GroupedData(object):
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -187,10 +220,99 @@ class GroupedData(object):
         [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
         """
         if values is None:
-            jgd = self._jdf.pivot(pivot_col)
+            jgd = self._jgd.pivot(pivot_col)
         else:
-            jgd = self._jdf.pivot(pivot_col, values)
+            jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self.sql_ctx)
+
+
+class GroupedIterator(object):
+    """ TODO """
+
+    def __init__(self, inputs):
+        self.inputs = BufferedIterator(inputs)
+        self.current_input = next(inputs)
+        self.current_key = self.current_input[0]
+        self.current_values = GroupValuesIterator(self)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    def next(self):
+        if self.current_values is None:
+            self._fetch_next_group()
+
+        ret = (self.current_key, self.current_values)
+        self.current_values = None
+        return ret
+
+    def _fetch_next_group(self):
+        if self.current_input is None:
+            self.current_input = next(self.inputs)
+
+        # Skip to next group, or consume all inputs and throw StopIteration exception.
+        while self.current_input[0] == self.current_key:
+            self.current_input = next(self.inputs)
+
+        self.current_key = self.current_input[0]
+        self.current_values = GroupValuesIterator(self)
+
+
+class GroupValuesIterator(object):
+    """ TODO """
+
+    def __init__(self, outter):
+        self.outter = outter
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    def next(self):
+        if self.outter.current_input is None:
+            self._fetch_next_value()
+
+        value = self.outter.current_input[1]
+        self.outter.current_input = None
+        return value
+
+    def _fetch_next_value(self):
+        if self.outter.inputs.head()[0] == self.outter.current_key:
+            self.outter.current_input = next(self.outter.inputs)
+        else:
+            raise StopIteration
+
+
+class BufferedIterator(object):
+    """ TODO """
+
+    def __init__(self, iterator):
+        self.iterator = iterator
+        self.buffered = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    def next(self):
+        if self.buffered is None:
+            return next(self.iterator)
+        else:
+            item = self.buffered
+            self.buffered = None
+            return item
+
+    def head(self):
+        if self.buffered is None:
+            self.buffered = next(self.iterator)
+        return self.buffered
 
 
 def _test():

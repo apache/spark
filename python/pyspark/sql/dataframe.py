@@ -28,7 +28,8 @@ else:
 
 from pyspark import since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, PickleSerializer, \
+    UTF8Deserializer, PairDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -236,9 +237,14 @@ class DataFrame(object):
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
+
+        if self._jdf.isPickled():
+            deserializer = PickleSerializer()
+        else:
+            deserializer = BatchedSerializer(PickleSerializer())
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(port, deserializer))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -277,6 +283,25 @@ class DataFrame(object):
         [u'Alice', u'Bob']
         """
         return self.rdd.map(f)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def applySchema(self, schema=None):
+        """ TODO """
+        # TODO: should we throw exception instead?
+        return self
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def mapPartitions2(self, func):
+        """ TODO """
+        return PipelinedDataFrame(self, func)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def map2(self, func):
+        """ TODO """
+        return self.mapPartitions2(lambda iterator: map(func, iterator))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -890,9 +915,19 @@ class DataFrame(object):
         >>> sorted(df.groupBy(['name', df.age]).count().collect())
         [Row(name=u'Alice', age=2, count=1), Row(name=u'Bob', age=5, count=1)]
         """
-        jgd = self._jdf.groupBy(self._jcols(*cols))
+        jgd = self._jdf.pythonGroupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
         return GroupedData(jgd, self.sql_ctx)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def groupByKey(self, key_func, key_type):
+        """ TODO """
+        f = lambda iterator: map(key_func, iterator)
+        wraped_func = _wrap_func(self._sc, self._jdf, f, False)
+        jgd = self._jdf.pythonGroupBy(wraped_func, key_type.json())
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx, not isinstance(key_type, StructType))
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1352,6 +1387,99 @@ class DataFrame(object):
 
     groupby = groupBy
     drop_duplicates = dropDuplicates
+
+
+class PipelinedDataFrame(DataFrame):
+
+    """ TODO """
+
+    def __init__(self, prev, func):
+        from pyspark.sql.group import GroupedData
+
+        self._jdf_val = None
+        self.is_cached = False
+        self.sql_ctx = prev.sql_ctx
+        self._sc = self.sql_ctx and self.sql_ctx._sc
+        self._lazy_rdd = None
+
+        if isinstance(prev, GroupedData):
+            # prev is GroupedData, set the grouped flag to true and use jgd as jdf.
+            self._grouped = True
+            self._func = func
+            self._prev_jdf = prev._jgd
+        elif not isinstance(prev, PipelinedDataFrame) or prev.is_cached:
+            # This transformation is the first in its stage:
+            self._grouped = False
+            self._func = func
+            self._prev_jdf = prev._jdf
+        else:
+            self._grouped = prev._grouped
+            self._func = _pipeline_func(prev._func, func)
+            # maintain the pipeline.
+            self._prev_jdf = prev._prev_jdf
+
+    def applySchema(self, schema=None):
+        if schema is None:
+            from pyspark.sql.types import _infer_type, _merge_type
+            # If no schema is specified, infer it from the whole data set.
+            jrdd = self._prev_jdf.javaToPython()
+            rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+            schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
+
+        if isinstance(schema, StructType):
+            to_rows = lambda iterator: map(schema.toInternal, iterator)
+        else:
+            data_type = schema
+            schema = StructType().add("value", data_type)
+            to_row = lambda obj: (data_type.toInternal(obj), )
+            to_rows = lambda iterator: map(to_row, iterator)
+
+        jdf = self._create_jdf(_pipeline_func(self._func, to_rows), schema)
+        return DataFrame(jdf, self.sql_ctx)
+
+    @property
+    def _jdf(self):
+        if self._jdf_val is None:
+            self._jdf_val = self._create_jdf(self._func)
+        return self._jdf_val
+
+    def _create_jdf(self, func, schema=None):
+        wrapped_func = _wrap_func(self._sc, self._prev_jdf, func, schema is None, self._grouped)
+        if schema is None:
+            if self._grouped:
+                return self._prev_jdf.flatMapGroups(wrapped_func)
+            else:
+                return self._prev_jdf.pythonMapPartitions(wrapped_func)
+        else:
+            schema_string = schema.json()
+            if self._grouped:
+                return self._prev_jdf.flatMapGroups(wrapped_func, schema_string)
+            else:
+                return self._prev_jdf.pythonMapPartitions(wrapped_func, schema_string)
+
+
+def _wrap_func(sc, jdf, func, output_binary, input_grouped=False):
+    if input_grouped:
+        deserializer = PairDeserializer(PickleSerializer(), PickleSerializer())
+    elif jdf.isPickled():
+        deserializer = PickleSerializer()
+    else:
+        deserializer = AutoBatchedSerializer(PickleSerializer())
+
+    if output_binary:
+        serializer = PickleSerializer()
+    else:
+        serializer = AutoBatchedSerializer(PickleSerializer())
+
+    from pyspark.rdd import _wrap_function
+    return _wrap_function(sc, lambda _, iterator: func(iterator), deserializer, serializer)
+
+
+def _pipeline_func(prev_func, next_func):
+    if prev_func is None:
+        return next_func
+    else:
+        return lambda iterator: next_func(prev_func(iterator))
 
 
 def _to_scala_map(sc, jm):
