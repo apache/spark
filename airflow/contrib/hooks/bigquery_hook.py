@@ -328,6 +328,45 @@ class BigQueryBaseCursor(object):
 
         return job_id
 
+    def get_schema(self, dataset_id, table_id):
+        """
+        Get the schema for a given datset.table.
+        see https://cloud.google.com/bigquery/docs/reference/v2/tables#resource
+        
+        :param dataset_id: the dataset ID of the requested table
+        :param table_id: the table ID of the requested table
+        :return: a table schema
+        """
+        tables_resource = self.service.tables() \
+            .get(projectId=self.project_id, datasetId=dataset_id, tableId=table_id) \
+            .execute()
+        return tables_resource['schema']
+
+    def get_tabledata(self, dataset_id, table_id,
+                      max_results=None, page_token=None, start_index=None):
+        """
+        Get the data of a given dataset.table.
+        see https://cloud.google.com/bigquery/docs/reference/v2/tabledata/list
+
+        :param dataset_id: the dataset ID of the requested table.
+        :param table_id: the table ID of the requested table.
+        :param max_results: the maximum results to return.
+        :param page_token: page token, returned from a previous call, identifying the result set.
+        :param start_index: zero based index of the starting row to read.
+        :return: map containing the requested rows.
+        """
+        optional_params = {}
+        if max_results:
+            optional_params['maxResults'] = max_results
+        if page_token:
+            optional_params['pageToken'] = page_token
+        if start_index:
+            optional_params['startIndex'] = start_index
+        return self.service.tabledata() \
+            .list(projectId=self.project_id, datasetId=dataset_id, tableId=table_id, **optional_params) \
+            .execute()
+
+
 class BigQueryCursor(BigQueryBaseCursor):
     """
     A very basic BigQuery PEP 249 cursor implementation. The PyHive PEP 249
