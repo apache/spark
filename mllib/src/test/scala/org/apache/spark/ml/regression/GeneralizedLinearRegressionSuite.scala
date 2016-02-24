@@ -216,6 +216,50 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     }
   }
 
+  test("generalized linear regression: gaussian family against glmnet") {
+    /*
+       R code:
+       library(glmnet)
+       data <- read.csv("path", header=FALSE)
+       label = data$V1
+       features = as.matrix(data.frame(data$V2, data$V3))
+       for (intercept in c(FALSE, TRUE)) {
+         for (lambda in c(0.0, 0.1, 1.0)) {
+           model <- glmnet(features, label, family="gaussian", intercept=intercept,
+                           lambda=lambda, alpha=0, thresh=1E-14)
+           print(as.vector(coef(model)))
+         }
+       }
+
+       [1] 0.0000000 2.2961005 0.8087932
+       [1] 0.0000000 2.2130368 0.8309556
+       [1] 0.0000000 1.7176137 0.9610657
+       [1] 2.5002642 2.2000403 0.5999485
+       [1] 3.1106389 2.0935142 0.5712711
+       [1] 6.7597127 1.4581054 0.3994266
+     */
+
+    val expected = Seq(
+      Vectors.dense(0.0, 2.2961005, 0.8087932),
+      Vectors.dense(0.0, 2.2130368, 0.8309556),
+      Vectors.dense(0.0, 1.7176137, 0.9610657),
+      Vectors.dense(2.5002642, 2.2000403, 0.5999485),
+      Vectors.dense(3.1106389, 2.0935142, 0.5712711),
+      Vectors.dense(6.7597127, 1.4581054, 0.3994266))
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true);
+         regParam <- Seq(0.0, 0.1, 1.0)) {
+      val trainer = new GeneralizedLinearRegression().setFamily("gaussian")
+        .setFitIntercept(fitIntercept).setRegParam(regParam)
+      val model = trainer.fit(datasetGaussianIdentity)
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      assert(actual ~== expected(idx) absTol 1e-4)
+
+      idx += 1
+    }
+  }
+
   test("generalized linear regression: binomial family") {
     /*
        R code:

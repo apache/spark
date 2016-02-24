@@ -201,7 +201,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         Instance(label, weight, features)
       }
 
-    if ($(family) == "gaussian" && $(link) == "identity") {
+    import GeneralizedLinearRegression._
+    if (familyObj == Gaussian && linkObj == Identity) {
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances)
