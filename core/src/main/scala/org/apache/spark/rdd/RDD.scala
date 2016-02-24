@@ -214,7 +214,7 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
-  @transient @volatile private var partitions_ : Array[Partition] = null
+  @transient private var partitions_ : Array[Partition] = null
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
   private def checkpointRDD: Option[CheckpointRDD[T]] = checkpointData.flatMap(_.checkpointRDD)

@@ -25,17 +25,18 @@ import org.apache.spark.{Partition, SparkContext}
 
 import scala.reflect.ClassTag
 
+object ParallelUnionRDD {
+  lazy val executorService = ThreadUtils.newDaemonFixedThreadPool(16, "ParallelUnionRDD")
+}
+
 class ParallelUnionRDD[T: ClassTag](
   sc: SparkContext,
   rdds: Seq[RDD[T]]) extends UnionRDD[T](sc, rdds){
-  // TODO: We might need to guess a more reasonable thread pool size here
-  @transient val executorService = ThreadUtils.newDaemonFixedThreadPool(
-    Math.min(rdds.size, Runtime.getRuntime.availableProcessors()), "ParallelUnionRDD")
 
   override def getPartitions: Array[Partition] = {
     // Calc partitions field for each RDD in parallel.
     val rddPartitions = rdds.map {rdd =>
-      (rdd, executorService.submit(new Callable[Array[Partition]] {
+      (rdd, ParallelUnionRDD.executorService.submit(new Callable[Array[Partition]] {
         override def call(): Array[Partition] = rdd.partitions
       }))
     }.map {case(r, f) => (r, f.get())}

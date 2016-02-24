@@ -89,4 +89,25 @@ class HiveTableScanSuite extends HiveComparisonTest {
     assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
     assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
   }
+
+
+  test("Spark-11517: calc partitions in parallel") {
+    val partitionNum = 500
+    val partitionTable = "combine"
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    val df = (1 to 500).map { i => (i, i)}.toDF("a", "b").coalesce(500)
+    df.registerTempTable("temp")
+    sql(s"""create table $partitionTable (a int, b string)
+            |partitioned by (c int)
+            |stored as orc""".stripMargin)
+    sql(
+      s"""insert into table $partitionTable partition(c)
+          |select a, b, (b % $partitionNum) as c from temp""".stripMargin)
+
+    // Ensure that the result is the same as the original
+    assert(
+      sql( s"""select * from $partitionTable order by a""").collect().map(_.toString()).deep
+        ==  (1 to 500).map{i => s"[$i,$i,${i % partitionNum}]"}.toArray.deep
+    )
+  }
 }
