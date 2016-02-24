@@ -112,7 +112,7 @@ abstract class DockerJDBCIntegrationSuite
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
-      eventually(timeout(200.seconds), interval(200.seconds)) {
+      eventually(timeout(60.seconds), interval(1.seconds)) {
         val conn = java.sql.DriverManager.getConnection(jdbcUrl)
         conn.close()
       }
