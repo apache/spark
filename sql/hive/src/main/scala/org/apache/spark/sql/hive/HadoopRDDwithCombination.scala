@@ -30,7 +30,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 
 class HadoopRDDwithCombination[K, V](
-    @transient sc: SparkContext,
+    sc: SparkContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
