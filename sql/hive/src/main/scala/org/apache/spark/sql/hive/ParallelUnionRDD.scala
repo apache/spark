@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.util.concurrent.Callable
 
+import scala.reflect.ClassTag
+
+import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.rdd.{RDD, UnionPartition, UnionRDD}
 import org.apache.spark.util.ThreadUtils
-import org.apache.spark.{Partition, SparkContext}
-
-import scala.reflect.ClassTag
 
 object ParallelUnionRDD {
   lazy val executorService = ThreadUtils.newDaemonFixedThreadPool(16, "ParallelUnionRDD")
