@@ -422,6 +422,7 @@ class CrossValidatorTests(PySparkTestCase):
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
+
 class TrainValidationSplitTests(PySparkTestCase):
 
     def test_fit_minimize_metric(self):

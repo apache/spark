@@ -25,7 +25,8 @@ from pyspark.ml.param.shared import HasSeed
 from pyspark.ml.util import keyword_only
 from pyspark.sql.functions import rand
 
-__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit', 'TrainValidationSplitModel']
+__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
+           'TrainValidationSplitModel']
 
 
 class ParamGridBuilder(object):
@@ -291,7 +292,6 @@ class CrossValidatorModel(Model):
 class TrainValidationSplit(Estimator, HasSeed):
     # TODO: add since keyword to functions
 
-
     estimator = Param(Params._dummy(), "estimator", "estimator to be tested")
     estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
     evaluator = Param(
@@ -300,19 +300,19 @@ class TrainValidationSplit(Estimator, HasSeed):
     trainRatio = Param(Params._dummy(), "trainRatio", "proportion for train-validation ratio")
 
     @keyword_only
-    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                  seed=None):
         """
-        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,\
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
                  seed=None)
         """
         super(TrainValidationSplit, self).__init__()
-        self._setDefault(trainRatio= 0.75)
+        self._setDefault(trainRatio=0.75)
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
-    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                   seed=None):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,\
@@ -415,7 +415,6 @@ class TrainValidationSplit(Estimator, HasSeed):
         if self.isSet(self.estimator):
             newCV.setEstimator(self.getEstimator().copy(extra))
         # estimatorParamMaps remain the same
-        
         if self.isSet(self.evaluator):
             newCV.setEvaluator(self.getEvaluator().copy(extra))
         return newCV
@@ -430,7 +429,6 @@ class TrainValidationSplitModel(Model):
         super(TrainValidationSplitModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
-        
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -447,7 +445,7 @@ class TrainValidationSplitModel(Model):
         """
         if extra is None:
             extra = dict()
-        return TrainValidationSplitModel(self. .copy(extra))
+        return TrainValidationSplitModel(self.bestModel.copy(extra))
 
 if __name__ == "__main__":
     import doctest
