@@ -27,7 +27,7 @@ import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.JvmSource
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
+import org.apache.spark.util._
 
 class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkContext {
 
@@ -66,6 +66,26 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(TaskContextSuite.completed === true)
   }
 
+  test("calls TaskFailureListeners after failure") {
+    TaskContextSuite.lastError = null
+    sc = new SparkContext("local", "test")
+    val rdd = new RDD[String](sc, List()) {
+      override def getPartitions = Array[Partition](StubPartition(0))
+      override def compute(split: Partition, context: TaskContext) = {
+        context.addTaskFailureListener((context, error) => TaskContextSuite.lastError = error)
+        sys.error("damn error")
+      }
+    }
+    val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+    val func = (c: TaskContext, i: Iterator[String]) => i.next()
+    val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
+    val task = new ResultTask[String, String](0, 0, taskBinary, rdd.partitions(0), Seq.empty, 0)
+    intercept[RuntimeException] {
+      task.run(0, 0, null)
+    }
+    assert(TaskContextSuite.lastError.getMessage == "damn error")
+  }
+
   test("all TaskCompletionListeners should be called even if some fail") {
     val context = TaskContext.empty()
     val listener = mock(classOf[TaskCompletionListener])
@@ -78,6 +98,20 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
 
     verify(listener, times(1)).onTaskCompletion(any())
+  }
+
+  test("all TaskFailureListeners should be called even if some fail") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskFailureListener])
+    context.addTaskFailureListener((_, _) => throw new Exception("blah"))
+    context.addTaskFailureListener(listener)
+    context.addTaskFailureListener((_, _) => throw new Exception("blah"))
+
+    intercept[TaskCompletionListenerException] {
+      context.markTaskFailed(new Exception("damn error"))
+    }
+
+    verify(listener, times(1)).onTaskFailure(any(), any())
   }
 
   test("TaskContext.attemptNumber should return attempt number, not task id (SPARK-4014)") {
@@ -153,6 +187,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
 
 private object TaskContextSuite {
   @volatile var completed = false
+
+  @volatile var lastError: Throwable = _
 }
 
 private case class StubPartition(index: Int) extends Partition

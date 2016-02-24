@@ -29,5 +29,34 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 trait TaskCompletionListener extends EventListener {
-  def onTaskCompletion(context: TaskContext)
+  def onTaskCompletion(context: TaskContext): Unit
+}
+
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Listener providing a callback function to invoke when a task's execution encounters an error.
+ * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+ */
+@DeveloperApi
+trait TaskFailureListener extends EventListener {
+  def onTaskFailure(context: TaskContext, error: Throwable): Unit
+}
+
+
+/**
+ * Exception thrown when there is an exception in
+ * executing the callback in TaskCompletionListener.
+ */
+private[spark]
+class TaskCompletionListenerException(errorMessages: Seq[String]) extends Exception {
+
+  override def getMessage: String = {
+    if (errorMessages.size == 1) {
+      errorMessages.head
+    } else {
+      errorMessages.zipWithIndex.map { case (msg, i) => s"Exception $i: $msg" }.mkString("\n")
+    }
+  }
 }
