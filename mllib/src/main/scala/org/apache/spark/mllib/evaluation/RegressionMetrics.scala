@@ -110,10 +110,10 @@ class RegressionMetrics @Since("2.0.0") (
     math.sqrt(this.meanSquaredError)
   }
 
-  @Since("2.0.0")
   /**
-   * Returns the root mean squared log error.
+   * @return The root mean squared log error.
    */
+  @Since("2.0.0")
   def rootMeanSquaredLogError: Double = {
     math.sqrt(SSlogerr / summary.count)
   }
