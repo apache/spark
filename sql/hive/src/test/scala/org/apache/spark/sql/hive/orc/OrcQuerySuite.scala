@@ -119,7 +119,8 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       // expr = (not leaf-0)
       assertResult(10) {
         sql("SELECT name, contacts FROM t where age > 5")
-          .rdd.flatMap(_.getAs[Seq[_]]("contacts"))
+          .rdd
+          .flatMap(_.getAs[Seq[_]]("contacts"))
           .count()
       }
 

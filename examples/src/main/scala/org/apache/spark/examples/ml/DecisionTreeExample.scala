@@ -324,7 +324,6 @@ object DecisionTreeExample {
 
   /**
    * Evaluate the given RegressionModel on data.  Print the results.
- *
    * @param model  Must fit RegressionModel abstraction
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model
