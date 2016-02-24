@@ -1016,6 +1016,7 @@ private[spark] class BlockManager(
    * If `data` is not put on disk, it won't be created.
    *
    * The caller of this method must hold a write lock on the block before calling this method.
+   * This method does not release the write lock.
    *
    * @return the block's new effective StorageLevel.
    */

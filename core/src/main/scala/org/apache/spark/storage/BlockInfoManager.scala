@@ -30,6 +30,9 @@ import org.apache.spark.{Logging, SparkException, TaskContext}
 /**
  * Tracks metadata for an individual block.
  *
+ * Instances of this class are _not_ thread-safe and are protected by locks in the
+ * [[BlockInfoManager]].
+ *
  * @param level the block's storage level. This is the requested persistence level, not the
  *              effective storage level of the block (i.e. if this is MEMORY_AND_DISK, then this
  *              does not imply that the block is actually resident in memory).
@@ -176,7 +179,7 @@ private[storage] class BlockInfoManager extends Logging {
    * If another task has already locked this block for reading, then the read lock will be
    * immediately granted to the calling task and its lock count will be incremented.
    *
-   * If another task has locked this block for reading, then this call will block until the write
+   * If another task has locked this block for writing, then this call will block until the write
    * lock is released or will return immediately if `blocking = false`.
    *
    * A single task can lock a block multiple times for reading, in which case each lock will need
