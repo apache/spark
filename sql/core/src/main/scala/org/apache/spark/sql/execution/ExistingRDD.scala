@@ -149,14 +149,55 @@ private[sql] case class PhysicalRDD(
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
+
+    // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
+    // by looking at the first value of the RDD and then calling the function which will process
+    // the remaining. It is faster to return batches.
+    // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
+    // here which path to use. Fix this.
+
+    val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+
+    val scanBatches = ctx.freshName("processBatches")
+    ctx.addNewFunction(scanBatches,
+      s"""
+      | private void $scanBatches($columnarBatchClz batch) throws java.io.IOException {
+      |  while (true) {
+      |     int numRows = batch.numRows();
+      |     $numOutputRows.add(numRows);
+      |     for (int i = 0; i < numRows; i++) {
+      |       InternalRow $row = batch.getRow(i);
+      |       ${columns.map(_.code).mkString("\n").trim}
+      |       ${consume(ctx, columns).trim}
+      |     }
+      |
+      |     if (shouldStop()) return;
+      |     if (!$input.hasNext()) break;
+      |     batch = ($columnarBatchClz)$input.next();
+      |   }
+      | }""".stripMargin)
+
+    val scanRows = ctx.freshName("processRows")
+    ctx.addNewFunction(scanRows,
+      s"""
+       | private void $scanRows(InternalRow $row) throws java.io.IOException {
+       |   while (true) {
+       |     $numOutputRows.add(1);
+       |     ${columns.map(_.code).mkString("\n").trim}
+       |     ${consume(ctx, columns).trim}
+       |     if (shouldStop()) return;
+       |     if (!$input.hasNext()) break;
+       |     $row = (InternalRow)$input.next();
+       |   }
+       | }""".stripMargin)
+
     s"""
-       | while ($input.hasNext()) {
-       |   InternalRow $row = (InternalRow) $input.next();
-       |   $numOutputRows.add(1);
-       |   ${columns.map(_.code).mkString("\n").trim}
-       |   ${consume(ctx, columns).trim}
-       |   if (shouldStop()) {
-       |     return;
+       | if ($input.hasNext()) {
+       |   Object firstValue = $input.next();
+       |   if (firstValue instanceof $columnarBatchClz) {
+       |     $scanBatches(($columnarBatchClz)firstValue);
+       |   } else {
+       |     $scanRows((InternalRow)firstValue);
        |   }
        | }
      """.stripMargin
