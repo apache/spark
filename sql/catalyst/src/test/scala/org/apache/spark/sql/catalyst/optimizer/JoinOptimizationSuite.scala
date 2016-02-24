@@ -34,7 +34,7 @@ class JoinOptimizationSuite extends PlanTest {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Filter Pushdown", Once,
+      Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
@@ -108,8 +108,8 @@ class JoinOptimizationSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"),
-            BroadcastHint(SubqueryAlias("y", input))),
+          BroadcastHint(
+            Project(Seq($"y.key"), SubqueryAlias("y", input))),
           Inner, None)).analyze
 
     comparePlans(optimized, expected)
