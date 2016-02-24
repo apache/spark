@@ -23,13 +23,13 @@ import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.spark.SparkContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.InputMetrics
 import org.apache.spark.rdd.{HadoopPartition, HadoopRDD}
-import org.apache.spark.sql.hive.mapred.{CombineSplit, CombineSplitInputFormat}
+import org.apache.spark.sql.hive.mapred.CombineSplitInputFormat
+import org.apache.spark.sql.hive.mapred.CombineSplitInputFormat.CombineSplit
 import org.apache.spark.util.SerializableConfiguration
 
 
-class HadoopCombineRDD[K, V](
+class HadoopRDDwithCombination[K, V](
     @transient sc: SparkContext,
     broadcastedConf: Broadcast[SerializableConfiguration],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
@@ -37,7 +37,7 @@ class HadoopCombineRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     minPartitions: Int,
-    mapperSplitSize: Int) extends HadoopRDD[K, V](sc,
+    splitCombineSize: Int) extends HadoopRDD[K, V](sc,
     broadcastedConf,
     initLocalJobConfFuncOpt,
     inputFormatClass,
@@ -45,16 +45,20 @@ class HadoopCombineRDD[K, V](
     valueClass,
     minPartitions
 ) {
+
   override protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
-      val inputFormat = super.getInputFormat(conf)
-      new CombineSplitInputFormat(inputFormat, mapperSplitSize)
+    if (splitCombineSize < 0) {
+      super.getInputFormat(conf)
+    } else {
+      new CombineSplitInputFormat(super.getInputFormat(conf), splitCombineSize)
+    }
   }
 
-  override protected def registMetricsReadCallback(split: HadoopPartition) = {
+  override protected def getBytesReadCallback(split: HadoopPartition) = {
     // Find a function that will return the FileSystem bytes read by this thread. Do this before
     // creating RecordReader, because RecordReader's constructor might read some bytes
     val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
-      case _: FileSplit | _: CombineFileSplit =>
+      case _: FileSplit | _: CombineFileSplit | _: CombineSplit =>
         SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
       case _ => None
     }

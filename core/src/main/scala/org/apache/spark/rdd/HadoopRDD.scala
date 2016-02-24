@@ -205,15 +205,14 @@ class HadoopRDD[K, V](
     array
   }
 
-  protected def registMetricsReadCallback(split: HadoopPartition) = {
-    // Find a function that will return the FileSystem bytes read by this thread. Do this before
-    // creating RecordReader, because RecordReader's constructor might read some bytes
-    val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
+  // Find a function that will return the FileSystem bytes read by this thread. Do this before
+  // creating RecordReader, because RecordReader's constructor might read some bytes
+  protected def getBytesReadCallback(split: HadoopPartition): Option[() => Long] = {
+    split.inputSplit.value match {
       case _: FileSplit | _: CombineFileSplit =>
         SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
       case _ => None
     }
-    getBytesReadCallback
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
@@ -233,14 +232,14 @@ class HadoopRDD[K, V](
         case _ => SqlNewHadoopRDDState.unsetInputFileName()
       }
 
-      val getBytesReadCallback = registMetricsReadCallback(split)
+      val bytesReadCallback = getBytesReadCallback(split)
 
       // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
       // If we do a coalesce, however, we are likely to compute multiple partitions in the same
       // task and in the same thread, in which case we need to avoid override values written by
       // previous partitions (SPARK-13071).
       def updateBytesRead(): Unit = {
-        getBytesReadCallback.foreach { getBytesRead =>
+        bytesReadCallback.foreach { getBytesRead =>
           inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
@@ -288,7 +287,7 @@ class HadoopRDD[K, V](
           } finally {
             reader = null
           }
-          if (getBytesReadCallback.isDefined) {
+          if (bytesReadCallback.isDefined) {
             updateBytesRead()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
                      split.inputSplit.value.isInstanceOf[CombineFileSplit]) {

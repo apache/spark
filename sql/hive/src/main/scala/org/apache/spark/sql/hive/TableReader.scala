@@ -274,18 +274,7 @@ class HadoopTableReader(
     inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
 
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
-    val rdd = if (sc.conf.mapperSplitCombineSize < 0) {
-      new HadoopRDD(
-        sc.sparkContext,
-        _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
-        Some(initializeJobConfFunc),
-        inputFormatClass,
-        classOf[Writable],
-        classOf[Writable],
-        _minSplitsPerRDD)
-
-    } else {
-      new HadoopCombineRDD(
+    val rdd = new HadoopRDDwithCombination(
         sc.sparkContext,
         _broadcastedHiveConf.asInstanceOf[Broadcast[SerializableConfiguration]],
         Some(initializeJobConfFunc),
@@ -294,8 +283,6 @@ class HadoopTableReader(
         classOf[Writable],
         _minSplitsPerRDD,
         sc.conf.mapperSplitCombineSize)
-    }
-
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
   }
