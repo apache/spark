@@ -423,7 +423,7 @@ class WindowFunctionTests(PySparkStreamingTestCase):
                 .reduceByKeyAndWindow(operator.add, None, 5, 1)\
                 .filter(lambda kv: kv[1] > 0).count()
 
-        expected = [[2], [4], [6], [6], [6], [6]]
+        expected = [[1], [2], [3], [4], [5], [6]]
         self._test_func(input, func, expected)
 
 
