@@ -38,7 +38,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  * supported by this builder (yet).
  */
 class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Logging {
-  require(logicalPlan.resolved, "SQLBuilder only supports resloved logical query plans")
+  require(logicalPlan.resolved, "SQLBuilder only supports resolved logical query plans")
 
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 
@@ -91,6 +91,23 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case Limit(limitExpr, child) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
 
+    case p: Sample if p.isTableSample =>
+      val fraction = math.min(100, math.max(0, (p.upperBound - p.lowerBound) * 100))
+      p.child match {
+        case m: MetastoreRelation =>
+          val aliasName = m.alias.getOrElse("")
+          build(
+            s"`${m.databaseName}`.`${m.tableName}`",
+            "TABLESAMPLE(" + fraction + " PERCENT)",
+            aliasName)
+        case s: SubqueryAlias =>
+          val aliasName = if (s.child.isInstanceOf[SubqueryAlias]) s.alias else ""
+          val plan = if (s.child.isInstanceOf[SubqueryAlias]) s.child else s
+          build(toSQL(plan), "TABLESAMPLE(" + fraction + " PERCENT)", aliasName)
+        case _ =>
+          build(toSQL(p.child), "TABLESAMPLE(" + fraction + " PERCENT)")
+      }
+
     case p: Filter =>
       val whereOrHaving = p.child match {
         case _: Aggregate => "HAVING"
@@ -98,9 +115,19 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       }
       build(toSQL(p.child), whereOrHaving, p.condition.sql)
 
+    case p @ Distinct(u: Union) if u.children.length > 1 =>
+      val childrenSql = u.children.map(c => s"(${toSQL(c)})")
+      childrenSql.mkString(" UNION DISTINCT ")
+
     case p: Union if p.children.length > 1 =>
-      val childrenSql = p.children.map(toSQL(_))
+      val childrenSql = p.children.map(c => s"(${toSQL(c)})")
       childrenSql.mkString(" UNION ALL ")
+
+    case p: Intersect =>
+      build("(" + toSQL(p.left), ") INTERSECT (", toSQL(p.right) + ")")
+
+    case p: Except =>
+      build("(" + toSQL(p.left), ") EXCEPT (", toSQL(p.right) + ")")
 
     case p: SubqueryAlias =>
       p.child match {
@@ -222,6 +249,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
             | OneRowRelation
             | _: LocalLimit
             | _: GlobalLimit
+            | _: Sample
         ) => plan
 
         case plan: Project =>

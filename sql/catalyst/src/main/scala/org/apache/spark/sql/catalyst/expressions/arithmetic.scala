@@ -95,8 +95,6 @@ case class Abs(child: Expression) extends UnaryExpression with ExpectsInputTypes
   }
 
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
-
-  override def sql: String = s"$prettyName(${child.sql})"
 }
 
 abstract class BinaryArithmetic extends BinaryOperator {

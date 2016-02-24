@@ -358,7 +358,8 @@ class SparkSubmitSuite
     val appArgs = new SparkSubmitArguments(clArgs)
     val (_, _, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     sysProps("spark.executor.memory") should be ("5g")
-    sysProps("spark.master") should be ("yarn-cluster")
+    sysProps("spark.master") should be ("yarn")
+    sysProps("spark.submit.deployMode") should be ("cluster")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
@@ -454,7 +455,7 @@ class SparkSubmitSuite
 
     // Test files and archives (Yarn)
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
       "--class", "org.SomeClass",
       "--files", files,
       "--archives", archives,
@@ -512,7 +513,7 @@ class SparkSubmitSuite
     writer2.println("spark.yarn.dist.archives " + archives)
     writer2.close()
     val clArgs2 = Seq(
-      "--master", "yarn-client",
+      "--master", "yarn",
       "--class", "org.SomeClass",
       "--properties-file", f2.getPath,
       "thejar.jar"

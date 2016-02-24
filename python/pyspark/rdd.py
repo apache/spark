@@ -2309,7 +2309,7 @@ class RDD(object):
                 yield row
 
 
-def _prepare_for_python_RDD(sc, command, obj=None):
+def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
     pickled_command = ser.dumps(command)
@@ -2327,6 +2327,15 @@ def _prepare_for_python_RDD(sc, command, obj=None):
     env = MapConverter().convert(sc.environment, sc._gateway._gateway_client)
     includes = ListConverter().convert(sc._python_includes, sc._gateway._gateway_client)
     return pickled_command, broadcast_vars, env, includes
+
+
+def _wrap_function(sc, func, deserializer, serializer, profiler=None):
+    assert deserializer, "deserializer should not be empty"
+    assert serializer, "serializer should not be empty"
+    command = (func, profiler, deserializer, serializer)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
 class PipelinedRDD(RDD):
@@ -2390,14 +2399,10 @@ class PipelinedRDD(RDD):
         else:
             profiler = None
 
-        command = (self.func, profiler, self._prev_jrdd_deserializer,
-                   self._jrdd_deserializer)
-        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
-        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
-                                             bytearray(pickled_cmd),
-                                             env, includes, self.preservesPartitioning,
-                                             self.ctx.pythonExec, self.ctx.pythonVer,
-                                             bvars, self.ctx._javaAccumulator)
+        wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
+                                      self._jrdd_deserializer, profiler)
+        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
+                                             self.preservesPartitioning)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:

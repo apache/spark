@@ -123,7 +123,7 @@ object SamplePushDown extends Rule[LogicalPlan] {
     // Push down projection into sample
     case Project(projectList, s @ Sample(lb, up, replace, seed, child)) =>
       Sample(lb, up, replace, seed,
-        Project(projectList, child))
+        Project(projectList, child))()
   }
 }
 

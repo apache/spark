@@ -234,4 +234,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         -> "Error in query: Table not found: nonexistent_table;"
     )
   }
+
+  test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
+    runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
+      "" -> "This is a test for Spark-11624")
+  }
 }
