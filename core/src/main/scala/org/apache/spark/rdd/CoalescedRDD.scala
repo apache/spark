@@ -273,7 +273,8 @@ private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack:
       groupArr += pgroup
       groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       var tries = 0
-      while (!addPartToPGroup(nxt_part, pgroup) && tries < targetLen) { // ensure at least one part
+      // ensure at least one part
+      while (pgroup.arr.isEmpty && !addPartToPGroup(nxt_part, pgroup) && tries < targetLen) {
         nxt_part = rotIt.next()._2
         tries += 1
       }
