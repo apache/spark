@@ -33,7 +33,7 @@ import org.apache.spark.network.util.{ByteUnit, JavaUtils}
  *                        string value. It's usually `toString`. But sometimes, a custom converter
  *                        is necessary. E.g., if T is List[String], `a, b, c` is better than
  *                        `List(a, b, c)`.
- * @param doc the document for the configuration
+ * @param doc the documentation for the configuration
  * @param isPublic if this configuration is public to the user. If it's `false`, this
  *                 configuration is only used internally and we should not expose it to the user.
  * @tparam T the value type
@@ -67,14 +67,17 @@ private[spark] class ConfigEntry[T] (
   }
 }
 
+/**
+ * A config entry that does not have a default value. See the `optional` method in ConfigEntry.
+ */
 private[spark] class OptionalConfigEntry[T](
     override val key: String,
-    val _valueConverter: String => T,
-    val _stringConverter: T => String,
+    _valueConverter: String => T,
+    val rawStringConverter: T => String,
     override val doc: String,
     override val isPublic: Boolean)
-    extends ConfigEntry[Option[T]](key, None, s => Some(_valueConverter(s)),
-      null, doc, isPublic) {
+    extends ConfigEntry[Option[T]](key, None, s => Option(_valueConverter(s)),
+      v => v.map(rawStringConverter).orNull, doc, isPublic) {
 
   override def readFrom(conf: SparkConf): Option[T] = {
     conf.getOption(key).map(_valueConverter)
@@ -82,6 +85,9 @@ private[spark] class OptionalConfigEntry[T](
 
 }
 
+/**
+ * A config entry whose default value is defined by another config entry.
+ */
 private class FallbackConfigEntry[T] (
     override val key: String,
     override val doc: String,

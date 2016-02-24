@@ -82,7 +82,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   private[spark] def set[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
-    set(entry.key, entry._stringConverter(value))
+    set(entry.key, entry.rawStringConverter(value))
     this
   }
 
@@ -168,7 +168,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   private[spark] def setIfMissing[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
-    if (settings.putIfAbsent(entry.key, entry._stringConverter(value)) == null) {
+    if (settings.putIfAbsent(entry.key, entry.rawStringConverter(value)) == null) {
       logDeprecationWarning(entry.key)
     }
     this
@@ -224,6 +224,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     getOption(key).getOrElse(defaultValue)
   }
 
+  /**
+   * Retrieves the value of a pre-defined configuration entry.
+   *
+   * - This is an internal Spark API.
+   * - The return type if defined by the configuration entry.
+   * - This will throw an exception is the config is not optional and the value is not set.
+   */
   private[spark] def get[T](entry: ConfigEntry[T]): T = {
     entry.readFrom(this)
   }
