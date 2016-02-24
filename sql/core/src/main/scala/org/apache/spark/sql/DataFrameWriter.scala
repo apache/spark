@@ -22,17 +22,18 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.HadoopFsRelation
 
 /**
  * :: Experimental ::
  * Interface used to write a [[DataFrame]] to external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[DataFrame.write]] to access this.
+ * key-value stores, etc) or data streams. Use [[DataFrame.write]] to access this.
  *
  * @since 1.4.0
  */
@@ -93,6 +94,27 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     this.extraOptions += (key -> value)
     this
   }
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameWriter = option(key, value.toString)
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameWriter = option(key, value.toString)
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameWriter = option(key, value.toString)
 
   /**
    * (Scala-specific) Adds output options for the underlying data source.
@@ -184,6 +206,46 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * This name must be unique among all the currently active queries in the associated SQLContext.
+   *
+   * @since 2.0.0
+   */
+  def queryName(queryName: String): DataFrameWriter = {
+    this.extraOptions += ("queryName" -> queryName)
+    this
+  }
+
+  /**
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
+   * the stream.
+   *
+   * @since 2.0.0
+   */
+  def stream(path: String): ContinuousQuery = {
+    option("path", path).stream()
+  }
+
+  /**
+   * Starts the execution of the streaming query, which will continually output results to the given
+   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
+   * the stream.
+   *
+   * @since 2.0.0
+   */
+  def stream(): ContinuousQuery = {
+    val sink = ResolvedDataSource.createSink(
+      df.sqlContext,
+      source,
+      extraOptions.toMap,
+      normalizedParCols.getOrElse(Nil))
+
+    df.sqlContext.continuousQueryManager.startQuery(
+      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, sink)
+  }
+
+  /**
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
    *
@@ -255,7 +317,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * The given column name may not be equal to any of the existing column names if we were in
-   * case-insensitive context.  Normalize the given column name to the real one so that we don't
+   * case-insensitive context. Normalize the given column name to the real one so that we don't
    * need to care about case sensitivity afterwards.
    */
   private def normalize(columnName: String, columnType: String): String = {
@@ -339,7 +401,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
-   *
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {

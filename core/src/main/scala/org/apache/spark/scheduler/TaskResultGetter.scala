@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.{ExecutorService, RejectedExecutionException}
 
 import scala.language.existentials
 import scala.util.control.NonFatal
@@ -35,9 +35,12 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   extends Logging {
 
   private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
-  private val getTaskResultExecutor = ThreadUtils.newDaemonFixedThreadPool(
-    THREADS, "task-result-getter")
 
+  // Exposed for testing.
+  protected val getTaskResultExecutor: ExecutorService =
+    ThreadUtils.newDaemonFixedThreadPool(THREADS, "task-result-getter")
+
+  // Exposed for testing.
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {
       sparkEnv.closureSerializer.newInstance()
@@ -45,7 +48,9 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   }
 
   def enqueueSuccessfulTask(
-    taskSetManager: TaskSetManager, tid: Long, serializedData: ByteBuffer) {
+      taskSetManager: TaskSetManager,
+      tid: Long,
+      serializedData: ByteBuffer): Unit = {
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
@@ -82,7 +87,19 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
               (deserializedResult, size)
           }
 
-          result.metrics.setResultSize(size)
+          // Set the task result size in the accumulator updates received from the executors.
+          // We need to do this here on the driver because if we did this on the executors then
+          // we would have to serialize the result again after updating the size.
+          result.accumUpdates = result.accumUpdates.map { a =>
+            if (a.name == Some(InternalAccumulator.RESULT_SIZE)) {
+              assert(a.update == Some(0L),
+                "task result size should not have been set on the executors")
+              a.copy(update = Some(size.toLong))
+            } else {
+              a
+            }
+          }
+
           scheduler.handleSuccessfulTask(taskSetManager, tid, result)
         } catch {
           case cnf: ClassNotFoundException =>

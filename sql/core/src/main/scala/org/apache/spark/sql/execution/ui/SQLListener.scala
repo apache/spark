@@ -23,7 +23,7 @@ import org.apache.spark.{JobExecutionStatus, Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetricParam, SQLMetricValue}
+import org.apache.spark.sql.execution.metric._
 import org.apache.spark.ui.SparkUI
 
 @DeveloperApi
@@ -139,9 +139,8 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 
   override def onExecutorMetricsUpdate(
       executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
-    for ((taskId, stageId, stageAttemptID, metrics) <- executorMetricsUpdate.taskMetrics) {
-      updateTaskAccumulatorValues(taskId, stageId, stageAttemptID, metrics.accumulatorUpdates(),
-        finishTask = false)
+    for ((taskId, stageId, stageAttemptID, accumUpdates) <- executorMetricsUpdate.accumUpdates) {
+      updateTaskAccumulatorValues(taskId, stageId, stageAttemptID, accumUpdates, finishTask = false)
     }
   }
 
@@ -177,7 +176,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       taskId: Long,
       stageId: Int,
       stageAttemptID: Int,
-      accumulatorUpdates: Map[Long, Any],
+      accumulatorUpdates: Seq[AccumulableInfo],
       finishTask: Boolean): Unit = {
 
     _stageIdToStageMetrics.get(stageId) match {
@@ -289,8 +288,10 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           for (stageId <- executionUIData.stages;
                stageMetrics <- _stageIdToStageMetrics.get(stageId).toIterable;
                taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
-               accumulatorUpdate <- taskMetrics.accumulatorUpdates.toSeq) yield {
-            accumulatorUpdate
+               accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
+            assert(accumulatorUpdate.update.isDefined, s"accumulator update from " +
+              s"task did not have a partial value: ${accumulatorUpdate.name}")
+            (accumulatorUpdate.id, accumulatorUpdate.update.get)
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
@@ -313,14 +314,17 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
 
 }
 
+
+/**
+ * A [[SQLListener]] for rendering the SQL UI in the history server.
+ */
 private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
   extends SQLListener(conf) {
 
   private var sqlTabAttached = false
 
-  override def onExecutorMetricsUpdate(
-      executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = synchronized {
-    // Do nothing
+  override def onExecutorMetricsUpdate(u: SparkListenerExecutorMetricsUpdate): Unit = {
+    // Do nothing; these events are not logged
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
@@ -328,9 +332,16 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.taskInfo.taskId,
       taskEnd.stageId,
       taskEnd.stageAttemptId,
-      taskEnd.taskInfo.accumulables.map { acc =>
-        (acc.id, new LongSQLMetricValue(acc.update.getOrElse("0").toLong))
-      }.toMap,
+      taskEnd.taskInfo.accumulables.flatMap { a =>
+        // Filter out accumulators that are not SQL metrics
+        // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
+        if (a.metadata.exists(_ == SQLMetrics.ACCUM_IDENTIFIER)) {
+          val newValue = new LongSQLMetricValue(a.update.map(_.toString.toLong).getOrElse(0L))
+          Some(a.copy(update = Some(newValue)))
+        } else {
+          None
+        }
+      },
       finishTask = true)
   }
 
@@ -406,4 +417,4 @@ private[ui] class SQLStageMetrics(
 private[ui] class SQLTaskMetrics(
     val attemptId: Long, // TODO not used yet
     var finished: Boolean,
-    var accumulatorUpdates: Map[Long, Any])
+    var accumulatorUpdates: Seq[AccumulableInfo])

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A parent class for mutable container objects that are reused when the values are changed,
@@ -211,6 +210,8 @@ final class SpecificMutableRow(val values: Array[MutableValue])
       }.toArray)
 
   def this() = this(Seq.empty)
+
+  def this(schema: StructType) = this(schema.fields.map(_.dataType))
 
   override def numFields: Int = values.length
 

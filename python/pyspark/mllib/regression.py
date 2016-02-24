@@ -219,8 +219,10 @@ class LinearRegressionWithSGD(object):
     """
     Train a linear regression model with no regularization using Stochastic Gradient Descent.
     This solves the least squares regression formulation
-                 f(weights) = 1/n ||A weights-y||^2^
-    (which is the mean squared error).
+
+        f(weights) = 1/n ||A weights-y||^2
+
+    which is the mean squared error.
     Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
     its corresponding right hand side label y.
     See also the documentation for the precise formulation.
@@ -367,8 +369,10 @@ class LassoModel(LinearRegressionModelBase):
 class LassoWithSGD(object):
     """
     Train a regression model with L1-regularization using Stochastic Gradient Descent.
-    This solves the l1-regularized least squares regression formulation
-             f(weights) = 1/2n ||A weights-y||^2^  + regParam ||weights||_1
+    This solves the L1-regularized least squares regression formulation
+
+        f(weights) = 1/2n ||A weights-y||^2  + regParam ||weights||_1
+
     Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
     its corresponding right hand side label y.
     See also the documentation for the precise formulation.
@@ -505,8 +509,10 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 class RidgeRegressionWithSGD(object):
     """
     Train a regression model with L2-regularization using Stochastic Gradient Descent.
-    This solves the l2-regularized least squares regression formulation
-             f(weights) = 1/2n ||A weights-y||^2^  + regParam/2 ||weights||^2^
+    This solves the L2-regularized least squares regression formulation
+
+          f(weights) = 1/2n ||A weights-y||^2  + regParam/2 ||weights||^2
+
     Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
     its corresponding right hand side label y.
     See also the documentation for the precise formulation.
@@ -655,17 +661,19 @@ class IsotonicRegression(object):
     Only univariate (single feature) algorithm supported.
 
     Sequential PAV implementation based on:
-    Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
+
+      Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
       "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
-      Available from [[http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf]]
+      Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
 
     Sequential PAV parallelization based on:
-    Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
-      "An approach to parallelizing isotonic regression."
-      Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
-      Available from [[http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf]]
 
-    @see [[http://en.wikipedia.org/wiki/Isotonic_regression Isotonic regression (Wikipedia)]]
+        Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
+        "An approach to parallelizing isotonic regression."
+        Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
+        Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
+
+    See `Isotonic regression (Wikipedia) <http://en.wikipedia.org/wiki/Isotonic_regression>`_.
 
     .. versionadded:: 1.4.0
     """

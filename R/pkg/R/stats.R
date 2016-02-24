@@ -66,8 +66,9 @@ setMethod("crosstab",
 #' cov <- cov(df, "title", "gender")
 #' }
 setMethod("cov",
-          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          signature(x = "DataFrame"),
           function(x, col1, col2) {
+            stopifnot(class(col1) == "character" && class(col2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
             callJMethod(statFunctions, "cov", col1, col2)
           })

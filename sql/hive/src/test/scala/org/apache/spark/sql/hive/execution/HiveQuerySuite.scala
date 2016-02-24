@@ -28,6 +28,7 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
@@ -121,60 +122,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertBroadcastNestedLoopJoin(spark_10484_3)
     assertBroadcastNestedLoopJoin(spark_10484_4)
   }
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
-    """
-      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #2",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM src group by key%5, key-5
-      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #3",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for CUBE #1",
-    """
-      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH CUBE
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for CUBE #2",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for GroupingSet",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
 
   createQueryTest("insert table with generator with column name",
     """
@@ -769,14 +716,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
-      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+      .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
     TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
-      .map(x => Pair(x.getString(0), x.getInt(1)))
+      .map(x => (x.getString(0), x.getInt(1)))
 
-    assert(results === Array(Pair("foo", 4)))
+    assert(results === Array(("foo", 4)))
     TestHive.reset()
   }
 
@@ -1260,6 +1207,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       s2.sql("DROP TABLE IF EXISTS test_b")
     }
 
+  }
+
+  test("use database") {
+    val currentDatabase = sql("select current_database()").first().getString(0)
+
+    sql("CREATE DATABASE hive_test_db")
+    sql("USE hive_test_db")
+    assert("hive_test_db" == sql("select current_database()").first().getString(0))
+
+    intercept[NoSuchDatabaseException] {
+      sql("USE not_existing_db")
+    }
+
+    sql(s"USE $currentDatabase")
+    assert(currentDatabase == sql("select current_database()").first().getString(0))
   }
 
   test("lookup hive UDF in another thread") {

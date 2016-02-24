@@ -54,27 +54,34 @@ private[ui] class ExecutorsPage(
   private val GCTimePercent = 0.1
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val (storageStatusList, execInfo) = listener.synchronized {
+    val (activeExecutorInfo, deadExecutorInfo) = listener.synchronized {
       // The follow codes should be protected by `listener` to make sure no executors will be
       // removed before we query their status. See SPARK-12784.
-      val _storageStatusList = listener.storageStatusList
-      val _execInfo = {
-        for (statusId <- 0 until _storageStatusList.size)
-          yield ExecutorsPage.getExecInfo(listener, statusId)
+      val _activeExecutorInfo = {
+        for (statusId <- 0 until listener.activeStorageStatusList.size)
+          yield ExecutorsPage.getExecInfo(listener, statusId, isActive = true)
       }
-      (_storageStatusList, _execInfo)
+      val _deadExecutorInfo = {
+        for (statusId <- 0 until listener.deadStorageStatusList.size)
+          yield ExecutorsPage.getExecInfo(listener, statusId, isActive = false)
+      }
+      (_activeExecutorInfo, _deadExecutorInfo)
     }
+
+    val execInfo = activeExecutorInfo ++ deadExecutorInfo
     val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
-    val execTable =
+    val execTable = {
       <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>
+          <th>Status</th>
           <th>RDD Blocks</th>
           <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
           <th>Disk Used</th>
+          <th>Cores</th>
           <th>Active Tasks</th>
           <th>Failed Tasks</th>
           <th>Complete Tasks</th>
@@ -97,22 +104,28 @@ private[ui] class ExecutorsPage(
           {execInfoSorted.map(execRow(_, logsExist))}
         </tbody>
       </table>
+    }
 
     val content =
       <div class="row">
         <div class="span12">
-          <h4>Totals for {execInfo.size} Executors</h4>
-          {execSummary(execInfo)}
+          <h4>Dead Executors({deadExecutorInfo.size})</h4>
+        </div>
+      </div>
+      <div class="row">
+        <div class="span12">
+          <h4>Active Executors({activeExecutorInfo.size})</h4>
+          {execSummary(activeExecutorInfo)}
         </div>
       </div>
       <div class = "row">
         <div class="span12">
-          <h4>Active Executors</h4>
+          <h4>Executors</h4>
           {execTable}
         </div>
       </div>;
 
-    UIUtils.headerSparkPage("Executors (" + execInfo.size + ")", content, parent)
+    UIUtils.headerSparkPage("Executors", content, parent)
   }
 
   /** Render an HTML row representing an executor */
@@ -120,9 +133,19 @@ private[ui] class ExecutorsPage(
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
+    val executorStatus =
+      if (info.isActive) {
+        "Active"
+      } else {
+        "Dead"
+      }
+
     <tr>
       <td>{info.id}</td>
       <td>{info.hostPort}</td>
+      <td sorttable_customkey={executorStatus.toString}>
+        {executorStatus}
+      </td>
       <td>{info.rddBlocks}</td>
       <td sorttable_customkey={memoryUsed.toString}>
         {Utils.bytesToString(memoryUsed)} /
@@ -131,6 +154,7 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
       </td>
+      <td>{info.totalCores}</td>
       {taskData(info.maxTasks, info.activeTasks, info.failedTasks, info.completedTasks,
       info.totalTasks, info.totalDuration, info.totalGCTime)}
       <td sorttable_customkey={info.totalInputBytes.toString}>
@@ -159,10 +183,14 @@ private[ui] class ExecutorsPage(
       }
       {
         if (threadDumpEnabled) {
-          val encodedId = URLEncoder.encode(info.id, "UTF-8")
-          <td>
-            <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
-          </td>
+          if (info.isActive) {
+            val encodedId = URLEncoder.encode(info.id, "UTF-8")
+            <td>
+              <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
+            </td>
+          } else {
+            <td> </td>
+          }
         } else {
           Seq.empty
         }
@@ -174,6 +202,7 @@ private[ui] class ExecutorsPage(
     val maximumMemory = execInfo.map(_.maxMemory).sum
     val memoryUsed = execInfo.map(_.memoryUsed).sum
     val diskUsed = execInfo.map(_.diskUsed).sum
+    val totalCores = execInfo.map(_.totalCores).sum
     val totalInputBytes = execInfo.map(_.totalInputBytes).sum
     val totalShuffleRead = execInfo.map(_.totalShuffleRead).sum
     val totalShuffleWrite = execInfo.map(_.totalShuffleWrite).sum
@@ -188,6 +217,7 @@ private[ui] class ExecutorsPage(
         <td sorttable_customkey={diskUsed.toString}>
           {Utils.bytesToString(diskUsed)}
         </td>
+        <td>{totalCores}</td>
         {taskData(execInfo.map(_.maxTasks).sum,
         execInfo.map(_.activeTasks).sum,
         execInfo.map(_.failedTasks).sum,
@@ -211,6 +241,7 @@ private[ui] class ExecutorsPage(
         <th>RDD Blocks</th>
         <th><span data-toggle="tooltip" title={ToolTips.STORAGE_MEMORY}>Storage Memory</span></th>
         <th>Disk Used</th>
+        <th>Cores</th>
         <th>Active Tasks</th>
         <th>Failed Tasks</th>
         <th>Complete Tasks</th>
@@ -231,14 +262,13 @@ private[ui] class ExecutorsPage(
   }
 
   private def taskData(
-    maxTasks: Int,
-    activeTasks: Int,
-    failedTasks: Int,
-    completedTasks: Int,
-    totalTasks: Int,
-    totalDuration: Long,
-    totalGCTime: Long):
-  Seq[Node] = {
+      maxTasks: Int,
+      activeTasks: Int,
+      failedTasks: Int,
+      completedTasks: Int,
+      totalTasks: Int,
+      totalDuration: Long,
+      totalGCTime: Long): Seq[Node] = {
     // Determine Color Opacity from 0.5-1
     // activeTasks range from 0 to maxTasks
     val activeTasksAlpha =
@@ -297,14 +327,22 @@ private[ui] class ExecutorsPage(
 
 private[spark] object ExecutorsPage {
   /** Represent an executor's info as a map given a storage status index */
-  def getExecInfo(listener: ExecutorsListener, statusId: Int): ExecutorSummary = {
-    val status = listener.storageStatusList(statusId)
+  def getExecInfo(
+      listener: ExecutorsListener,
+      statusId: Int,
+      isActive: Boolean): ExecutorSummary = {
+    val status = if (isActive) {
+      listener.activeStorageStatusList(statusId)
+    } else {
+      listener.deadStorageStatusList(statusId)
+    }
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
     val diskUsed = status.diskUsed
+    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
     val maxTasks = listener.executorToTasksMax.getOrElse(execId, 0)
     val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
@@ -320,9 +358,11 @@ private[spark] object ExecutorsPage {
     new ExecutorSummary(
       execId,
       hostPort,
+      isActive,
       rddBlocks,
       memUsed,
       diskUsed,
+      totalCores,
       maxTasks,
       activeTasks,
       failedTasks,

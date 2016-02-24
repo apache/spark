@@ -212,7 +212,10 @@ class HadoopRDD[K, V](
       logInfo("Input split: " + split.inputSplit)
       val jobConf = getJobConf()
 
+      // TODO: there is a lot of duplicate code between this and NewHadoopRDD and SqlNewHadoopRDD
+
       val inputMetrics = context.taskMetrics().registerInputMetrics(DataReadMethod.Hadoop)
+      val existingBytesRead = inputMetrics.bytesRead
 
       // Sets the thread local variable for the file's name
       split.inputSplit.value match {
@@ -222,14 +225,21 @@ class HadoopRDD[K, V](
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
-      val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
-        split.inputSplit.value match {
-          case _: FileSplit | _: CombineFileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-          case _ => None
+      val getBytesReadCallback: Option[() => Long] = split.inputSplit.value match {
+        case _: FileSplit | _: CombineFileSplit =>
+          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+        case _ => None
+      }
+
+      // For Hadoop 2.5+, we get our input bytes from thread-local Hadoop FileSystem statistics.
+      // If we do a coalesce, however, we are likely to compute multiple partitions in the same
+      // task and in the same thread, in which case we need to avoid override values written by
+      // previous partitions (SPARK-13071).
+      def updateBytesRead(): Unit = {
+        getBytesReadCallback.foreach { getBytesRead =>
+          inputMetrics.setBytesRead(existingBytesRead + getBytesRead())
         }
       }
-      inputMetrics.setBytesReadCallback(bytesReadCallback)
 
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
@@ -250,7 +260,10 @@ class HadoopRDD[K, V](
             finished = true
         }
         if (!finished) {
-          inputMetrics.incRecordsRead(1)
+          inputMetrics.incRecordsReadInternal(1)
+        }
+        if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
+          updateBytesRead()
         }
         (key, value)
       }
@@ -272,14 +285,14 @@ class HadoopRDD[K, V](
           } finally {
             reader = null
           }
-          if (bytesReadCallback.isDefined) {
-            inputMetrics.updateBytesRead()
+          if (getBytesReadCallback.isDefined) {
+            updateBytesRead()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit] ||
                      split.inputSplit.value.isInstanceOf[CombineFileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.incBytesRead(split.inputSplit.value.getLength)
+              inputMetrics.incBytesReadInternal(split.inputSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)

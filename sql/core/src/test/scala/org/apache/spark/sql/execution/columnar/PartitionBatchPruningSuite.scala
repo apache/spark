@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
 
-class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
+
+class PartitionBatchPruningSuite
+  extends SparkFunSuite
+  with BeforeAndAfterEach
+  with SharedSQLContext {
+
   import testImplicits._
 
   private lazy val originalColumnBatchSize = sqlContext.conf.columnBatchSize
@@ -32,27 +39,38 @@ class PartitionBatchPruningSuite extends SparkFunSuite with SharedSQLContext {
     super.beforeAll()
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
     sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
-
-    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
-      val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
-      TestData(key, string)
-    }, 5).toDF()
-    pruningData.registerTempTable("pruningData")
-
     // Enable in-memory partition pruning
     sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Enable in-memory table scan accumulators
     sqlContext.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
-    sqlContext.cacheTable("pruningData")
   }
 
   override protected def afterAll(): Unit = {
     try {
       sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-      sqlContext.uncacheTable("pruningData")
     } finally {
       super.afterAll()
+    }
+  }
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    // This creates accumulators, which get cleaned up after every single test,
+    // so we need to do this before every test.
+    val pruningData = sparkContext.makeRDD((1 to 100).map { key =>
+      val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
+      TestData(key, string)
+    }, 5).toDF()
+    pruningData.registerTempTable("pruningData")
+    sqlContext.cacheTable("pruningData")
+  }
+
+  override protected def afterEach(): Unit = {
+    try {
+      sqlContext.uncacheTable("pruningData")
+    } finally {
+      super.afterEach()
     }
   }
 

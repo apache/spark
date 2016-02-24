@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveContext
@@ -30,7 +31,7 @@ import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**
- * A simple set of tests that call the methods of a hive ClientInterface, loading different version
+ * A simple set of tests that call the methods of a [[HiveClient]], loading different version
  * of hive from maven central.  These tests are simple in that they are mostly just testing to make
  * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
@@ -60,8 +61,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hadoopVersion = VersionInfo.getVersion,
       config = buildConf(),
       ivyPath = ivyPath).createClient()
-    val db = new HiveDatabase("default", "")
-    badClient.createDatabase(db)
+    val db = new CatalogDatabase("default", "desc", "loc", Map())
+    badClient.createDatabase(db, ignoreIfExists = true)
   }
 
   private def getNestedMessages(e: Throwable): String = {
@@ -101,7 +102,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
   private val versions = Seq("12", "13", "14", "1.0.0", "1.1.0", "1.2.0")
 
-  private var client: ClientInterface = null
+  private var client: HiveClient = null
 
   versions.foreach { version =>
     test(s"$version: create client") {
@@ -116,29 +117,27 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: createDatabase") {
-      val db = HiveDatabase("default", "")
-      client.createDatabase(db)
+      val db = CatalogDatabase("default", "desc", "loc", Map())
+      client.createDatabase(db, ignoreIfExists = true)
     }
 
     test(s"$version: createTable") {
       val table =
-        HiveTable(
+        CatalogTable(
           specifiedDatabase = Option("default"),
           name = "src",
-          schema = Seq(HiveColumn("key", "int", "")),
-          partitionColumns = Seq.empty,
-          properties = Map.empty,
-          serdeProperties = Map.empty,
-          tableType = ManagedTable,
-          location = None,
-          inputFormat =
-            Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
-          outputFormat =
-            Some(classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-          serde =
-            Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()))
+          tableType = CatalogTableType.MANAGED_TABLE,
+          schema = Seq(CatalogColumn("key", "int")),
+          storage = CatalogStorageFormat(
+            locationUri = None,
+            inputFormat = Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
+            outputFormat = Some(
+              classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+            serde = Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()),
+            serdeProperties = Map.empty
+          ))
 
-      client.createTable(table)
+      client.createTable(table, ignoreIfExists = false)
     }
 
     test(s"$version: getTable") {

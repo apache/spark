@@ -249,6 +249,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
 
   override def symbol: String = "&&"
 
+  override def sqlOperator: String = "AND"
+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
     if (input1 == false) {
@@ -289,8 +291,6 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
       }
      """
   }
-
-  override def sql: String = s"(${left.sql} AND ${right.sql})"
 }
 
 
@@ -299,6 +299,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
   override def inputType: AbstractDataType = BooleanType
 
   override def symbol: String = "||"
+
+  override def sqlOperator: String = "OR"
 
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
@@ -340,8 +342,6 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
       }
      """
   }
-
-  override def sql: String = s"(${left.sql} OR ${right.sql})"
 }
 
 

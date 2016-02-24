@@ -18,9 +18,9 @@
 import warnings
 
 from pyspark import since
-from pyspark.ml.util import keyword_only
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
+from pyspark.ml.util import *
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.mllib.common import inherit_doc
 
 
@@ -35,7 +35,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol):
+                       HasStandardization, HasSolver, HasWeightCol, MLWritable, MLReadable):
     """
     Linear regression.
 
@@ -68,6 +68,18 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+    >>> lr_path = temp_path + "/lr"
+    >>> lr.save(lr_path)
+    >>> lr2 = LinearRegression.load(lr_path)
+    >>> lr2.getMaxIter()
+    5
+    >>> model_path = temp_path + "/lr_model"
+    >>> model.save(model_path)
+    >>> model2 = LinearRegressionModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.intercept == model2.intercept
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -106,7 +118,7 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
         return LinearRegressionModel(java_model)
 
 
-class LinearRegressionModel(JavaModel):
+class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by LinearRegression.
 
@@ -821,16 +833,27 @@ class AFTSurvivalRegressionModel(JavaModel):
 
 if __name__ == "__main__":
     import doctest
+    import pyspark.ml.regression
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
-    globs = globals().copy()
+    globs = pyspark.ml.regression.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.regression tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)

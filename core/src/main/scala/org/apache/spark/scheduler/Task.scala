@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
@@ -41,32 +41,29 @@ import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Uti
  * and divides the task output to multiple buckets (based on the task's partitioner).
  *
  * @param stageId id of the stage this task belongs to
+ * @param stageAttemptId attempt id of the stage this task belongs to
  * @param partitionId index of the number in the RDD
+ * @param initialAccumulators initial set of accumulators to be used in this task for tracking
+ *                            internal metrics. Other accumulators will be registered later when
+ *                            they are deserialized on the executors.
  */
 private[spark] abstract class Task[T](
     val stageId: Int,
     val stageAttemptId: Int,
     val partitionId: Int,
-    internalAccumulators: Seq[Accumulator[Long]]) extends Serializable {
+    val initialAccumulators: Seq[Accumulator[_]]) extends Serializable {
 
   /**
-   * The key of the Map is the accumulator id and the value of the Map is the latest accumulator
-   * local value.
-   */
-  type AccumulatorUpdates = Map[Long, Any]
-
-  /**
-   * Called by [[Executor]] to run this task.
+   * Called by [[org.apache.spark.executor.Executor]] to run this task.
    *
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task along with updates of Accumulators.
    */
   final def run(
-    taskAttemptId: Long,
-    attemptNumber: Int,
-    metricsSystem: MetricsSystem)
-  : (T, AccumulatorUpdates) = {
+      taskAttemptId: Long,
+      attemptNumber: Int,
+      metricsSystem: MetricsSystem): T = {
     context = new TaskContextImpl(
       stageId,
       partitionId,
@@ -74,16 +71,14 @@ private[spark] abstract class Task[T](
       attemptNumber,
       taskMemoryManager,
       metricsSystem,
-      internalAccumulators)
+      initialAccumulators)
     TaskContext.setTaskContext(context)
-    context.taskMetrics.setHostname(Utils.localHostName())
-    context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
     taskThread = Thread.currentThread()
     if (_killed) {
       kill(interruptThread = false)
     }
     try {
-      (runTask(context), context.collectAccumulators())
+      runTask(context)
     } finally {
       context.markTaskCompleted()
       try {
@@ -139,6 +134,18 @@ private[spark] abstract class Task[T](
    * Returns the amount of time spent deserializing the RDD and function to be run.
    */
   def executorDeserializeTime: Long = _executorDeserializeTime
+
+  /**
+   * Collect the latest values of accumulators used in this task. If the task failed,
+   * filter out the accumulators whose values should not be included on failures.
+   */
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulableInfo] = {
+    if (context != null) {
+      context.taskMetrics.accumulatorUpdates().filter { a => !taskFailed || a.countFailedValues }
+    } else {
+      Seq.empty[AccumulableInfo]
+    }
+  }
 
   /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark

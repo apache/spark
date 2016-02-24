@@ -64,6 +64,8 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
 
   override def toString: String = s"DecimalType($precision,$scale)"
 
+  override def sql: String = typeName.toUpperCase
+
   /**
    * Returns whether this DecimalType is wider than `other`. If yes, it means `other`
    * can be casted into `this` safely without losing any precision or range.
@@ -89,9 +91,9 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   }
 
   /**
-   * The default size of a value of the DecimalType is 4096 bytes.
+   * The default size of a value of the DecimalType is 8 bytes (precision <= 18) or 16 bytes.
    */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = if (precision <= Decimal.MAX_LONG_DIGITS) 8 else 16
 
   override def simpleString: String = s"decimal($precision,$scale)"
 
@@ -145,6 +147,28 @@ object DecimalType extends AbstractDataType {
     def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
       case t: DecimalType => Some((t.precision, t.scale))
       case _ => None
+    }
+  }
+
+  /**
+   * Returns if dt is a DecimalType that fits inside a long
+   */
+  def is64BitDecimalType(dt: DataType): Boolean = {
+    dt match {
+      case t: DecimalType =>
+        t.precision <= Decimal.MAX_LONG_DIGITS
+      case _ => false
+    }
+  }
+
+  /**
+   * Returns if dt is a DecimalType that doesn't fit inside a long
+   */
+  def isByteArrayDecimalType(dt: DataType): Boolean = {
+    dt match {
+      case t: DecimalType =>
+        t.precision > Decimal.MAX_LONG_DIGITS
+      case _ => false
     }
   }
 

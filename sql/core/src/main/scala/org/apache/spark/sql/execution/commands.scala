@@ -404,7 +404,17 @@ case class DescribeFunction(
           result
         }
 
-      case None => Seq(Row(s"Function: $functionName is not found."))
+      case None => Seq(Row(s"Function: $functionName not found."))
     }
   }
+}
+
+case class SetDatabaseCommand(databaseName: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext): Seq[Row] = {
+    sqlContext.catalog.setCurrentDatabase(databaseName)
+    Seq.empty[Row]
+  }
+
+  override val output: Seq[Attribute] = Seq.empty
 }

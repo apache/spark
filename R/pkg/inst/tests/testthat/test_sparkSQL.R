@@ -996,6 +996,8 @@ test_that("column functions", {
   c14 <- cume_dist() + ntile(1) + corr(c, c1)
   c15 <- dense_rank() + percent_rank() + rank() + row_number()
   c16 <- is.nan(c) + isnan(c) + isNaN(c)
+  c17 <- cov(c, c1) + cov("c", "c1") + covar_samp(c, c1) + covar_samp("c", "c1")
+  c18 <- covar_pop(c, c1) + covar_pop("c", "c1")
 
   # Test if base::is.nan() is exposed
   expect_equal(is.nan(c("a", "b")), c(FALSE, FALSE))
@@ -1045,13 +1047,13 @@ test_that("column functions", {
                         schema = c("a", "b", "c"))
   result <- collect(select(df, struct("a", "c")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
+  expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
                                  listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
   result <- collect(select(df, struct(df$a, df$b)))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
+  expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
                                  listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 

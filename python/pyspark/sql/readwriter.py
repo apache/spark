@@ -152,6 +152,8 @@ class DataFrameReader(object):
         You can set the following JSON-specific options to deal with non-standard JSON files:
             * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
                 type
+            * `floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal \
+                type
             * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
             * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
             * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \

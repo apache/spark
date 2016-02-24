@@ -47,9 +47,9 @@ class BinaryType private() extends AtomicType {
   }
 
   /**
-   * The default size of a value of the BinaryType is 4096 bytes.
+   * The default size of a value of the BinaryType is 100 bytes.
    */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = 100
 
   private[spark] override def asNullable: BinaryType = this
 }

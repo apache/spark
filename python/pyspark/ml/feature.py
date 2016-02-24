@@ -1323,7 +1323,7 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid):
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
     ...     key=lambda x: x[0])
     [(0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)]
-    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels())
+    >>> inverter = IndexToString(inputCol="indexed", outputCol="label2", labels=model.labels)
     >>> itd = inverter.transform(td)
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
@@ -1365,13 +1365,14 @@ class StringIndexerModel(JavaModel):
 
     .. versionadded:: 1.4.0
     """
+
     @property
     @since("1.5.0")
     def labels(self):
         """
         Ordered list of labels, corresponding to indices to be assigned.
         """
-        return self._java_obj.labels
+        return self._call_java("labels")
 
 
 @inherit_doc
@@ -1835,12 +1836,12 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     +----+--------------------+
     ...
     >>> model.findSynonyms("a", 2).show()
-    +----+--------------------+
-    |word|          similarity|
-    +----+--------------------+
-    |   b| 0.16782984556103436|
-    |   c|-0.46761559092107646|
-    +----+--------------------+
+    +----+-------------------+
+    |word|         similarity|
+    +----+-------------------+
+    |   b| 0.2505344027513247|
+    |   c|-0.6980510075367647|
+    +----+-------------------+
     ...
     >>> model.transform(doc).head().model
     DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])

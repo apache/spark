@@ -19,6 +19,9 @@ package org.apache.spark.sql
 
 import org.apache.spark.annotation.DeveloperApi
 
+
+// TODO: don't swallow original stack trace if it exists
+
 /**
  * :: DeveloperApi ::
  * Thrown when a query fails to analyze, usually because the query itself is invalid.
