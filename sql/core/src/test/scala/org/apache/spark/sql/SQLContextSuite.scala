@@ -65,4 +65,21 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
       session2.sql("select myadd(1, 2)").explain()
     }
   }
+
+  test("SPARK-13390: createDataFrame(java.util.List[_],Class[_]) NotSerializableException") {
+    val rows = new java.util.ArrayList[IntJavaBean]()
+    rows.add(new IntJavaBean(1))
+    val sqlContext = SQLContext.getOrCreate(sc)
+    // Without the fix for SPARK-13390, this will throw NotSerializableException
+    sqlContext.createDataFrame(rows, classOf[IntJavaBean]).groupBy("int").count().collect()
+  }
+}
+
+class IntJavaBean(private var i: Int) extends Serializable {
+
+  def getInt(): Int = i
+
+  def setInt(i: Int): Unit = {
+    this.i = i
+  }
 }
