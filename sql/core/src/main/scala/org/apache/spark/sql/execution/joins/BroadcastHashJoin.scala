@@ -190,18 +190,14 @@ case class BroadcastHashJoin(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
-    val resultVars = buildSide match {
-      case BuildLeft => buildVars ++ input
-      case BuildRight => input ++ buildVars
-    }
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val checkCondition = if (condition.isDefined) {
       // filter the output via condition
-      ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
+      ctx.currentVars = input ++ buildVars
+      val ev = BindReferences.bindReference(
+        condition.get, streamedPlan.output ++ buildPlan.output).gen(ctx)
       s"""
-         |${evaluateRequiredVariables(buildPlan.output, buildVars, condition.get.references)}
          |${ev.code}
          |if (${ev.isNull} || !${ev.value}) continue;
        """.stripMargin
@@ -209,6 +205,10 @@ case class BroadcastHashJoin(
       ""
     }
 
+    val resultVars = buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
       s"""
          |// generate join key for stream side
@@ -252,22 +252,20 @@ case class BroadcastHashJoin(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
-    val resultVars = buildSide match {
-      case BuildLeft => buildVars ++ input
-      case BuildRight => input ++ buildVars
-    }
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
     val conditionPassed = ctx.freshName("conditionPassed")
     val checkCondition = if (condition.isDefined) {
-      ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, condition.get.references)
+      ctx.currentVars = input ++ buildVars
+      val ev = BindReferences.bindReference(condition.get,
+        streamedPlan.output ++ buildPlan.output).gen(ctx)
       s"""
          |boolean $conditionPassed = true;
-         |${evaluateRequiredVariables(buildPlan.output, buildVars, condition.get.references)}
+         |${eval.trim}
+         |${ev.code}
          |if ($matched != null) {
-         |  ${ev.code}
          |  $conditionPassed = !${ev.isNull} && ${ev.value};
          |}
        """.stripMargin
@@ -275,6 +273,10 @@ case class BroadcastHashJoin(
       s"final boolean $conditionPassed = true;"
     }
 
+    val resultVars = buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
       s"""
          |// generate join key for stream side

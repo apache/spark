@@ -306,11 +306,11 @@ case class SortMergeJoin(
       val (used, notUsed) = attributes.zip(variables).partition{ case (a, ev) =>
         condRefs.contains(a)
       }
-      val beforeCond = used.map(_._2.code).mkString("\n")
-      val afterCond = notUsed.map(_._2.code).mkString("\n")
+      val beforeCond = evaluateVariables(used.map(_._2))
+      val afterCond = evaluateVariables(notUsed.map(_._2))
       (beforeCond, afterCond)
     } else {
-      (variables.map(_.code).mkString("\n"), "")
+      (evaluateVariables(variables), "")
     }
   }
 
@@ -326,41 +326,48 @@ case class SortMergeJoin(
     val leftVars = createLeftVars(ctx, leftRow)
     val rightRow = ctx.freshName("rightRow")
     val rightVars = createRightVar(ctx, rightRow)
-    val resultVars = leftVars ++ rightVars
-
-    // Check condition
-    ctx.currentVars = resultVars
-    val cond = if (condition.isDefined) {
-      BindReferences.bindReference(condition.get, output).gen(ctx)
-    } else {
-      ExprCode("", "false", "true")
-    }
-    // Split the code of creating variables based on whether it's used by condition or not.
-    val loaded = ctx.freshName("loaded")
-    val (leftBefore, leftAfter) = splitVarsByCondition(left.output, leftVars)
-    val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
-
 
     val size = ctx.freshName("size")
     val i = ctx.freshName("i")
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val (beforeLoop, condCheck) = if (condition.isDefined) {
+      // Split the code of creating variables based on whether it's used by condition or not.
+      val loaded = ctx.freshName("loaded")
+      val (leftBefore, leftAfter) = splitVarsByCondition(left.output, leftVars)
+      val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
+      // Generate code for condition
+      ctx.currentVars = leftVars ++ rightVars
+      val cond = BindReferences.bindReference(condition.get, output).gen(ctx)
+      // evaluate the columns those used by condition before loop
+      val before = s"""
+           |boolean $loaded = false;
+           |$leftBefore
+         """.stripMargin
+
+      val checking = s"""
+         |$rightBefore
+         |${cond.code}
+         |if (${cond.isNull} || !${cond.value}) continue;
+         |if (!$loaded) {
+         |  $loaded = true;
+         |  $leftAfter
+         |}
+         |$rightAfter
+     """.stripMargin
+      (before, checking)
+    } else {
+      (evaluateVariables(leftVars), "")
+    }
+
     s"""
        |while (findNextInnerJoinRows($leftInput, $rightInput)) {
        |  int $size = $matches.size();
-       |  boolean $loaded = false;
-       |  $leftBefore
+       |  ${beforeLoop.trim}
        |  for (int $i = 0; $i < $size; $i ++) {
        |    InternalRow $rightRow = (InternalRow) $matches.get($i);
-       |    $rightBefore
-       |    ${cond.code}
-       |    if (${cond.isNull} || !${cond.value}) continue;
-       |    if (!$loaded) {
-       |      $loaded = true;
-       |      $leftAfter
-       |    }
-       |    $rightAfter
+       |    ${condCheck.trim}
        |    $numOutput.add(1);
-       |    ${consume(ctx, resultVars)}
+       |    ${consume(ctx, leftVars ++ rightVars)}
        |  }
        |  if (shouldStop()) return;
        |}
