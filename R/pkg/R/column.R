@@ -66,7 +66,7 @@ setMethod("head", signature="Column", definition=function(x, n=6) {
 
 setMethod("column",
           signature(x = "jobj"),
-          function(x, df=NA) {
+          function(x, df) {
             new("Column", x, df)
           })
 
