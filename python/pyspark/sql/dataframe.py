@@ -18,17 +18,18 @@
 import sys
 import warnings
 import random
+from itertools import chain
 
 if sys.version >= '3':
     basestring = unicode = str
     long = int
     from functools import reduce
 else:
-    from itertools import imap as map
+    from itertools import imap as map, ifilter as filter
 
 from pyspark import since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -36,10 +37,10 @@ from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.types import *
 
-__all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
+__all__ = ["DataFrame", "Dataset", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
-class DataFrame(object):
+class Dataset(object):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
@@ -231,14 +232,18 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def collect(self):
-        """Returns all the records as a list of :class:`Row`.
+        """Returns all the records as a list.
 
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
+        if self._jdf.isOutputPickled():
+            deserializer = PickleSerializer()
+        else:
+            deserializer = BatchedSerializer(PickleSerializer())
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return list(_load_from_socket(port, deserializer))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -256,15 +261,42 @@ class DataFrame(object):
     @ignore_unicode_prefix
     @since(1.3)
     def take(self, num):
-        """Returns the first ``num`` rows as a :class:`list` of :class:`Row`.
+        """Returns the first ``num`` records as a :class:`list`.
 
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        with SCCallSiteSync(self._sc) as css:
-            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
-                self._jdf, num)
-        return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+        return self.limit(num).collect()
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def applySchema(self, schema=None):
+        """ TODO """
+        raise RuntimeError("Can't apply schema to a Dataset with non-default schema")
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def mapPartitions2(self, func):
+        """ TODO """
+        return PipelinedDataset(self, func)
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def map2(self, func):
+        """ TODO """
+        return self.mapPartitions2(lambda iterator: map(func, iterator))
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def flatMap2(self, func):
+        """ TODO """
+        return self.mapPartitions2(lambda iterator: chain.from_iterable(map(func, iterator)))
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def filter2(self, func):
+        """ TODO """
+        return self.mapPartitions2(lambda iterator: filter(func, iterator))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1352,6 +1384,79 @@ class DataFrame(object):
 
     groupby = groupBy
     drop_duplicates = dropDuplicates
+
+
+DataFrame = Dataset
+
+
+class PipelinedDataset(Dataset):
+
+    """ TODO """
+
+    def __init__(self, prev, func):
+        self._jdf_val = None
+        self.is_cached = False
+        self.sql_ctx = prev.sql_ctx
+        self._sc = self.sql_ctx and self.sql_ctx._sc
+        self._lazy_rdd = None
+
+        if not isinstance(prev, PipelinedDataset) or prev.is_cached:
+            # This transformation is the first in its stage:
+            self._func = func
+            self._prev_jdf = prev._jdf
+        else:
+            self._func = _pipeline_func(prev._func, func)
+            # maintain the pipeline.
+            self._prev_jdf = prev._prev_jdf
+
+    def applySchema(self, schema=None):
+        if schema is None:
+            from pyspark.sql.types import _infer_type, _merge_type
+            # If no schema is specified, infer it from the whole data set.
+            jrdd = self._prev_jdf.javaToPython()
+            rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+            schema = rdd.mapPartitions(self._func).map(_infer_type).reduce(_merge_type)
+
+        if isinstance(schema, StructType):
+            to_rows = lambda iterator: map(schema.toInternal, iterator)
+        else:
+            data_type = schema
+            schema = StructType().add("value", data_type)
+            to_row = lambda obj: (data_type.toInternal(obj), )
+            to_rows = lambda iterator: map(to_row, iterator)
+
+        wrapped_func = self._wrap_func(_pipeline_func(self._func, to_rows), False)
+        jdf = self._prev_jdf.pythonMapPartitions(wrapped_func, schema.json())
+        return DataFrame(jdf, self.sql_ctx)
+
+    @property
+    def _jdf(self):
+        if self._jdf_val is None:
+            wrapped_func = self._wrap_func(self._func, True)
+            self._jdf_val = self._prev_jdf.pythonMapPartitions(wrapped_func)
+        return self._jdf_val
+
+    def _wrap_func(self, func, output_binary):
+        if self._prev_jdf.isOutputPickled():
+            deserializer = PickleSerializer()
+        else:
+            deserializer = AutoBatchedSerializer(PickleSerializer())
+
+        if output_binary:
+            serializer = PickleSerializer()
+        else:
+            serializer = AutoBatchedSerializer(PickleSerializer())
+
+        from pyspark.rdd import _wrap_function
+        return _wrap_function(self._sc, lambda _, iterator: func(iterator), deserializer, serializer)
+
+
+def _pipeline_func(prev_func, next_func):
+    """
+    Pipeline 2 functions into one, while each of these 2 functions takes an iterator and
+    returns an iterator.
+    """
+    return lambda iterator: next_func(prev_func(iterator))
 
 
 def _to_scala_map(sc, jm):

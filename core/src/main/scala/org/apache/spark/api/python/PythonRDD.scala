@@ -71,6 +71,14 @@ private[spark] class PythonRDD(
   }
 }
 
+private[spark] case class PythonFunction(
+    command: Array[Byte],
+    envVars: JMap[String, String],
+    pythonIncludes: JList[String],
+    pythonExec: String,
+    pythonVer: String,
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
+    accumulator: Accumulator[JList[Array[Byte]]])
 
 /**
  * A helper class to run Python UDFs in Spark.

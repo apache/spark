@@ -328,6 +328,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, keyObj, lObj, rObj, out, lGroup, rGroup, lAttr, rAttr,
           planLater(left), planLater(right)) :: Nil
 
+      case logical.PythonMapPartitions(f, output, child) =>
+        execution.python.PythonMapPartitions(f, output, planLater(child)) :: Nil
+
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
           ShuffleExchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil

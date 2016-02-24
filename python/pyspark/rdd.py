@@ -2329,6 +2329,15 @@ def _prepare_for_python_RDD(sc, command, obj=None):
     return pickled_command, broadcast_vars, env, includes
 
 
+def _wrap_function(sc, func, deserializer, serializer, profiler=None):
+    assert deserializer, "deserializer should not be empty"
+    assert serializer, "serializer should not be empty"
+    command = (func, profiler, deserializer, serializer)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+
 class PipelinedRDD(RDD):
 
     """

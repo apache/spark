@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonFunction, PythonRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
@@ -1752,15 +1752,32 @@ class DataFrame private[sql](
    * Converts a JavaRDD to a PythonRDD.
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
-    val structType = schema  // capture it for closure
-    val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
-    EvaluatePython.javaToPython(rdd)
+    if (isOutputPickled) {
+      queryExecution.toRdd.map(_.getBinary(0))
+    } else {
+      val structType = schema // capture it for closure
+      val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
+      EvaluatePython.javaToPython(rdd)
+    }
   }
 
   protected[sql] def collectToPython(): Int = {
     withNewExecutionId {
       PythonRDD.collectAndServe(javaToPython.rdd)
     }
+  }
+
+  protected[sql] def isOutputPickled: Boolean = EvaluatePython.schemaOfPickled == schema
+
+  protected[sql] def pythonMapPartitions(func: PythonFunction): DataFrame = withPlan {
+    PythonMapPartitions(func, EvaluatePython.schemaOfPickled.toAttributes, logicalPlan)
+  }
+
+  protected[sql] def pythonMapPartitions(
+      func: PythonFunction,
+      schemaJson: String): DataFrame = withPlan {
+    val schema = DataType.fromJson(schemaJson).asInstanceOf[StructType]
+    PythonMapPartitions(func, schema.toAttributes, logicalPlan)
   }
 
   /**

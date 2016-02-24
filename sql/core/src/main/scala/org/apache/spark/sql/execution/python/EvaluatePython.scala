@@ -54,17 +54,6 @@ object EvaluatePython {
   def apply(udf: PythonUDF, child: LogicalPlan): EvaluatePython =
     new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
 
-  def takeAndServe(df: DataFrame, n: Int): Int = {
-    registerPicklers()
-    df.withNewExecutionId {
-      val iter = new SerDeUtil.AutoBatchedPickler(
-        df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
-          EvaluatePython.toJava(row, df.schema)
-        })
-      PythonRDD.serveIterator(iter, s"serve-DataFrame")
-    }
-  }
-
   /**
    * Helper for converting from Catalyst type to java type suitable for Pyrolite.
    */
@@ -257,5 +246,13 @@ object EvaluatePython {
       registerPicklers()  // let it called in executor
       new SerDeUtil.AutoBatchedPickler(iter)
     }
+  }
+
+  /**
+   * The default schema for Python Dataset which is returned by typed operation.
+   */
+  val schemaOfPickled = {
+    val metaPickled = new MetadataBuilder().putBoolean("pickled", true).build()
+    new StructType().add("value", BinaryType, nullable = false, metadata = metaPickled)
   }
 }
