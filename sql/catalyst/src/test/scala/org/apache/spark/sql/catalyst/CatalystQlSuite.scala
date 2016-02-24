@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
@@ -201,6 +200,70 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
+  }
+
+  test("nesting UNION") {
+    val parsed = parser.parsePlan(
+      """
+       |SELECT  `u_1`.`id` FROM (((SELECT  `t0`.`id` FROM `default`.`t0`)
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) UNION ALL
+       |(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+      """.stripMargin)
+
+    val expected = Project(
+      UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
+      SubqueryAlias("u_1",
+        Union(
+          Union(
+            Project(
+              UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0", Some("default")), None)),
+            Project(
+              UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0", Some("default")), None))),
+          Project(
+            UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+            UnresolvedRelation(TableIdentifier("t0", Some("default")), None)))))
+
+    comparePlans(parsed, expected)
+
+    val parsedSame = parser.parsePlan(
+      """
+       |SELECT  `u_1`.`id` FROM ((SELECT  `t0`.`id` FROM `default`.`t0`)
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`) UNION ALL
+       |(SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+      """.stripMargin)
+
+    comparePlans(parsedSame, expected)
+
+    val parsed2 = parser.parsePlan(
+      """
+       |SELECT  `u_1`.`id` FROM ((((SELECT  `t0`.`id` FROM `default`.`t0`)
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) UNION ALL
+       |(SELECT  `t0`.`id` FROM `default`.`t0`))
+       |UNION ALL (SELECT  `t0`.`id` FROM `default`.`t0`)) AS u_1
+      """.stripMargin)
+
+    val expected2 = Project(
+      UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
+      SubqueryAlias("u_1",
+        Union(
+          Union(
+            Union(
+              Project(
+                UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+                UnresolvedRelation(TableIdentifier("t0", Some("default")), None)),
+              Project(
+                UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+                UnresolvedRelation(TableIdentifier("t0", Some("default")), None))),
+            Project(
+              UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+              UnresolvedRelation(TableIdentifier("t0", Some("default")), None))),
+          Project(
+            UnresolvedAlias(UnresolvedAttribute("t0.id"), None) :: Nil,
+            UnresolvedRelation(TableIdentifier("t0", Some("default")), None)))))
+
+    comparePlans(parsed2, expected2)
   }
 
   test("subquery") {
