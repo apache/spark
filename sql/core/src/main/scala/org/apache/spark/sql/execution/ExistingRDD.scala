@@ -138,6 +138,10 @@ private[sql] case class PhysicalRDD(
   // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
   // never requires UnsafeRow as input.
   override protected def doProduce(ctx: CodegenContext): String = {
+    val input = ctx.freshName("input")
+    // PhysicalRDD always just has one input
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
@@ -145,8 +149,8 @@ private[sql] case class PhysicalRDD(
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       | while (input.hasNext()) {
-       |   InternalRow $row = (InternalRow) input.next();
+       | while ($input.hasNext()) {
+       |   InternalRow $row = (InternalRow) $input.next();
        |   $numOutputRows.add(1);
        |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
