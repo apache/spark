@@ -195,7 +195,7 @@ if [[ "$1" == "package" ]]; then
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
   LFTP mkdir -p $dest_dir
-  LFTP mput spark-* $dest_dir
+  LFTP mput -O $dest_dir spark-*
   echo "Linking /latest to $dest_dir"
   LFTP rm "$REMOTE_PARENT_DIR/latest"
   LFTP ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
@@ -216,7 +216,7 @@ if [[ "$1" == "docs" ]]; then
   echo "Linking /latest to $dest_dir"
   LFTP rm "$REMOTE_PARENT_DIR/latest"
   LFTP ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
-  LFTP mput _site/* $dest_dir
+  LFTP mput -O $dest_dir _site/*
   cd ..
   exit 0
 fi
