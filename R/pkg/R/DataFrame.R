@@ -966,13 +966,14 @@ setMethod("take",
 
 #' Head
 #'
-#' Return the first NUM rows of a DataFrame as a data.frame. If NUM is NULL,
-#' then head() returns the first 6 rows in keeping with the current data.frame
-#' convention in R.
+#' Return the first elements of a dataset. If \code{x} is a DataFrame, its first 
+#' rows will be returned as a data.frame. If the dataset is a \code{Column}, its first 
+#' elements will be returned as a vector. The number of elements to be returned
+#' is given by parameter \code{num}. Default value for \code{num} is 6.
 #'
-#' @param x A SparkSQL DataFrame
+#' @param x A Spark DataFrame or Column
 #' @param num The number of rows to return. Default is 6.
-#' @return A data.frame
+#' @return A data.frame or vector
 #'
 #' @family DataFrame functions
 #' @rdname head
@@ -980,11 +981,18 @@ setMethod("take",
 #' @export
 #' @examples
 #'\dontrun{
+#' # Initialize Spark context and SQL context
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
-#' head(df)
+#' 
+#' # Create a DataFrame from the Iris dataset
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' 
+#' # Get the first 6 elements of the DataFrame
+#' head(irisDF)
+#' 
+#' # Get the first 20 elements of a Column
+#' head(irisDF$Sepal_Length)
 #' }
 setMethod("head",
           signature(x = "DataFrame"),
