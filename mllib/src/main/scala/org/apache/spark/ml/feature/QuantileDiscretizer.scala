@@ -106,9 +106,9 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
 
   /**
    * Minimum number of samples required for finding splits, regardless of number of bins.  If
-   * the dataset has less rows than this value, the entire dataset column will be used.
+   * the dataset has fewer rows than this value, the entire dataset will be used.
    */
-  val minSamplesRequired: Int = 10000
+  private[spark] val minSamplesRequired: Int = 10000
 
   /**
    * Sampling from the given dataset to collect quantile statistics.
