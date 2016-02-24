@@ -323,8 +323,11 @@ private[storage] class BlockInfoManager extends Logging {
       infos(blockId) = newBlockInfo
       newBlockInfo.writerTask = currentTaskAttemptId
       writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
+      logTrace(s"Task $currentTaskAttemptId successfully locked new block $blockId")
       true
     } else {
+      logTrace(s"Task $currentTaskAttemptId did not create and lock block $blockId " +
+        s"because that block already exists")
       false
     }
   }
