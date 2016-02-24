@@ -58,9 +58,21 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  override def addTaskCompletionListener(f: (TaskContext) => Unit): this.type = {
+    addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = f(context)
+    })
+  }
+
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     onFailureCallbacks += listener
     this
+  }
+
+  override def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): this.type = {
+    addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
+    })
   }
 
   /** Marks the task as completed and triggers the failure listeners. */

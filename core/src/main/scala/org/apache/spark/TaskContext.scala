@@ -114,11 +114,7 @@ abstract class TaskContext extends Serializable {
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
-  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext = {
-    addTaskCompletionListener(new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = f(context)
-    })
-  }
+  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
 
   /**
    * Adds a listener to be executed on task failure.
@@ -130,11 +126,7 @@ abstract class TaskContext extends Serializable {
    * Adds a listener to be executed on task failure.
    * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
    */
-  def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
-    addTaskFailureListener(new TaskFailureListener {
-      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
-    })
-  }
+  def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext
 
   /**
    * The ID of the stage that this task belong to.
