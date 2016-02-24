@@ -182,6 +182,8 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> model2 = IsotonicRegressionModel.load(model_path)
     >>> model.boundaries == model2.boundaries
     True
+    >>> model.predictions == model2.predictions
+    True
     """
 
     isotonic = \
@@ -711,6 +713,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model.coefficients == model2.coefficients
     True
     >>> model.intercept == model2.intercept
+    True
+    >>> model.scale == model2.scale
     True
 
     .. versionadded:: 1.6.0
