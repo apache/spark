@@ -34,23 +34,18 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-from shutil import rmtree
-import tempfile
-
-from pyspark.ml import Estimator, Model, Pipeline, Transformer
-from pyspark.ml.classification import LogisticRegression
-from pyspark.ml.clustering import KMeans
-from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.ml.feature import *
-from pyspark.ml.param import Param, Params
-from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
-from pyspark.ml.regression import LinearRegression
-from pyspark.ml.tuning import *
-from pyspark.ml.util import keyword_only
-from pyspark.mllib.linalg import DenseVector
+from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
-from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.param import Param, Params
+from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
+from pyspark.ml.util import keyword_only
+from pyspark.ml import Estimator, Model, Pipeline, Transformer
+from pyspark.ml.feature import *
+from pyspark.ml.tuning import ParamGridBuilder, CrossValidator, CrossValidatorModel
+from pyspark.mllib.linalg import DenseVector
 
 
 class MockDataset(DataFrame):
@@ -209,11 +204,6 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
-    def test_hasparam(self):
-        testParams = TestParams()
-        self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
-        self.assertFalse(testParams.hasParam("notAParameter"))
-
     def test_params(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
@@ -223,7 +213,7 @@ class ParamTests(PySparkTestCase):
         params = testParams.params
         self.assertEqual(params, [inputCol, maxIter, seed])
 
-        self.assertTrue(testParams.hasParam(maxIter.name))
+        self.assertTrue(testParams.hasParam(maxIter))
         self.assertTrue(testParams.hasDefault(maxIter))
         self.assertFalse(testParams.isSet(maxIter))
         self.assertTrue(testParams.isDefined(maxIter))
@@ -232,7 +222,7 @@ class ParamTests(PySparkTestCase):
         self.assertTrue(testParams.isSet(maxIter))
         self.assertEqual(testParams.getMaxIter(), 100)
 
-        self.assertTrue(testParams.hasParam(inputCol.name))
+        self.assertTrue(testParams.hasParam(inputCol))
         self.assertFalse(testParams.hasDefault(inputCol))
         self.assertFalse(testParams.isSet(inputCol))
         self.assertFalse(testParams.isDefined(inputCol))
@@ -248,14 +238,6 @@ class ParamTests(PySparkTestCase):
             "\n".join(["inputCol: input column name. (undefined)",
                        "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
                        "seed: random seed. (default: 41, current: 43)"]))
-
-    def test_kmeans_param(self):
-        algo = KMeans()
-        self.assertEqual(algo.getInitMode(), "k-means||")
-        algo.setK(10)
-        self.assertEqual(algo.getK(), 10)
-        algo.setInitSteps(10)
-        self.assertEqual(algo.getInitSteps(), 10)
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
