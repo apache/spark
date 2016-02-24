@@ -174,7 +174,7 @@ class SparkContext(object):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
 
-        self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED","0")
+        self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED", "0")
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
