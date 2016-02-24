@@ -21,7 +21,7 @@ import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.types._
 
 class CSVTypeCastSuite extends SparkFunSuite {
@@ -70,10 +70,10 @@ class CSVTypeCastSuite extends SparkFunSuite {
   }
 
   test("Throws exception for empty string with non null type") {
-    val exception = intercept[NumberFormatException]{
+    val exception = intercept[SparkException]{
       CSVTypeCast.castTo("", IntegerType, nullable = false)
     }
-    assert(exception.getMessage.contains("For input string: \"\""))
+    assert(exception.getMessage.contains("could not be converted to"))
   }
 
   test("Types are cast correctly") {
