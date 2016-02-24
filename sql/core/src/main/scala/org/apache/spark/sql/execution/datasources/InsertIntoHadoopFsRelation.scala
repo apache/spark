@@ -60,7 +60,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     @transient relation: HadoopFsRelation,
     @transient query: LogicalPlan,
     mode: SaveMode,
-    codec: Option[Class[_ <: CompressionCodec]] = None)
+    compressionCodec: Option[Class[_ <: CompressionCodec]] = None)
   extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
@@ -128,7 +128,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
           """.stripMargin)
 
         val writerContainer = if (partitionColumns.isEmpty && relation.maybeBucketSpec.isEmpty) {
-          new DefaultWriterContainer(relation, job, isAppend, codec)
+          new DefaultWriterContainer(relation, job, isAppend, compressionCodec)
         } else {
           val output = df.queryExecution.executedPlan.output
           val (partitionOutput, dataOutput) =
@@ -143,7 +143,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             PartitioningUtils.DEFAULT_PARTITION_NAME,
             sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
             isAppend,
-            codec)
+            compressionCodec)
         }
 
         // This call shouldn't be put into the `try` block below because it only initializes and

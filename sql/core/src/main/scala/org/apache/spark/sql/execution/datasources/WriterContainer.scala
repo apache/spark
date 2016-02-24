@@ -41,7 +41,7 @@ private[sql] abstract class BaseWriterContainer(
     @transient val relation: HadoopFsRelation,
     @transient private val job: Job,
     isAppend: Boolean,
-    codec: Option[Class[_ <: CompressionCodec]] = None)
+    compressionCodec: Option[Class[_ <: CompressionCodec]] = None)
   extends Logging with Serializable {
 
   protected val dataSchema = relation.dataSchema
@@ -209,7 +209,7 @@ private[sql] abstract class BaseWriterContainer(
     serializableConf.value.set("mapred.task.id", taskAttemptId.toString)
     serializableConf.value.setBoolean("mapred.task.is.map", true)
     serializableConf.value.setInt("mapred.task.partition", 0)
-    codec.map { codecClass =>
+    compressionCodec.map { codecClass =>
       serializableConf.value.set("mapred.output.compress", "true")
       serializableConf.value.set("mapred.output.compression.codec", codecClass.getCanonicalName)
       serializableConf.value.set("mapred.output.compression.type", "BLOCK")
@@ -247,8 +247,8 @@ private[sql] class DefaultWriterContainer(
     relation: HadoopFsRelation,
     job: Job,
     isAppend: Boolean,
-    codec: Option[Class[_ <: CompressionCodec]])
-  extends BaseWriterContainer(relation, job, isAppend, codec) {
+    compressionCodec: Option[Class[_ <: CompressionCodec]])
+  extends BaseWriterContainer(relation, job, isAppend, compressionCodec) {
 
   def writeRows(taskContext: TaskContext, iterator: Iterator[InternalRow]): Unit = {
     executorSideSetup(taskContext)
@@ -317,8 +317,8 @@ private[sql] class DynamicPartitionWriterContainer(
     defaultPartitionName: String,
     maxOpenFiles: Int,
     isAppend: Boolean,
-    codec: Option[Class[_ <: CompressionCodec]])
-  extends BaseWriterContainer(relation, job, isAppend, codec) {
+    compressionCodec: Option[Class[_ <: CompressionCodec]])
+  extends BaseWriterContainer(relation, job, isAppend, compressionCodec) {
 
   private val bucketSpec = relation.maybeBucketSpec
 
