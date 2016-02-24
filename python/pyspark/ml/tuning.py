@@ -290,7 +290,6 @@ class CrossValidatorModel(Model):
 
 
 class TrainValidationSplit(Estimator, HasSeed):
-    # TODO: add since keyword to functions
 
     estimator = Param(Params._dummy(), "estimator", "estimator to be tested")
     estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
@@ -299,6 +298,7 @@ class TrainValidationSplit(Estimator, HasSeed):
         "evaluator used to select hyper-parameters that maximize the metric")
     trainRatio = Param(Params._dummy(), "trainRatio", "proportion for train-validation ratio")
 
+    @since("2.0.0")
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                  seed=None):
@@ -311,6 +311,7 @@ class TrainValidationSplit(Estimator, HasSeed):
         kwargs = self.__init__._input_kwargs
         self._set(**kwargs)
 
+    @since("2.0.0")
     @keyword_only
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                   seed=None):
@@ -322,6 +323,7 @@ class TrainValidationSplit(Estimator, HasSeed):
         kwargs = self.setParams._input_kwargs
         return self._set(**kwargs)
 
+    @since("2.0.0")
     def setEstimator(self, value):
         """
         Sets the value of :py:attr:`estimator`.
@@ -329,12 +331,14 @@ class TrainValidationSplit(Estimator, HasSeed):
         self._paramMap[self.estimator] = value
         return self
 
+    @since("2.0.0")
     def getEstimator(self):
         """
         Gets the value of estimator or its default value.
         """
         return self.getOrDefault(self.estimator)
 
+    @since("2.0.0")
     def setEstimatorParamMaps(self, value):
         """
         Sets the value of :py:attr:`estimatorParamMaps`.
@@ -342,12 +346,14 @@ class TrainValidationSplit(Estimator, HasSeed):
         self._paramMap[self.estimatorParamMaps] = value
         return self
 
+    @since("2.0.0")
     def getEstimatorParamMaps(self):
         """
         Gets the value of estimatorParamMaps or its default value.
         """
         return self.getOrDefault(self.estimatorParamMaps)
 
+    @since("2.0.0")
     def setEvaluator(self, value):
         """
         Sets the value of :py:attr:`evaluator`.
@@ -355,12 +361,14 @@ class TrainValidationSplit(Estimator, HasSeed):
         self._paramMap[self.evaluator] = value
         return self
 
+    @since("2.0.0")
     def getEvaluator(self):
         """
         Gets the value of evaluator or its default value.
         """
         return self.getOrDefault(self.evaluator)
 
+    @since("2.0.0")
     def setTrainRatio(self, value):
         """
         Sets the value of :py:attr:`trainRatio`.
@@ -368,13 +376,14 @@ class TrainValidationSplit(Estimator, HasSeed):
         self._paramMap[self.trainRatio] = value
         return self
 
-    @since("1.4.0")
+    @since("2.0.0")
     def getTrainRatio(self):
         """
         Gets the value of trainRatio or its default value.
         """
         return self.getOrDefault(self.trainRatio)
 
+    @since("2.0.0")
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
         epm = self.getOrDefault(self.estimatorParamMaps)
@@ -399,7 +408,7 @@ class TrainValidationSplit(Estimator, HasSeed):
         bestModel = est.fit(dataset, epm[bestIndex])
         return TrainValidationSplitModel(bestModel)
 
-    @since("1.4.0")
+    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
@@ -425,14 +434,17 @@ class TrainValidationSplitModel(Model):
     Model from train validation split.
     """
 
+    @since("2.0.0")
     def __init__(self, bestModel):
         super(TrainValidationSplitModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
 
+    @since("2.0.0")
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 
+    @since("2.0.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance with a randomly generated uid
