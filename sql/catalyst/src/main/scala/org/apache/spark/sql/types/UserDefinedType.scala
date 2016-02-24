@@ -71,10 +71,7 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   def userClass: java.lang.Class[UserType]
 
-  /**
-   * The default size of a value of the UserDefinedType is 4096 bytes.
-   */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = sqlType.defaultSize
 
   /**
    * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
@@ -86,6 +83,11 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
     this.getClass == dataType.getClass
 
   override def sql: String = sqlType.sql
+
+  override def equals(other: Any): Boolean = other match {
+    case that: UserDefinedType[_] => this.acceptsType(that)
+    case _ => false
+  }
 }
 
 /**
@@ -111,5 +113,10 @@ private[sql] class PythonUserDefinedType(
       ("pyClass" -> pyUDT) ~
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
+  }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: PythonUserDefinedType => this.pyUDT.equals(that.pyUDT)
+    case _ => false
   }
 }

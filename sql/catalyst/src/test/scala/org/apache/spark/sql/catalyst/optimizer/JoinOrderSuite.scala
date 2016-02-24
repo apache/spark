@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
+import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -33,7 +33,7 @@ class JoinOrderSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
-        EliminateSubQueries) ::
+        EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", Once,
         CombineFilters,
         PushPredicateThroughProject,
@@ -90,6 +90,6 @@ class JoinOrderSuite extends PlanTest {
         .join(y, condition = Some("y.d".attr === "z.a".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubQueries(correctAnswer))
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
   }
 }

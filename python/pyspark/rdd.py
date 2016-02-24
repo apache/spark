@@ -844,8 +844,7 @@ class RDD(object):
     def fold(self, zeroValue, op):
         """
         Aggregate the elements of each partition, and then the results for all
-        the partitions, using a given associative and commutative function and
-        a neutral "zero value."
+        the partitions, using a given associative function and a neutral "zero value."
 
         The function C{op(t1, t2)} is allowed to modify C{t1} and return it
         as its result value to avoid object allocation; however, it should not
@@ -1558,7 +1557,7 @@ class RDD(object):
 
     def reduceByKey(self, func, numPartitions=None, partitionFunc=portable_hash):
         """
-        Merge the values for each key using an associative reduce function.
+        Merge the values for each key using an associative and commutative reduce function.
 
         This will also perform the merging locally on each mapper before
         sending results to a reducer, similarly to a "combiner" in MapReduce.
@@ -1576,7 +1575,7 @@ class RDD(object):
 
     def reduceByKeyLocally(self, func):
         """
-        Merge the values for each key using an associative reduce function, but
+        Merge the values for each key using an associative and commutative reduce function, but
         return the results immediately to the master as a dictionary.
 
         This will also perform the merging locally on each mapper before

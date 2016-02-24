@@ -364,6 +364,27 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
 
 }
 
+/**
+ * Internal subclass of [[TaskMetrics]] which is used only for posting events to listeners.
+ * Its purpose is to obviate the need for the driver to reconstruct the original accumulators,
+ * which might have been garbage-collected. See SPARK-13407 for more details.
+ *
+ * Instances of this class should be considered read-only and users should not call `inc*()` or
+ * `set*()` methods. While we could override the setter methods to throw
+ * UnsupportedOperationException, we choose not to do so because the overrides would quickly become
+ * out-of-date when new metrics are added.
+ */
+private[spark] class ListenerTaskMetrics(
+    initialAccums: Seq[Accumulator[_]],
+    accumUpdates: Seq[AccumulableInfo]) extends TaskMetrics(initialAccums) {
+
+  override def accumulatorUpdates(): Seq[AccumulableInfo] = accumUpdates
+
+  override private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    throw new UnsupportedOperationException("This TaskMetrics is read-only")
+  }
+}
+
 private[spark] object TaskMetrics extends Logging {
 
   def empty: TaskMetrics = new TaskMetrics
@@ -397,33 +418,15 @@ private[spark] object TaskMetrics extends Logging {
     // Initial accumulators are passed into the TaskMetrics constructor first because these
     // are required to be uniquely named. The rest of the accumulators from this task are
     // registered later because they need not satisfy this requirement.
-    val (initialAccumInfos, otherAccumInfos) = accumUpdates
-      .filter { info => info.update.isDefined }
-      .partition { info => info.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX)) }
-    val initialAccums = initialAccumInfos.map { info =>
-      val accum = InternalAccumulator.create(info.name.get)
-      accum.setValueAny(info.update.get)
-      accum
-    }
-    // We don't know the types of the rest of the accumulators, so we try to find the same ones
-    // that were previously registered here on the driver and make copies of them. It is important
-    // that we copy the accumulators here since they are used across many tasks and we want to
-    // maintain a snapshot of their local task values when we post them to listeners downstream.
-    val otherAccums = otherAccumInfos.flatMap { info =>
-      val id = info.id
-      val acc = Accumulators.get(id).map { a =>
-        val newAcc = a.copy()
-        newAcc.setValueAny(info.update.get)
-        newAcc
+    val definedAccumUpdates = accumUpdates.filter { info => info.update.isDefined }
+    val initialAccums = definedAccumUpdates
+      .filter { info => info.name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX)) }
+      .map { info =>
+        val accum = InternalAccumulator.create(info.name.get)
+        accum.setValueAny(info.update.get)
+        accum
       }
-      if (acc.isEmpty) {
-        logWarning(s"encountered unregistered accumulator $id when reconstructing task metrics.")
-      }
-      acc
-    }
-    val metrics = new TaskMetrics(initialAccums)
-    otherAccums.foreach(metrics.registerAccumulator)
-    metrics
+    new ListenerTaskMetrics(initialAccums, definedAccumUpdates)
   }
 
 }

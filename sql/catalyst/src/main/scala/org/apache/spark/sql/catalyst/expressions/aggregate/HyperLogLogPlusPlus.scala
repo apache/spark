@@ -68,6 +68,8 @@ case class HyperLogLogPlusPlus(
       inputAggBufferOffset = 0)
   }
 
+  override def prettyName: String = "approx_count_distinct"
+
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -238,7 +240,7 @@ case class HyperLogLogPlusPlus(
       diff * diff
     }
 
-    // Keep moving bounds as long as the the (exclusive) high bound is closer to the estimate than
+    // Keep moving bounds as long as the (exclusive) high bound is closer to the estimate than
     // the lower (inclusive) bound.
     var low = math.max(nearestEstimateIndex - K + 1, 0)
     var high = math.min(low + K, numEstimates)

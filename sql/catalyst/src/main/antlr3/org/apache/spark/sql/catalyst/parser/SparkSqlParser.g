@@ -2320,6 +2320,26 @@ regularBody[boolean topLevel]
    )
    |
    selectStatement[topLevel]
+   |
+   (LPAREN selectStatement0[true]) => nestedSetOpSelectStatement[topLevel]
+   ;
+
+nestedSetOpSelectStatement[boolean topLevel]
+   :
+   (
+   LPAREN s=selectStatement0[topLevel] RPAREN -> {$s.tree}
+   )
+   (set=setOpSelectStatement[$nestedSetOpSelectStatement.tree, topLevel])
+   -> {set == null}?
+      {$nestedSetOpSelectStatement.tree}
+   -> {$set.tree}
+   ;
+
+selectStatement0[boolean topLevel]
+   :
+   (selectStatement[true]) => selectStatement[topLevel]
+   |
+   (nestedSetOpSelectStatement[true]) => nestedSetOpSelectStatement[topLevel]
    ;
 
 selectStatement[boolean topLevel]

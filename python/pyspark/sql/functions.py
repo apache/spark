@@ -223,22 +223,22 @@ def coalesce(*cols):
     +----+----+
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
-    +-------------+
-    |coalesce(a,b)|
-    +-------------+
-    |         null|
-    |            1|
-    |            2|
-    +-------------+
+    +--------------+
+    |coalesce(a, b)|
+    +--------------+
+    |          null|
+    |             1|
+    |             2|
+    +--------------+
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
-    +----+----+---------------+
-    |   a|   b|coalesce(a,0.0)|
-    +----+----+---------------+
-    |null|null|            0.0|
-    |   1|null|            1.0|
-    |null|   2|            0.0|
-    +----+----+---------------+
+    +----+----+----------------+
+    |   a|   b|coalesce(a, 0.0)|
+    +----+----+----------------+
+    |null|null|             0.0|
+    |   1|null|             1.0|
+    |null|   2|             0.0|
+    +----+----+----------------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
@@ -479,7 +479,7 @@ def round(col, scale=0):
 
 @since(1.5)
 def shiftLeft(col, numBits):
-    """Shift the the given value numBits left.
+    """Shift the given value numBits left.
 
     >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
     [Row(r=42)]
@@ -490,7 +490,7 @@ def shiftLeft(col, numBits):
 
 @since(1.5)
 def shiftRight(col, numBits):
-    """Shift the the given value numBits right.
+    """Shift the given value numBits right.
 
     >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
     [Row(r=21)]
@@ -502,7 +502,7 @@ def shiftRight(col, numBits):
 
 @since(1.5)
 def shiftRightUnsigned(col, numBits):
-    """Unsigned shift the the given value numBits right.
+    """Unsigned shift the given value numBits right.
 
     >>> df = sqlContext.createDataFrame([(-42,)], ['a'])
     >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
@@ -1528,7 +1528,7 @@ def array_contains(col, value):
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(array_contains(df.data, "a")).collect()
-    [Row(array_contains(data,a)=True), Row(array_contains(data,a)=False)]
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
