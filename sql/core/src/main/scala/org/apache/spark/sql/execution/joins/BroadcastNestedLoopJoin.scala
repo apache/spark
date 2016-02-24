@@ -190,20 +190,19 @@ case class BroadcastNestedLoopJoin(
 
     val matchedBuildRows = streamRdd.mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
-      val includedBroadcastTuples = new BitSet(buildRows.length)
+      val matched = new BitSet(buildRows.length)
       val joinedRow = new JoinedRow
 
       streamedIter.foreach { streamedRow =>
         var i = 0
         while (i < buildRows.length) {
-          val buildRow = buildRows(i)
-          if (boundCondition(joinedRow(streamedRow, buildRow))) {
-            includedBroadcastTuples.set(i)
+          if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
+            matched.set(i)
           }
           i += 1
         }
       }
-      Iterator(includedBroadcastTuples)
+      Seq(matched).toIterator
     }
 
     val matchedBroadcastRows = matchedBuildRows.fold(
@@ -235,15 +234,14 @@ case class BroadcastNestedLoopJoin(
         val matchedRows = new CompactBuffer[InternalRow]
 
         while (i < buildRows.length) {
-          val buildRow = buildRows(i)
-          if (boundCondition(joinedRow(streamedRow, buildRow))) {
+          if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
             matchedRows += joinedRow.copy()
             foundMatch = true
           }
           i += 1
         }
 
-        if (!foundMatch) {
+        if (!foundMatch && joinType == FullOuter) {
           matchedRows += joinedRow(streamedRow, nulls).copy()
         }
         matchedRows.iterator
@@ -254,12 +252,12 @@ case class BroadcastNestedLoopJoin(
       val nulls = new GenericMutableRow(streamed.output.size)
       val buf: CompactBuffer[InternalRow] = new CompactBuffer()
       var i = 0
-      val rel = relation.value
+      val buildRows = relation.value
       val joinedRow = new JoinedRow
       joinedRow.withLeft(nulls)
-      while (i < rel.length) {
+      while (i < buildRows.length) {
         if (!matchedBroadcastRows.get(i)) {
-          buf += joinedRow.withRight(rel(i)).copy()
+          buf += joinedRow.withRight(buildRows(i)).copy()
         }
         i += 1
       }
