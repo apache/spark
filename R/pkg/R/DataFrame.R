@@ -846,9 +846,15 @@ setMethod("dim",
             c(count(x), ncol(x))
           })
 
-#' Collects all the elements of a Spark DataFrame and coerces them into an R data.frame.
+#' Download Spark datasets into R
 #'
-#' @param x A SparkSQL DataFrame
+#' If applied to a DataFrame, \code{collect} returns a data.frame. If applied to a 
+#' Column, it returns a vector of the same type. 
+#' 
+#' \strong{Note:} Since R data.frames and vectors are
+#' held in memory, ensure that you have enough memory on your system to 
+#' accommodate the contents.
+#' @param x A Spark DataFrame or Column
 #' @param stringsAsFactors (Optional) A logical indicating whether or not string columns
 #' should be converted to factors. FALSE by default.
 #'
@@ -858,12 +864,18 @@ setMethod("dim",
 #' @export
 #' @examples
 #'\dontrun{
+#' # Initialize Spark context and SQL context
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
-#' collected <- collect(df)
-#' firstName <- collected[[1]]$name
+#' 
+#' # Create a DataFrame from the Iris dataset
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' 
+#' # Collect it
+#' df <- collect(irisDF)
+#' 
+#' # Collect a column
+#' v <- collect(irisDF$Sepal_Length * 100)
 #' }
 setMethod("collect",
           signature(x = "DataFrame"),
