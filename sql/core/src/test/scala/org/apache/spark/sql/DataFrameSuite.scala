@@ -178,8 +178,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
       }.queryExecution.assertAnalyzed()
     }
-    assert(e.getMessage.contains(
-      "Cannot explode *, explode can only be applied on a specific column."))
+    assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
 
     df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
       csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq

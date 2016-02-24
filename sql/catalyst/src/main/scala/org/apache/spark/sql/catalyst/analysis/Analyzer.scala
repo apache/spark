@@ -406,7 +406,7 @@ class Analyzer(
           }
         )
       case g: Generate if containsStar(g.generator.children) =>
-        failAnalysis("Cannot explode *, explode can only be applied on a specific column.")
+        failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
     }
 
     /**
