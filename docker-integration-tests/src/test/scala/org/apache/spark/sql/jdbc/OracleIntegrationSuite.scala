@@ -38,7 +38,9 @@ import org.apache.spark.tags.DockerTest
  * 2. Start docker - sudo service docker start
  * 3. Download oracle 11g driver jar and put it in maven local repo:
  *    (com/oracle/ojdbc6/11.2.0.2.0/ojdbc6-11.2.0.2.0.jar)
- * 4. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ * 4. The timeout and interval parameter to be increased from 60,1 to a high value for oracle test
+ *    in DockerJDBCIntegrationSuite.scala (Locally tested with 200,200 and executed successfully).
+ * 5. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * All tests in this suite are ignored because of the dependency with the oracle jar from maven
  * repository.
