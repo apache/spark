@@ -90,6 +90,48 @@ object ActorReceiver {
 @DeveloperApi
 abstract class ActorReceiver extends Actor {
 
+  /**
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
+   *
+   * @param props the props object of the receiver actor
+   * @param name  the name of the actor
+   */
+  def startNewActorReceiver(props: Props, name: String) {
+    context.parent ! (props, name)
+  }
+
+  /**
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
+   *
+   * @param props the props object of the receiver actor
+   */
+  def startNewActorReceiver(props: Props) {
+    context.parent ! props
+  }
+
+  /**
+   * query the statistical information in the current receiver system spark streaming will
+   * asynchronously send result to the caller actor of this API return message format:
+   * [[org.apache.spark.streaming.akka.Statistics]]
+   *
+   */
+  def queryStatisticalInfo() {
+    context.parent ! Statistics
+  }
+
+  /**
+   * send the message which is possibly harmful
+   * receiver supervisor will simply count the number of such messages
+   *
+   * @param warning the possibly harmful message
+   * @tparam A the message to send (must be extended from akka.actor.PossiblyHarmful)
+   */
+  def sendWarning[A <: PossiblyHarmful](warning: A) {
+    context.parent ! warning
+  }
+
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
     context.parent ! IteratorData(iter)
@@ -132,13 +174,54 @@ abstract class ActorReceiver extends Actor {
  *  AkkaUtils.<String>createStream(jssc, Props.create(MyActor.class), "MyActorReceiver");
  *
  * }}}
- *
  * @note Since Actor may exist outside the spark framework, It is thus user's responsibility
  *       to ensure the type safety, i.e. parametrized type of push block and InputDStream
  *       should be same.
  */
 @DeveloperApi
 abstract class JavaActorReceiver extends UntypedActor {
+
+  /**
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
+   *
+   * @param props the props object of the receiver actor
+   * @param name  the name of the actor
+   */
+  def startNewActorReceiver(props: Props, name: String) {
+    context.parent ! (props, name)
+  }
+
+  /**
+   * start a new actor-based receiver, spark streaming will asynchronously send the corresponding
+   * ActorRef object to the caller actor of this API
+   *
+   * @param props the props object of the receiver actor
+   */
+  def startNewActorReceiver(props: Props) {
+    context.parent ! props
+  }
+
+  /**
+   * query the statistical information in the current receiver system spark streaming will
+   * asynchronously send result to the caller actor of this API return message format:
+   * [[org.apache.spark.streaming.akka.Statistics]]
+   *
+   */
+  def queryStatisticalInfo() {
+    context.parent ! Statistics
+  }
+
+  /**
+   * send the message which is possibly harmful
+   * receiver supervisor will simply count the number of such messages
+   *
+   * @param warning the possibly harmful message
+   * @tparam A the message to send (must be extended from akka.actor.PossiblyHarmful)
+   */
+  def sendWarning[A <: PossiblyHarmful](warning: A) {
+    context.parent ! warning
+  }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store[T](iter: Iterator[T]) {
@@ -169,17 +252,26 @@ abstract class JavaActorReceiver extends UntypedActor {
  * Statistics for querying the supervisor about state of workers. Used in
  * conjunction with `AkkaUtils.createStream` and
  * [[org.apache.spark.streaming.akka.ActorReceiverSupervisor]].
+ *
+ * @param numberOfMsgs the number of messages received by the machine where the current receiver
+ *                     runs
+ * @param numberOfHiccups indicates how many messages extending akka.actor.PossiblyHarmful are
+ *                        received
+ * @param workerAddresses the addresses of the receiver workers
  */
 @DeveloperApi
-case class Statistics(numberOfMsgs: Int,
-  numberOfWorkers: Int,
-  numberOfHiccups: Int,
-  otherInfo: String)
+case class Statistics(
+    numberOfMsgs: Int,
+    numberOfHiccups: Int,
+    workerAddresses: String)
 
 /** Case class to receive data sent by child actors */
 private[akka] sealed trait ActorReceiverData
+
 private[akka] case class SingleItemData[T](item: T) extends ActorReceiverData
+
 private[akka] case class IteratorData[T](iterator: Iterator[T]) extends ActorReceiverData
+
 private[akka] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiverData
 
 /**
@@ -206,8 +298,7 @@ private[akka] class ActorReceiverSupervisor[T: ClassTag](
     props: Props,
     name: String,
     storageLevel: StorageLevel,
-    receiverSupervisorStrategy: SupervisorStrategy
-  ) extends Receiver[T](storageLevel) with Logging {
+    receiverSupervisorStrategy: SupervisorStrategy) extends Receiver[T](storageLevel) with Logging {
 
   private lazy val actorSystem = actorSystemCreator()
   protected lazy val actorSupervisor = actorSystem.actorOf(Props(new Supervisor),
@@ -219,39 +310,62 @@ private[akka] class ActorReceiverSupervisor[T: ClassTag](
     private val worker = context.actorOf(props, name)
     logInfo("Started receiver worker at:" + worker.path)
 
-    private val n: AtomicInteger = new AtomicInteger(0)
-    private val hiccups: AtomicInteger = new AtomicInteger(0)
+    private var messageCount = 0
+    private var hiccups = 0
+    private val childClass = props.actorClass()
+
+    private def createNewReceiver(props: Props, actorName: Option[String] = None):
+    Option[ActorRef] = {
+      if (props.actorClass() == childClass) {
+        val worker = {
+          if (actorName.isDefined) {
+            context.actorOf(props, name = actorName.get)
+          } else {
+            context.actorOf(props)
+          }
+        }
+        logInfo("Started receiver worker at:" + worker.path)
+        messageCount += 1
+        Some(worker)
+      } else {
+        logWarning("Received different props object of the child actor")
+        None
+      }
+    }
 
     override def receive: PartialFunction[Any, Unit] = {
 
       case IteratorData(iterator) =>
         logDebug("received iterator")
         store(iterator.asInstanceOf[Iterator[T]])
+        messageCount += 1
 
       case SingleItemData(msg) =>
         logDebug("received single")
         store(msg.asInstanceOf[T])
-        n.incrementAndGet
+        messageCount += 1
 
       case ByteBufferData(bytes) =>
         logDebug("received bytes")
         store(bytes)
+        messageCount += 1
 
       case props: Props =>
-        val worker = context.actorOf(props)
-        logInfo("Started receiver worker at:" + worker.path)
-        sender ! worker
+        val newReceiverActorRef = createNewReceiver(props)
+        sender() ! newReceiverActorRef
 
-      case (props: Props, name: String) =>
-        val worker = context.actorOf(props, name)
-        logInfo("Started receiver worker at:" + worker.path)
-        sender ! worker
+      case (props: Props, actorName: String) =>
+        val newReceiverActorRef = createNewReceiver(props, actorName = Some(name))
+        sender() ! newReceiverActorRef
 
-      case _: PossiblyHarmful => hiccups.incrementAndGet()
+      case _: PossiblyHarmful =>
+        messageCount += 1
+        hiccups += 1
 
       case _: Statistics =>
+        messageCount += 1
         val workers = context.children
-        sender ! Statistics(n.get, workers.size, hiccups.get, workers.mkString("\n"))
+        sender ! Statistics(messageCount, hiccups, workers.mkString("\n"))
 
     }
   }
