@@ -137,7 +137,9 @@ private[sql] object JDBCRDD extends Logging {
             val fieldScale = rsmd.getScale(i + 1)
             val isSigned = rsmd.isSigned(i + 1)
             val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
-            val metadata = new MetadataBuilder().putString("name", columnName)
+            val metadata = new MetadataBuilder()
+              .putString("name", columnName)
+              .putLong("scale", fieldScale)
             val columnType =
               dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
                 getCatalystType(dataType, fieldSize, fieldScale, isSigned))

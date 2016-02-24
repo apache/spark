@@ -18,10 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, TypeCheckResult, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.sequenceOption
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -96,7 +96,7 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated meaning the code to evaluated has already been added
       // as a function and called in advance. Just use it.
-      val code = s"/* ${this.toCommentSafeString} */"
+      val code = s"/* ${toCommentSafeString(this.toString)} */"
       ExprCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
@@ -105,7 +105,7 @@ abstract class Expression extends TreeNode[Expression] {
       ve.code = genCode(ctx, ve)
       if (ve.code != "") {
         // Add `this` in the comment.
-        ve.copy(s"/* ${this.toCommentSafeString} */\n" + ve.code.trim)
+        ve.copy(s"/* ${toCommentSafeString(this.toString)} */\n" + ve.code.trim)
       } else {
         ve
       }
@@ -201,17 +201,6 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = getClass.getSimpleName.toLowerCase
 
-  /**
-   * Returns a user-facing string representation of this expression, i.e. does not have developer
-   * centric debugging information like the expression id.
-   */
-  def prettyString: String = {
-    transform {
-      case a: AttributeReference => PrettyAttribute(a.name, a.dataType)
-      case u: UnresolvedAttribute => PrettyAttribute(u.name)
-    }.toString
-  }
-
   private def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
@@ -219,24 +208,16 @@ abstract class Expression extends TreeNode[Expression] {
 
   override def simpleString: String = toString
 
-  override def toString: String = prettyName + flatArguments.mkString("(", ",", ")")
+  override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
 
   /**
-   * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code.
+   * Returns SQL representation of this expression.  For expressions extending [[NonSQLExpression]],
+   * this method may return an arbitrary user facing string.
    */
-  protected def toCommentSafeString: String = this.toString
-    .replace("*/", "\\*\\/")
-    .replace("\\u", "\\\\u")
-
-  /**
-   * Returns SQL representation of this expression.  For expressions that don't have a SQL
-   * representation (e.g. `ScalaUDF`), this method should throw an `UnsupportedOperationException`.
-   */
-  @throws[UnsupportedOperationException](cause = "Expression doesn't have a SQL representation")
-  def sql: String = throw new UnsupportedOperationException(
-    s"Cannot map expression $this to its SQL representation"
-  )
+  def sql: String = {
+    val childrenSQL = children.map(_.sql).mkString(", ")
+    s"$prettyName($childrenSQL)"
+  }
 }
 
 
@@ -251,6 +232,19 @@ trait Unevaluable extends Expression {
 
   final override protected def genCode(ctx: CodegenContext, ev: ExprCode): String =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+
+/**
+ * Expressions that don't have SQL representation should extend this trait.  Examples are
+ * `ScalaUDF`, `ScalaUDAF`, and object expressions like `MapObjects` and `Invoke`.
+ */
+trait NonSQLExpression extends Expression {
+  override def sql: String = {
+    transform {
+      case a: Attribute => new PrettyAttribute(a)
+    }.toString
+  }
 }
 
 
@@ -373,8 +367,6 @@ abstract class UnaryExpression extends Expression {
       """
     }
   }
-
-  override def sql: String = s"($prettyName(${child.sql}))"
 }
 
 
@@ -477,8 +469,6 @@ abstract class BinaryExpression extends Expression {
       """
     }
   }
-
-  override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
 }
 
 
@@ -499,6 +489,8 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   def symbol: String
 
+  def sqlOperator: String = symbol
+
   override def toString: String = s"($left $symbol $right)"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(inputType, inputType)
@@ -506,17 +498,17 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
     if (left.dataType != right.dataType) {
-      TypeCheckResult.TypeCheckFailure(s"differing types in '$prettyString' " +
+      TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
-      TypeCheckResult.TypeCheckFailure(s"'$prettyString' requires ${inputType.simpleString} type," +
+      TypeCheckResult.TypeCheckFailure(s"'$sql' requires ${inputType.simpleString} type," +
         s" not ${left.dataType.simpleString}")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
   }
 
-  override def sql: String = s"(${left.sql} $symbol ${right.sql})"
+  override def sql: String = s"(${left.sql} $sqlOperator ${right.sql})"
 }
 
 
@@ -622,10 +614,5 @@ abstract class TernaryExpression extends Expression {
         $resultCode
       """
     }
-  }
-
-  override def sql: String = {
-    val childrenSQL = children.map(_.sql).mkString(", ")
-    s"$prettyName($childrenSQL)"
   }
 }

@@ -185,7 +185,7 @@ class BisectingKMeans @Since("2.0.0") (
       .setSeed($(seed))
     val parentModel = bkm.run(rdd)
     val model = new BisectingKMeansModel(uid, parentModel)
-    copyValues(model)
+    copyValues(model.setParent(this))
   }
 
   @Since("2.0.0")

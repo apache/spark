@@ -151,7 +151,7 @@ private[yarn] class AMDelegationTokenRenewer(
     // passed in already has tokens for that FS even if the tokens are expired (it really only
     // checks if there are tokens for the service, and not if they are valid). So the only real
     // way to get new tokens is to make sure a different Credentials object is used each time to
-    // get new tokens and then the new tokens are copied over the the current user's Credentials.
+    // get new tokens and then the new tokens are copied over the current user's Credentials.
     // So:
     // - we login as a different user and get the UGI
     // - use that UGI to get the tokens (see doAs block below)
