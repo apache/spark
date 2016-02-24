@@ -227,7 +227,25 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     val exception = intercept[IllegalArgumentException] {
       UnifiedMemoryManager(conf2, numCores = 1)
     }
-    assert(exception.getMessage.contains("larger heap size"))
+    assert(exception.getMessage.contains("increase heap size"))
+  }
+
+  test("insufficient executor memory") {
+    val systemMemory = 1024 * 1024
+    val reservedMemory = 300 * 1024
+    val memoryFraction = 0.8
+    val conf = new SparkConf()
+      .set("spark.memory.fraction", memoryFraction.toString)
+      .set("spark.testing.memory", systemMemory.toString)
+      .set("spark.testing.reservedMemory", reservedMemory.toString)
+    val mm = UnifiedMemoryManager(conf, numCores = 1)
+
+    // Try using an executor memory that's too small
+    val conf2 = conf.clone().set("spark.executor.memory", (reservedMemory / 2).toString)
+    val exception = intercept[IllegalArgumentException] {
+      UnifiedMemoryManager(conf2, numCores = 1)
+    }
+    assert(exception.getMessage.contains("increase executor memory"))
   }
 
   test("execution can evict cached blocks when there are multiple active tasks (SPARK-12155)") {
