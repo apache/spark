@@ -57,16 +57,16 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   def getFamily: String = $(family)
 
   /**
-   * Param for the name of the model link function which provides the relationship
+   * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
    * @group param
    */
   @Since("2.0.0")
-  final val link: Param[String] = new Param(this, "link", "The name of the model link function " +
+  final val link: Param[String] = new Param(this, "link", "The name of link function " +
     "which provides the relationship between the linear predictor and the mean of the " +
-    "distribution function. Supported options: identity, log, inverse, logit, probit, cloglog " +
-    "and sqrt.",
+    "distribution function. Supported options: identity, log, inverse, logit, probit, " +
+    "cloglog and sqrt.",
     ParamValidators.inArray[String](GeneralizedLinearRegression.supportedLinkNames.toArray))
 
   /** @group getParam */
@@ -84,10 +84,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       setDefault(maxIter -> 25)
     }
     if (isDefined(link)) {
-      import GeneralizedLinearRegression._
-      require(supportedFamilyAndLinkParis.contains(familyObj -> linkObj),
-        s"Generalized Linear Regression with ${$(family)} family does not support ${$(link)} " +
-          s"link function.")
+      require(GeneralizedLinearRegression.supportedFamilyAndLinkParis.contains(
+        familyObj -> linkObj), s"Generalized Linear Regression with ${$(family)} family " +
+        s"does not support ${$(link)} link function.")
     }
   }
 }
@@ -186,12 +185,13 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(solver -> "irls")
 
   override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
-    val numFeatures = dataset.select(col($(featuresCol))).limit(1).map {
-      case Row(features: Vector) => features.size
-    }.first()
+    val numFeatures = dataset.select(col($(featuresCol))).limit(1)
+      .map { case Row(features: Vector) =>
+        features.size
+      }.first()
     if (numFeatures > WeightedLeastSquares.MaxNumFeatures) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
-        s" <= 4096. Found $numFeatures in the input dataset."
+        s" <= ${WeightedLeastSquares.MaxNumFeatures}. Found $numFeatures in the input dataset."
       throw new SparkException(msg)
     }
 
@@ -201,8 +201,9 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         Instance(label, weight, features)
       }
 
-    import GeneralizedLinearRegression._
-    if (familyObj == Gaussian && linkObj == Identity) {
+    if (familyObj == GeneralizedLinearRegression.Gaussian &&
+      linkObj == GeneralizedLinearRegression.Identity) {
+      // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances)
@@ -212,19 +213,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       return model
     }
 
-    val newInstances = instances.map { instance =>
-      val mu = familyObj.initialize(instance.label, instance.weight)
-      val eta = familyAndLink.predict(mu)
-      Instance(eta, instance.weight, instance.features)
-    }
-
-    val initialModel = new WeightedLeastSquares($(fitIntercept), $(regParam),
-      standardizeFeatures = true, standardizeLabel = true)
-      .fit(newInstances)
-
+    // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
+    val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
     val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
       $(fitIntercept), $(regParam), $(maxIter), $(tol))
-
     val irlsModel = optimizer.fit(instances)
 
     val model = copyValues(
@@ -240,7 +232,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 @Since("2.0.0")
 private[ml] object GeneralizedLinearRegression {
 
-  /** Set of family and link pairs that GeneralizedLinearRegression supports */
+  /** Set of family and link pairs that GeneralizedLinearRegression supports. */
   lazy val supportedFamilyAndLinkParis = Set(
     Gaussian -> Identity, Gaussian -> Log, Gaussian -> Inverse,
     Binomial -> Logit, Binomial -> Probit, Binomial -> CLogLog,
@@ -248,16 +240,16 @@ private[ml] object GeneralizedLinearRegression {
     Gamma -> Inverse, Gamma -> Identity, Gamma -> Log
   )
 
-  /** Set of families that GeneralizedLinearRegression supports */
+  /** Set of family names that GeneralizedLinearRegression supports. */
   lazy val supportedFamilyNames = supportedFamilyAndLinkParis.map(_._1.name)
 
-  /** Set of links that GeneralizedLinearRegression supports */
+  /** Set of link names that GeneralizedLinearRegression supports. */
   lazy val supportedLinkNames = supportedFamilyAndLinkParis.map(_._2.name)
 
   val epsilon: Double = 1E-16
 
   /**
-   * Wrapper of family and link instance.
+   * Wrapper of family and link combination used in the model.
    */
   private[ml] class FamilyAndLink(val family: Family, var link: Link) extends Serializable {
 
@@ -267,20 +259,42 @@ private[ml] object GeneralizedLinearRegression {
     /** Fitted value based on linear predictor eta. */
     def fitted(eta: Double): Double = family.clean(link.unlink(eta))
 
+    /**
+     * Get the initial guess model for [[IterativelyReweightedLeastSquares]].
+     */
+    def initialize(
+        instances: RDD[Instance],
+        fitIntercept: Boolean,
+        regParam: Double): WeightedLeastSquaresModel = {
+      val newInstances = instances.map { instance =>
+        val mu = family.initialize(instance.label, instance.weight)
+        val eta = predict(mu)
+        Instance(eta, instance.weight, instance.features)
+      }
+      val initialModel = new WeightedLeastSquares(fitIntercept, regParam,
+        standardizeFeatures = true, standardizeLabel = true)
+        .fit(newInstances)
+      initialModel
+    }
+
+    /**
+     * The reweight function used to update offsets and weights
+     * at each iteration of [[IterativelyReweightedLeastSquares]].
+     */
     val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double) = {
       (instance: Instance, model: WeightedLeastSquaresModel) => {
         val eta = model.predict(instance.features)
         val mu = fitted(eta)
-        val z = eta + (instance.label - mu) * link.deriv(mu)
-        val w = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
-        (z, w)
+        val offset = eta + (instance.label - mu) * link.deriv(mu)
+        val weight = instance.weight / (math.pow(this.link.deriv(mu), 2.0) * family.variance(mu))
+        (offset, weight)
       }
     }
   }
 
   /**
    * A description of the error distribution to be used in the model.
-   * @param name the name of the family
+   * @param name the name of the family.
    */
   private[ml] abstract class Family(val name: String) extends Serializable {
 
@@ -422,7 +436,7 @@ private[ml] object GeneralizedLinearRegression {
    * A description of the link function to be used in the model.
    * The link function provides the relationship between the linear predictor
    * and the mean of the distribution function.
-   * @param name the name of link function
+   * @param name the name of link function.
    */
   private[ml] abstract class Link(val name: String) extends Serializable {
 
@@ -440,7 +454,8 @@ private[ml] object GeneralizedLinearRegression {
 
     /**
      * Gets the [[Link]] object from its name.
-     * @param name link name: "identity", "logit", "log", "inverse", "probit", "cloglog" or "sqrt".
+     * @param name link name: "identity", "logit", "log",
+     *             "inverse", "probit", "cloglog" or "sqrt".
      */
     def fromName(name: String): Link = {
       name match {
