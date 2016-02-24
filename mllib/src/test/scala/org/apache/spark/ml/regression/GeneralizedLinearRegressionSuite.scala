@@ -149,7 +149,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     assert(model.getLink === "identity")
   }
 
-  test("generalized linear regression: gaussian family") {
+  test("generalized linear regression: gaussian family against glm") {
     /*
        R code:
        f1 <- data$V1 ~ data$V2 + data$V3 - 1
@@ -260,7 +260,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     }
   }
 
-  test("generalized linear regression: binomial family") {
+  test("generalized linear regression: binomial family against glm") {
     /*
        R code:
        f1 <- data$V1 ~ data$V2 + data$V3 + data$V4 + data$V5 - 1
@@ -325,7 +325,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     }
   }
 
-  test("generalized linear regression: poisson family") {
+  test("generalized linear regression: poisson family against glm") {
     /*
        R code:
        f1 <- data$V1 ~ data$V2 + data$V3 - 1
@@ -391,7 +391,7 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     }
   }
 
-  test("generalized linear regression: gamma family") {
+  test("generalized linear regression: gamma family against glm") {
     /*
        R code:
        f1 <- data$V1 ~ data$V2 + data$V3 - 1

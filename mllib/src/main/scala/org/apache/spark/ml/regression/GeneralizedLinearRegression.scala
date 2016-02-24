@@ -75,7 +75,11 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
 
   import GeneralizedLinearRegression._
   protected lazy val familyObj = Family.fromName($(family))
-  protected lazy val linkObj = if (isDefined(link)) Link.fromName($(link)) else familyObj.defaultLink
+  protected lazy val linkObj = if (isDefined(link)) {
+    Link.fromName($(link))
+  } else {
+    familyObj.defaultLink
+  }
   protected lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   @Since("2.0.0")
