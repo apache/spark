@@ -131,8 +131,8 @@ private[sql] case class PhysicalRDD(
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
-  override def upstream(): RDD[InternalRow] = {
-    rdd
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    rdd :: Nil
   }
 
   // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
