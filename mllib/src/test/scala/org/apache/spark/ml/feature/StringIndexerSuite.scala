@@ -60,6 +60,20 @@ class StringIndexerSuite
     assert(output === expected)
   }
 
+  test("StringIndexer on column with empty string values") {
+    val data = sc.parallelize(Seq((0, "a"), (1, ""), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
+    val df = sqlContext.createDataFrame(data).toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+      .fit(df)
+
+    val transformed = indexer.transform(df)
+    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attr.values.get === Array("a", "c", "EMPTY_STRING"))
+  }
+
   test("StringIndexerUnseen") {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (4, "b")), 2)
     val data2 = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c")), 2)
