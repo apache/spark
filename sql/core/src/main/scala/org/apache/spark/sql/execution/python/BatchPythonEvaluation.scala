@@ -76,13 +76,7 @@ case class BatchPythonEvaluation(udf: PythonUDF, output: Seq[Attribute], child: 
 
       // Output iterator for results from Python.
       val outputIterator = new PythonRunner(
-        udf.command,
-        udf.envVars,
-        udf.pythonIncludes,
-        udf.pythonExec,
-        udf.pythonVer,
-        udf.broadcastVars,
-        udf.accumulator,
+        udf.func,
         bufferSize,
         reuseWorker
       ).compute(inputIterator, context.partitionId(), context)

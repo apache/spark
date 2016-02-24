@@ -43,10 +43,10 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
       s"""
         | Registering new PythonUDF:
         | name: $name
-        | command: ${udf.command.toSeq}
-        | envVars: ${udf.envVars}
-        | pythonIncludes: ${udf.pythonIncludes}
-        | pythonExec: ${udf.pythonExec}
+        | command: ${udf.func.command.toSeq}
+        | envVars: ${udf.func.envVars}
+        | pythonIncludes: ${udf.func.pythonIncludes}
+        | pythonExec: ${udf.func.pythonExec}
         | dataType: ${udf.dataType}
       """.stripMargin)
 
