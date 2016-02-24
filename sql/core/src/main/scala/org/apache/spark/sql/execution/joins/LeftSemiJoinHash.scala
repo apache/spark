@@ -25,8 +25,8 @@ import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * Build the right table's join keys into a HashSet, and iteratively go through the left
- * table, to find the if join keys are in the Hash set.
+ * Build the right table's join keys into a HashedRelation, and iteratively go through the left
+ * table, to find if the join keys are in the HashedRelation.
  */
 case class LeftSemiJoinHash(
     leftKeys: Seq[Expression],
@@ -47,13 +47,8 @@ case class LeftSemiJoinHash(
     val numOutputRows = longMetric("numOutputRows")
 
     right.execute().zipPartitions(left.execute()) { (buildIter, streamIter) =>
-      if (condition.isEmpty) {
-        val hashSet = buildKeyHashSet(buildIter)
-        hashSemiJoin(streamIter, hashSet, numOutputRows)
-      } else {
-        val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
-        hashSemiJoin(streamIter, hashRelation, numOutputRows)
-      }
+      val hashRelation = HashedRelation(buildIter, rightKeyGenerator)
+      hashSemiJoin(streamIter, hashRelation, numOutputRows)
     }
   }
 }
