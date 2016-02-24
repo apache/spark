@@ -41,7 +41,7 @@ class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> sorted(model.freqItemsets().collect())
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
-    >>> model_path = temp_path + "/fpg_model"
+    >>> model_path = temp_path + "/fpm"
     >>> model.save(sc, model_path)
     >>> sameModel = FPGrowthModel.load(sc, model_path)
     >>> sorted(model.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
