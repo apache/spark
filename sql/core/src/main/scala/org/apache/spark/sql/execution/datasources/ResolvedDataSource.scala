@@ -24,7 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.compress.CompressionCodecFactory
+import org.apache.hadoop.io.compress._
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
@@ -49,6 +49,13 @@ object ResolvedDataSource extends Logging {
     "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getCanonicalName,
     "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getCanonicalName
   )
+
+  /** Maps the short versions of compression codec names to fully-qualified class names. */
+  private val shortCompressionCodecNames = Map(
+    "bzip2" -> classOf[BZip2Codec].getCanonicalName,
+    "deflate" -> classOf[DeflateCodec].getCanonicalName,
+    "gzip" -> classOf[GzipCodec].getCanonicalName,
+    "snappy" -> classOf[SnappyCodec].getCanonicalName)
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider0: String): Class[_] = {
@@ -287,11 +294,14 @@ object ResolvedDataSource extends Logging {
           bucketSpec,
           caseInsensitiveOptions)
 
-        val codec = options
+        val compressionCodec = options
           .get("compressionCodec")
           .map { codecName =>
-            val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
-            Option(new CompressionCodecFactory(hadoopConf).getCodecClassByName(codecName))
+            val codecFactory = new CompressionCodecFactory(
+              sqlContext.sparkContext.hadoopConfiguration)
+            val resolvedCodecName = shortCompressionCodecNames.getOrElse(
+              codecName.toLowerCase, codecName)
+            Option(codecFactory.getCodecClassByName(resolvedCodecName))
           }
           .getOrElse(None)
 
@@ -303,7 +313,7 @@ object ResolvedDataSource extends Logging {
             r,
             data.logicalPlan,
             mode,
-            codec)).toRdd
+            compressionCodec)).toRdd
         r
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
