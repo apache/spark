@@ -2201,7 +2201,7 @@ private[spark] object Utils extends Logging {
    * @return whether it is local mode
    */
   def isLocalMaster(conf: SparkConf): Boolean = {
-    val master: String = conf.get("spark.master", "")
+    val master = conf.get("spark.master", "")
     master == "local" || master.startsWith("local[")
   }
 
