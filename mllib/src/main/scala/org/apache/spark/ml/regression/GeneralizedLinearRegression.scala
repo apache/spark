@@ -254,10 +254,10 @@ private[ml] object GeneralizedLinearRegression {
   private[ml] class FamilyAndLink(val family: Family, var link: Link) extends Serializable {
 
     /** Linear predictor based on given mu. */
-    def predict(mu: Double): Double = link.link(family.clean(mu))
+    def predict(mu: Double): Double = link.link(family.project(mu))
 
     /** Fitted value based on linear predictor eta. */
-    def fitted(eta: Double): Double = family.clean(link.unlink(eta))
+    def fitted(eta: Double): Double = family.project(link.unlink(eta))
 
     /**
      * Get the initial guess model for [[IterativelyReweightedLeastSquares]].
@@ -271,6 +271,7 @@ private[ml] object GeneralizedLinearRegression {
         val eta = predict(mu)
         Instance(eta, instance.weight, instance.features)
       }
+      // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val initialModel = new WeightedLeastSquares(fitIntercept, regParam,
         standardizeFeatures = true, standardizeLabel = true)
         .fit(newInstances)
@@ -308,7 +309,7 @@ private[ml] object GeneralizedLinearRegression {
     def variance(mu: Double): Double
 
     /** Trim the fitted value so that it will be in valid range. */
-    def clean(mu: Double): Double = mu
+    def project(mu: Double): Double = mu
   }
 
   private[ml] object Family {
@@ -339,7 +340,7 @@ private[ml] object GeneralizedLinearRegression {
 
     def variance(mu: Double): Double = 1.0
 
-    override def clean(mu: Double): Double = {
+    override def project(mu: Double): Double = {
       if (mu.isNegInfinity) {
         Double.MinValue
       } else if (mu.isPosInfinity) {
@@ -367,7 +368,7 @@ private[ml] object GeneralizedLinearRegression {
 
     override def variance(mu: Double): Double = mu * (1.0 - mu)
 
-    override def clean(mu: Double): Double = {
+    override def project(mu: Double): Double = {
       if (mu < epsilon) {
         epsilon
       } else if (mu > 1.0 - epsilon) {
@@ -394,7 +395,7 @@ private[ml] object GeneralizedLinearRegression {
 
     override def variance(mu: Double): Double = mu
 
-    override def clean(mu: Double): Double = {
+    override def project(mu: Double): Double = {
       if (mu < epsilon) {
         epsilon
       } else if (mu.isInfinity) {
@@ -421,7 +422,7 @@ private[ml] object GeneralizedLinearRegression {
 
     override def variance(mu: Double): Double = math.pow(mu, 2.0)
 
-    override def clean(mu: Double): Double = {
+    override def project(mu: Double): Double = {
       if (mu < epsilon) {
         epsilon
       } else if (mu.isInfinity) {
