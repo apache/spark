@@ -44,7 +44,7 @@ from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.util import keyword_only
 from pyspark.ml import Estimator, Model, Pipeline, Transformer
 from pyspark.ml.feature import *
-from pyspark.ml.tuning import ParamGridBuilder, CrossValidator, CrossValidatorModel
+from pyspark.ml.tuning import *
 from pyspark.mllib.linalg import DenseVector
 
 
@@ -242,7 +242,7 @@ class ParamTests(PySparkTestCase):
     def test_hasseed(self):
         noSeedSpecd = TestParams()
         withSeedSpecd = TestParams(seed=42)
-        other = OtherTestParams()
+        other = OtherTestParams() 
         # Check that we no longer use 42 as the magic number
         self.assertNotEqual(noSeedSpecd.getSeed(), 42)
         origSeed = noSeedSpecd.getSeed()
