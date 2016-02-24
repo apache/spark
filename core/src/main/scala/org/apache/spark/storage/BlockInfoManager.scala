@@ -279,7 +279,8 @@ private[storage] class BlockInfoManager extends Logging {
       s"Task $currentTaskAttemptId tried to downgrade a write lock that it does not hold on" +
         s" block $blockId")
     unlock(blockId)
-    lockForReading(blockId, blocking = false)
+    val lockOutcome = lockForReading(blockId, blocking = false)
+    assert(lockOutcome.isDefined)
   }
 
   /**
