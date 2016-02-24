@@ -55,9 +55,10 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
  * any sparsity.
  */
 @Experimental
-class MaxAbsScaler(override val uid: String)
+class MaxAbsScaler @Since("2.0.0") (override val uid: String)
   extends Estimator[MaxAbsScalerModel] with MaxAbsScalerParams with DefaultParamsWritable {
 
+  @Since("2.0.0")
   def this() = this(Identifiable.randomUID("maxAbsScal"))
 
   /** @group setParam */
@@ -70,11 +71,10 @@ class MaxAbsScaler(override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
     val summary = Statistics.colStats(input)
-    val maxAbs = summary.min.toArray.zip(summary.max.toArray).map { case (min, max) =>
-      val absMin = math.abs(min)
-      val absMax = math.abs(max)
-      if(absMax > absMin) absMax else absMin
-    }
+    val minVals = summary.min.toArray
+    val maxVals = summary.max.toArray
+    val n = minVals.length
+    val maxAbs = Array.tabulate(n) { i => math.max(math.abs(minVals(i)), math.abs(maxVals(i))) }
 
     copyValues(new MaxAbsScalerModel(uid, Vectors.dense(maxAbs)).setParent(this))
   }
@@ -113,8 +113,9 @@ class MaxAbsScalerModel private[ml] (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     // TODO: this looks hack, we may have to handle sparse and dense vectors separately.
-    val maxAbsUnzero = Vectors.dense(maxAbs.toArray.map(i => if (i == 0) 1 else i))
+    val maxAbsUnzero = Vectors.dense(maxAbs.toArray.map(x => if (x == 0) 1 else x))
     val reScale = udf { (vector: Vector) =>
       val brz = vector.toBreeze / maxAbsUnzero.toBreeze
       Vectors.fromBreeze(brz)
