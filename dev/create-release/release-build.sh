@@ -102,7 +102,14 @@ fi
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 
 function LFTP {
-  COMMANDS="connect -u $ASF_USERNAME,p sftp://home.apache.org && $@"
+  SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
+  COMMANDS=$(cat <<'EOF'
+     set net:max-retries 1 &&
+     set sftp:connect-program $SSH &&
+     connect -u $ASF_USERNAME,p sftp://home.apache.org &&
+     $@
+EOF
+)
   lftp --norc -c "$COMMANDS"
 }
 export -f LFTP
