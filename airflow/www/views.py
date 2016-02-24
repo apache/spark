@@ -16,7 +16,7 @@ import inspect
 import traceback
 
 import sqlalchemy as sqla
-from sqlalchemy import or_
+from sqlalchemy import or_, desc
 
 
 from flask import redirect, url_for, request, Markup, Response, current_app, render_template
@@ -1247,7 +1247,11 @@ class Airflow(BaseView):
             dttm = dag.latest_execution_date or datetime.now().date()
 
         DR = models.DagRun
-        drs = session.query(DR).filter_by(dag_id=dag_id).order_by('execution_date desc').all()
+        drs = (
+            session.query(DR)
+            .filter_by(dag_id=dag_id)
+            .order_by(desc(DR.execution_date)).all()
+        )
         dr_choices = []
         dr_state = None
         for dr in drs:
