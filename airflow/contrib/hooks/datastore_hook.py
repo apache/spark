@@ -26,7 +26,7 @@ class DatastoreHook(GoogleCloudBaseHook):
                  delegate_to=None):
         super(DatastoreHook, self).__init__(scope, datastore_conn_id, delegate_to)
         # datasetId is the same as the project name
-        self.datasetId = self._extras_dejson().get('project')
+        self.dataset_id = self._extras_dejson().get('project')
 
     def get_conn(self):
         """
@@ -43,7 +43,7 @@ class DatastoreHook(GoogleCloudBaseHook):
         :param partialKeys: a list of partial keys
         :return: a list of full keys.
         """
-        resp = self.get_conn().datasets().allocateIds(datasetId=self.datasetId, body={'keys': partialKeys}).execute()
+        resp = self.get_conn().datasets().allocateIds(datasetId=self.dataset_id, body={'keys': partialKeys}).execute()
         return resp['keys']
 
     def begin_transaction(self):
@@ -53,7 +53,7 @@ class DatastoreHook(GoogleCloudBaseHook):
 
         :return: a transaction handle
         """
-        resp = self.get_conn().datasets().beginTransaction(datasetId=self.datasetId, body={}).execute()
+        resp = self.get_conn().datasets().beginTransaction(datasetId=self.dataset_id, body={}).execute()
         return resp['transaction']
 
     def commit(self, body):
@@ -64,7 +64,7 @@ class DatastoreHook(GoogleCloudBaseHook):
         :param body: the body of the commit request
         :return: the response body of the commit request
         """
-        resp = self.get_conn().datasets().commit(datasetId=self.datasetId, body=body).execute()
+        resp = self.get_conn().datasets().commit(datasetId=self.dataset_id, body=body).execute()
         return resp
 
     def lookup(self, keys, read_consistency=None, transaction=None):
@@ -82,7 +82,7 @@ class DatastoreHook(GoogleCloudBaseHook):
             body['readConsistency'] = read_consistency
         if transaction:
             body['transaction'] = transaction
-        return self.get_conn().datasets().lookup(datasetId=self.datasetId, body=body).execute()
+        return self.get_conn().datasets().lookup(datasetId=self.dataset_id, body=body).execute()
 
     def rollback(self, transaction):
         """
@@ -90,7 +90,7 @@ class DatastoreHook(GoogleCloudBaseHook):
         see https://cloud.google.com/datastore/docs/apis/v1beta2/datasets/rollback
         :param transaction: the transaction to roll back
         """
-        self.get_conn().datasets().rollback(datasetId=self.datasetId, body={'transaction': transaction})\
+        self.get_conn().datasets().rollback(datasetId=self.dataset_id, body={'transaction': transaction})\
             .execute()
 
     def run_query(self, body):
@@ -100,5 +100,5 @@ class DatastoreHook(GoogleCloudBaseHook):
         :param body: the body of the query request
         :return: the batch of query results.
         """
-        resp = self.get_conn().datasets().runQuery(datasetId=self.datasetId, body=body).execute()
+        resp = self.get_conn().datasets().runQuery(datasetId=self.dataset_id, body=body).execute()
         return resp['batch']
