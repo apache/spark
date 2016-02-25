@@ -2309,7 +2309,7 @@ class RDD(object):
                 yield row
 
 
-def _prepare_for_python_RDD(sc, command, obj=None):
+def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
     pickled_command = ser.dumps(command)
@@ -2399,14 +2399,10 @@ class PipelinedRDD(RDD):
         else:
             profiler = None
 
-        command = (self.func, profiler, self._prev_jrdd_deserializer,
-                   self._jrdd_deserializer)
-        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
-        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
-                                             bytearray(pickled_cmd),
-                                             env, includes, self.preservesPartitioning,
-                                             self.ctx.pythonExec, self.ctx.pythonVer,
-                                             bvars, self.ctx._javaAccumulator)
+        wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
+                                      self._jrdd_deserializer, profiler)
+        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
+                                             self.preservesPartitioning)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:

@@ -174,7 +174,8 @@ class Dataset(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        WholeStageCodegen
+        :  +- Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==

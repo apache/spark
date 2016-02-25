@@ -41,6 +41,7 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
+        ColumnPruning,
         CollapseProject) :: Nil
   }
 
@@ -60,6 +61,52 @@ class FilterPushdownSuite extends PlanTest {
       testRelation
         .select('a.attr)
         .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for group") {
+    val originalQuery =
+      testRelation
+        .groupBy('a)('a, count('b))
+        .select('a)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .groupBy('a)('a).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for group with alias") {
+    val originalQuery =
+      testRelation
+        .groupBy('a)('a as 'c, count('b))
+        .select('c)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .groupBy('a)('a as 'c).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("column pruning for Project(ne, Limit)") {
+    val originalQuery =
+      testRelation
+        .select('a, 'b)
+        .limit(2)
+        .select('a)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -555,6 +602,39 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     comparePlans(optimized, originalQuery)
+  }
+
+  test("push down project past sort") {
+    val x = testRelation.subquery('x)
+
+    // push down valid
+    val originalQuery = {
+      x.select('a, 'b)
+       .sortBy(SortOrder('a, Ascending))
+       .select('a)
+    }
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      x.select('a)
+       .sortBy(SortOrder('a, Ascending)).analyze
+
+    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+
+    // push down invalid
+    val originalQuery1 = {
+      x.select('a, 'b)
+       .sortBy(SortOrder('a, Ascending))
+       .select('b)
+    }
+
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 =
+      x.select('a, 'b)
+       .sortBy(SortOrder('a, Ascending))
+       .select('b).analyze
+
+    comparePlans(optimized1, analysis.EliminateSubqueryAliases(correctAnswer1))
   }
 
   test("push project and filter down into sample") {
