@@ -210,7 +210,7 @@ object SparkSubmitClassLoaderTest extends Logging {
     }
     // Second, we load classes at the executor side.
     logInfo("Testing load classes at the executor side.")
-    val result = df.rdd.mapPartitions { x =>
+    val result = df.mapPartitions { x =>
       var exception: String = null
       try {
         Utils.classForName(args(0))
