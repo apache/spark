@@ -173,10 +173,10 @@ trait StreamTest extends QueryTest with Timeouts {
     testStream(stream.toDF())(actions: _*)
 
   /**
-   * Executes the specified actions on the the given streaming DataFrame and provides helpful
+   * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
    *
-   * Note that if the stream is not explictly started before an action that requires it to be
+   * Note that if the stream is not explicitly started before an action that requires it to be
    * running then it will be automatically started before performing any other actions.
    */
   def testStream(stream: DataFrame)(actions: StreamAction*): Unit = {

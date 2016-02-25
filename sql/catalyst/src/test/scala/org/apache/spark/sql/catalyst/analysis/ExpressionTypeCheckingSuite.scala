@@ -41,7 +41,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       assertSuccess(expr)
     }
     assert(e.getMessage.contains(
-      s"cannot resolve '${expr.prettyString}' due to data type mismatch:"))
+      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
     assert(e.getMessage.contains(errorMessage))
   }
 
@@ -52,7 +52,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
     assertError(expr,
-      s"differing types in '${expr.prettyString}'")
+      s"differing types in '${expr.sql}'")
   }
 
   test("check types for unary arithmetic") {

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -45,9 +45,8 @@ abstract class SubqueryExpression extends LeafExpression {
 }
 
 /**
- * A subquery that will return only one row and one column.
- *
- * This will be converted into [[execution.ScalarSubquery]] during physical planning.
+ * A subquery that will return only one row and one column. This will be converted into a physical
+ * scalar subquery during planning.
  *
  * Note: `exprId` is used to have unique name in explain string output.
  */
@@ -56,7 +55,7 @@ case class ScalarSubquery(
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression with Unevaluable {
 
-  override def plan: LogicalPlan = Subquery(toString, query)
+  override def plan: LogicalPlan = SubqueryAlias(toString, query)
 
   override lazy val resolved: Boolean = query.resolved
 
