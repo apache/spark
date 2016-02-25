@@ -25,7 +25,11 @@ singleStatement
     ;
 
 singleExpression
-    : expression EOF
+    : namedExpression EOF
+    ;
+
+singleQualifiedName
+    : qualifiedName EOF
     ;
 
 statement
@@ -74,11 +78,11 @@ query
     ;
 
 with
-    : WITH RECURSIVE? namedQuery (',' namedQuery)*
+    : WITH namedQuery (',' namedQuery)*
     ;
 
 tableElement
-    : identifier type
+    : identifier dataType
     ;
 
 tableProperties
@@ -110,7 +114,7 @@ queryPrimary
     ;
 
 sortItem
-    : expression ordering=(ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
+    : expression ordering=(ASC | DESC)?
     ;
 
 querySpecification
@@ -148,7 +152,7 @@ setQuantifier
     ;
 
 selectItem
-    : expression (AS? identifier)?  #selectSingle
+    : namedExpression               #selectSingle
     | qualifiedName '.' ASTERISK    #selectAll
     | ASTERISK                      #selectAll
     ;
@@ -203,6 +207,10 @@ relationPrimary
     | '(' relation ')'                                                #parenthesizedRelation
     ;
 
+namedExpression
+    : expression (AS? identifier)?
+    ;
+
 expression
     : booleanExpression
     ;
@@ -227,18 +235,18 @@ predicate[ParserRuleContext value]
     | NOT? BETWEEN lower=valueExpression AND upper=valueExpression        #between
     | NOT? IN '(' expression (',' expression)* ')'                        #inList
     | NOT? IN '(' query ')'                                               #inSubquery
-    | NOT? LIKE pattern=valueExpression (ESCAPE escape=valueExpression)?  #like
+    | NOT? like=(RLIKE | LIKE) pattern=valueExpression                    #like
     | IS NOT? NULL                                                        #nullPredicate
-    | IS NOT? DISTINCT FROM right=valueExpression                         #distinctFrom
     ;
 
 valueExpression
-    : primaryExpression                                                                 #valueExpressionDefault
-    | valueExpression AT timeZoneSpecifier                                              #atTimeZone
-    | operator=(MINUS | PLUS) valueExpression                                           #arithmeticUnary
-    | left=valueExpression operator=(ASTERISK | SLASH | PERCENT) right=valueExpression  #arithmeticBinary
-    | left=valueExpression operator=(PLUS | MINUS) right=valueExpression                #arithmeticBinary
-    | left=valueExpression CONCAT right=valueExpression                                 #concatenation
+    : primaryExpression                                                                      #valueExpressionDefault
+    | operator=(MINUS | PLUS| TILDE) valueExpression                                         #arithmeticUnary
+    | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
+    | left=valueExpression operator=(PLUS | MINUS) right=valueExpression                     #arithmeticBinary
+    | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
+    | left=valueExpression operator=HAT right=valueExpression                                #arithmeticBinary
+    | left=valueExpression operator=PIPE right=valueExpression                               #arithmeticBinary
     ;
 
 primaryExpression
@@ -248,41 +256,22 @@ primaryExpression
     | number                                                                         #numericLiteral
     | booleanValue                                                                   #booleanLiteral
     | STRING                                                                         #stringLiteral
-    | BINARY_LITERAL                                                                 #binaryLiteral
-    | POSITION '(' valueExpression IN valueExpression ')'                            #position
+    | (identifier '.')* ASTERISK                                                     #star
     | '(' expression (',' expression)+ ')'                                           #rowConstructor
-    | ROW '(' expression (',' expression)* ')'                                       #rowConstructor
-    | qualifiedName '(' ASTERISK ')' over?                                           #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' over?     #functionCall
-    | identifier '->' expression                                                     #lambda
-    | '(' identifier (',' identifier)* ')' '->' expression                           #lambda
     | '(' query ')'                                                                  #subqueryExpression
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END         #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                         #searchedCase
-    | CAST '(' expression AS type ')'                                                #cast
-    | TRY_CAST '(' expression AS type ')'                                            #cast
+    | CAST '(' expression AS dataType ')'                                            #cast
     | ARRAY '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                          #subscript
     | identifier                                                                     #columnReference
     | base=primaryExpression '.' fieldName=identifier                                #dereference
-    | name=CURRENT_DATE                                                              #specialDateTimeFunction
-    | name=CURRENT_TIME ('(' precision=INTEGER_VALUE ')')?                           #specialDateTimeFunction
-    | name=CURRENT_TIMESTAMP ('(' precision=INTEGER_VALUE ')')?                      #specialDateTimeFunction
-    | name=LOCALTIME ('(' precision=INTEGER_VALUE ')')?                              #specialDateTimeFunction
-    | name=LOCALTIMESTAMP ('(' precision=INTEGER_VALUE ')')?                         #specialDateTimeFunction
-    | SUBSTRING '(' valueExpression FROM valueExpression (FOR valueExpression)? ')'  #substring
-    | NORMALIZE '(' valueExpression (',' normalForm)? ')'                            #normalize
-    | EXTRACT '(' identifier FROM valueExpression ')'                                #extract
     | '(' expression ')'                                                             #parenthesizedExpression
     ;
 
-timeZoneSpecifier
-    : TIME ZONE interval  #timeZoneInterval
-    | TIME ZONE STRING    #timeZoneString
-    ;
-
 comparisonOperator
-    : EQ | NEQ | LT | LTE | GT | GTE
+    : EQ | NEQ | LT | LTE | GT | GTE | NSEQ
     ;
 
 booleanValue
@@ -290,28 +279,33 @@ booleanValue
     ;
 
 interval
-    : INTERVAL sign=(PLUS | MINUS)? STRING from=intervalField (TO to=intervalField)?
+    : INTERVAL value=intervalValue YEAR TO MONTH   #ytmIntervalLiteral
+    | INTERVAL value=intervalValue DAY TO SECOND   #dtsIntervalLiteral
+    | INTERVAL intervalField+                      #composedIntervalLiteral
     ;
 
 intervalField
-    : YEAR | MONTH | DAY | HOUR | MINUTE | SECOND
+    : value=intervalValue unit=(YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND)
     ;
 
-type
-    : type ARRAY
-    | ARRAY '<' type '>'
-    | MAP '<' type ',' type '>'
-    | baseType ('(' typeParameter (',' typeParameter)* ')')?
+intervalValue
+    : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
+    | STRING
+    ;
+
+dataType
+    : complex=ARRAY '<' dataType '>'                            #complexDataType
+    | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
+    | complex=STRUCT '<' colType (',' colType)* '>'             #complexDataType
+    | identifier ('(' INTEGER_VALUE (',' typeParameter)* ')')?  #primitiveDatatype
+    ;
+
+colType
+    : identifier ':' dataType (COMMENT STRING)?
     ;
 
 typeParameter
-    : INTEGER_VALUE | type
-    ;
-
-baseType
-    : TIME_WITH_TIME_ZONE
-    | TIMESTAMP_WITH_TIME_ZONE
-    | identifier
+    : INTEGER_VALUE | dataType
     ;
 
 whenClause
@@ -319,10 +313,15 @@ whenClause
     ;
 
 over
-    : OVER '('
-        (PARTITION BY partition+=expression (',' partition+=expression)*)?
-        (ORDER BY sortItem (',' sortItem)*)?
-        windowFrame?
+    : OVER name=identifier  #windowRef
+    | OVER windowSpec       #windowDef
+    ;
+
+windowSpec
+    : '('
+      (PARTITION BY partition+=expression (',' partition+=expression)*)?
+      (ORDER BY sortItem (',' sortItem)*)?
+      windowFrame?
       ')'
     ;
 
@@ -334,10 +333,10 @@ windowFrame
     ;
 
 frameBound
-    : UNBOUNDED boundType=PRECEDING                 #unboundedFrame
-    | UNBOUNDED boundType=FOLLOWING                 #unboundedFrame
-    | CURRENT ROW                                   #currentRowBound
-    | expression boundType=(PRECEDING | FOLLOWING)  #boundedFrame // expression should be unsignedLiteral
+    : UNBOUNDED boundType=PRECEDING
+    | UNBOUNDED boundType=FOLLOWING
+    | boundType=CURRENT ROW
+    | expression boundType=(PRECEDING | FOLLOWING)
     ;
 
 
@@ -369,43 +368,37 @@ qualifiedName
 
 identifier
     : IDENTIFIER             #unquotedIdentifier
-    | quotedIdentifier       #quotedIdentifierAlternative
+    | BACKQUOTED_IDENTIFIER  #quotedIdentifier
     | nonReserved            #unquotedIdentifier
-    | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
     ;
 
-quotedIdentifier
-    : QUOTED_IDENTIFIER
-    ;
-
 number
-    : DECIMAL_VALUE  #decimalLiteral
-    | INTEGER_VALUE  #integerLiteral
+    : DECIMAL_VALUE            #decimalLiteral
+    | SCIENTIFIC_DECIMAL_VALUE #scientificDecimalLiteral
+    | INTEGER_VALUE            #integerLiteral
+    | BIGINT_LITERAL           #bigIntLiteral
+    | SMALLINT_LITERAL         #smallIntLiteral
+    | TINYINT_LITERAL          #tinyIntLiteral
+    | DOUBLE_LITERAL           #doubleLiteral
     ;
 
 nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | SCHEMAS | CATALOGS | SESSION
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY
-    | DATE | TIME | TIMESTAMP | INTERVAL | ZONE
-    | YEAR | MONTH | DAY | HOUR | MINUTE | SECOND
+    | DATE | TIMESTAMP | INTERVAL
+    | YEAR | WEEK| MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
     | EXPLAIN | FORMAT | TYPE | TEXT | GRAPHVIZ | LOGICAL | DISTRIBUTED
     | TABLESAMPLE | SYSTEM | BERNOULLI | POISSONIZED | USE | TO
-    | RESCALED | APPROXIMATE | AT | CONFIDENCE
+    | RESCALED | APPROXIMATE | CONFIDENCE
     | SET | RESET
     | VIEW | REPLACE
-    | IF | NULLIF | COALESCE
-    | normalForm
-    | POSITION
+    | IF
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
     | SERIALIZABLE | REPEATABLE | COMMITTED | UNCOMMITTED | READ | WRITE | ONLY
     | CALL
-    ;
-
-normalForm
-    : NFD | NFC | NFKD | NFKC
     ;
 
 SELECT: 'SELECT';
@@ -432,11 +425,12 @@ CONFIDENCE: 'CONFIDENCE';
 OR: 'OR';
 AND: 'AND';
 IN: 'IN';
-NOT: 'NOT';
+NOT: 'NOT' | '!';
 NO: 'NO';
 EXISTS: 'EXISTS';
 BETWEEN: 'BETWEEN';
 LIKE: 'LIKE';
+RLIKE: 'RLIKE' | 'REGEXP';
 IS: 'IS';
 NULL: 'NULL';
 TRUE: 'TRUE';
@@ -447,26 +441,19 @@ LAST: 'LAST';
 ESCAPE: 'ESCAPE';
 ASC: 'ASC';
 DESC: 'DESC';
-SUBSTRING: 'SUBSTRING';
-POSITION: 'POSITION';
 FOR: 'FOR';
 DATE: 'DATE';
-TIME: 'TIME';
 TIMESTAMP: 'TIMESTAMP';
 INTERVAL: 'INTERVAL';
 YEAR: 'YEAR';
 MONTH: 'MONTH';
+WEEK: 'WEEK';
 DAY: 'DAY';
 HOUR: 'HOUR';
 MINUTE: 'MINUTE';
 SECOND: 'SECOND';
-ZONE: 'ZONE';
-CURRENT_DATE: 'CURRENT_DATE';
-CURRENT_TIME: 'CURRENT_TIME';
-CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
-LOCALTIME: 'LOCALTIME';
-LOCALTIMESTAMP: 'LOCALTIMESTAMP';
-EXTRACT: 'EXTRACT';
+MILLISECOND: 'MILLISECOND';
+MICROSECOND: 'MICROSECOND';
 CASE: 'CASE';
 WHEN: 'WHEN';
 THEN: 'THEN';
@@ -492,7 +479,6 @@ FOLLOWING: 'FOLLOWING';
 CURRENT: 'CURRENT';
 ROW: 'ROW';
 WITH: 'WITH';
-RECURSIVE: 'RECURSIVE';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
@@ -511,7 +497,6 @@ GRAPHVIZ: 'GRAPHVIZ';
 LOGICAL: 'LOGICAL';
 DISTRIBUTED: 'DISTRIBUTED';
 CAST: 'CAST';
-TRY_CAST: 'TRY_CAST';
 SHOW: 'SHOW';
 TABLES: 'TABLES';
 SCHEMAS: 'SCHEMAS';
@@ -538,6 +523,8 @@ UNNEST: 'UNNEST';
 ORDINALITY: 'ORDINALITY';
 ARRAY: 'ARRAY';
 MAP: 'MAP';
+STRUCT: 'STRUCT';
+COMMENT: 'COMMENT';
 SET: 'SET';
 RESET: 'RESET';
 SESSION: 'SESSION';
@@ -558,17 +545,10 @@ WRITE: 'WRITE';
 ONLY: 'ONLY';
 CALL: 'CALL';
 
-NORMALIZE: 'NORMALIZE';
-NFD : 'NFD';
-NFC : 'NFC';
-NFKD : 'NFKD';
-NFKC : 'NFKC';
-
 IF: 'IF';
-NULLIF: 'NULLIF';
-COALESCE: 'COALESCE';
 
-EQ  : '=';
+EQ  : '=' | '==';
+NSEQ: '<=>';
 NEQ : '<>' | '!=';
 LT  : '<';
 LTE : '<=';
@@ -580,17 +560,27 @@ MINUS: '-';
 ASTERISK: '*';
 SLASH: '/';
 PERCENT: '%';
-CONCAT: '||';
+DIV: 'DIV';
+TILDE: '~';
+AMPERSAND: '&';
+PIPE: '|';
+HAT: '^';
 
 STRING
-    : '\'' ( ~'\'' | '\'\'' )* '\''
+    : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
+    | '\"' ( ~('\"'|'\\') | ('\\' .) )* '\"'
     ;
 
-// Note: we allow any character inside the binary literal and validate
-// its a correct literal when the AST is being constructed. This
-// allows us to provide more meaningful error messages to the user
-BINARY_LITERAL
-    :  'X\'' (~'\'')* '\''
+BIGINT_LITERAL
+    : DIGIT+ 'L'
+    ;
+
+SMALLINT_LITERAL
+    : DIGIT+ 'S'
+    ;
+
+TINYINT_LITERAL
+    : DIGIT+ 'Y'
     ;
 
 INTEGER_VALUE
@@ -600,32 +590,28 @@ INTEGER_VALUE
 DECIMAL_VALUE
     : DIGIT+ '.' DIGIT*
     | '.' DIGIT+
-    | DIGIT+ ('.' DIGIT*)? EXPONENT
+    ;
+
+SCIENTIFIC_DECIMAL_VALUE
+    : DIGIT+ ('.' DIGIT*)? EXPONENT
     | '.' DIGIT+ EXPONENT
     ;
 
+DOUBLE_LITERAL
+    :
+    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    ;
+
 IDENTIFIER
-    : (LETTER | '_') (LETTER | DIGIT | '_' | '@' | ':')*
+    : (LETTER | '_') (LETTER | DIGIT | '_')*
     ;
 
 DIGIT_IDENTIFIER
-    : DIGIT (LETTER | DIGIT | '_' | '@' | ':')+
-    ;
-
-QUOTED_IDENTIFIER
-    : '"' ( ~'"' | '""' )* '"'
+    : DIGIT (LETTER | DIGIT | '_')+
     ;
 
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
-    ;
-
-TIME_WITH_TIME_ZONE
-    : 'TIME' WS 'WITH' WS 'TIME' WS 'ZONE'
-    ;
-
-TIMESTAMP_WITH_TIME_ZONE
-    : 'TIMESTAMP' WS 'WITH' WS 'TIME' WS 'ZONE'
     ;
 
 fragment EXPONENT

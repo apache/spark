@@ -403,7 +403,8 @@ object OldDeps {
 object Catalyst {
   lazy val settings = antlr4Settings ++ Seq(
     antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser.ng"),
-
+    antlr4GenListener in Antlr4 := true,
+    antlr4GenVisitor in Antlr4 := true,
     // ANTLR code-generation step.
     //
     // This has been heavily inspired by com.github.stefri.sbt-antlr (0.5.3). It fixes a number of
