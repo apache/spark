@@ -136,11 +136,11 @@ case class Sort(
     val spillSize = ctx.freshName("spillSize")
     ctx.addMutableState(classOf[Long].getName, spillSize, "")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
-    ctx.addMutableState(classOf[Long].getName, spillSizeBefore,
-      s"$spillSizeBefore = $metrics.memoryBytesSpilled();")
+    ctx.addMutableState(classOf[Long].getName, spillSizeBefore, "")
     s"""
        | if ($needToSort) {
        |   $addToSorter();
+       |   $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $sortedIterator = $sorterVariable.sort();
        |   $dataSize += $sorterVariable.getPeakMemoryUsage();
        |   $spillSize += $metrics.memoryBytesSpilled() - $spillSizeBefore;
