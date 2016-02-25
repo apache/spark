@@ -162,6 +162,10 @@ private[sql] class OrcRelation(
   extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
+  /* org.apache.orc contains OrcConf which can be used later */
+  private[sql] val ORC_BLOOM_FILTER_COLUMNS = "orc.bloom.filter.columns"
+  private[sql] val ORC_BLOOM_FILTER_FPP = "orc.bloom.filter.fpp"
+
   private[sql] def this(
       paths: Array[String],
       maybeDataSchema: Option[StructType],
@@ -176,6 +180,9 @@ private[sql] class OrcRelation(
       None,
       parameters)(sqlContext)
   }
+
+  private val orcBloomFilterCols = parameters.get(ORC_BLOOM_FILTER_COLUMNS)
+  private val orcBloomFilterFpp = parameters.get(ORC_BLOOM_FILTER_FPP)
 
   override val dataSchema: StructType = maybeDataSchema.getOrElse {
     OrcFileOperator.readSchema(
@@ -211,6 +218,9 @@ private[sql] class OrcRelation(
   }
 
   override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    val conf = job.getConfiguration
+    orcBloomFilterCols.map(conf.set(ORC_BLOOM_FILTER_COLUMNS, _))
+    orcBloomFilterFpp.map(conf.set(ORC_BLOOM_FILTER_FPP, _))
     job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive.orc
 
-import java.io.File
+import java.io.{PrintStream, ByteArrayOutputStream, File}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.CompressionKind
+import org.apache.hadoop.hive.ql.io.orc.{FileDump, CompressionKind}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -393,5 +393,43 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
       }
     }
+  }
+
+  test("SPARK-12417. Orc bloom filter options are not propagated during file " +
+    "generation") {
+    withTempPath { dir =>
+      // Create separate sub dir for bloom filter testing
+      val path = new File(dir, "orc").getCanonicalPath
+
+      // Write some data
+      val data = (0 until 10).map { i =>
+        val maybeInt = if (i % 2 == 0) None else Some(i)
+        val nullValue: Option[String] = None
+        (maybeInt, nullValue)
+      }
+
+      // Dump data to orc
+      createDataFrame(data).toDF("a", "b")
+        .write.option("orc.bloom.filter.columns", "*").orc(path)
+
+      // Verify if orc bloom filters are present. This can be verified via
+      // ORC RecordReaderImpl when it is made public. Until then, verify by
+      // dumping file statistics and checking whether bloom filter was added.
+      new File(path).listFiles().filter(_.getName.endsWith("orc")) map { file =>
+        withTempStream { buf =>
+          val fileDumpArgs = Array(file.getCanonicalPath)
+          FileDump.main(fileDumpArgs)
+          assert(buf.toString.contains("BLOOM_FILTER"))
+        }
+      }
+    }
+  }
+
+  def withTempStream(f: ByteArrayOutputStream => Unit): Unit = {
+    val oriStream = System.out
+    val buf = new ByteArrayOutputStream()
+    val stream = new PrintStream(buf)
+    System.setOut(stream)
+    try f(buf) finally System.setOut(oriStream)
   }
 }
