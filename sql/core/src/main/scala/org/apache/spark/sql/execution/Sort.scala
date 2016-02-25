@@ -76,8 +76,6 @@ case class Sort(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val schema = child.schema
-
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
 
@@ -99,8 +97,8 @@ case class Sort(
     }
   }
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   // Name of sorter variable used in codegen.
@@ -149,7 +147,7 @@ case class Sort(
     }
 
     ctx.currentVars = input
-    val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
+    val code = GenerateUnsafeProjection.createCode(ctx, colExprs, useSubexprElimination = false)
 
     s"""
        | // Convert the input attributes to an UnsafeRow and add it to the sorter

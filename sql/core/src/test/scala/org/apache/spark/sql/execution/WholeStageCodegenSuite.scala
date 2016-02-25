@@ -35,8 +35,8 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     checkThatPlansAgree(
       sqlContext.range(100),
       (p: SparkPlan) =>
-        WholeStageCodegen(Filter('a == 1, InputAdapter(p)), Seq()),
-      (p: SparkPlan) => Filter('a == 1, p),
+        WholeStageCodegen(Filter('a === 1, InputAdapter(p)), Seq()),
+      (p: SparkPlan) => Filter('a === 1, p),
       sortAnswers = false
     )
   }
