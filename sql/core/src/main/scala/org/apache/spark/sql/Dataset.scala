@@ -142,7 +142,7 @@ class Dataset[T] private[sql](
    * the same name after two Datasets have been joined.
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T] = withPlan(Subquery(alias, _))
+  def as(alias: String): Dataset[T] = withPlan(SubqueryAlias(alias, _))
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe.  In contrast to the
@@ -564,7 +564,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
-    withPlan(Sample(0.0, fraction, withReplacement, seed, _))
+    withPlan(Sample(0.0, fraction, withReplacement, seed, _)())
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of records, using a random seed.

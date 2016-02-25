@@ -266,7 +266,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  /** Test whether the closure accesses the the attribute with name `attrName`. */
+  /** Test whether the closure accesses the attribute with name `attrName`. */
   private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
     try {
       BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
