@@ -57,7 +57,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", FixedPoint(100),
       RemoveLiteralFromGroupExpressions) ::
-    Batch("Join", Once,
+    Batch("Join", FixedPoint(100),
       AddFilterOfNullForInnerJoin) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
@@ -147,7 +147,8 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 
 /**
  * Add Filter to left and right of an inner Join to filter out rows with null keys.
- * So we don't need to check nullability of keys while joining.
+ * So we may not need to check nullability of keys while joining. Besides, by filtering
+ * out keys with null, we can also reduce data size in Join.
  */
 object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -170,14 +171,24 @@ object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
         keysConditions
       }
 
-      val newLeft = left match {
-        case BroadcastHint(p) => BroadcastHint(Filter(leftConditions, p))
-        case _ => Filter(leftConditions, left)
+      val leftHasAllNotNullPredicate = left.constraints.nonEmpty &&
+        left.constraints.filter(_.isInstanceOf[IsNotNull])
+          .forall(expr => leftConditions.references.intersect(expr.references).nonEmpty)
+
+      val rightHasAllNotNullPredicate = right.constraints.nonEmpty &&
+        right.constraints.filter(_.isInstanceOf[IsNotNull])
+          .forall(expr => rightConditions.references.intersect(expr.references).nonEmpty)
+
+      val newLeft = if (leftHasAllNotNullPredicate) {
+        left
+      } else {
+        Filter(leftConditions, left)
       }
 
-      val newRight = right match {
-        case BroadcastHint(p) => BroadcastHint(Filter(rightConditions, p))
-        case _ => Filter(rightConditions, right)
+      val newRight = if (rightHasAllNotNullPredicate) {
+        right
+      } else {
+        Filter(rightConditions, right)
       }
 
       Join(newLeft, newRight, Inner, Some(finalConditions))
