@@ -282,8 +282,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("kryo with fold") {
     val control = 1 :: 2 :: Nil
     // zeroValue must not be a ClassWithoutNoArgConstructor instance because it will be
-    // serialized by spark.closure.serializer but spark.closure.serializer only supports
-    // the default Java serializer.
+    // serialized by the Java serializer.
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
       .fold(null)((t1, t2) => {
       val t1x = if (t1 == null) 0 else t1.x

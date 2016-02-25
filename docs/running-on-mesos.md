@@ -32,7 +32,7 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 
 # Installing Mesos
 
-Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} and does not
+Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
 require any special patches of Mesos.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
@@ -188,7 +188,7 @@ overhead, but at the cost of reserving the Mesos resources for the complete dura
 application.
 
 Coarse-grained is the default mode. You can also set `spark.mesos.coarse` property to true
-to turn it on explictly in [SparkConf](configuration.html#spark-properties):
+to turn it on explicitly in [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
@@ -277,9 +277,11 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.extra.cores</code></td>
   <td><code>0</code></td>
   <td>
-    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
-    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
-    Note that total amount of cores the executor will request in total will not exceed the <code>spark.cores.max</code> setting.
+    Set the extra number of cores for an executor to advertise. This
+    does not result in more cores allocated.  It instead means that an
+    executor will "pretend" it has more cores, so that the driver will
+    send it more tasks.  Use this to increase parallelism.  This
+    setting is only used for Mesos coarse-grained mode.
   </td>
 </tr>
 <tr>
@@ -382,7 +384,7 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
       <li>Set constraints are matched with "subset of" semantics i.e. value in the constraint must be a subset of the resource offer's value.</li>
-      <li>Text constraints are metched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
+      <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
   </td>

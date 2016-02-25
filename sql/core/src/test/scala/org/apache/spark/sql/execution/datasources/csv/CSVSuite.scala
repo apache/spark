@@ -56,7 +56,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val numRows = if (withHeader) numCars else numCars + 1
     // schema
     assert(df.schema.fieldNames.length === numColumns)
-    assert(df.collect().length === numRows)
+    assert(df.count === numRows)
 
     if (checkHeader) {
       if (withHeader) {
@@ -87,6 +87,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .format("csv")
       .option("header", "false")
       .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("simple csv test with calling another function to load") {
+    val cars = sqlContext
+      .read
+      .option("header", "false")
+      .csv(testFile(carsFile))
 
     verifyCars(cars, withHeader = false, checkTypes = false)
   }

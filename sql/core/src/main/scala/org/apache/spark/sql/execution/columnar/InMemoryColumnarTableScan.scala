@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
 
@@ -216,6 +217,9 @@ private[sql] case class InMemoryColumnarTableScan(
     @transient relation: InMemoryRelation)
   extends LeafNode {
 
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
   override def output: Seq[Attribute] = attributes
 
   // The cached version does not change the outputPartitioning of the original SparkPlan.
@@ -286,6 +290,8 @@ private[sql] case class InMemoryColumnarTableScan(
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+
     if (enableAccumulators) {
       readPartitions.setValue(0)
       readBatches.setValue(0)
@@ -332,12 +338,18 @@ private[sql] case class InMemoryColumnarTableScan(
           cachedBatchIterator
         }
 
+      // update SQL metrics
+      val withMetrics = cachedBatchesToScan.map { batch =>
+        numOutputRows += batch.numRows
+        batch
+      }
+
       val columnTypes = requestedColumnDataTypes.map {
         case udt: UserDefinedType[_] => udt.sqlType
         case other => other
       }.toArray
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
-      columnarIterator.initialize(cachedBatchesToScan, columnTypes, requestedColumnIndices.toArray)
+      columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
         readPartitions += 1
       }

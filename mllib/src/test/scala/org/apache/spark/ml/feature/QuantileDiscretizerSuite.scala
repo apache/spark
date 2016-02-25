@@ -93,8 +93,10 @@ private object QuantileDiscretizerSuite extends SparkFunSuite {
 
     val df = sc.parallelize(data.map(Tuple1.apply)).toDF("input")
     val discretizer = new QuantileDiscretizer().setInputCol("input").setOutputCol("result")
-      .setNumBuckets(numBucket)
-    val result = discretizer.fit(df).transform(df)
+      .setNumBuckets(numBucket).setSeed(1)
+    val model = discretizer.fit(df)
+    assert(model.hasParent)
+    val result = model.transform(df)
 
     val transformedFeatures = result.select("result").collect()
       .map { case Row(transformedFeature: Double) => transformedFeature }
