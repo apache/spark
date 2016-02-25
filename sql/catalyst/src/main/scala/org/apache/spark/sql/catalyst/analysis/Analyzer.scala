@@ -620,7 +620,7 @@ class Analyzer(
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsUp  {
+        val resolvedPlan = q transformExpressionsUp  {
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result =
@@ -629,6 +629,19 @@ class Analyzer(
             result
           case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
             ExtractValue(child, fieldExpr, resolver)
+        }
+
+        resolvedPlan.transform {
+          case f @ Filter(filterCondition, j @ Join(_, _, _, _)) =>
+            val joinOutput = new ArrayBuffer[(Attribute, Attribute)]
+            j.output.map {
+              case a: AttributeReference => joinOutput += ((a, a))
+            }
+            val joinOutputMap = AttributeMap(joinOutput)
+            val newFilterCond = filterCondition.transform {
+              case a: AttributeReference => joinOutputMap.get(a).getOrElse(a)
+            }
+            Filter(newFilterCond, j)
         }
     }
 
