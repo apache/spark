@@ -945,8 +945,10 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Elimination of outer joins, if the predicates can restrict the result sets so that
- * all null-supplying rows are eliminated
+ * Elimination of Outer Joins
+ *
+ * Rule Set 1: checking the Filter Condition if the predicates can restrict the result sets
+ * so that all null-supplying rows are eliminated
  *
  * - full outer -> inner if both sides have such predicates
  * - left outer -> inner if the right side has such predicates
@@ -954,7 +956,21 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
  *
- * This rule should be executed before pushing down the Filter
+ * This rule set should be executed before pushing down the Filter
+ *
+ * Rule Set 2: given an outer join is involved in another join (called parent join), when the join
+ * type of the parent join is inner, left-semi, left-outer and right-outer, checking if the join
+ * condition of the parent join satisfies the following two conditions:
+ * 1) there exist null filtering predicates against the columns in the null-supplying side of
+ *    parent join.
+ * 2) these columns are from the child join.
+ *
+ * If having such join predicates, execute the elimination rules:
+ * - full outer -> inner if both sides of the child join have such predicates
+ * - left outer -> inner if the right side of the child join has such predicates
+ * - right outer -> inner if the left side of the child join has such predicates
+ * - full outer -> left outer if only the left side of the child join has such predicates
+ * - full outer -> right outer if only the right side of the child join has such predicates
  */
 object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -997,10 +1013,12 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // Rule Set 1: elimination using Filter conditions/constraints
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
       val newJoinType = buildNewJoinType(f.condition, f.constraints, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
+    // Rule Set 2: elimination using Parent Join conditions/constraints
     // Case 1: when parent join is Inner|LeftSemi|LeftOuter and the child join is on the right side
     case pj @ Join(
         _,

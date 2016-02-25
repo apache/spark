@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Project, Join}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, Project}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
