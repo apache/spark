@@ -1224,7 +1224,7 @@ class DataFrame(object):
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
-        return PickleSerializer().loads(bytes(self._sc._jvm.SerDe.dumps(jaq)), encoding="bytes")
+        return list(jaq)
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
