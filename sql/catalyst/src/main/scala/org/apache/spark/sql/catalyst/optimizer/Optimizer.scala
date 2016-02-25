@@ -969,18 +969,21 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
     v == null || v == false
   }
 
-  private def buildNewJoinType(filter: Filter, join: Join): JoinType = {
-    val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(filter.condition)
+  private def buildNewJoinType(
+      condition: Expression,
+      constraints: Set[Expression],
+      join: Join): JoinType = {
+    val splitConjunctiveConditions: Seq[Expression] = splitConjunctivePredicates(condition)
     val leftConditions = splitConjunctiveConditions
       .filter(_.references.subsetOf(join.left.outputSet))
     val rightConditions = splitConjunctiveConditions
       .filter(_.references.subsetOf(join.right.outputSet))
 
     val leftHasNonNullPredicate = leftConditions.exists(canFilterOutNull) ||
-      filter.constraints.filter(_.isInstanceOf[IsNotNull])
+      constraints.filter(_.isInstanceOf[IsNotNull])
         .exists(expr => join.left.outputSet.intersect(expr.references).nonEmpty)
     val rightHasNonNullPredicate = rightConditions.exists(canFilterOutNull) ||
-      filter.constraints.filter(_.isInstanceOf[IsNotNull])
+      constraints.filter(_.isInstanceOf[IsNotNull])
         .exists(expr => join.right.outputSet.intersect(expr.references).nonEmpty)
 
     join.joinType match {
@@ -995,8 +998,34 @@ object OuterJoinElimination extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _)) =>
-      val newJoinType = buildNewJoinType(f, j)
+      val newJoinType = buildNewJoinType(f.condition, f.constraints, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
+
+    // Case 1: when parent join is Inner|LeftSemi|LeftOuter and the child join is on the right side
+    case pj @ Join(
+        _,
+        j @ Join(left, right, RightOuter|LeftOuter|FullOuter, condition),
+        Inner | LeftSemi | LeftOuter,
+        Some(pJoinCond)) =>
+      val newJoinType = buildNewJoinType(pJoinCond, pj.constraints, j)
+      if (j.joinType == newJoinType) {
+        pj
+      } else {
+        Join(pj.left, j.copy(joinType = newJoinType), pj.joinType, pj.condition)
+      }
+
+    // Case 2: when parent join is Inner|LeftSemi|RightOuter and the child join is on the left side
+    case pj @ Join(
+        j @ Join(left, right, RightOuter|LeftOuter|FullOuter, condition),
+        _,
+        Inner | LeftSemi | RightOuter,
+        Some(pJoinCond)) =>
+      val newJoinType = buildNewJoinType(pJoinCond, pj.constraints, j)
+      if (j.joinType == newJoinType) {
+        pj
+      } else {
+        Join(j.copy(joinType = newJoinType), pj.right, pj.joinType, pj.condition)
+      }
   }
 }
 
