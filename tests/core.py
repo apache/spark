@@ -27,7 +27,7 @@ from lxml import html
 from airflow.utils import AirflowException
 from airflow.configuration import AirflowConfigException
 
-NUM_EXAMPLE_DAGS = 9
+NUM_EXAMPLE_DAGS = 12
 DEV_NULL = '/dev/null'
 DEFAULT_DATE = datetime(2015, 1, 1)
 DEFAULT_DATE_ISO = DEFAULT_DATE.isoformat()
