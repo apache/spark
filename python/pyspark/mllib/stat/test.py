@@ -103,7 +103,7 @@ class BinarySample(namedtuple("BinarySample", ["isExperiment", "value"])):
 
 
 @inherit_doc
-class StreamingTestResult(TestResult):
+class StreamingTestResult2(TestResult):
     """
     Contains test results for StreamingTest.
     """
@@ -114,6 +114,21 @@ class StreamingTestResult(TestResult):
         Name of the test method
         """
         return self._java_model.method()
+
+
+class StreamingTestResult(namedtuple("StreamingTestResult",
+                                     ["pValue", "degreesOfFreedom", "statistic", "method",
+                                      "nullHypothesis"])):
+    """
+    Contains test results for StreamingTest.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __reduce__(self):
+        return StreamingTestResult, (float(self.pValue),
+                                     float(self.degreesOfFreedom), float(self.statistic),
+                                     str(self.method), str(self.nullHypothesis))
 
 
 class StreamingTest(object):

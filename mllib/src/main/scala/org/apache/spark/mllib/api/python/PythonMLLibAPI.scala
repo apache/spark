@@ -1485,6 +1485,22 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  private[python] class StreamingTestResultPickler extends BasePickler[StreamingTestResult] {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val result = obj.asInstanceOf[StreamingTestResult]
+      saveObjects(out, pickler, result.pValue, result.degreesOfFreedom, result.statistic,
+        result.method, result.nullHypothesis)
+    }
+
+    def construct(args: Array[AnyRef]): AnyRef = {
+      if (args.length != 5) {
+        throw new PickleException("should be 5")
+      }
+      new StreamingTestResult(args(0).asInstanceOf[Double], args(1).asInstanceOf[Double],
+        args(2).asInstanceOf[Double], args(3).asInstanceOf[String], args(4).asInstanceOf[String])
+    }
+  }
+
   var initialized = false
   // This should be called before trying to serialize any above classes
   // In cluster mode, this should be put in the closure
@@ -1497,6 +1513,7 @@ private[spark] object SerDe extends Serializable {
         new DenseMatrixPickler().register()
         new SparseMatrixPickler().register()
         new SparseVectorPickler().register()
+        new StreamingTestResultPickler().register()
         new LabeledPointPickler().register()
         new RatingPickler().register()
         initialized = true

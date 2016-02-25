@@ -56,6 +56,7 @@ _picklable_classes = [
     'Rating',
     'LabeledPoint',
     'BinarySample',
+    'StreamingTestResult',
 ]
 
 
