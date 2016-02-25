@@ -53,7 +53,7 @@ import org.apache.spark.util.random.SamplingUtils
  *     random forests]]
  *
  * @param strategy The configuration parameters for the random forest algorithm which specify
- *                 the type of random forest (classification, regression, etc.), feature type
+ *                 the type of random forest (classification or regression), feature type
  *                 (continuous, categorical), depth of the tree, quantile calculation strategy,
  *                 etc.
  * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.

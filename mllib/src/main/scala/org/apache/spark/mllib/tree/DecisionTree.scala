@@ -39,8 +39,8 @@ import org.apache.spark.util.random.XORShiftRandom
  * A class which implements a decision tree learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
  *
- * @param strategy The configuration parameters for the tree algorithm which specify the type of
- *                 decision tree (classification, regression, etc.), feature type (continuous,
+ * @param strategy The configuration parameters for the tree algorithm which specify the type
+ *                 of decision tree (classification or regression), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
 @Since("1.0.0")
@@ -77,8 +77,8 @@ object DecisionTree extends Serializable with Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
-   * @param strategy The configuration parameters for the tree algorithm which specify the type of
-   *                 decision tree (classification, regression, etc.), feature type (continuous,
+   * @param strategy The configuration parameters for the tree algorithm which specify the type
+   *                 of decision tree (classification or regression), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return DecisionTreeModel that can be used for prediction.
    */
