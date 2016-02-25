@@ -347,8 +347,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.uris</code></td>
   <td>(none)</td>
   <td>
-    A list of URIs to be downloaded to the sandbox when driver or executor is launched by Mesos.
-    This applies to both coarse-grain and fine-grain mode.
+    A comma-separated list of URIs to be downloaded to the sandbox
+    when driver or executor is launched by Mesos.  This applies to
+    both coarse-grained and fine-grained mode.
   </td>
 </tr>
 <tr>
