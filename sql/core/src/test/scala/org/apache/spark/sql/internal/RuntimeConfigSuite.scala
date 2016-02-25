@@ -22,7 +22,7 @@ import org.apache.spark.sql.RuntimeConfig
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
-  private def newConf(): RuntimeConfig = new new RuntimeConfigImpl
+  private def newConf(): RuntimeConfig = new RuntimeConfigImpl
 
   test("set and get") {
     val conf = newConf()
