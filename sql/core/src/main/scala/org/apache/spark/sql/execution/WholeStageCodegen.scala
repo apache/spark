@@ -42,6 +42,7 @@ trait CodegenSupport extends SparkPlan {
     case _: TungstenAggregate => "agg"
     case _: BroadcastHashJoin => "bhj"
     case _: SortMergeJoin => "smj"
+    case _: PhysicalRDD => "rdd"
     case _ => nodeName.toLowerCase
   }
 

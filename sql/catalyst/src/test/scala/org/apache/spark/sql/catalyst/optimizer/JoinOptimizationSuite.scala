@@ -23,18 +23,18 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.planning.ExtractFiltersAndInnerJoins
-import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
 
-class JoinOrderSuite extends PlanTest {
+class JoinOptimizationSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
-      Batch("Filter Pushdown", Once,
+      Batch("Filter Pushdown", FixedPoint(100),
         CombineFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
@@ -91,5 +91,31 @@ class JoinOrderSuite extends PlanTest {
         .analyze
 
     comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+  }
+
+  test("broadcasthint sets relation statistics to smallest value") {
+    val input = LocalRelation('key.int, 'value.string)
+
+    val query =
+      Project(Seq($"x.key", $"y.key"),
+        Join(
+          SubqueryAlias("x", input),
+          BroadcastHint(SubqueryAlias("y", input)), Inner, None)).analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      Project(Seq($"x.key", $"y.key"),
+        Join(
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
+          Inner, None)).analyze
+
+    comparePlans(optimized, expected)
+
+    val broadcastChildren = optimized.collect {
+      case Join(_, r, _, _) if r.statistics.sizeInBytes == 1 => r
+    }
+    assert(broadcastChildren.size == 1)
   }
 }
