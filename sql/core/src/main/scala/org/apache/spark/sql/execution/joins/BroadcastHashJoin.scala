@@ -193,11 +193,14 @@ case class BroadcastHashJoin(
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val checkCondition = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       // filter the output via condition
       ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(
-        condition.get, streamedPlan.output ++ buildPlan.output).gen(ctx)
+      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
       s"""
+         |$eval
          |${ev.code}
          |if (${ev.isNull} || !${ev.value}) continue;
        """.stripMargin
@@ -257,10 +260,11 @@ case class BroadcastHashJoin(
     // filter the output via condition
     val conditionPassed = ctx.freshName("conditionPassed")
     val checkCondition = if (condition.isDefined) {
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, condition.get.references)
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
       ctx.currentVars = input ++ buildVars
-      val ev = BindReferences.bindReference(condition.get,
-        streamedPlan.output ++ buildPlan.output).gen(ctx)
+      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
       s"""
          |boolean $conditionPassed = true;
          |${eval.trim}
@@ -285,7 +289,6 @@ case class BroadcastHashJoin(
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |${checkCondition.trim}
          |if (!$conditionPassed) {
-         |  // reset to null
          |  $matched = null;
          |  // reset the variables those are already evaluated.
          |  ${buildVars.filter(_.code == "").map(v => s"${v.isNull} = true;").mkString("\n")}
