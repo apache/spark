@@ -58,7 +58,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("compression") {
-    Seq("bzip2", "deflate", "gzip", "snappy").map { codecName =>
+    Seq("bzip2", "deflate", "gzip").map { codecName =>
       val tempDirPath = Utils.createTempDir().getAbsolutePath
       val df = sqlContext.read.text(testFile)
       df.write.option("compressionCodec", codecName).mode(SaveMode.Overwrite).text(tempDirPath)

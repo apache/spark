@@ -33,7 +33,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShortCompressionCodecNameMapper, Utils}
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
@@ -51,11 +51,12 @@ object ResolvedDataSource extends Logging {
   )
 
   /** Maps the short versions of compression codec names to fully-qualified class names. */
-  private val shortCompressionCodecNames = Map(
-    "bzip2" -> classOf[BZip2Codec].getCanonicalName,
-    "deflate" -> classOf[DeflateCodec].getCanonicalName,
-    "gzip" -> classOf[GzipCodec].getCanonicalName,
-    "snappy" -> classOf[SnappyCodec].getCanonicalName)
+  private val hadoopShortCodecNameMapper = new ShortCompressionCodecNameMapper {
+    override def bzip2: Option[String] = Some(classOf[BZip2Codec].getCanonicalName)
+    override def deflate: Option[String] = Some(classOf[DeflateCodec].getCanonicalName)
+    override def gzip: Option[String] = Some(classOf[GzipCodec].getCanonicalName)
+    override def snappy: Option[String] = Some(classOf[SnappyCodec].getCanonicalName)
+  }
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider0: String): Class[_] = {
@@ -299,8 +300,7 @@ object ResolvedDataSource extends Logging {
           .map { codecName =>
             val codecFactory = new CompressionCodecFactory(
               sqlContext.sparkContext.hadoopConfiguration)
-            val resolvedCodecName = shortCompressionCodecNames.getOrElse(
-              codecName.toLowerCase, codecName)
+            val resolvedCodecName = hadoopShortCodecNameMapper.get(codecName).getOrElse(codecName)
             Option(codecFactory.getCodecClassByName(resolvedCodecName))
           }
           .getOrElse(None)

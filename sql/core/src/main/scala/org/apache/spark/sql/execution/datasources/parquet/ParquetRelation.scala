@@ -49,7 +49,7 @@ import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{SerializableConfiguration, ShortCompressionCodecNameMapper, Utils}
 
 private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
@@ -283,10 +283,8 @@ private[sql] class ParquetRelation(
     conf.set(
       ParquetOutputFormat.COMPRESSION,
       ParquetRelation
-        .shortParquetCompressionCodecNames
-        .getOrElse(
-          sqlContext.conf.parquetCompressionCodec.toUpperCase,
-          CompressionCodecName.UNCOMPRESSED).name())
+        .parquetShortCodecNameMapper.get(sqlContext.conf.parquetCompressionCodec)
+        .getOrElse(CompressionCodecName.UNCOMPRESSED.name()))
 
     new BucketedOutputWriterFactory {
       override def newInstance(
@@ -902,11 +900,12 @@ private[sql] object ParquetRelation extends Logging {
     }
   }
 
-  // The parquet compression short names
-  val shortParquetCompressionCodecNames = Map(
-    "NONE" -> CompressionCodecName.UNCOMPRESSED,
-    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY" -> CompressionCodecName.SNAPPY,
-    "GZIP" -> CompressionCodecName.GZIP,
-    "LZO" -> CompressionCodecName.LZO)
+  /** Maps the short versions of compression codec names to qualified compression names. */
+  val parquetShortCodecNameMapper = new ShortCompressionCodecNameMapper {
+    override def none: Option[String] = Some(CompressionCodecName.UNCOMPRESSED.name())
+    override def uncompressed: Option[String] = Some(CompressionCodecName.UNCOMPRESSED.name())
+    override def gzip: Option[String] = Some(CompressionCodecName.GZIP.name())
+    override def lzo: Option[String] = Some(CompressionCodecName.LZO.name())
+    override def snappy: Option[String] = Some(CompressionCodecName.SNAPPY.name())
+  }
 }
