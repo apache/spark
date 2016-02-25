@@ -35,10 +35,10 @@ trait AnalysisTest extends PlanTest {
     caseInsensitiveCatalog.registerTable(TableIdentifier("TaBlE"), TestRelations.testRelation)
 
     new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     } ->
     new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
   }
 
@@ -60,7 +60,18 @@ trait AnalysisTest extends PlanTest {
       inputPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    analyzer.checkAnalysis(analyzer.execute(inputPlan))
+    val analysisAttempt = analyzer.execute(inputPlan)
+    try analyzer.checkAnalysis(analysisAttempt) catch {
+      case a: AnalysisException =>
+        fail(
+          s"""
+            |Failed to Analyze Plan
+            |$inputPlan
+            |
+            |Partial Analysis
+            |$analysisAttempt
+          """.stripMargin, a)
+    }
   }
 
   protected def assertAnalysisError(
@@ -71,8 +82,17 @@ trait AnalysisTest extends PlanTest {
     val e = intercept[AnalysisException] {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }
-    assert(expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains),
-      s"Expected to throw Exception contains: ${expectedErrors.mkString(", ")}, " +
-        s"actually we get ${e.getMessage}")
+
+    if (!expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
+      fail(
+        s"""Exception message should contain the following substrings:
+           |
+           |  ${expectedErrors.mkString("\n  ")}
+           |
+           |Actual exception message:
+           |
+           |  ${e.getMessage}
+         """.stripMargin)
+    }
   }
 }

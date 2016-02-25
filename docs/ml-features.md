@@ -185,7 +185,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
-the the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example python/ml/tokenizer_example.py %}
@@ -459,7 +459,7 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
-Additionaly, there are two strategies regarding how `StringIndexer` will handle
+Additionally, there are two strategies regarding how `StringIndexer` will handle
 unseen labels when you have fit a `StringIndexer` on one dataset and then use it
 to transform another:
 
@@ -779,7 +779,7 @@ for more details on the API.
 
 * `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
 
-Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potenial out of Bucketizer bounds exception.
+Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potential out of Bucketizer bounds exception.
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 

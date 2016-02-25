@@ -50,6 +50,26 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
+
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  private def getAliasedConstraints: Set[Expression] = {
+    projectList.flatMap {
+      case a @ Alias(e, _) =>
+        child.constraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(e) =>
+            a.toAttribute
+        }).union(Set(EqualNullSafe(e, a.toAttribute)))
+      case _ =>
+        Set.empty[Expression]
+    }.toSet
+  }
+
+  override def validConstraints: Set[Expression] = {
+    child.constraints.union(getAliasedConstraints)
+  }
 }
 
 /**
@@ -156,6 +176,13 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       Some(children.flatMap(_.maxRows).min)
     }
   }
+
+  override def statistics: Statistics = {
+    val leftSize = left.statistics.sizeInBytes
+    val rightSize = right.statistics.sizeInBytes
+    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -168,6 +195,10 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+
+  override def statistics: Statistics = {
+    Statistics(sizeInBytes = left.statistics.sizeInBytes)
+  }
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -301,6 +332,10 @@ case class Join(
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  // We manually set statistics of BroadcastHint to smallest value to make sure
+  // the plan wrapped by BroadcastHint will be considered to broadcast later.
+  override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
 case class InsertIntoTable(
@@ -330,7 +365,7 @@ case class InsertIntoTable(
  *                     key is the alias of the CTE definition,
  *                     value is the CTE definition.
  */
-case class With(child: LogicalPlan, cteRelations: Map[String, Subquery]) extends UnaryNode {
+case class With(child: LogicalPlan, cteRelations: Map[String, SubqueryAlias]) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
@@ -406,6 +441,14 @@ case class Aggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+
+  override def statistics: Statistics = {
+    if (groupingExpressions.isEmpty) {
+      Statistics(sizeInBytes = 1)
+    } else {
+      super.statistics
+    }
+  }
 }
 
 case class Window(
@@ -501,9 +544,7 @@ case class Expand(
     AttributeSet(projections.flatten.flatMap(_.references))
 
   override def statistics: Statistics = {
-    // TODO shouldn't we factor in the size of the projection versus the size of the backing child
-    //      row?
-    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
 }
@@ -555,7 +596,7 @@ case class Pivot(
   override def output: Seq[Attribute] = groupByExprs.map(_.toAttribute) ++ aggregates match {
     case agg :: Nil => pivotValues.map(value => AttributeReference(value.toString, agg.dataType)())
     case _ => pivotValues.flatMap{ value =>
-      aggregates.map(agg => AttributeReference(value + "_" + agg.prettyString, agg.dataType)())
+      aggregates.map(agg => AttributeReference(value + "_" + agg.sql, agg.dataType)())
     }
   }
 }
@@ -603,7 +644,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   }
 }
 
-case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
+case class SubqueryAlias(alias: String, child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output.map(_.withQualifiers(alias :: Nil))
 }
@@ -617,15 +658,29 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
  * @param withReplacement Whether to sample with replacement.
  * @param seed the random seed
  * @param child the LogicalPlan
+ * @param isTableSample Is created from TABLESAMPLE in the parser.
  */
 case class Sample(
     lowerBound: Double,
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)(
+    val isTableSample: java.lang.Boolean = false) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+
+  override def statistics: Statistics = {
+    val ratio = upperBound - lowerBound
+    // BigInt can't multiply with Double
+    var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
+    if (sizeInBytes == 0) {
+      sizeInBytes = 1
+    }
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+
+  override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
 }
 
 /**
