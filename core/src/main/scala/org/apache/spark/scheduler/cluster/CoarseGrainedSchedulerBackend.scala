@@ -79,7 +79,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   protected val executorsPendingLossReason = new HashSet[String]
 
   // The num of current max ExecutorId used to re-register appMaster
-  private var currentExecutorIdCounter = 0
+  var currentExecutorIdCounter = 0
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -190,9 +190,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RetrieveSparkProps =>
         context.reply(sparkProperties)
-
-      case RetrieveMaxExecutorId =>
-        context.reply(currentExecutorIdCounter)
     }
 
     // Make fake resource offers on all executors
