@@ -202,7 +202,7 @@ if [[ "$1" == "package" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir 'spark-*'
   # Delete /latest directory and rename new upload to /latest
-  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest && exit 0"
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
@@ -224,7 +224,7 @@ if [[ "$1" == "docs" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir '_site/*'
   # Delete /latest directory and rename new upload to /latest
-  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest && exit 0"
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
