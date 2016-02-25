@@ -249,7 +249,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
-    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    classes in the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
 
     This is used in cluster mode only.
@@ -373,7 +373,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
     does not need to fork() a Python process for every tasks. It will be very useful
-    if there is large broadcast, then the broadcast will not be needed to transfered
+    if there is large broadcast, then the broadcast will not be needed to transferred
     from JVM to Python worker for every task.
   </td>
 </tr>
@@ -582,6 +582,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many finished batches the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedDeadExecutors</code></td>
+  <td>100</td>
+  <td>
+    How many dead executors the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
 </table>
@@ -1266,7 +1273,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work. Putting a "*" in the list means any user can have the priviledge
+    help debug when things work. Putting a "*" in the list means any user can have the privilege
     of admin.
   </td>
 </tr>
@@ -1471,6 +1478,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.streaming.backpressure.initialRate</code></td>
+  <td>not set</td>
+  <td>
+    This is the initial maximum receiving rate at which each receiver will receive data for the
+    first batch when the backpressure mechanism is enabled.
+  </td>
+</tr>
+<tr>
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200ms</td>
   <td>
@@ -1596,7 +1611,7 @@ Apart from these, the following properties are also available, and may be useful
 #### Deploy
 
 <table class="table">
-  <tr><th>Property Name</th><th>Default</th><th>Meaniing</th></tr>
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.deploy.recoveryMode</code></td>
     <td>NONE</td>
@@ -1647,7 +1662,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
@@ -1685,7 +1700,7 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 # Overriding configuration directory
 
 To specify a different configuration directory other than the default "SPARK_HOME/conf",
-you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
+you can set SPARK_CONF_DIR. Spark will use the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
 from this directory.
 
 # Inheriting Hadoop Cluster Configuration

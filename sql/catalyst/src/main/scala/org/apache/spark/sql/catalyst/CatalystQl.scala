@@ -243,7 +243,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         queryArgs match {
           case Token("TOK_CTE", ctes) :: Token("TOK_FROM", from) :: inserts =>
             val cteRelations = ctes.map { node =>
-              val relation = nodeToRelation(node).asInstanceOf[Subquery]
+              val relation = nodeToRelation(node).asInstanceOf[SubqueryAlias]
               relation.alias -> relation
             }
             (Some(from.head), inserts, Some(cteRelations.toMap))
@@ -454,7 +454,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   protected def nodeToRelation(node: ASTNode): LogicalPlan = {
     node match {
       case Token("TOK_SUBQUERY", query :: Token(alias, Nil) :: Nil) =>
-        Subquery(cleanIdentifier(alias), nodeToPlan(query))
+        SubqueryAlias(cleanIdentifier(alias), nodeToPlan(query))
 
       case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
         nodeToGenerate(
@@ -499,12 +499,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               s"Sampling fraction ($fraction) must be on interval [0, 100]")
             Sample(0.0, fraction.toDouble / 100, withReplacement = false,
               (math.random * 1000).toInt,
-              relation)
+              relation)(
+              isTableSample = true)
           case Token("TOK_TABLEBUCKETSAMPLE",
           Token(numerator, Nil) ::
             Token(denominator, Nil) :: Nil) =>
             val fraction = numerator.toDouble / denominator.toDouble
-            Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)
+            Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)(
+              isTableSample = true)
           case a =>
             noParseRule("Sampling", a)
         }.getOrElse(relation)
@@ -667,6 +669,8 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           UnresolvedAttribute(nameParts :+ cleanIdentifier(attr))
         case other => UnresolvedExtractValue(other, Literal(cleanIdentifier(attr)))
       }
+    case Token("TOK_SUBQUERY_EXPR", Token("TOK_SUBQUERY_OP", Nil) :: subquery :: Nil) =>
+      ScalarSubquery(nodeToPlan(subquery))
 
     /* Stars (*) */
     case Token("TOK_ALLCOLREF", Nil) => UnresolvedStar(None)

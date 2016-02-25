@@ -158,7 +158,7 @@ JavaReceiverInputDStream<String> lines = jssc.socketTextStream("localhost", 9999
 {% endhighlight %}
 
 This `lines` DStream represents the stream of data that will be received from the data
-server. Each record in this stream is a line of text. Then, we want to split the the lines by
+server. Each record in this stream is a line of text. Then, we want to split the lines by
 space into words.
 
 {% highlight java %}
@@ -798,7 +798,7 @@ Some of the common ones are as follows.
   <td> <b>reduce</b>(<i>func</i>) </td>
   <td> Return a new DStream of single-element RDDs by aggregating the elements in each RDD of the
   source DStream using a function <i>func</i> (which takes two arguments and returns one).
-  The function should be associative so that it can be computed in parallel. </td>
+  The function should be associative and commutative so that it can be computed in parallel. </td>
 </tr>
 <tr>
   <td> <b>countByValue</b>() </td>
@@ -1072,7 +1072,7 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 <tr>
   <td> <b>reduceByWindow</b>(<i>func</i>, <i>windowLength</i>, <i>slideInterval</i>) </td>
   <td> Return a new single-element stream, created by aggregating elements in the stream over a
-  sliding interval using <i>func</i>. The function should be associative so that it can be computed
+  sliding interval using <i>func</i>. The function should be associative and commutative so that it can be computed
   correctly in parallel.
   </td>
 </tr>
