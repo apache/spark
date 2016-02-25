@@ -22,13 +22,11 @@ import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
 import scala.reflect.ClassTag
 
 import net.razorvine.pickle._
 
-import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
@@ -42,11 +40,10 @@ import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.stat.{
-  KernelDensity, MultivariateStatisticalSummary, Statistics}
+import org.apache.spark.mllib.stat.{KernelDensity, MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
-import org.apache.spark.mllib.stat.test.{ChiSqTestResult, KolmogorovSmirnovTestResult}
+import org.apache.spark.mllib.stat.test._
 import org.apache.spark.mllib.tree.{DecisionTree, GradientBoostedTrees, RandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo, BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.impurity._
@@ -56,6 +53,7 @@ import org.apache.spark.mllib.util.{LinearDataGenerator, MLUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.api.java.JavaDStream
 import org.apache.spark.util.Utils
 
 /**
@@ -1214,7 +1212,11 @@ private[spark] object SerDe extends Serializable {
     extends IObjectPickler with IObjectConstructor {
 
     private val cls = implicitly[ClassTag[T]].runtimeClass
-    private val module = PYSPARK_PACKAGE + "." + cls.getName.split('.')(4)
+
+    // drop 4 to remove "org.apache.spark.mllib", while dropRight 1 to remove class simple name.
+    private val interPath = cls.getName.split('.').drop(4).dropRight(1).mkString(".")
+    private val module = PYSPARK_PACKAGE + "." + interPath
+
     private val name = cls.getSimpleName
 
     // register this to Pickler and Unpickler
@@ -1469,6 +1471,20 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
+  private[python] class BinarySamplePickler extends BasePickler[BinarySample] {
+    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
+      val binarySample = obj.asInstanceOf[BinarySample]
+      saveObjects(out, pickler, binarySample.isExperiment, binarySample.value)
+    }
+
+    def construct(args: Array[AnyRef]): AnyRef = {
+      if (args.length != 2) {
+        throw new PickleException("should be 2")
+      }
+      BinarySample(args(0).asInstanceOf[Boolean], args(1).asInstanceOf[Double])
+    }
+  }
+
   var initialized = false
   // This should be called before trying to serialize any above classes
   // In cluster mode, this should be put in the closure
@@ -1476,6 +1492,7 @@ private[spark] object SerDe extends Serializable {
     SerDeUtil.initialize()
     synchronized {
       if (!initialized) {
+        new BinarySamplePickler().register()
         new DenseVectorPickler().register()
         new DenseMatrixPickler().register()
         new SparseMatrixPickler().register()
@@ -1541,5 +1558,40 @@ private[spark] object SerDe extends Serializable {
         }
       }
     }.toJavaRDD()
+  }
+
+  /**
+   * Convert a DStream of Java objects to a DStream of serialized Python objects, that is usable by
+   * PySpark.
+   */
+  def javaToPython(jDStream: JavaDStream[Any]): JavaDStream[Array[Byte]] = {
+    val dStream = jDStream.dstream.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      new SerDeUtil.AutoBatchedPickler(iter)
+    }
+    new JavaDStream[Array[Byte]](dStream)
+  }
+
+  /**
+   * Convert a DStream of serialized Python objects to a DStream of objects, that is usable by
+   * PySpark.
+   */
+  def pythonToJava(pyDStream: JavaDStream[Array[Byte]], batched: Boolean): JavaDStream[Any] = {
+    val dStream = pyDStream.dstream.mapPartitions { iter =>
+      initialize()  // let it called in executor
+      val unpickle = new Unpickler
+      iter.flatMap { row =>
+        val obj = unpickle.loads(row)
+        if (batched) {
+          obj match {
+            case list: JArrayList[_] => list.asScala
+            case arr: Array[_] => arr
+          }
+        } else {
+          Seq(obj)
+        }
+      }
+    }
+    new JavaDStream[Any](dStream)
   }
 }

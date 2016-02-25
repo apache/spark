@@ -55,6 +55,7 @@ _picklable_classes = [
     'DenseMatrix',
     'Rating',
     'LabeledPoint',
+    'BinarySample',
 ]
 
 

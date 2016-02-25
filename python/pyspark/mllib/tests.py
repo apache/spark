@@ -58,6 +58,7 @@ from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.stat.test import BinarySample, StreamingTest
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler, ElementwiseProduct
@@ -65,6 +66,7 @@ from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
+from pyspark.streaming.tests import PySparkStreamingTestCase
 from pyspark.sql import SQLContext
 from pyspark.streaming import StreamingContext
 
@@ -1581,6 +1583,20 @@ class ALSTests(MLlibTestCase):
         r = Rating(1205640308657491975, 50233468418, 1.0)
         # rating user id exceeds max int value, should fail when pickled
         self.assertRaises(Py4JJavaError, self.sc._jvm.SerDe.loads, bytearray(ser.dumps(r)))
+
+
+class StreamingTestTest(PySparkStreamingTestCase):
+    def test_accuracy_for_single_center(self):
+        """Test that parameters obtained are correct for a single center."""
+
+        fake_stream = [[True, 2], [False, 2], [False, 1], [True, 1],
+                       [True, 4], [True, 1], [True, 2], [False, 3],
+                       [True, 1], [False, 1], [False, 1], [False, 1]]
+
+        dstream = self.ssc.queueStream(fake_stream).map(lambda x: BinarySample(x[0], x[1]))
+        model = StreamingTest()
+        test_result = model.registerStream(dstream)
+        print(self._take(test_result, 2))
 
 
 if __name__ == "__main__":
