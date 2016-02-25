@@ -128,7 +128,7 @@ if [ -n "$REMOTE_PARENT_MAX_LENGTH" ]; then
         | tail -n +$REMOTE_PARENT_MAX_LENGTH)
   for old_dir in $old_dirs; do
     echo "Removing directory: $old_dir"
-    LFTP rm -rf $REMOTE_PARENT_DIR/$old_dir
+    LFTP "rm -rf $REMOTE_PARENT_DIR/$old_dir && exit 0"
   done
 fi
 
@@ -198,17 +198,15 @@ if [[ "$1" == "package" ]]; then
   # Copy data
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
-  set -x
   # Put to new directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir spark-*
   # Delete /latest directory and rename new upload to /latest
-  LFTP rm -rf "$REMOTE_PARENT_DIR/latest"
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest && exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir spark-*
-  set +x
   exit 0
 fi
 
@@ -226,7 +224,7 @@ if [[ "$1" == "docs" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir _site/*
   # Delete /latest directory and rename new upload to /latest
-  LFTP rm -rf "$REMOTE_PARENT_DIR/latest"
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest && exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
