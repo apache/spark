@@ -126,7 +126,10 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         timedOut
       }
 
-      // generate one more bacth to make sure RDD in lastJob is checkpointed.
+      // generate one more batch to make sure RDD in lastJob is checkpointed. As an performance
+      // optimization, if the latest info has been checkpointed in last batch, there is no need
+      // to run another round. "isCheckpointMissedLastTime" method here is in charge of collect
+      // such information from every DStream recursively.
       if (!jobScheduler.receiverTracker.hasUnallocatedBlocks &&
         ssc.graph.isCheckpointMissedLastTime) {
         Thread.sleep(ssc.graph.batchDuration.milliseconds)

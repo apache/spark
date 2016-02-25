@@ -497,13 +497,14 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def readyToShutdown(): Unit = {
     _readyToShutdown = true
     dependencies.foreach(_.readyToShutdown())
-    logDebug("Ready to shutdown")
+    logDebug("Ready to shutdown: " + this)  // show DStreamType@InstanceId
   }
 
   private[streaming] def isCheckpointMissedLastTime(): Boolean = {
-    val latestTime = generatedRDDs.keys.max
-    val itself = checkpointDuration!= null &&
+    val itself = if (checkpointDuration != null) {
+      val latestTime = generatedRDDs.keys.max
       !(latestTime - zeroTime).isMultipleOf(checkpointDuration)
+    } else false
     dependencies.foldLeft(itself)((value, next) => value || next.isCheckpointMissedLastTime)
   }
 
