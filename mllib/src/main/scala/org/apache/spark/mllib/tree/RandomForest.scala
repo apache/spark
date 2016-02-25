@@ -307,7 +307,7 @@ object RandomForest extends Serializable with Logging {
    *                                if numTrees > 1 (forest) set to "sqrt".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
-   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node; depth 1 means
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
    *                 1 internal node + 2 leaf nodes).
    *                 (suggested value: 4)
    * @param maxBins Maximum number of bins used for splitting features
@@ -395,7 +395,7 @@ object RandomForest extends Serializable with Logging {
    *                                if numTrees > 1 (forest) set to "onethird".
    * @param impurity Criterion used for information gain calculation.
    *                 The only supported value for regression is "variance".
-   * @param maxDepth Maximum depth of the tree. (e.g., depth 0 means 1 leaf node; depth 1 means
+   * @param maxDepth Maximum depth of the tree. (e.g., depth 0 means 1 leaf node, depth 1 means
    *                 1 internal node + 2 leaf nodes).
    *                 (suggested value: 4)
    * @param maxBins Maximum number of bins used for splitting features.
