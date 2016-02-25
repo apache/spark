@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, SQLConf}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataSourceDetectionSuite extends QueryTest with SharedSQLContext  {
