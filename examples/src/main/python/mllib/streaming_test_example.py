@@ -16,13 +16,8 @@
 #
 
 """
- Create a queue of RDDs that will be mapped/reduced one at a time in
- 1 second intervals.
-
- To run this example use
-    `$ bin/spark-submit examples/src/main/python/streaming/queue_stream.py
+Create a DStream that contains several RDDs to show the StreamingTest of PySpark.
 """
-import sys
 import time
 import tempfile
 from shutil import rmtree
@@ -36,21 +31,20 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonStreamingTestExample")
     ssc = StreamingContext(sc, 1)
 
-    checkpointPath = tempfile.mkdtemp()
-    ssc.checkpoint(checkpointPath)
+    checkpoint_path = tempfile.mkdtemp()
+    ssc.checkpoint(checkpoint_path)
 
-    # Create the queue through which RDDs can be pushed to
-    # a QueueInputDStream
-    rddQueue = []
+    # Create the queue through which RDDs can be pushed to a QueueInputDStream.
+    rdd_queue = []
     for i in range(5):
-        rddQueue += [ssc.sparkContext.parallelize(
+        rdd_queue += [ssc.sparkContext.parallelize(
             [BinarySample(True, j) for j in range(1, 1001)], 10)]
 
-    # Create the QueueInputDStream and use it do some processing
-    inputStream = ssc.queueStream(rddQueue)
+    # Create the QueueInputDStream and use it do some processing.
+    input_stream = ssc.queueStream(rdd_queue)
 
     model = StreamingTest()
-    test_result = model.registerStream(inputStream)
+    test_result = model.registerStream(input_stream)
 
     test_result.pprint()
 
@@ -58,6 +52,6 @@ if __name__ == "__main__":
     time.sleep(12)
     ssc.stop(stopSparkContext=True, stopGraceFully=True)
     try:
-        rmtree(checkpointPath)
+        rmtree(checkpoint_path)
     except OSError:
         pass
