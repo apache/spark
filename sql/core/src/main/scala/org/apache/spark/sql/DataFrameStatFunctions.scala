@@ -100,9 +100,9 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    */
   def approxQuantile(
       col: String,
-      probabilities: List[Double],
+      probabilities: java.util.List[Double],
       relativeError: Double): Array[Double] = {
-    StatFunctions.multipleApproxQuantiles(df, Seq(col), probabilities, relativeError).head.toArray
+    approxQuantile(col, probabilities.asScala.toArray, relativeError)
   }
 
   /**

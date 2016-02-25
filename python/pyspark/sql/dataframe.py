@@ -1211,8 +1211,7 @@ class DataFrame(object):
             raise ValueError("col should be a string.")
 
         if not isinstance(probabilities, (list, tuple)):
-            raise ValueError(
-                    "probabilities should be a list or tuple")
+            raise ValueError("probabilities should be a list or tuple")
         if isinstance(probabilities, tuple):
             probabilities = list(probabilities)
         for p in probabilities:
@@ -1226,7 +1225,6 @@ class DataFrame(object):
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
         return PickleSerializer().loads(bytes(self._sc._jvm.SerDe.dumps(jaq)), encoding="bytes")
-
 
     @since(1.4)
     def corr(self, col1, col2, method=None):
