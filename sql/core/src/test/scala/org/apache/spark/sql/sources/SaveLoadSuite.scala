@@ -21,7 +21,8 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLConf}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils

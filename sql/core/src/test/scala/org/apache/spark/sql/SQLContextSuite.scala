@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext{
 

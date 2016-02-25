@@ -25,6 +25,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Contains methods for debugging query execution.

@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.local
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashedRelation}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A [[HashJoinNode]] for broadcast join. It takes a streamedNode and a broadcast

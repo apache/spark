@@ -19,12 +19,13 @@ package org.apache.spark.sql.hive
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton {
   import hiveContext.sql

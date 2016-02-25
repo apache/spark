@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.SQLConf._
+import org.apache.spark.sql.internal.SQLConf._
 
 class SQLConfEntrySuite extends SparkFunSuite {
 

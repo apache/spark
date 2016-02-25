@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertI
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -755,6 +756,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
 
   /**
    * Drop named tables if they exist
+ *
    * @param tableNames tables to drop
    */
   def dropTables(tableNames: String*): Unit = {

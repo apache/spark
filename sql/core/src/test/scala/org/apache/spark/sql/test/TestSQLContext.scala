@@ -18,8 +18,8 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SQLConf, SQLContext}
-
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A special [[SQLContext]] prepared for testing.
@@ -39,7 +39,7 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
       super.clear()
 
       // Make sure we start with the default test configs even after clear
-      TestSQLContext.overrideConfs.map {
+      TestSQLContext.overrideConfs.foreach {
         case (key, value) => setConfString(key, value)
       }
     }
