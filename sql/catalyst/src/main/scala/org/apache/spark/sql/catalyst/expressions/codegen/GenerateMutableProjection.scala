@@ -94,6 +94,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
+    val callSite =
+      if (validExpr.isEmpty) "unknown" else validExpr(0).origin.callSite.getOrElse("unknown")
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificMutableProjection(references);
@@ -123,12 +125,18 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
         }
 
         public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
-          $evalSubexpr
-          $allProjections
-          // copy all the results into MutableRow
-          $allUpdates
-          return mutableRow;
+          try {
+            InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+            $evalSubexpr
+            $allProjections
+            // copy all the results into MutableRow
+            $allUpdates
+            return mutableRow;
+          } catch (final Throwable e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
+            logger.error("The method apply() is generated for ${callSite}");
+            throw e;
+          }
         }
       }
     """

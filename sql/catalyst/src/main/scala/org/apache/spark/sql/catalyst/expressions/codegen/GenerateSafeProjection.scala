@@ -139,8 +139,11 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
   protected def create(expressions: Seq[Expression]): Projection = {
     val ctx = newCodeGenContext()
-    val expressionCodes = expressions.zipWithIndex.map {
-      case (NoOp, _) => ""
+    val validExpr = expressions.filter {
+      case NoOp => false
+      case _ => true
+    }
+    val expressionCodes = validExpr.zipWithIndex.map {
       case (e, i) =>
         val evaluationCode = e.genCode(ctx)
         val converter = convertToSafe(ctx, evaluationCode.value, e.dataType)
@@ -155,6 +158,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           """
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
+    val callSite =
+      if (validExpr.isEmpty) "unknown" else validExpr(0).origin.callSite.getOrElse("unknown")
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificSafeProjection(references);
@@ -174,9 +179,15 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
         }
 
         public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
-          $allExpressions
-          return mutableRow;
+          try {
+            InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+            $allExpressions
+            return mutableRow;
+          } catch (final Throwable e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
+            logger.error("The method apply() is generated for ${callSite}");
+            throw e;
+          }
         }
       }
     """

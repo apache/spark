@@ -56,8 +56,15 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
 
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
-          ${eval.code}
-          return !${eval.isNull} && ${eval.value};
+          try {
+            ${eval.code}
+            return !${eval.isNull} && ${eval.value};
+          } catch (final Throwable e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
+            logger.error("The method eval() is generated for " +
+                         "${predicate.origin.callSite.getOrElse("unknown")}");
+            throw e;
+          }
         }
       }"""
 

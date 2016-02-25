@@ -328,7 +328,14 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         ${ctx.declareAddedFunctions()}
 
         protected void processNext() throws java.io.IOException {
-          ${code.trim}
+          try {
+            ${code.trim}
+          } catch (final Throwable e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
+            logger.error("The method processNext() is generated for " +
+                         "${plan.origin.callSite.getOrElse("unknown")}");
+            throw e;
+          }
         }
       }
       """.trim
