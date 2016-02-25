@@ -25,26 +25,35 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 class DataSourceDetectionSuite extends QueryTest with SharedSQLContext  {
 
-  test("detect datasource - parquet") {
+  test("detect datasource - parquet (by magic number)") {
     val data = (1 to 10).map(i => (i, i.toString))
     withTempPath { file =>
-      withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "uncompressed") {
-        val path = file.getCanonicalPath
-        sqlContext.createDataFrame(data).write.parquet(path)
-        file.listFiles().filterNot { file =>
-          file.toString.startsWith(".") || file.toString.startsWith("_")
-        }.foreach { file =>
-          // Remove extensions
-          file.renameTo(new File(file.toString.replace(".parquet", "")))
-        }
-
-        val source = "parquet"
-        assert(DataSourceDetection.detect(sqlContext, path) == source)
+      val path = file.getCanonicalPath
+      sqlContext.createDataFrame(data).write.parquet(path)
+      file.listFiles().filterNot { file =>
+        file.toString.startsWith(".") || file.toString.startsWith("_")
+      }.foreach { file =>
+        // Remove extensions
+        file.renameTo(new File(file.toString.replace(".parquet", "")))
       }
+
+      val source = "parquet"
+      assert(DataSourceDetection.detect(sqlContext, path) == source)
     }
   }
 
-  test("detect datasource - json") {
+  test("detect datasource - parquet (by part file extension)") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      sqlContext.createDataFrame(data).write.parquet(path)
+
+      val source = "parquet"
+      assert(DataSourceDetection.detect(sqlContext, path) == source)
+    }
+  }
+
+  test("detect datasource - json (by directory extension)") {
     val data = (1 to 10).map(i => (i, i.toString))
     withTempPath { file =>
       val path = s"${file.getCanonicalPath}.json"
