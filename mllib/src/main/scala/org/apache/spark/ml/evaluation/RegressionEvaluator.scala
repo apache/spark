@@ -85,8 +85,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
     val predictionAndLabels = dataset
       .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
-      .rdd.
-      map { case Row(prediction: Double, label: Double) =>
+      .map { case Row(prediction: Double, label: Double) =>
         (prediction, label)
       }
     val metrics = new RegressionMetrics(predictionAndLabels)

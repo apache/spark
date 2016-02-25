@@ -330,7 +330,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // listener should ignore the non SQL stage
     assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber)
 
-    sqlContext.sparkContext.parallelize(1 to 10).toDF().rdd.foreach(i => ())
+    sqlContext.sparkContext.parallelize(1 to 10).toDF().foreach(i => ())
     sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
     // listener should save the SQL stage
     assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
@@ -398,7 +398,7 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
           ).toDF()
           df.collect()
           try {
-            df.rdd.foreach(_ => throw new RuntimeException("Oops"))
+            df.foreach(_ => throw new RuntimeException("Oops"))
           } catch {
             case e: SparkException => // This is expected for a failed job
           }

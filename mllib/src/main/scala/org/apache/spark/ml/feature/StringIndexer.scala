@@ -83,7 +83,6 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
     val counts = dataset.select(col($(inputCol)).cast(StringType))
-      .rdd
       .map(_.getString(0))
       .countByValue()
     val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray

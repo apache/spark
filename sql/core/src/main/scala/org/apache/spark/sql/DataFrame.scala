@@ -1427,6 +1427,48 @@ class DataFrame private[sql](
   def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
 
   /**
+   * Returns a new RDD by applying a function to all rows of this DataFrame.
+   * @group rdd
+   * @since 1.3.0
+   */
+  def map[R: ClassTag](f: Row => R): RDD[R] = rdd.map(f)
+
+  /**
+   * Returns a new RDD by first applying a function to all rows of this [[DataFrame]],
+   * and then flattening the results.
+   * @group rdd
+   * @since 1.3.0
+   */
+  def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R] = rdd.flatMap(f)
+
+  /**
+   * Returns a new RDD by applying a function to each partition of this DataFrame.
+   * @group rdd
+   * @since 1.3.0
+   */
+  def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
+    rdd.mapPartitions(f)
+  }
+
+  /**
+   * Applies a function `f` to all rows.
+   * @group rdd
+   * @since 1.3.0
+   */
+  def foreach(f: Row => Unit): Unit = withNewExecutionId {
+    rdd.foreach(f)
+  }
+
+  /**
+   * Applies a function f to each partition of this [[DataFrame]].
+   * @group rdd
+   * @since 1.3.0
+   */
+  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecutionId {
+    rdd.foreachPartition(f)
+  }
+
+  /**
    * Returns the first `n` rows in the [[DataFrame]].
    *
    * Running take requires moving data into the application's driver process, and doing so with

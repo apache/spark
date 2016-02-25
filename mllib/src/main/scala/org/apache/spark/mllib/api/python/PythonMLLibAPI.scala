@@ -1052,7 +1052,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Java stub for the constructor of Python mllib RankingMetrics
    */
   def newRankingMetrics(predictionAndLabels: DataFrame): RankingMetrics[Any] = {
-    new RankingMetrics(predictionAndLabels.rdd.map(
+    new RankingMetrics(predictionAndLabels.map(
       r => (r.getSeq(0).toArray[Any], r.getSeq(1).toArray[Any])))
   }
 
@@ -1135,7 +1135,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def createIndexedRowMatrix(rows: DataFrame, numRows: Long, numCols: Int): IndexedRowMatrix = {
     // We use DataFrames for serialization of IndexedRows from Python,
     // so map each Row in the DataFrame back to an IndexedRow.
-    val indexedRows = rows.rdd.map {
+    val indexedRows = rows.map {
       case Row(index: Long, vector: Vector) => IndexedRow(index, vector)
     }
     new IndexedRowMatrix(indexedRows, numRows, numCols)
@@ -1147,7 +1147,7 @@ private[python] class PythonMLLibAPI extends Serializable {
   def createCoordinateMatrix(rows: DataFrame, numRows: Long, numCols: Long): CoordinateMatrix = {
     // We use DataFrames for serialization of MatrixEntry entries from
     // Python, so map each Row in the DataFrame back to a MatrixEntry.
-    val entries = rows.rdd.map {
+    val entries = rows.map {
       case Row(i: Long, j: Long, value: Double) => MatrixEntry(i, j, value)
     }
     new CoordinateMatrix(entries, numRows, numCols)
@@ -1161,7 +1161,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     // We use DataFrames for serialization of sub-matrix blocks from
     // Python, so map each Row in the DataFrame back to a
     // ((blockRowIndex, blockColIndex), sub-matrix) tuple.
-    val blockTuples = blocks.rdd.map {
+    val blockTuples = blocks.map {
       case Row(Row(blockRowIndex: Long, blockColIndex: Long), subMatrix: Matrix) =>
         ((blockRowIndex.toInt, blockColIndex.toInt), subMatrix)
     }

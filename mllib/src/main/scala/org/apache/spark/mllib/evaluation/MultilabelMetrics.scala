@@ -35,9 +35,7 @@ class MultilabelMetrics @Since("1.2.0") (predictionAndLabels: RDD[(Array[Double]
    * @param predictionAndLabels a DataFrame with two double array columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.rdd.map { r =>
-      (r.getSeq[Double](0).toArray, r.getSeq[Double](1).toArray)
-    })
+    this(predictionAndLabels.map(r => (r.getSeq[Double](0).toArray, r.getSeq[Double](1).toArray)))
 
   private lazy val numDocs: Long = predictionAndLabels.count()
 

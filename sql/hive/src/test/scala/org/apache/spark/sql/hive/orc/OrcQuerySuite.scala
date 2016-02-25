@@ -119,7 +119,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       // expr = (not leaf-0)
       assertResult(10) {
         sql("SELECT name, contacts FROM t where age > 5")
-          .rdd
           .flatMap(_.getAs[Seq[_]]("contacts"))
           .count()
       }
@@ -132,7 +131,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
         assert(df.count() === 2)
         assertResult(4) {
-          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.flatMap(_.getAs[Seq[_]]("contacts")).count()
         }
       }
 
@@ -144,7 +143,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
         assert(df.count() === 3)
         assertResult(6) {
-          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.flatMap(_.getAs[Seq[_]]("contacts")).count()
         }
       }
     }
