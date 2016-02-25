@@ -82,7 +82,6 @@ class QuantileDiscretizerSuite
       .setInputCol("input")
       .setOutputCol("result")
       .setNumBuckets(numBuckets)
-      .setSeed(1)
 
     val result = discretizer.fit(df).transform(df)
     val observedNumBuckets = result.select("result").distinct.count
