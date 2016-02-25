@@ -187,8 +187,10 @@ class JDBCSuite extends SparkFunSuite
       val parentPlan = df.queryExecution.executedPlan
       // Check if SparkPlan Filter is removed in a physical plan and
       // the plan only has PhysicalRDD to scan JDBCRelation.
-      assert(parentPlan.isInstanceOf[PhysicalRDD])
-      assert(parentPlan.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
+      assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
+      val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
+      assert(node.plan.isInstanceOf[org.apache.spark.sql.execution.PhysicalRDD])
+      assert(node.plan.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
       df
     }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
