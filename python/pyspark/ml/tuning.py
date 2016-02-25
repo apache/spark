@@ -30,7 +30,7 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
 
 
 class ParamGridBuilder(object):
-    """
+    r"""
     Builder for a param grid used in grid search-based model selection.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -298,7 +298,6 @@ class TrainValidationSplit(Estimator, HasSeed):
         "evaluator used to select hyper-parameters that maximize the metric")
     trainRatio = Param(Params._dummy(), "trainRatio", "proportion for train-validation ratio")
 
-    @since("2.0.0")
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                  seed=None):
@@ -383,7 +382,6 @@ class TrainValidationSplit(Estimator, HasSeed):
         """
         return self.getOrDefault(self.trainRatio)
 
-    @since("2.0.0")
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
         epm = self.getOrDefault(self.estimatorParamMaps)
@@ -434,13 +432,11 @@ class TrainValidationSplitModel(Model):
     Model from train validation split.
     """
 
-    @since("2.0.0")
     def __init__(self, bestModel):
         super(TrainValidationSplitModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
 
-    @since("2.0.0")
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
 

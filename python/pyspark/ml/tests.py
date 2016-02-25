@@ -494,26 +494,6 @@ class PersistenceTest(PySparkTestCase):
             pass
 
 
-class PersistenceTest(PySparkTestCase):
-
-    def test_linear_regression(self):
-        lr = LinearRegression(maxIter=1)
-        path = tempfile.mkdtemp()
-        lr_path = path + "/lr"
-        lr.save(lr_path)
-        lr2 = LinearRegression.load(lr_path)
-        self.assertEqual(lr2.uid, lr2.maxIter.parent,
-                         "Loaded LinearRegression instance uid (%s) did not match Param's uid (%s)"
-                         % (lr2.uid, lr2.maxIter.parent))
-        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
-                         "Loaded LinearRegression instance default params did not match " +
-                         "original defaults")
-        try:
-            rmtree(path)
-        except OSError:
-            pass
-
-
 if __name__ == "__main__":
     from pyspark.ml.tests import *
     if xmlrunner:
