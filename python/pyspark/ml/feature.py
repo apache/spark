@@ -53,18 +53,11 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritab
     >>> params = {binarizer.threshold: -0.5, binarizer.outputCol: "vector"}
     >>> binarizer.transform(df, params).head().vector
     1.0
-     >>> import tempfile
-     >>> path = tempfile.mkdtemp()
-     >>> featurePath = path + "/feature-transformer"
-     >>> binarizer.save(featurePath)
-     >>> loadedBinarizer = Binarizer.load(featurePath)
-     >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
-     True
-     >>> from shutil import rmtree
-     >>> try:
-     ...     rmtree(path)
-     ... except OSError:
-     ...     pass
+    >>> binarizerPath = temp_path + "/binarizer"
+    >>> binarizer.save(binarizerPath)
+    >>> loadedBinarizer = Binarizer.load(binarizerPath)
+    >>> loadedBinarizer.getThreshold() == binarizer.getThreshold()
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -130,18 +123,11 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWrita
     2.0
     >>> bucketizer.setParams(outputCol="b").transform(df).head().b
     0.0
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> bucketizer.save(featurePath)
-    >>> loadedBucketizer = Bucketizer.load(featurePath)
+    >>> bucketizerPath = temp_path + "/bucketizer"
+    >>> bucketizer.save(bucketizerPath)
+    >>> loadedBucketizer = Bucketizer.load(bucketizerPath)
     >>> loadedBucketizer.getSplits() == bucketizer.getSplits()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -213,27 +199,20 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWr
     ...
     >>> sorted(model.vocabulary) == ['a', 'b', 'c']
     True
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> cv.save(featurePath)
-    >>> loadedCv = CountVectorizer.load(featurePath)
+    >>> countVectorizerPath = temp_path + "/count-vectorizer"
+    >>> cv.save(countVectorizerPath)
+    >>> loadedCv = CountVectorizer.load(countVectorizerPath)
     >>> loadedCv.getMinDF() == cv.getMinDF()
     True
     >>> loadedCv.getMinTF() == cv.getMinTF()
     True
     >>> loadedCv.getVocabSize() == cv.getVocabSize()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/count-vectorizer-model"
     >>> model.save(modelPath)
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -366,18 +345,11 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     >>> df3 = DCT(inverse=True, inputCol="resultVec", outputCol="origVec").transform(df2)
     >>> df3.head().origVec
     DenseVector([5.0, 8.0, 6.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> dct.save(featurePath)
-    >>> loadedDtc = DCT.load(featurePath)
+    >>> dctPath = temp_path + "/dct"
+    >>> dct.save(dctPath)
+    >>> loadedDtc = DCT.load(dctPath)
     >>> loadedDtc.getInverse()
     False
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -439,18 +411,11 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, MLReadable,
     DenseVector([2.0, 2.0, 9.0])
     >>> ep.setParams(scalingVec=Vectors.dense([2.0, 3.0, 5.0])).transform(df).head().eprod
     DenseVector([4.0, 3.0, 15.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> ep.save(featurePath)
-    >>> loadedEp = ElementwiseProduct.load(featurePath)
+    >>> elementwiseProductPath = temp_path + "/elementwise-product"
+    >>> ep.save(elementwiseProductPath)
+    >>> loadedEp = ElementwiseProduct.load(elementwiseProductPath)
     >>> loadedEp.getScalingVec() == ep.getScalingVec()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.5.0
     """
@@ -512,19 +477,12 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, MLRe
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
     >>> hashingTF.transform(df, params).head().vector
     SparseVector(5, {2: 1.0, 3: 1.0, 4: 1.0})
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> hashingTF.save(featurePath)
-    >>> loadedHashingTF = HashingTF.load(featurePath)
+    >>> hashingTFPath = temp_path + "/hashing-tf"
+    >>> hashingTF.save(hashingTFPath)
+    >>> loadedHashingTF = HashingTF.load(hashingTFPath)
     >>> param = loadedHashingTF.getParam("numFeatures")
     >>> loadedHashingTF.getOrDefault(param) == hashingTF.getOrDefault(param)
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -570,23 +528,16 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     >>> params = {idf.minDocFreq: 1, idf.outputCol: "vector"}
     >>> idf.fit(df, params).transform(df).head().vector
     DenseVector([0.2877, 0.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> idf.save(featurePath)
-    >>> loadedIdf = IDF.load(featurePath)
+    >>> idfPath = temp_path + "/idf"
+    >>> idf.save(idfPath)
+    >>> loadedIdf = IDF.load(idfPath)
     >>> loadedIdf.getMinDocFreq() == idf.getMinDocFreq()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/idf-model"
     >>> model.save(modelPath)
     >>> loadedModel = IDFModel.load(modelPath)
     >>> loadedModel.transform(df).head().idf == model.transform(df).head().idf
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -676,27 +627,20 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWrita
     |[2.0]| [1.0]|
     +-----+------+
     ...
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> mmScaler.save(featurePath)
-    >>> loadedMMScaler = MinMaxScaler.load(featurePath)
+    >>> minMaxScalerPath = temp_path + "/min-max-scaler"
+    >>> mmScaler.save(minMaxScalerPath)
+    >>> loadedMMScaler = MinMaxScaler.load(minMaxScalerPath)
     >>> loadedMMScaler.getMin() == mmScaler.getMin()
     True
     >>> loadedMMScaler.getMax() == mmScaler.getMax()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/min-max-scaler-model"
     >>> model.save(modelPath)
     >>> loadedModel = MinMaxScalerModel.load(modelPath)
     >>> loadedModel.originalMin == model.originalMin
     True
     >>> loadedModel.originalMax == model.originalMax
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -816,18 +760,11 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> ngram.save(featurePath)
-    >>> loadedNGram = NGram.load(featurePath)
+    >>> ngramPath = temp_path + "/ngram"
+    >>> ngram.save(ngramPath)
+    >>> loadedNGram = NGram.load(ngramPath)
     >>> loadedNGram.getN() == ngram.getN()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.5.0
     """
@@ -889,18 +826,11 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWrita
     >>> params = {normalizer.p: 1.0, normalizer.inputCol: "dense", normalizer.outputCol: "vector"}
     >>> normalizer.transform(df, params).head().vector
     DenseVector([0.4286, -0.5714])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> normalizer.save(featurePath)
-    >>> loadedNormalizer = Normalizer.load(featurePath)
+    >>> normalizerPath = temp_path + "/normalizer"
+    >>> normalizer.save(normalizerPath)
+    >>> loadedNormalizer = Normalizer.load(normalizerPath)
     >>> loadedNormalizer.getP() == normalizer.getP()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -978,18 +908,11 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWr
     >>> params = {encoder.dropLast: False, encoder.outputCol: "test"}
     >>> encoder.transform(td, params).head().test
     SparseVector(3, {0: 1.0})
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> encoder.save(featurePath)
-    >>> loadedEncoder = OneHotEncoder.load(featurePath)
+    >>> onehotEncoderPath = temp_path + "/onehot-encoder"
+    >>> encoder.save(onehotEncoderPath)
+    >>> loadedEncoder = OneHotEncoder.load(onehotEncoderPath)
     >>> loadedEncoder.getDropLast() == encoder.getDropLast()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1051,18 +974,11 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, MLReadable
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
     >>> px.setParams(outputCol="test").transform(df).head().test
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> px.save(featurePath)
-    >>> loadedPx = PolynomialExpansion.load(featurePath)
+    >>> polyExpansionPath = temp_path + "/poly-expansion"
+    >>> px.save(polyExpansionPath)
+    >>> loadedPx = PolynomialExpansion.load(polyExpansionPath)
     >>> loadedPx.getDegree() == px.getDegree()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1130,18 +1046,11 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, 
     >>> bucketed = bucketizer.transform(df).head()
     >>> bucketed.buckets
     0.0
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> qds.save(featurePath)
-    >>> loadedQds = QuantileDiscretizer.load(featurePath)
+    >>> quantileDiscretizerPath = temp_path + "/quantile-discretizer"
+    >>> qds.save(quantileDiscretizerPath)
+    >>> loadedQds = QuantileDiscretizer.load(quantileDiscretizerPath)
     >>> loadedQds.getNumBuckets() == qds.getNumBuckets()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 2.0.0
     """
@@ -1230,20 +1139,13 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLW
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> reTokenizer.save(featurePath)
-    >>> loadedReTokenizer = RegexTokenizer.load(featurePath)
+    >>> regexTokenizerPath = temp_path + "/regex-tokenizer"
+    >>> reTokenizer.save(regexTokenizerPath)
+    >>> loadedReTokenizer = RegexTokenizer.load(regexTokenizerPath)
     >>> loadedReTokenizer.getMinTokenLength() == reTokenizer.getMinTokenLength()
     True
     >>> loadedReTokenizer.getGaps() == reTokenizer.getGaps()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1354,18 +1256,11 @@ class SQLTransformer(JavaTransformer, MLReadable, MLWritable):
     ...     statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
     >>> sqlTrans.transform(df).head()
     Row(id=0, v1=1.0, v2=3.0, v3=4.0, v4=3.0)
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> sqlTrans.save(featurePath)
-    >>> loadedSqlTrans = SQLTransformer.load(featurePath)
+    >>> sqlTransformerPath = temp_path + "/sql-transformer"
+    >>> sqlTrans.save(sqlTransformerPath)
+    >>> loadedSqlTrans = SQLTransformer.load(sqlTransformerPath)
     >>> loadedSqlTrans.getStatement() == sqlTrans.getStatement()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -1426,27 +1321,20 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWri
     DenseVector([1.4142])
     >>> model.transform(df).collect()[1].scaled
     DenseVector([1.4142])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> standardScaler.save(featurePath)
-    >>> loadedStandardScaler = StandardScaler.load(featurePath)
+    >>> standardScalerPath = temp_path + "/standard-scaler"
+    >>> standardScaler.save(standardScalerPath)
+    >>> loadedStandardScaler = StandardScaler.load(standardScalerPath)
     >>> loadedStandardScaler.getWithMean() == standardScaler.getWithMean()
     True
     >>> loadedStandardScaler.getWithStd() == standardScaler.getWithStd()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/standard-scaler-model"
     >>> model.save(modelPath)
     >>> loadedModel = StandardScalerModel.load(modelPath)
     >>> loadedModel.std == model.std
     True
     >>> loadedModel.mean == model.mean
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1557,28 +1445,21 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> sorted(set([(i[0], str(i[1])) for i in itd.select(itd.id, itd.label2).collect()]),
     ...     key=lambda x: x[0])
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> stringIndexer.save(featurePath)
-    >>> loadedIndexerModel = StringIndexer.load(featurePath).fit(stringIndDf)
+    >>> stringIndexerPath = temp_path + "/string-indexer"
+    >>> stringIndexer.save(stringIndexerPath)
+    >>> loadedIndexerModel = StringIndexer.load(stringIndexerPath).fit(stringIndDf)
     >>> loadedIndexerModel.labels == model.labels
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/string-indexer-model"
     >>> model.save(modelPath)
     >>> loadedModel = StringIndexerModel.load(modelPath)
     >>> loadedModel.labels == model.labels
     True
-    >>> featurePath2 = path + "/feature-transformer2"
-    >>> inverter.save(featurePath2)
-    >>> loadedInverter = IndexToString.load(featurePath2)
+    >>> indexToStringPath = temp_path + "/index-to-string"
+    >>> inverter.save(indexToStringPath)
+    >>> loadedInverter = IndexToString.load(indexToStringPath)
     >>> loadedInverter.getLabels() == inverter.getLabels()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1692,18 +1573,11 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
     >>> remover.transform(df).head().words == ['a', 'c']
     True
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> remover.save(featurePath)
-    >>> loadedRemover = StopWordsRemover.load(featurePath)
+    >>> stopWordsRemoverPath = temp_path + "/stopwords-remover"
+    >>> remover.save(stopWordsRemoverPath)
+    >>> loadedRemover = StopWordsRemover.load(stopWordsRemoverPath)
     >>> loadedRemover.transform(df).head().words == remover.transform(df).head().words
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -1797,18 +1671,11 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWritab
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> tokenizer.save(featurePath)
-    >>> loadedTokenizer = Tokenizer.load(featurePath)
+    >>> tokenizerPath = temp_path + "/tokenizer"
+    >>> tokenizer.save(tokenizerPath)
+    >>> loadedTokenizer = Tokenizer.load(tokenizerPath)
     >>> loadedTokenizer.transform(df).head().tokens == tokenizer.transform(df).head().tokens
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.3.0
     """
@@ -1850,18 +1717,11 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, MLReadable, M
     >>> params = {vecAssembler.inputCols: ["b", "a"], vecAssembler.outputCol: "vector"}
     >>> vecAssembler.transform(df, params).head().vector
     DenseVector([0.0, 1.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> vecAssembler.save(featurePath)
-    >>> loadedAssembler = VectorAssembler.load(featurePath)
+    >>> vectorAssemblerPath = temp_path + "/vector-assembler"
+    >>> vecAssembler.save(vectorAssemblerPath)
+    >>> loadedAssembler = VectorAssembler.load(vectorAssemblerPath)
     >>> loadedAssembler.transform(df).head().freqs == vecAssembler.transform(df).head().freqs
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -1944,25 +1804,18 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWrit
     >>> model2 = indexer.fit(df, params)
     >>> model2.transform(df).head().vector
     DenseVector([1.0, 0.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> indexer.save(featurePath)
-    >>> loadedIndexer = VectorIndexer.load(featurePath)
+    >>> vectorIndexerPath = temp_path + "/vector-indexer"
+    >>> indexer.save(vectorIndexerPath)
+    >>> loadedIndexer = VectorIndexer.load(vectorIndexerPath)
     >>> loadedIndexer.getMaxCategories() == indexer.getMaxCategories()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/vector-indexer-model"
     >>> model.save(modelPath)
     >>> loadedModel = VectorIndexerModel.load(modelPath)
     >>> loadedModel.numFeatures == model.numFeatures
     True
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -2063,20 +1916,13 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, MLWri
     >>> vs = VectorSlicer(inputCol="features", outputCol="sliced", indices=[1, 4])
     >>> vs.transform(df).head().sliced
     DenseVector([2.3, 1.0])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> vs.save(featurePath)
-    >>> loadedVs = VectorSlicer.load(featurePath)
+    >>> vectorSlicerPath = temp_path + "/vector-slicer"
+    >>> vs.save(vectorSlicerPath)
+    >>> loadedVs = VectorSlicer.load(vectorSlicerPath)
     >>> loadedVs.getIndices() == vs.getIndices()
     True
     >>> loadedVs.getNames() == vs.getNames()
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.6.0
     """
@@ -2173,27 +2019,20 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     ...
     >>> model.transform(doc).head().model
     DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> word2Vec.save(featurePath)
-    >>> loadedWord2Vec = Word2Vec.load(featurePath)
+    >>> word2vecPath = temp_path + "/word2vec"
+    >>> word2Vec.save(word2vecPath)
+    >>> loadedWord2Vec = Word2Vec.load(word2vecPath)
     >>> loadedWord2Vec.getVectorSize() == word2Vec.getVectorSize()
     True
     >>> loadedWord2Vec.getNumPartitions() == word2Vec.getNumPartitions()
     True
     >>> loadedWord2Vec.getMinCount() == word2Vec.getMinCount()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/word2vec-model"
     >>> model.save(modelPath)
     >>> loadedModel = Word2VecModel.load(modelPath)
     >>> loadedModel.transform(doc).head().model == model.transform(doc).head().model
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -2329,25 +2168,18 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     DenseVector([1.648..., -4.013...])
     >>> model.explainedVariance
     DenseVector([0.794..., 0.205...])
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> pca.save(featurePath)
-    >>> loadedPca = PCA.load(featurePath)
+    >>> pcaPath = temp_path + "/pca"
+    >>> pca.save(pcaPath)
+    >>> loadedPca = PCA.load(pcaPath)
     >>> loadedPca.getK() == pca.getK()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/pca-model"
     >>> model.save(modelPath)
     >>> loadedModel = PCAModel.load(modelPath)
     >>> loadedModel.pc == model.pc
     True
     >>> loadedModel.explainedVariance == model.explainedVariance
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.5.0
     """
@@ -2532,23 +2364,16 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, ML
     DenseVector([1.0])
     >>> model.selectedFeatures
     [3]
-    >>> import tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> featurePath = path + "/feature-transformer"
-    >>> selector.save(featurePath)
-    >>> loadedSelector = ChiSqSelector.load(featurePath)
+    >>> chiSqSelectorPath = temp_path + "/chi-sq-selector"
+    >>> selector.save(chiSqSelectorPath)
+    >>> loadedSelector = ChiSqSelector.load(chiSqSelectorPath)
     >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
     True
-    >>> modelPath = path + "/feature-model"
+    >>> modelPath = temp_path + "/chi-sq-selector-model"
     >>> model.save(modelPath)
     >>> loadedModel = ChiSqSelectorModel.load(modelPath)
     >>> loadedModel.selectedFeatures == model.selectedFeatures
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 2.0.0
     """
@@ -2626,12 +2451,16 @@ class ChiSqSelectorModel(JavaModel, MLReadable, MLWritable):
 
 if __name__ == "__main__":
     import doctest
+    import tempfile
+
     import pyspark.ml.feature
     from pyspark.context import SparkContext
     from pyspark.sql import Row, SQLContext
+
     globs = globals().copy()
     features = pyspark.ml.feature.__dict__.copy()
     globs.update(features)
+
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.feature tests")
@@ -2642,7 +2471,16 @@ if __name__ == "__main__":
                                Row(id=2, label="c"), Row(id=3, label="a"),
                                Row(id=4, label="a"), Row(id=5, label="c")], 2)
     globs['stringIndDf'] = sqlContext.createDataFrame(testData)
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)
