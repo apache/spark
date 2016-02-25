@@ -25,6 +25,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Contains methods for debugging query execution.
@@ -84,6 +85,7 @@ package object debug {
 
     /**
      * A collection of metrics for each column of output.
+ *
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
      *        causing the wrong data to be projected.
      */

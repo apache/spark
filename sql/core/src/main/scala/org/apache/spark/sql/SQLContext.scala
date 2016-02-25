@@ -31,7 +31,6 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.{execution => sparkexecution}
-import org.apache.spark.sql.SQLConf.SQLConfEntry
 import org.apache.spark.sql.catalyst.{InternalRow, _}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
@@ -43,6 +42,8 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -305,6 +306,7 @@ class SQLContext private[sql](
 
   /**
    * Returns true if the table is currently cached in-memory.
+   *
    * @group cachemgmt
    * @since 1.3.0
    */
@@ -314,6 +316,7 @@ class SQLContext private[sql](
 
   /**
    * Returns true if the [[Queryable]] is currently cached in-memory.
+   *
    * @group cachemgmt
    * @since 1.3.0
    */
@@ -323,6 +326,7 @@ class SQLContext private[sql](
 
   /**
    * Caches the specified table in-memory.
+   *
    * @group cachemgmt
    * @since 1.3.0
    */
@@ -332,6 +336,7 @@ class SQLContext private[sql](
 
   /**
    * Removes the specified table from the in-memory cache.
+   *
    * @group cachemgmt
    * @since 1.3.0
    */
@@ -339,6 +344,7 @@ class SQLContext private[sql](
 
   /**
    * Removes all cached tables from the in-memory cache.
+   *
    * @since 1.3.0
    */
   def clearCache(): Unit = cacheManager.clearCache()
@@ -540,6 +546,7 @@ class SQLContext private[sql](
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
+   *
    * @group dataframes
    * @since 1.3.0
    */
@@ -559,6 +566,7 @@ class SQLContext private[sql](
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
+   *
    * @group dataframes
    * @since 1.3.0
    */
@@ -571,6 +579,7 @@ class SQLContext private[sql](
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
+   *
    * @group dataframes
    * @since 1.6.0
    */
