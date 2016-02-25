@@ -618,7 +618,14 @@ object SimplifyFilters extends Rule[LogicalPlan] {
  */
 object PushPredicateThroughProject extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter @ Filter(condition, project @ Project(fields, grandChild)) =>
+    // SPARK-13473: We can't push the predicate down when the underlying projection output non-
+    // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
+    // implies that, for a given input row, the output are determined by the expression's initial
+    // state and all the input rows processed before. In another word, the order of input rows
+    // matters for non-deterministic expressions, while pushing down predicates changes the order.
+    case filter @ Filter(condition, project @ Project(fields, grandChild))
+      if fields.forall(_.deterministic) =>
+
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT a + b AS c, d ...' produces Map(c -> a + b).
       val aliasMap = AttributeMap(fields.collect {
