@@ -46,12 +46,12 @@ class ApproxQuantileSuite extends SparkFunSuite {
     val approx = summary.query(quant)
     // The rank of the approximation.
     val rank = data.count(_ < approx) // has to be <, not <= to be exact
-    val lower = math.floor((quant - summary.epsilon) * data.size)
-    assert(rank >= lower,
-      s"approx_rank: $rank ! >= $lower, requested quantile = $quant")
-    val upper = math.ceil((quant + summary.epsilon) * data.size)
-    assert(rank <= upper,
-      s"approx_rank: $rank ! <= $upper, requested quantile = $quant")
+    val lower = math.floor((quant - summary.relativeError) * data.size)
+    val upper = math.ceil((quant + summary.relativeError) * data.size)
+    val msg =
+      s"$rank not in [$lower $upper], requested quantile: $quant, approx returned: $approx"
+    assert(rank >= lower, msg)
+    assert(rank <= upper, msg)
   }
 
   for {
