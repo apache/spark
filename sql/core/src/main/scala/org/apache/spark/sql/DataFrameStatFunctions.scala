@@ -98,11 +98,11 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def approxQuantile(
+  private[spark] def approxQuantile(
       col: String,
-      probabilities: java.util.List[Double],
+      probabilities: List[Double],
       relativeError: Double): Array[Double] = {
-    approxQuantile(col, probabilities.asScala.toArray, relativeError)
+    approxQuantile(col, probabilities.toArray, relativeError)
   }
 
   /**
