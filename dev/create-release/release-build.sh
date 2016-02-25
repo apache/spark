@@ -121,10 +121,14 @@ rm -rf .git
 cd ..
 
 if [ -n "$REMOTE_PARENT_MAX_LENGTH" ]; then
-  old_dirs=$(LFTP nlist $REMOTE_PARENT_DIR | sort | head -n +$REMOTE_PARENT_MAX_LENGTH)
+  old_dirs=$(
+    LFTP nlist $REMOTE_PARENT_DIR \
+        | grep -v "^\." \
+        | sort \
+        | tail -n +$REMOTE_PARENT_MAX_LENGTH)
   for old_dir in $old_dirs; do
     echo "Removing directory: $old_dir"
-    LFTP rm -r $REMOTE_PARENT_DIR/$old_dir
+    LFTP rm -rf $REMOTE_PARENT_DIR/$old_dir
   done
 fi
 
