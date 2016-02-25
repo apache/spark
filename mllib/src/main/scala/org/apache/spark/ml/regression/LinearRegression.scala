@@ -277,8 +277,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
     } else {
+      val standardizationParam = $(standardization)
       def effectiveL1RegFun = (index: Int) => {
-        if ($(standardization)) {
+        if (standardizationParam) {
           effectiveL1RegParam
         } else {
           // If `standardization` is false, we still standardize the data
