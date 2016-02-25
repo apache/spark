@@ -38,7 +38,11 @@ class ParquetDataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("parquet") {
     val df = Seq(1, 2, 3).toDS().toDF()
-    df.write.format("parquet").save("test")
+    val file = "test" + System.currentTimeMillis()
+    df.write.format("parquet").save(file)
+    checkAnswer(
+      sqlContext.read.format("parquet").load(file).as[Int],
+      1, 2, 3)
   }
 }
 

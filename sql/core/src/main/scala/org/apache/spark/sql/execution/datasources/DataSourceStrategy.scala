@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -48,11 +49,10 @@ private[sql] class DataSourceAnalysis extends Rule[LogicalPlan] {
            l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
       InsertIntoHadoopFsRelation(
-        t.paths.head,
-        t.partitionColumns.fields.map(_.name).map(UnresolvedAttribute(_)),
-        t.dataSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
+        new Path(t.location.paths.head), // TODO: Qualify?
+        t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
         t.bucketSpec,
-        (j: Job) => ???,
+        t.fileFormat,
         plan,
         mode)
   }
@@ -87,10 +87,10 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Scanning partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _, _))
-        if t.partitionSpec.partitionColumns.nonEmpty =>
+        if t.partitionSchema.nonEmpty =>
       // We divide the filter expressions into 3 parts
       val partitionColumns = AttributeSet(
-        t.partitionColumns.map(c => l.output.find(_.name == c.name).get))
+        t.partitionSchema.map(c => l.output.find(_.name == c.name).get))
 
       // Only pruning the partition keys
       val partitionFilters = filters.filter(_.references.subsetOf(partitionColumns))
@@ -102,47 +102,49 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val partitionAndNormalColumnFilters =
         filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
 
-      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
+//      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
+//
+//      logInfo {
+//        val total = t.partitionSpec.partitions.length
+//        val selected = selectedPartitions.length
+//        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
+//        s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
+//      }
+//
+//      // need to add projections from "partitionAndNormalColumnAttrs" in if it is not empty
+//      val partitionAndNormalColumnAttrs = AttributeSet(partitionAndNormalColumnFilters)
+//      val partitionAndNormalColumnProjs = if (partitionAndNormalColumnAttrs.isEmpty) {
+//        projects
+//      } else {
+//        (partitionAndNormalColumnAttrs ++ projects).toSeq
+//      }
+//
+//      // Prune the buckets based on the pushed filters that do not contain partitioning key
+//      // since the bucketing key is not allowed to use the columns in partitioning key
+//      val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
+//
+//      val scan = buildPartitionedTableScan(
+//        l,
+//        partitionAndNormalColumnProjs,
+//        pushedFilters,
+//        bucketSet,
+//        t.partitionSpec.partitionColumns,
+//        selectedPartitions)
+//
+//      // Add a Projection to guarantee the original projection:
+//      // this is because "partitionAndNormalColumnAttrs" may be different
+//      // from the original "projects", in elements or their ordering
+//
+//      partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
+//        if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
+//          // if the original projection is empty, no need for the additional Project either
+//          execution.Filter(cf, scan)
+//        } else {
+//          execution.Project(projects, execution.Filter(cf, scan))
+//        }
+//      ).getOrElse(scan) :: Nil
 
-      logInfo {
-        val total = t.partitionSpec.partitions.length
-        val selected = selectedPartitions.length
-        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
-        s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
-      }
-
-      // need to add projections from "partitionAndNormalColumnAttrs" in if it is not empty
-      val partitionAndNormalColumnAttrs = AttributeSet(partitionAndNormalColumnFilters)
-      val partitionAndNormalColumnProjs = if (partitionAndNormalColumnAttrs.isEmpty) {
-        projects
-      } else {
-        (partitionAndNormalColumnAttrs ++ projects).toSeq
-      }
-
-      // Prune the buckets based on the pushed filters that do not contain partitioning key
-      // since the bucketing key is not allowed to use the columns in partitioning key
-      val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
-
-      val scan = buildPartitionedTableScan(
-        l,
-        partitionAndNormalColumnProjs,
-        pushedFilters,
-        bucketSet,
-        t.partitionSpec.partitionColumns,
-        selectedPartitions)
-
-      // Add a Projection to guarantee the original projection:
-      // this is because "partitionAndNormalColumnAttrs" may be different
-      // from the original "projects", in elements or their ordering
-
-      partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
-        if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
-          // if the original projection is empty, no need for the additional Project either
-          execution.Filter(cf, scan)
-        } else {
-          execution.Project(projects, execution.Filter(cf, scan))
-        }
-      ).getOrElse(scan) :: Nil
+      ???
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _, _)) =>
@@ -158,11 +160,13 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         projects,
         filters,
         (a, f) =>
-          t.buildInternalScan(
+          t.fileFormat.buildInternalScan(
+            t.sqlContext,
+            t.dataSchema,
             a.map(_.name).toArray,
             f,
             bucketSet,
-            t.paths.toArray,
+            t.location.allFiles().toArray,
             confBroadcast)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
@@ -204,8 +208,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           // Don't scan any partition columns to save I/O.  Here we are being optimistic and
           // assuming partition columns data stored in data files are always consistent with those
           // partition values encoded in partition directory paths.
-          val dataRows = relation.buildInternalScan(
-            requiredDataColumns.map(_.name).toArray, filters, buckets, Array(dir), confBroadcast)
+          val dataRows = relation.fileFormat.buildInternalScan(
+            relation.sqlContext,
+            relation.dataSchema,
+            requiredDataColumns.map(_.name).toArray,
+            filters,
+            buckets,
+            Array(/* dir */),
+            confBroadcast)
 
           // Merges data values with partition values.
           mergeWithPartitionValues(
@@ -438,7 +448,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
       relation.relation match {
-        case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.paths.mkString(", ")
+        case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.location.paths.mkString(", ")
         case _ =>
       }
 

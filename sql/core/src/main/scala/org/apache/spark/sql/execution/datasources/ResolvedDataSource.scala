@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
+import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
 import scala.collection.JavaConverters._
@@ -146,7 +147,6 @@ object ResolvedDataSource extends Logging {
       case (_: RelationProvider, Some(_)) =>
         throw new AnalysisException(s"$className does not allow user-specified schemas.")
 
-
       case (format: FileFormat, _) =>
         // TODO: this is ugly...
         val paths = {
@@ -168,11 +168,21 @@ object ResolvedDataSource extends Logging {
         }
 
         val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, paths)
-        val schema = userSpecifiedSchema.getOrElse {
-          format.inferSchema(fileCatalog.allFiles())
+        val dataSchema = userSpecifiedSchema.getOrElse {
+          format.inferSchema(
+            sqlContext,
+            caseInsensitiveOptions,
+            fileCatalog.allFiles())
         }
 
-        ???
+        HadoopFsRelation(
+          sqlContext,
+          fileCatalog,
+          partitionSchema = StructType(Nil),
+          dataSchema = dataSchema,
+          bucketSpec = None,
+          format)
+
       case _ =>
         throw new AnalysisException(
           s"$className is not a valid Spark SQL Data Source.")
@@ -213,10 +223,10 @@ object ResolvedDataSource extends Logging {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
     val clazz: Class[_] = lookupDataSource(provider)
-    val relation = clazz.newInstance() match {
+    clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
-      case dataSource: HadoopFsRelationProvider =>
+      case format: FileFormat =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;
@@ -237,28 +247,31 @@ object ResolvedDataSource extends Logging {
         val equality = columnNameEquality(caseSensitive)
         val dataSchema = StructType(
           data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-        val r = dataSource.createRelation(
-          sqlContext,
-          Array(outputPath.toString),
-          Some(dataSchema.asNullable),
-          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
-          bucketSpec,
-          caseInsensitiveOptions)
+//        val r = dataSource.createRelation(
+//          sqlContext,
+//          Array(outputPath.toString),
+//          Some(dataSchema.asNullable),
+//          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+//          bucketSpec,
+//          caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
-        sqlContext.executePlan(
+        val plan =
           InsertIntoHadoopFsRelation(
-            r,
-            dataSchema.asNullable.map(_.name).map(UnresolvedAttribute),
-            bucketSpec
+            outputPath,
+            partitionColumns.map(UnresolvedAttribute.quoted),
+            bucketSpec,
+            format,
             data.logicalPlan,
-            mode)).toRdd
-        r
+            mode)
+        sqlContext.executePlan(plan).toRdd
+
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
-    ResolvedDataSource(clazz, relation)
+
+    apply(sqlContext, Some(data.schema), partitionColumns, bucketSpec, provider, options)
   }
 }

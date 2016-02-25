@@ -467,12 +467,13 @@ abstract class OutputWriter {
   }
 }
 
-
-
 case class HadoopFsRelation(
     sqlContext: SQLContext,
-    paths: Seq[String],
-    dataSchema: StructType) extends BaseRelation {
+    location: FileCatalog,
+    partitionSchema: StructType,
+    dataSchema: StructType,
+    bucketSpec: Option[BucketSpec],
+    fileFormat: FileFormat) extends BaseRelation {
 
   case class WriteRelation(
       sqlContext: SQLContext,
@@ -480,39 +481,43 @@ case class HadoopFsRelation(
       prepareJobForWrite: Job => OutputWriterFactory,
       bucketSpec: Option[BucketSpec])
 
-  def schema: StructType = ???
+  def schema: StructType = dataSchema // TODO: Partition Columns
 
-  def bucketSpec: Option[BucketSpec] = ???
-
-  def partitionSpec: PartitionSpec = ???
-
-  def partitionColumns: StructType = partitionSpec.partitionColumns
-
-  def refresh(): Unit = ???
-
-  protected def cachedLeafStatuses(): mutable.LinkedHashSet[FileStatus] = ???
-
-  def prepareJobForWrite(job: Job): OutputWriterFactory = ???
-
-  def buildInternalScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = ???
+  def refresh(): Unit = location.refresh()
 }
 
 trait FileFormat {
-  def inferSchema(files: Seq[FileStatus]): StructType
+  def inferSchema(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): StructType
+
+  def prepareWrite(
+      sqlContext: SQLContext,
+      job: Job,
+      dataSchema: StructType): BucketedOutputWriterFactory
+
+  def buildInternalScan(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      bucketSet: Option[BitSet],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow]
 }
 
 trait FileCatalog {
+  def paths: Array[String]
+
   def inferPartitioning(): PartitionSpec
+
   def allFiles(): Seq[FileStatus]
+
   def refresh(): Unit
 }
 
-class HDFSFileCatalog(
+case class HDFSFileCatalog(
     sqlContext: SQLContext,
     parameters: Map[String, String],
     paths: Array[String])
@@ -521,12 +526,13 @@ class HDFSFileCatalog(
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
   var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
-
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
+  refresh()
 
   def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
   private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
+    println(paths.toSeq)
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
     } else {
@@ -697,134 +703,131 @@ abstract class HadoopFsRelation2 private[sql](
   /**
    * Paths of this relation.  For partitioned relations, it should be root directories
    * of all partition directories.
-   *
-   * @since 1.4.0
+ * @since 1.4.0
    */
-  def paths: Array[String]
+ * def paths: Array[String]
 
+ * override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
+ * override def sizeInBytes: Long = cachedLeafStatuses().map(_.getLen).sum
 
-  override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
-
-  override def sizeInBytes: Long = cachedLeafStatuses().map(_.getLen).sum
-
-  /**
+ * /**
    * Partition columns.  Can be either defined by [[userDefinedPartitionColumns]] or automatically
    * discovered.  Note that they should always be nullable.
    *
    * @since 1.4.0
    */
-  final def partitionColumns: StructType =
-    userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
+ * final def partitionColumns: StructType =
+ * userDefinedPartitionColumns.getOrElse(partitionSpec.partitionColumns)
 
-  /**
+ * /**
    * Optional user defined partition columns.
    *
    * @since 1.4.0
    */
-  def userDefinedPartitionColumns: Option[StructType] = None
+ * def userDefinedPartitionColumns: Option[StructType] = None
 
-  private[sql] def refresh(): Unit = {
-    fileStatusCache.refresh()
-    if (sqlContext.conf.partitionDiscoveryEnabled()) {
-      _partitionSpec = discoverPartitions()
-    }
-  }
+ * private[sql] def refresh(): Unit = {
+ * fileStatusCache.refresh()
+ * if (sqlContext.conf.partitionDiscoveryEnabled()) {
+ * _partitionSpec = discoverPartitions()
+ * }
+ * }
 
-  /**
+ * /**
    * Schema of this relation.  It consists of columns appearing in [[dataSchema]] and all partition
    * columns not appearing in [[dataSchema]].
    *
    * @since 1.4.0
    */
-  override lazy val schema: StructType = {
-    val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
-    StructType(dataSchema ++ partitionColumns.filterNot { column =>
-      dataSchemaColumnNames.contains(column.name.toLowerCase)
-    })
-  }
+ * override lazy val schema: StructType = {
+ * val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
+ * StructType(dataSchema ++ partitionColumns.filterNot { column =>
+ * dataSchemaColumnNames.contains(column.name.toLowerCase)
+ * })
+ * }
 
-  /**
+ * /**
    * Groups the input files by bucket id, if bucketing is enabled and this data source is bucketed.
    * Returns None if there exists any malformed bucket files.
    */
-  private def groupBucketFiles(
-      files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
-    malformedBucketFile = false
-    if (getBucketSpec.isDefined) {
-      val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
-      var i = 0
-      while (!malformedBucketFile && i < files.length) {
-        val bucketId = BucketingUtils.getBucketId(files(i).getPath.getName)
-        if (bucketId.isEmpty) {
-          logError(s"File ${files(i).getPath} is expected to be a bucket file, but there is no " +
-            "bucket id information in file name. Fall back to non-bucketing mode.")
-          malformedBucketFile = true
-        } else {
-          val bucketFiles =
-            groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty)
-          bucketFiles += files(i)
-        }
-        i += 1
-      }
-      if (malformedBucketFile) None else Some(groupedBucketFiles.mapValues(_.toArray))
-    } else {
-      None
-    }
-  }
+ * private def groupBucketFiles(
+ * files: Array[FileStatus]): Option[scala.collection.Map[Int, Array[FileStatus]]] = {
+ * malformedBucketFile = false
+ * if (getBucketSpec.isDefined) {
+ * val groupedBucketFiles = mutable.HashMap.empty[Int, mutable.ArrayBuffer[FileStatus]]
+ * var i = 0
+ * while (!malformedBucketFile && i < files.length) {
+ * val bucketId = BucketingUtils.getBucketId(files(i).getPath.getName)
+ * if (bucketId.isEmpty) {
+ * logError(s"File ${files(i).getPath} is expected to be a bucket file, but there is no " +
+ * "bucket id information in file name. Fall back to non-bucketing mode.")
+ * malformedBucketFile = true
+ * } else {
+ * val bucketFiles =
+ * groupedBucketFiles.getOrElseUpdate(bucketId.get, mutable.ArrayBuffer.empty)
+ * bucketFiles += files(i)
+ * }
+ * i += 1
+ * }
+ * if (malformedBucketFile) None else Some(groupedBucketFiles.mapValues(_.toArray))
+ * } else {
+ * None
+ * }
+ * }
 
-  final private[sql] def buildInternalScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputPaths: Array[String],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val inputStatuses = inputPaths.flatMap { input =>
-      val path = new Path(input)
+ * final private[sql] def buildInternalScan(
+ * requiredColumns: Array[String],
+ * filters: Array[Filter],
+ * bucketSet: Option[BitSet],
+ * inputPaths: Array[String],
+ * broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+ * val inputStatuses = inputPaths.flatMap { input =>
+ * val path = new Path(input)
 
-      // First assumes `input` is a directory path, and tries to get all files contained in it.
-      fileStatusCache.leafDirToChildrenFiles.getOrElse(
-        path,
-        // Otherwise, `input` might be a file path
-        fileStatusCache.leafFiles.get(path).toArray
-      ).filter { status =>
-        val name = status.getPath.getName
-        !name.startsWith("_") && !name.startsWith(".")
-      }
-    }
+ * // First assumes `input` is a directory path, and tries to get all files contained in it.
+ * fileStatusCache.leafDirToChildrenFiles.getOrElse(
+ * path,
+ * // Otherwise, `input` might be a file path
+ * fileStatusCache.leafFiles.get(path).toArray
+ * ).filter { status =>
+ * val name = status.getPath.getName
+ * !name.startsWith("_") && !name.startsWith(".")
+ * }
+ * }
 
-    groupBucketFiles(inputStatuses).map { groupedBucketFiles =>
-      // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket
-      // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
-      // bucket), and coalesce it to one partition. Finally union all bucket RDDs to one result.
-      val perBucketRows = (0 until maybeBucketSpec.get.numBuckets).map { bucketId =>
-        // If the current bucketId is not set in the bucket bitSet, skip scanning it.
-        if (bucketSet.nonEmpty && !bucketSet.get.get(bucketId)){
-          sqlContext.emptyResult
-        } else {
-          // When all the buckets need a scan (i.e., bucketSet is equal to None)
-          // or when the current bucket need a scan (i.e., the bit of bucketId is set to true)
-          groupedBucketFiles.get(bucketId).map { inputStatuses =>
-            buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
-          }.getOrElse(sqlContext.emptyResult)
-        }
-      }
+ * groupBucketFiles(inputStatuses).map { groupedBucketFiles =>
+ * // For each bucket id, firstly we get all files belong to this bucket, by detecting bucket
+ * // id from file name. Then read these files into a RDD(use one-partition empty RDD for empty
+ * // bucket), and coalesce it to one partition. Finally union all bucket RDDs to one result.
+ * val perBucketRows = (0 until maybeBucketSpec.get.numBuckets).map { bucketId =>
+ * // If the current bucketId is not set in the bucket bitSet, skip scanning it.
+ * if (bucketSet.nonEmpty && !bucketSet.get.get(bucketId)){
+ * sqlContext.emptyResult
+ * } else {
+ * // When all the buckets need a scan (i.e., bucketSet is equal to None)
+ * // or when the current bucket need a scan (i.e., the bit of bucketId is set to true)
+ * groupedBucketFiles.get(bucketId).map { inputStatuses =>
+ * buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf).coalesce(1)
+ * }.getOrElse(sqlContext.emptyResult)
+ * }
+ * }
 
-      new UnionRDD(sqlContext.sparkContext, perBucketRows)
-    }.getOrElse {
-      buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
-    }
-  }
+ * new UnionRDD(sqlContext.sparkContext, perBucketRows)
+ * }.getOrElse {
+ * buildInternalScan(requiredColumns, filters, inputStatuses, broadcastedConf)
+ * }
+ * }
 
-  /**
+ * /**
    * Specifies schema of actual data files.  For partitioned relations, if one or more partitioned
    * columns are contained in the data files, they should also appear in `dataSchema`.
    *
    * @since 1.4.0
    */
-  def dataSchema: StructType
+ * def dataSchema: StructType
 
-  /**
+ * /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
    * and builds an `RDD[Row]` containing all rows within that single partition.
@@ -834,12 +837,12 @@ abstract class HadoopFsRelation2 private[sql](
    *        selected partition.
    * @since 1.4.0
    */
-  def buildScan(inputFiles: Array[FileStatus]): RDD[Row] = {
-    throw new UnsupportedOperationException(
-      "At least one buildScan() method should be overridden to read the relation.")
-  }
+ * def buildScan(inputFiles: Array[FileStatus]): RDD[Row] = {
+ * throw new UnsupportedOperationException(
+ * "At least one buildScan() method should be overridden to read the relation.")
+ * }
 
-  /**
+ * /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
    * and builds an `RDD[Row]` containing all rows within that single partition.
@@ -850,49 +853,49 @@ abstract class HadoopFsRelation2 private[sql](
    *        selected partition.
    * @since 1.4.0
    */
-  // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
-  //
-  // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
-  // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
-  // introduce another row value conversion for data sources whose `needConversion` is true.
-  def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
-    // Yeah, to workaround serialization...
-    val dataSchema = this.dataSchema
-    val needConversion = this.needConversion
+ * // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
+ * //
+ * // PR #7626 separated `Row` and `InternalRow` completely.  One of the consequences is that we can
+ * // no longer treat an `InternalRow` containing Catalyst values as a `Row`.  Thus we have to
+ * // introduce another row value conversion for data sources whose `needConversion` is true.
+ * def buildScan(requiredColumns: Array[String], inputFiles: Array[FileStatus]): RDD[Row] = {
+ * // Yeah, to workaround serialization...
+ * val dataSchema = this.dataSchema
+ * val needConversion = this.needConversion
 
-    val requiredOutput = requiredColumns.map { col =>
-      val field = dataSchema(col)
-      BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
-    }.toSeq
+ * val requiredOutput = requiredColumns.map { col =>
+ * val field = dataSchema(col)
+ * BoundReference(dataSchema.fieldIndex(col), field.dataType, field.nullable)
+ * }.toSeq
 
-    val rdd: RDD[Row] = buildScan(inputFiles)
-    val converted: RDD[InternalRow] =
-      if (needConversion) {
-        RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
-      } else {
-        rdd.asInstanceOf[RDD[InternalRow]]
-      }
+ * val rdd: RDD[Row] = buildScan(inputFiles)
+ * val converted: RDD[InternalRow] =
+ * if (needConversion) {
+ * RDDConversions.rowToRowRdd(rdd, dataSchema.fields.map(_.dataType))
+ * } else {
+ * rdd.asInstanceOf[RDD[InternalRow]]
+ * }
 
-    converted.mapPartitions { rows =>
-      val buildProjection =
-        GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
+ * converted.mapPartitions { rows =>
+ * val buildProjection =
+ * GenerateMutableProjection.generate(requiredOutput, dataSchema.toAttributes)
 
-      val projectedRows = {
-        val mutableProjection = buildProjection()
-        rows.map(r => mutableProjection(r))
-      }
+ * val projectedRows = {
+ * val mutableProjection = buildProjection()
+ * rows.map(r => mutableProjection(r))
+ * }
 
-      if (needConversion) {
-        val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
-        val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
-        projectedRows.map(toScala(_).asInstanceOf[Row])
-      } else {
-        projectedRows
-      }
-    }.asInstanceOf[RDD[Row]]
-  }
+ * if (needConversion) {
+ * val requiredSchema = StructType(requiredColumns.map(dataSchema(_)))
+ * val toScala = CatalystTypeConverters.createToScalaConverter(requiredSchema)
+ * projectedRows.map(toScala(_).asInstanceOf[Row])
+ * } else {
+ * projectedRows
+ * }
+ * }.asInstanceOf[RDD[Row]]
+ * }
 
-  /**
+ * /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
    * and builds an `RDD[Row]` containing all rows within that single partition.
@@ -907,14 +910,14 @@ abstract class HadoopFsRelation2 private[sql](
    *        selected partition.
    * @since 1.4.0
    */
-  def buildScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputFiles: Array[FileStatus]): RDD[Row] = {
-    buildScan(requiredColumns, inputFiles)
-  }
+ * def buildScan(
+ * requiredColumns: Array[String],
+ * filters: Array[Filter],
+ * inputFiles: Array[FileStatus]): RDD[Row] = {
+ * buildScan(requiredColumns, inputFiles)
+ * }
 
-  /**
+ * /**
    * For a non-partitioned relation, this method builds an `RDD[Row]` containing all rows within
    * this relation. For partitioned relations, this method is called for each selected partition,
    * and builds an `RDD[Row]` containing all rows within that single partition.
@@ -933,15 +936,15 @@ abstract class HadoopFsRelation2 private[sql](
    *                        overhead of broadcasting the Configuration for every Hadoop RDD.
    * @since 1.4.0
    */
-  private[sql] def buildScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
-    buildScan(requiredColumns, filters, inputFiles)
-  }
+ * private[sql] def buildScan(
+ * requiredColumns: Array[String],
+ * filters: Array[Filter],
+ * inputFiles: Array[FileStatus],
+ * broadcastedConf: Broadcast[SerializableConfiguration]): RDD[Row] = {
+ * buildScan(requiredColumns, filters, inputFiles)
+ * }
 
-  /**
+ * /**
    * For a non-partitioned relation, this method builds an `RDD[InternalRow]` containing all rows
    * within this relation. For partitioned relations, this method is called for each selected
    * partition, and builds an `RDD[InternalRow]` containing all rows within that single partition.
@@ -962,24 +965,24 @@ abstract class HadoopFsRelation2 private[sql](
    * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
    *        overhead of broadcasting the Configuration for every Hadoop RDD.
    */
-  private[sql] def buildInternalScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val requiredSchema = StructType(requiredColumns.map(dataSchema.apply))
-    val internalRows = {
-      val externalRows = buildScan(requiredColumns, filters, inputFiles, broadcastedConf)
-      execution.RDDConversions.rowToRowRdd(externalRows, requiredSchema.map(_.dataType))
-    }
+ * private[sql] def buildInternalScan(
+ * requiredColumns: Array[String],
+ * filters: Array[Filter],
+ * inputFiles: Array[FileStatus],
+ * broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+ * val requiredSchema = StructType(requiredColumns.map(dataSchema.apply))
+ * val internalRows = {
+ * val externalRows = buildScan(requiredColumns, filters, inputFiles, broadcastedConf)
+ * execution.RDDConversions.rowToRowRdd(externalRows, requiredSchema.map(_.dataType))
+ * }
 
-    internalRows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredSchema)
-      iterator.map(unsafeProjection)
-    }
-  }
+ * internalRows.mapPartitions { iterator =>
+ * val unsafeProjection = UnsafeProjection.create(requiredSchema)
+ * iterator.map(unsafeProjection)
+ * }
+ * }
 
-  /**
+ * /**
    * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
    * be put here.  For example, user defined output committer can be configured here
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
@@ -990,8 +993,8 @@ abstract class HadoopFsRelation2 private[sql](
    *
    * @since 1.4.0
    */
-  def prepareJobForWrite(job: Job): OutputWriterFactory
-}
+ * def prepareJobForWrite(job: Job): OutputWriterFactory
+ * }
  */
 
 private[sql] object HadoopFsRelation extends Logging {

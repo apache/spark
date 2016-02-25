@@ -25,7 +25,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.{RunnableCommand, SQLExecution}
@@ -57,18 +57,26 @@ import org.apache.spark.util.Utils
  *      thrown during job commitment, also aborts the job.
  */
 private[sql] case class InsertIntoHadoopFsRelation(
-    path: String,
+    outputPath: Path,
     partitionColumns: Seq[Attribute],
-    dataColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
-    fileFormatWriter: Job => OutputWriterFactory,
+    fileFormat: FileFormat,
     @transient query: LogicalPlan,
     mode: SaveMode)
   extends RunnableCommand {
 
+  override def children: Seq[LogicalPlan] = query :: Nil
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
+      val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
+          s"cannot save to file.")
+    }
+
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
-    val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
@@ -100,11 +108,19 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[InternalRow])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
+      val partitionSet = AttributeSet(partitionColumns)
+      val dataColumns = query.output.filterNot(partitionSet.contains)
+
       val queryExecution = DataFrame(sqlContext, query).queryExecution
       SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
 
         val relation =
-          WriteRelation(sqlContext, dataColumns.toStructType, path, fileFormatWriter, bucketSpec)
+          WriteRelation(
+            sqlContext,
+            dataColumns.toStructType,
+            qualifiedOutputPath.toString,
+            fileFormat.prepareWrite(sqlContext, _, dataColumns.toStructType),
+            bucketSpec)
 
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
@@ -112,9 +128,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
           new DynamicPartitionWriterContainer(
             relation,
             job,
-            partitionColumns,
-            dataColumns,
-            output,
+            partitionColumns = partitionColumns,
+            dataColumns = dataColumns,
+            inputSchema = output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,
             sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
             isAppend)

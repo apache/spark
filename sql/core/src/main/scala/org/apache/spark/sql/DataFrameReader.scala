@@ -372,11 +372,14 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
 
-//      sqlContext.baseRelationToDataFrame(
-//        new ParquetRelation(
-//          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
-
-      ???
+      sqlContext.baseRelationToDataFrame(
+        ResolvedDataSource.apply(
+          sqlContext,
+          userSpecifiedSchema,
+          Array.empty,
+          None,
+          "parquet",
+          extraOptions.toMap + ("paths" -> globbedPaths.map(_.toString).mkString(","))).relation)
     }
   }
 
