@@ -187,7 +187,7 @@ case class BroadcastHashJoin(
     */
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    val (keyEv, _) = genStreamSideJoinKey(ctx, input)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val resultVars = buildSide match {
@@ -219,7 +219,7 @@ case class BroadcastHashJoin(
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
-         |UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |if ($matched != null) {
          |  ${buildVars.map(_.code).mkString("\n")}
          |  $outputCode
@@ -235,7 +235,7 @@ case class BroadcastHashJoin(
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashRelation
-         |$bufferType $matches = ($bufferType)$relationTerm.get(${keyEv.value});
+         |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
          |if ($matches != null) {
          |  int $size = $matches.size();
          |  for (int $i = 0; $i < $size; $i++) {

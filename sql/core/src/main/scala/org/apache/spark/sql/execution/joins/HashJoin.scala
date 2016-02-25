@@ -152,11 +152,11 @@ trait HashJoin {
           while (currentHashMatches == null && streamIter.hasNext) {
             currentStreamedRow = streamIter.next()
             val key = joinKeys(currentStreamedRow)
-            // We do filtering null keys by inserting a Filter before inner join,
-            // So don't need to check nullability of keys again.
-            currentHashMatches = hashedRelation.get(key)
-            if (currentHashMatches != null) {
-              currentMatchPosition = 0
+            if (!key.anyNull) {
+              currentHashMatches = hashedRelation.get(key)
+              if (currentHashMatches != null) {
+                currentMatchPosition = 0
+              }
             }
           }
           if (currentHashMatches == null) {

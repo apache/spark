@@ -421,7 +421,10 @@ private[joins] class SortMergeJoinScanner(
    *         results.
    */
   final def findNextInnerJoinRows(): Boolean = {
-    advancedStreamed()
+    while (advancedStreamed() && streamedRowKey.anyNull) {
+      // Advance the streamed side of the join until we find the next row whose join key contains
+      // no nulls or we hit the end of the streamed iterator.
+    }
     if (streamedRow == null) {
       // We have consumed the entire streamed iterator, so there can be no more matches.
       matchJoinKey = null
@@ -440,9 +443,14 @@ private[joins] class SortMergeJoinScanner(
       // Advance both the streamed and buffered iterators to find the next pair of matching rows.
       var comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
       do {
-        comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-        if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
-        else if (comp < 0) advancedStreamed()
+        if (streamedRowKey.anyNull) {
+          advancedStreamed()
+        } else {
+          assert(!bufferedRowKey.anyNull)
+          comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
+          if (comp > 0) advancedBufferedToRowWithNullFreeJoinKey()
+          else if (comp < 0) advancedStreamed()
+        }
       } while (streamedRow != null && bufferedRow != null && comp != 0)
       if (streamedRow == null || bufferedRow == null) {
         // We have either hit the end of one of the iterators, so there can be no more matches.
