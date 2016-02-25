@@ -149,7 +149,7 @@ class BigQueryBaseCursor(object):
         self.service = service
         self.project_id = project_id
 
-    def run_query(self, bql, destination_dataset_table = False, write_disposition = 'WRITE_EMPTY'):
+    def run_query(self, bql, destination_dataset_table = False, write_disposition = 'WRITE_EMPTY', allow_large_results=False):
         """
         Executes a BigQuery SQL query. Optionally persists results in a BigQuery
         table. See here:
@@ -164,10 +164,12 @@ class BigQueryBaseCursor(object):
             BigQuery table to save the query results.
         :param write_disposition: What to do if the table already exists in
             BigQuery.
+        :param allow_large_results: Whether to allow large results.
+        :type allow_large_results: boolean
         """
         configuration = {
             'query': {
-                'query': bql
+                'query': bql,
             }
         }
 
@@ -176,6 +178,7 @@ class BigQueryBaseCursor(object):
                 'Expected destination_dataset_table in the format of <dataset>.<table>. Got: {}'.format(destination_dataset_table)
             destination_dataset, destination_table = destination_dataset_table.split('.', 1)
             configuration['query'].update({
+                'allowLargeResults': allow_large_results,
                 'writeDisposition': write_disposition,
                 'destinationTable': {
                     'projectId': self.project_id,
@@ -205,7 +208,7 @@ class BigQueryBaseCursor(object):
         :param compression: Type of compression to use.
         :type compression: string
         :param export_format: File format to export.
-        :type field_delimiter: string
+        :type export_format: string
         :param field_delimiter: The delimiter to use when extracting to a CSV.
         :type field_delimiter: string
         :param print_header: Whether to print a header for a CSV file extract.
@@ -288,6 +291,63 @@ class BigQueryBaseCursor(object):
                 }
             }
         }
+
+        return self.run_with_configuration(configuration)
+
+    def run_load(self, destination_dataset_table, schema_fields, source_uris, source_format='CSV', create_disposition='CREATE_IF_NEEDED', skip_leading_rows=0, write_disposition='WRITE_EMPTY', field_delimiter=','):
+        """
+        Executes a BigQuery load command to load data from Google Cloud Storage
+        to BigQuery. See here:
+
+        https://cloud.google.com/bigquery/docs/reference/v2/jobs
+
+        For more details about these parameters.
+
+        :param destination_dataset_table: The dotted <dataset>.<table> BigQuery table to load data into.
+        :type destination_dataset_table: string
+        :param schema_fields: The schema field list as defined here:
+            https://cloud.google.com/bigquery/docs/reference/v2/jobs#configuration.load
+        :type schema_fields: list
+        :param source_uris: The source Google Cloud 
+            Storage URI (e.g. gs://some-bucket/some-file.txt). A single wild
+            per-object name can be used.
+        :type source_uris: list
+        :param source_format: File format to export.
+        :type source_format: string
+        :param create_disposition: The create disposition if the table doesn't exist.
+        :type create_disposition: string
+        :param skip_leading_rows: Number of rows to skip when loading from a CSV.
+        :type skip_leading_rows: int
+        :param write_disposition: The write disposition if the table already exists.
+        :type write_disposition: string
+        :param field_delimiter: The delimiter to use when loading from a CSV.
+        :type field_delimiter: string
+        """
+        assert '.' in destination_dataset_table, \
+            'Expected destination_dataset_table in the format of <dataset>.<table>. Got: {}'.format(destination_dataset_table)
+
+        destination_dataset, destination_table = destination_dataset_table.split('.', 1)
+
+        configuration = {
+            'load': {
+                'createDisposition': create_disposition,
+                'destinationTable': {
+                    'projectId': self.project_id,
+                    'datasetId': destination_dataset,
+                    'tableId': destination_table,
+                },
+                'schema': {
+                    'fields': schema_fields
+                },
+                'sourceFormat': source_format,
+                'sourceUris': source_uris,
+                'writeDisposition': write_disposition,
+            }
+        }
+
+        if source_format == 'CSV':
+            configuration['load']['skipLeadingRows'] = skip_leading_rows
+            configuration['load']['fieldDelimiter'] = field_delimiter
 
         return self.run_with_configuration(configuration)
 
