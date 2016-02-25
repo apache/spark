@@ -167,38 +167,6 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery)
   }
 
-  test("nondeterministic: push down part of filter through project") {
-    val originalQuery = testRelation
-      .select(Rand(10).as('rand), 'a)
-      .where('rand > 5 && 'a > 5)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-
-    val correctAnswer = testRelation
-      .where('a > 5)
-      .select(Rand(10).as('rand), 'a)
-      .where('rand > 5)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("nondeterministic: push down filter through project") {
-    val originalQuery = testRelation
-      .select(Rand(10).as('rand), 'a)
-      .where('a > 5 && 'a < 10)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-    val correctAnswer = testRelation
-      .where('a > 5 && 'a < 10)
-      .select(Rand(10).as('rand), 'a)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
   test("filters: combines filters") {
     val originalQuery = testRelation
       .select('a)
