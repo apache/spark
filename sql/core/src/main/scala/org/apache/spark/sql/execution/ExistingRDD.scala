@@ -152,7 +152,6 @@ private[sql] case class PhysicalRDD(
        | while ($input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
        |   $numOutputRows.add(1);
-       |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
        |   if (shouldStop()) {
        |     return;
