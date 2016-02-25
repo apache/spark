@@ -74,13 +74,6 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   def getLink: String = $(link)
 
   import GeneralizedLinearRegression._
-  protected lazy val familyObj = Family.fromName($(family))
-  protected lazy val linkObj = if (isDefined(link)) {
-    Link.fromName($(link))
-  } else {
-    familyObj.defaultLink
-  }
-  protected lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   @Since("2.0.0")
   override def validateParams(): Unit = {
@@ -88,9 +81,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       setDefault(maxIter -> 25)
     }
     if (isDefined(link)) {
-      require(GeneralizedLinearRegression.supportedFamilyAndLinkParis.contains(
-        familyObj -> linkObj), s"Generalized Linear Regression with ${$(family)} family " +
-        s"does not support ${$(link)} link function.")
+      require(supportedFamilyAndLinkPairs.contains(
+        Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
+        s"with ${$(family)} family does not support ${$(link)} link function.")
     }
   }
 }
@@ -115,6 +108,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   extends Regressor[Vector, GeneralizedLinearRegression, GeneralizedLinearRegressionModel]
   with GeneralizedLinearRegressionBase with Logging {
 
+  import GeneralizedLinearRegression._
+
   @Since("2.0.0")
   def this() = this(Identifiable.randomUID("glm"))
 
@@ -125,7 +120,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
-  setDefault(family -> "gaussian")
+  setDefault(family -> Gaussian.name)
 
   /**
    * Sets the value of param [[link]].
@@ -189,6 +184,14 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   setDefault(solver -> "irls")
 
   override protected def train(dataset: DataFrame): GeneralizedLinearRegressionModel = {
+    val familyObj = Family.fromName($(family))
+    val linkObj = if (isDefined(link)) {
+      Link.fromName($(link))
+    } else {
+      familyObj.defaultLink
+    }
+    val familyAndLink = new FamilyAndLink(familyObj, linkObj)
+
     val numFeatures = dataset.select(col($(featuresCol))).limit(1)
       .map { case Row(features: Vector) =>
         features.size
@@ -205,8 +208,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         Instance(label, weight, features)
       }
 
-    if (familyObj == GeneralizedLinearRegression.Gaussian &&
-      linkObj == GeneralizedLinearRegression.Identity) {
+    if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         standardizeFeatures = true, standardizeLabel = true)
@@ -237,7 +239,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 private[ml] object GeneralizedLinearRegression {
 
   /** Set of family and link pairs that GeneralizedLinearRegression supports. */
-  lazy val supportedFamilyAndLinkParis = Set(
+  lazy val supportedFamilyAndLinkPairs = Set(
     Gaussian -> Identity, Gaussian -> Log, Gaussian -> Inverse,
     Binomial -> Logit, Binomial -> Probit, Binomial -> CLogLog,
     Poisson -> Log, Poisson -> Identity, Poisson -> Sqrt,
@@ -245,17 +247,17 @@ private[ml] object GeneralizedLinearRegression {
   )
 
   /** Set of family names that GeneralizedLinearRegression supports. */
-  lazy val supportedFamilyNames = supportedFamilyAndLinkParis.map(_._1.name)
+  lazy val supportedFamilyNames = supportedFamilyAndLinkPairs.map(_._1.name)
 
   /** Set of link names that GeneralizedLinearRegression supports. */
-  lazy val supportedLinkNames = supportedFamilyAndLinkParis.map(_._2.name)
+  lazy val supportedLinkNames = supportedFamilyAndLinkPairs.map(_._2.name)
 
   val epsilon: Double = 1E-16
 
   /**
    * Wrapper of family and link combination used in the model.
    */
-  private[ml] class FamilyAndLink(val family: Family, var link: Link) extends Serializable {
+  private[ml] class FamilyAndLink(val family: Family, val link: Link) extends Serializable {
 
     /** Linear predictor based on given mu. */
     def predict(mu: Double): Double = link.link(family.project(mu))
@@ -551,6 +553,16 @@ class GeneralizedLinearRegressionModel private[ml] (
     @Since("2.0.0") val intercept: Double)
   extends RegressionModel[Vector, GeneralizedLinearRegressionModel]
   with GeneralizedLinearRegressionBase {
+
+  import GeneralizedLinearRegression._
+
+  lazy val familyObj = Family.fromName($(family))
+  lazy val linkObj = if (isDefined(link)) {
+    Link.fromName($(link))
+  } else {
+    familyObj.defaultLink
+  }
+  lazy val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
   override protected def predict(features: Vector): Double = {
     val eta = BLAS.dot(features, coefficients) + intercept

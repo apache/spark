@@ -156,6 +156,10 @@ private[ml] class WeightedLeastSquares(
 
 private[ml] object WeightedLeastSquares {
 
+  /**
+   * In order to take the normal equation approach efficiently, [[WeightedLeastSquares]]
+   * only supports the number of features is no more than 4096.
+   */
   val MaxNumFeatures: Int = 4096
 
   /**
