@@ -31,7 +31,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
+//import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
@@ -334,14 +334,15 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    sqlContext.baseRelationToDataFrame(
-      new JSONRelation(
-        Some(jsonRDD),
-        maybeDataSchema = userSpecifiedSchema,
-        maybePartitionSpec = None,
-        userDefinedPartitionColumns = None,
-        parameters = extraOptions.toMap)(sqlContext)
-    )
+//    sqlContext.baseRelationToDataFrame(
+//      new JSONRelation(
+//        Some(jsonRDD),
+//        maybeDataSchema = userSpecifiedSchema,
+//        maybePartitionSpec = None,
+//        userDefinedPartitionColumns = None,
+//        parameters = extraOptions.toMap)(sqlContext)
+//    )
+    ???
   }
 
   /**

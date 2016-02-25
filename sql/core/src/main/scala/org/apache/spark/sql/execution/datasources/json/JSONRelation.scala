@@ -40,7 +40,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-
+/*
 class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "json"
@@ -73,7 +73,7 @@ private[sql] class JSONRelation(
     override val paths: Array[String] = Array.empty[String],
     parameters: Map[String, String] = Map.empty[String, String])
     (@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters) {
+  extends HadoopFsRelation {
 
   val options: JSONOptions = new JSONOptions(parameters)
 
@@ -222,3 +222,4 @@ private[json] class JsonOutputWriter(
     recordWriter.close(context)
   }
 }
+*/

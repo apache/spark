@@ -312,7 +312,7 @@ private[sql] class DynamicPartitionWriterContainer(
     isAppend: Boolean)
   extends BaseWriterContainer(relation, job, isAppend) {
 
-  private val bucketSpec = relation.maybeBucketSpec
+  private val bucketSpec = relation.getBucketSpec
 
   private val bucketColumns: Seq[Attribute] = bucketSpec.toSeq.flatMap {
     spec => spec.bucketColumnNames.map(c => inputSchema.find(_.name == c).get)

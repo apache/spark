@@ -126,7 +126,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
              |Actual: ${partitionColumns.mkString(", ")}
           """.stripMargin)
 
-        val writerContainer = if (partitionColumns.isEmpty && relation.maybeBucketSpec.isEmpty) {
+        val writerContainer = if (partitionColumns.isEmpty && relation.getBucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
         } else {
           val output = df.queryExecution.executedPlan.output

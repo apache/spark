@@ -464,6 +464,35 @@ abstract class OutputWriter {
   }
 }
 
+class HadoopFsRelation extends BaseRelation {
+  override def sqlContext: SQLContext = ???
+
+  override def schema: StructType = ???
+
+  def getBucketSpec: Option[BucketSpec] = ???
+
+  def partitionSpec: PartitionSpec = ???
+
+  def partitionColumns: StructType = partitionSpec.partitionColumns
+
+  def dataSchema: StructType = ???
+
+  def paths: Array[String] = ???
+
+  def refresh(): Unit = ???
+
+  protected def cachedLeafStatuses(): mutable.LinkedHashSet[FileStatus] = ???
+
+  def prepareJobForWrite(job: Job): OutputWriterFactory = ???
+
+  def buildInternalScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      bucketSet: Option[BitSet],
+      inputPaths: Array[String],
+      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = ???
+}
+
 /**
  * ::Experimental::
  * A [[BaseRelation]] that provides much of the common code required for relations that store their
@@ -488,7 +517,7 @@ abstract class OutputWriter {
  * @since 1.4.0
  */
 @Experimental
-abstract class HadoopFsRelation private[sql](
+abstract class HadoopFsRelation2 private[sql](
     maybePartitionSpec: Option[PartitionSpec],
     parameters: Map[String, String])
   extends BaseRelation with FileRelation with Logging {
@@ -497,10 +526,8 @@ abstract class HadoopFsRelation private[sql](
 
   def this() = this(None, Map.empty[String, String])
 
-  def this(parameters: Map[String, String]) = this(None, parameters)
-
-  private[sql] def this(maybePartitionSpec: Option[PartitionSpec]) =
-    this(maybePartitionSpec, Map.empty[String, String])
+  //private[sql] def this(maybePartitionSpec: Option[PartitionSpec]) =
+   // this(maybePartitionSpec, Map.empty[String, String])
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 

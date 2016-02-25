@@ -38,7 +38,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A data source for reading text files.
- */
+
 class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
   override def createRelation(
@@ -173,3 +173,4 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
     recordWriter.close(context)
   }
 }
+ */
