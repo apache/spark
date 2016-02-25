@@ -203,13 +203,6 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   }.sum
 
   /**
-   * Returns weighted averaged specificity
-   */
-  lazy val weightedSpecificity: Double = labelCountByClass.map { case (category, count) =>
-    specificity(category) * count.toDouble / labelCount
-  }.sum
-
-  /**
    * Returns weighted averaged f-measure
    * @param beta the beta parameter.
    */
