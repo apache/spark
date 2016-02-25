@@ -202,7 +202,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test multiple session") {
-    import org.apache.spark.sql.SQLConf
+    import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null

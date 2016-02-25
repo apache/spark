@@ -20,12 +20,15 @@ package org.apache.spark.streaming.akka
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import akka.actor._
 import akka.actor.SupervisorStrategy.{Escalate, Restart}
+import akka.pattern.ask
+import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 
 import org.apache.spark.{Logging, TaskContext}
@@ -105,12 +108,25 @@ abstract class ActorReceiver extends Actor {
   }
 
   /**
-   * Store a single item of received data to Spark's memory.
+   * Store a single item of received data to Spark's memory asynchronously.
    * These single items will be aggregated together into data blocks before
    * being pushed into Spark's memory.
    */
   def store[T](item: T) {
     context.parent ! SingleItemData(item)
+  }
+
+  /**
+   * Store a single item of received data to Spark's memory and returns a `Future`.
+   * The `Future` will be completed when the operator finishes, or with an
+   * `akka.pattern.AskTimeoutException` after the given timeout has expired.
+   * These single items will be aggregated together into data blocks before
+   * being pushed into Spark's memory.
+   *
+   * This method allows the user to control the flow speed using `Future`
+   */
+  def store[T](item: T, timeout: Timeout): Future[Unit] = {
+    context.parent.ask(AskStoreSingleItemData(item))(timeout).map(_ => ())(context.dispatcher)
   }
 }
 
@@ -162,6 +178,19 @@ abstract class JavaActorReceiver extends UntypedActor {
   def store[T](item: T) {
     context.parent ! SingleItemData(item)
   }
+
+  /**
+   * Store a single item of received data to Spark's memory and returns a `Future`.
+   * The `Future` will be completed when the operator finishes, or with an
+   * `akka.pattern.AskTimeoutException` after the given timeout has expired.
+   * These single items will be aggregated together into data blocks before
+   * being pushed into Spark's memory.
+   *
+   * This method allows the user to control the flow speed using `Future`
+   */
+  def store[T](item: T, timeout: Timeout): Future[Unit] = {
+    context.parent.ask(AskStoreSingleItemData(item))(timeout).map(_ => ())(context.dispatcher)
+  }
 }
 
 /**
@@ -179,8 +208,10 @@ case class Statistics(numberOfMsgs: Int,
 /** Case class to receive data sent by child actors */
 private[akka] sealed trait ActorReceiverData
 private[akka] case class SingleItemData[T](item: T) extends ActorReceiverData
+private[akka] case class AskStoreSingleItemData[T](item: T) extends ActorReceiverData
 private[akka] case class IteratorData[T](iterator: Iterator[T]) extends ActorReceiverData
 private[akka] case class ByteBufferData(bytes: ByteBuffer) extends ActorReceiverData
+private[akka] object Ack extends ActorReceiverData
 
 /**
  * Provides Actors as receivers for receiving stream.
@@ -232,6 +263,12 @@ private[akka] class ActorReceiverSupervisor[T: ClassTag](
         logDebug("received single")
         store(msg.asInstanceOf[T])
         n.incrementAndGet
+
+      case AskStoreSingleItemData(msg) =>
+        logDebug("received single sync")
+        store(msg.asInstanceOf[T])
+        n.incrementAndGet
+        sender() ! Ack
 
       case ByteBufferData(bytes) =>
         logDebug("received bytes")

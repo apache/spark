@@ -939,7 +939,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed):
     """
     .. note:: Experimental
 
@@ -951,7 +951,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
 
     >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets")
+    ...     inputCol="values", outputCol="buckets", seed=123)
+    >>> qds.getSeed()
+    123
     >>> bucketizer = qds.fit(df)
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
@@ -971,9 +973,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
                        "categories) into which data points are grouped. Must be >= 2. Default 2.")
 
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None)
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -987,9 +989,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
