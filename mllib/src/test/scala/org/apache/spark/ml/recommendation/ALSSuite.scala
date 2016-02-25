@@ -342,11 +342,10 @@ class ALSSuite
       .setSeed(0)
     val alpha = als.getAlpha
     val model = als.fit(training.toDF())
-    val predictions = model.transform(test.toDF())
-      .select("rating", "prediction")
-      .map { case Row(rating: Float, prediction: Float) =>
+    val predictions = model.transform(test.toDF()).select("rating", "prediction").rdd.map {
+      case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)
-      }
+    }
     val rmse =
       if (implicitPrefs) {
         // TODO: Use a better (rank-based?) evaluation metric for implicit feedback.

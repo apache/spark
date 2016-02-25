@@ -84,11 +84,10 @@ class BinaryClassificationEvaluator @Since("1.4.0") (@Since("1.4.0") override va
     SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
 
     // TODO: When dataset metadata has been implemented, check rawPredictionCol vector length = 2.
-    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol))
-      .map {
-        case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
-        case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
-      }
+    val scoreAndLabels = dataset.select($(rawPredictionCol), $(labelCol)).rdd.map {
+      case Row(rawPrediction: Vector, label: Double) => (rawPrediction(1), label)
+      case Row(rawPrediction: Double, label: Double) => (rawPrediction, label)
+    }
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
     val metric = $(metricName) match {
       case "areaUnderROC" => metrics.areaUnderROC()
