@@ -258,11 +258,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     val confCreate = mirror.classLoader.
       loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
       getMethod("create", classOf[Configuration])
-
     val obtainToken = mirror.classLoader.
       loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
       getMethod("obtainToken", classOf[Configuration])
-
     val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
     if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
       logDebug("Attempting to fetch HBase security token.")
