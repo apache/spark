@@ -307,7 +307,6 @@ private[csv] object EncodingTextInputFormat {
         bytes.slice(utf16beBOM.length, bytes.length)
       case "UTF-16LE" if bytes.startsWith(utf16leBOM) =>
         bytes.slice(utf16leBOM.length, bytes.length)
-        bytes.slice(2, bytes.length)
       case "UTF-32" | "UTF-32BE" if bytes.startsWith(utf32beBOM) =>
         bytes.slice(utf32beBOM.length, bytes.length)
       case "UTF-32LE" if bytes.startsWith(utf32leBOM) =>
