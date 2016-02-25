@@ -79,7 +79,7 @@ final class ChiSqSelector(override val uid: String)
 
   override def fit(dataset: DataFrame): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(labelCol), $(featuresCol)).map {
+    val input = dataset.select($(labelCol), $(featuresCol)).rdd.map {
       case Row(label: Double, features: Vector) =>
         LabeledPoint(label, features)
     }
