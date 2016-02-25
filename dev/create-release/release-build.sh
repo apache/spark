@@ -197,7 +197,7 @@ if [[ "$1" == "package" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir spark-*
   echo "Linking /latest to $dest_dir"
-  LFTP rm "$REMOTE_PARENT_DIR/latest"
+  LFTP rm -f "$REMOTE_PARENT_DIR/latest"
   LFTP ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
   exit 0
 fi
@@ -214,7 +214,7 @@ if [[ "$1" == "docs" ]]; then
   echo "Copying release documentation to $dest_dir"
   LFTP mkdir -p $dest_dir
   echo "Linking /latest to $dest_dir"
-  LFTP rm "$REMOTE_PARENT_DIR/latest"
+  LFTP rm -f "$REMOTE_PARENT_DIR/latest"
   LFTP ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
   LFTP mput -O $dest_dir _site/*
   cd ..
