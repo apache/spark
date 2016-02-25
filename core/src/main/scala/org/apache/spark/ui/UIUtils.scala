@@ -408,13 +408,6 @@ private[spark] object UIUtils extends Logging {
     </sup>
   }
 
-  /** Return a script element that automatically expands the DAG visualization on page load. */
-  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
-    <script type="text/javascript">
-      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
-    </script>
-  }
-
   /**
    * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
    * and make sure that it only contains anchors with root-relative links. Otherwise,
