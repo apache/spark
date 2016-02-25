@@ -52,15 +52,14 @@ class KafkaInputDStream[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     useReliableReceiver: Boolean,
-    storageLevel: StorageLevel,
-    useWhiteListTopicFilter: Boolean = false
+    storageLevel: StorageLevel
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
     if (!useReliableReceiver) {
-      new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel, useWhiteListTopicFilter)
+      new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
     } else {
-      new ReliableKafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel, useWhiteListTopicFilter)
+      new ReliableKafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
     }
   }
 }

@@ -55,8 +55,7 @@ class ReliableKafkaReceiver[
   T <: Decoder[_]: ClassTag](
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
-    storageLevel: StorageLevel,
-    useWhiteListTopicFilter: Boolean = false
+    storageLevel: StorageLevel
   ) extends Receiver[(K, V)](storageLevel) with Logging {
 
   private val groupId = kafkaParams("group.id")
@@ -125,7 +124,7 @@ class ReliableKafkaReceiver[
     blockGenerator.start()
 
     messageHandlerThreadPool =
-      ThreadUtils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
+      ThreadUtils.newDaemonFixedThreadPool(computeNumberOfThreads(), "KafkaMessageHandler")
 
     val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
@@ -143,29 +142,43 @@ class ReliableKafkaReceiver[
     }
   }
 
+  private def computeNumberOfThreads() : Int = {
+    topics match {
+      case filter: KafkaRegexTopicFilter => {
+        filter.numStreams
+      }
+      case _ => {
+        topics.values.sum
+      }
+    }
+  }
+
   private def createMessageHandlers(
       keyDecoder: Decoder[K], valueDecoder: Decoder[V]) : Iterable[MessageHandler] = {
-    if (!useWhiteListTopicFilter) {
-      val topicMessageStreams = consumerConnector.createMessageStreams(
-        topics, keyDecoder, valueDecoder)
+    topics match {
+      case filter: KafkaRegexTopicFilter => {
+        val topicFilter = if(filter.blackList) {
+          Blacklist(filter.regexFilter)
+        } else {
+          Whitelist(filter.regexFilter)
+        }
 
-      topicMessageStreams.values.flatten { streams =>
-        streams.map { stream =>
+        val topicMessageStreams = consumerConnector.createMessageStreamsByFilter(
+          topicFilter, filter.numStreams, keyDecoder, valueDecoder)
+
+        topicMessageStreams.map { stream =>
           new MessageHandler(stream)
         }
       }
-    } else {
-      val topicsHeadOption = topics.headOption
-      assert(topicsHeadOption.isDefined)
+      case _ => {
+        val topicMessageStreams = consumerConnector.createMessageStreams(
+          topics, keyDecoder, valueDecoder)
 
-      val topicsHead = topicsHeadOption.get
-      val topicFilter = Whitelist(topicsHead._1);
-
-      val topicMessageStreams = consumerConnector.createMessageStreamsByFilter(
-        topicFilter, topicsHead._2, keyDecoder, valueDecoder)
-
-      topicMessageStreams.map { stream =>
-        new MessageHandler(stream)
+        topicMessageStreams.values.flatten { streams =>
+          streams.map { stream =>
+            new MessageHandler(stream)
+          }
+        }
       }
     }
   }

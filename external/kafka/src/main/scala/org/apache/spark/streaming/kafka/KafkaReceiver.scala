@@ -18,17 +18,16 @@
 package org.apache.spark.streaming.kafka
 
 import java.util.Properties
-import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor}
 
 import kafka.consumer._
 import kafka.serializer.Decoder
-import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZKStringSerializer, ZkUtils}
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
-import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
+import kafka.utils.VerifiableProperties
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.ThreadUtils
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.Logging
 
-import scala.collection.{Map, mutable}
+import scala.collection.Map
 import scala.reflect.{ClassTag, classTag}
 
 /**
@@ -42,8 +41,7 @@ class KafkaReceiver[
   T <: Decoder[_] : ClassTag](
      kafkaParams: Map[String, String],
      topics: Map[String, Int],
-     storageLevel: StorageLevel,
-     useWhiteListTopicFilter: Boolean = false
+     storageLevel: StorageLevel
    ) extends Receiver[(K, V)](storageLevel) with Logging {
 
   // Connection to Kafka
@@ -57,7 +55,6 @@ class KafkaReceiver[
   }
 
   def onStart() {
-
     logInfo("Starting Kafka Consumer Stream with group: " + kafkaParams("group.id"))
 
     // Kafka connection properties
@@ -79,8 +76,10 @@ class KafkaReceiver[
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
 
+
+
     val messageHandlerThreadPool =
-      ThreadUtils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
+      ThreadUtils.newDaemonFixedThreadPool(computeNumberOfThreads(), "KafkaMessageHandler")
 
     try {
       createMessageHandlers(keyDecoder, valueDecoder).foreach(messageHandlerThreadPool.submit)
@@ -90,29 +89,43 @@ class KafkaReceiver[
     }
   }
 
+  private def computeNumberOfThreads() : Int = {
+    topics match {
+      case filter: KafkaRegexTopicFilter => {
+        filter.numStreams
+      }
+      case _ => {
+        topics.values.sum
+      }
+    }
+  }
+
   private def createMessageHandlers(
       keyDecoder: Decoder[K], valueDecoder: Decoder[V]) : Iterable[MessageHandler] = {
-    if (!useWhiteListTopicFilter) {
-      val topicMessageStreams = consumerConnector.createMessageStreams(
-        topics, keyDecoder, valueDecoder)
+    topics match {
+      case filter: KafkaRegexTopicFilter => {
+        val topicFilter = if(filter.blackList) {
+          Blacklist(filter.regexFilter)
+        } else {
+          Whitelist(filter.regexFilter)
+        }
 
-      topicMessageStreams.values.flatten { streams =>
-        streams.map { stream =>
+        val topicMessageStreams = consumerConnector.createMessageStreamsByFilter(
+          topicFilter, filter.numStreams, keyDecoder, valueDecoder)
+
+        topicMessageStreams.map { stream =>
           new MessageHandler(stream)
         }
       }
-    } else {
-      val topicsHeadOption = topics.headOption
-      assert(topicsHeadOption.isDefined)
+      case _ => {
+        val topicMessageStreams = consumerConnector.createMessageStreams(
+          topics, keyDecoder, valueDecoder)
 
-      val topicsHead = topicsHeadOption.get
-      val topicFilter = Whitelist(topicsHead._1);
-
-      val topicMessageStreams = consumerConnector.createMessageStreamsByFilter(
-        topicFilter, topicsHead._2, keyDecoder, valueDecoder)
-
-      topicMessageStreams.map { stream =>
-        new MessageHandler(stream)
+        topicMessageStreams.values.flatten { streams =>
+          streams.map { stream =>
+            new MessageHandler(stream)
+          }
+        }
       }
     }
   }
@@ -133,5 +146,4 @@ class KafkaReceiver[
       }
     }
   }
-
 }
