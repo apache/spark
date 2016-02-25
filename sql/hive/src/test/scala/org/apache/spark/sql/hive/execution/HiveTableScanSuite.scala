@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -88,5 +87,34 @@ class HiveTableScanSuite extends HiveComparisonTest {
 
     assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
     assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+  }
+
+  test("Spark-8813 Combine small splits for table scan") {
+    val partitionNum = 5
+    val partitionTable = "combine_small"
+    sql("set hive.exec.dynamic.partition.mode=nonstrict")
+    val df = (1 to 100).map { i => (i, i) }.toDF("a", "b").coalesce(100)
+    df.registerTempTable("temp")
+    sql(
+      s"""create table $partitionTable (a int, b string)
+          |partitioned by (c int)
+          |stored as orc""".stripMargin)
+    sql(
+      s"""insert into table $partitionTable partition(c)
+          |select a, b, (b % $partitionNum) as c from temp""".stripMargin)
+
+    // Check the num of RDD partition without the combination
+    assert(sql( s"""select * from $partitionTable""").rdd.getNumPartitions == 100)
+
+    // Check the num of RDD partitions with the combination
+    sql("set spark.sql.mapper.splitCombineSize=10000")
+    assert(sql(
+      s"""select * from $partitionTable""").rdd.getNumPartitions == partitionNum)
+
+    // Ensure that the result is the same as the original after the combination
+    assert(
+      sql( s"""select * from $partitionTable order by a""").collect().map(_.toString()).deep
+      ==  (1 to 100).map{i => s"[$i,$i,${i % partitionNum}]"}.toArray.deep
+    )
   }
 }

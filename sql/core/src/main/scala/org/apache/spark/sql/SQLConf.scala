@@ -507,6 +507,10 @@ private[spark] object SQLConf {
       " method",
     isPublic = false)
 
+  val MAPPER_SPLIT_COMBINE_SIZE = intConf(
+    "spark.sql.mapper.splitCombineSize",
+    defaultValue = Some(-1),
+    isPublic = true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -573,6 +577,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   private[spark] def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
+
+  private[spark] def mapperSplitCombineSize: Int = getConf(MAPPER_SPLIT_COMBINE_SIZE)
 
   private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
