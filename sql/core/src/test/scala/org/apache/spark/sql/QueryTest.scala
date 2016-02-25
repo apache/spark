@@ -45,7 +45,6 @@ abstract class QueryTest extends PlanTest {
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the
    * none of keywords are listed in the answer
- *
    * @param df the [[DataFrame]] to be executed
    * @param exists true for make sure the keywords are listed in the output, otherwise
    *               to make sure none of the keyword are not listed in the output
@@ -118,7 +117,6 @@ abstract class QueryTest extends PlanTest {
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
- *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
@@ -158,7 +156,6 @@ abstract class QueryTest extends PlanTest {
 
   /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
- *
    * @param dataFrame the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param absTol the absolute tolerance between actual and expected answers.
@@ -308,7 +305,6 @@ object QueryTest {
    * If there was exception during the execution or the contents of the DataFrame does not
    * match the expected result, an error message will be returned. Otherwise, a [[None]] will
    * be returned.
- *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
@@ -383,7 +379,6 @@ object QueryTest {
 
   /**
    * Runs the plan and makes sure the answer is within absTol of the expected result.
- *
    * @param actualAnswer the actual result in a [[Row]].
    * @param expectedAnswer the expected result in a[[Row]].
    * @param absTol the absolute tolerance between actual and expected answers.

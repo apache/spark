@@ -85,7 +85,6 @@ package object debug {
 
     /**
      * A collection of metrics for each column of output.
- *
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
      *        causing the wrong data to be projected.
      */
