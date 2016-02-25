@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -115,6 +116,9 @@ case class Sort(
     sorterVariable = ctx.freshName("sorter")
     ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
       s"$sorterVariable = $thisPlan.createSorter();")
+    val metrics = ctx.freshName("metrics")
+    ctx.addMutableState(classOf[TaskMetrics].getName, metrics,
+      s"$metrics = org.apache.spark.TaskContext.get().taskMetrics();")
     val sortedIterator = ctx.freshName("sortedIter")
     ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
 
@@ -127,10 +131,20 @@ case class Sort(
       """.stripMargin.trim)
 
     val outputRow = ctx.freshName("outputRow")
+    val dataSize = ctx.freshName("dataSize")
+    ctx.addMutableState(classOf[Long].getName, dataSize, "")
+    val spillSize = ctx.freshName("spillSize")
+    ctx.addMutableState(classOf[Long].getName, spillSize, "")
+    val spillSizeBefore = ctx.freshName("spillSizeBefore")
+    ctx.addMutableState(classOf[Long].getName, spillSizeBefore,
+      s"$spillSizeBefore = $metrics.memoryBytesSpilled();")
     s"""
        | if ($needToSort) {
        |   $addToSorter();
        |   $sortedIterator = $sorterVariable.sort();
+       |   $dataSize += $sorterVariable.getPeakMemoryUsage();
+       |   $spillSize += $metrics.memoryBytesSpilled() - $spillSizeBefore;
+       |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
        |   $needToSort = false;
        | }
        |
