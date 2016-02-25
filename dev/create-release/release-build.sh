@@ -198,15 +198,17 @@ if [[ "$1" == "package" ]]; then
   # Copy data
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
+  set -x
   # Put to new directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir spark-*
   # Delete /latest directory and rename new upload to /latest
-  LFTP rm -f "$REMOTE_PARENT_DIR/latest"
+  LFTP rm -rf "$REMOTE_PARENT_DIR/latest"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir spark-*
+  set +x
   exit 0
 fi
 
@@ -224,7 +226,7 @@ if [[ "$1" == "docs" ]]; then
   LFTP mkdir -p $dest_dir
   LFTP mput -O $dest_dir _site/*
   # Delete /latest directory and rename new upload to /latest
-  LFTP rm -f "$REMOTE_PARENT_DIR/latest"
+  LFTP rm -rf "$REMOTE_PARENT_DIR/latest"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
