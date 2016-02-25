@@ -212,7 +212,7 @@ class CatalystQlSuite extends PlanTest {
 
     val expected = Project(
       UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
-      Subquery("u_1",
+      SubqueryAlias("u_1",
         Union(
           Union(
             Project(
@@ -246,7 +246,7 @@ class CatalystQlSuite extends PlanTest {
 
     val expected2 = Project(
       UnresolvedAlias(UnresolvedAttribute("u_1.id"), None) :: Nil,
-      Subquery("u_1",
+      SubqueryAlias("u_1",
         Union(
           Union(
             Union(

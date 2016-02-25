@@ -1112,6 +1112,91 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
 
+  test("nested union") {
+    sql(
+      """
+        | EXPLAIN
+        | SELECT count(1) FROM (
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src) src
+      """.stripMargin)
+
+    val countForSrc = sql("SELECT count(1) FROM src").first()
+
+    val countForUnion25Src = sql(
+      """
+        | SELECT count(1) FROM (
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        |
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src UNION ALL
+        | SELECT key, value FROM src) src
+      """.stripMargin).first()
+
+    assert(countForSrc.getLong(0) == 500)
+    assert(countForUnion25Src.getLong(0) == 500 * 25)
+
+    val nested = sql(
+      """
+        | SELECT u_1.key FROM (((SELECT key FROM src)
+        | UNION ALL (SELECT key FROM src)) UNION ALL
+        | (SELECT key FROM src)) AS u_1
+      """.stripMargin).collect()
+
+    assert(nested.size == 500 * 3)
+  }
+
   test("parse HQL set commands") {
     // Adapted from its SQL counterpart.
     val testKey = "spark.sql.key.usedfortestonly"
