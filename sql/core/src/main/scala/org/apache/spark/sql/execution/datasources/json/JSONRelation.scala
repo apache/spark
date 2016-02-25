@@ -40,7 +40,6 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-/*
 class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
   override def shortName(): String = "json"
@@ -52,18 +51,19 @@ class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegi
       partitionColumns: Option[StructType],
       bucketSpec: Option[BucketSpec],
       parameters: Map[String, String]): HadoopFsRelation = {
-
-    new JSONRelation(
-      inputRDD = None,
-      maybeDataSchema = dataSchema,
-      maybePartitionSpec = None,
-      userDefinedPartitionColumns = partitionColumns,
-      maybeBucketSpec = bucketSpec,
-      paths = paths,
-      parameters = parameters)(sqlContext)
+???
+//    new JSONRelation(
+//      inputRDD = None,
+//      maybeDataSchema = dataSchema,
+//      maybePartitionSpec = None,
+//      userDefinedPartitionColumns = partitionColumns,
+//      maybeBucketSpec = bucketSpec,
+//      paths = paths,
+//      parameters = parameters)(sqlContext)
   }
 }
 
+/*
 private[sql] class JSONRelation(
     val inputRDD: Option[RDD[String]],
     val maybeDataSchema: Option[StructType],

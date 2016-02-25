@@ -31,8 +31,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-//import org.apache.spark.sql.execution.datasources.json.JSONRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
@@ -374,9 +372,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
 
-      sqlContext.baseRelationToDataFrame(
-        new ParquetRelation(
-          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
+//      sqlContext.baseRelationToDataFrame(
+//        new ParquetRelation(
+//          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
+
+      ???
     }
   }
 

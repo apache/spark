@@ -58,12 +58,13 @@ private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with D
 
   override def createRelation(
       sqlContext: SQLContext,
-      paths: Array[String],
-      schema: Option[StructType],
-      partitionColumns: Option[StructType],
-      bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
-    new ParquetRelation(paths, schema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
+      parameters: Map[String, String]): FileFormat = {
+
+    new FileFormat {
+      override def inferSchema(files: Seq[FileStatus]): StructType = {
+        ParquetRelation.mergeSchemasInParallel(files, sqlContext).get
+      }
+    }
   }
 }
 
@@ -106,17 +107,17 @@ private[sql] class ParquetOutputWriter(
 
   override def close(): Unit = recordWriter.close(context)
 }
-
+/*
 private[sql] class ParquetRelation(
     override val paths: Array[String],
     private val maybeDataSchema: Option[StructType],
     // This is for metastore conversion.
     private val maybePartitionSpec: Option[PartitionSpec],
-    override val userDefinedPartitionColumns: Option[StructType],
-    override val maybeBucketSpec: Option[BucketSpec],
+    val userDefinedPartitionColumns: Option[StructType],
+    val maybeBucketSpec: Option[BucketSpec],
     parameters: Map[String, String])(
-    val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters)
+    override val sqlContext: SQLContext)
+  extends HadoopFsRelation
   with Logging {
 
   private[sql] def this(
@@ -214,7 +215,7 @@ private[sql] class ParquetRelation(
     schema
   }
 
-  override private[sql] def refresh(): Unit = {
+  override def refresh(): Unit = {
     super.refresh()
     metadataCache.refresh()
   }
@@ -300,7 +301,7 @@ private[sql] class ParquetRelation(
     }
   }
 
-  override def buildInternalScan(
+  def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
@@ -526,6 +527,7 @@ private[sql] class ParquetRelation(
     }
   }
 }
+*/
 
 private[sql] object ParquetRelation extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.

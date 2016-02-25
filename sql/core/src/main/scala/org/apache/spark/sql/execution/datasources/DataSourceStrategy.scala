@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.hadoop.mapreduce.Job
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.rules.Rule
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, TaskContext}
@@ -37,6 +41,22 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
+
+private[sql] class DataSourceAnalysis extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+    case i @ logical.InsertIntoTable(
+           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) =>
+      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
+      InsertIntoHadoopFsRelation(
+        t.paths.head,
+        t.partitionColumns.fields.map(_.name).map(UnresolvedAttribute(_)),
+        t.dataSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
+        t.bucketSpec,
+        (j: Job) => ???,
+        plan,
+        mode)
+  }
+}
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -101,7 +121,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       // Prune the buckets based on the pushed filters that do not contain partitioning key
       // since the bucketing key is not allowed to use the columns in partitioning key
-      val bucketSet = getBuckets(pushedFilters, t.getBucketSpec)
+      val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
 
       val scan = buildPartitionedTableScan(
         l,
@@ -132,13 +152,18 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val confBroadcast =
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
       // Prune the buckets based on the filters
-      val bucketSet = getBuckets(filters, t.getBucketSpec)
+      val bucketSet = getBuckets(filters, t.bucketSpec)
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, f) =>
-          t.buildInternalScan(a.map(_.name).toArray, f, bucketSet, t.paths, confBroadcast)) :: Nil
+          t.buildInternalScan(
+            a.map(_.name).toArray,
+            f,
+            bucketSet,
+            t.paths.toArray,
+            confBroadcast)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -147,11 +172,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
       execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
-
-    case i @ logical.InsertIntoTable(
-      l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) =>
-      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      execution.ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
 
     case _ => Nil
   }

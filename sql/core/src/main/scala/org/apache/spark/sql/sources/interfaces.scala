@@ -185,6 +185,10 @@ trait HadoopFsRelationProvider extends StreamSourceProvider {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation
 
+  def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): FileFormat = ???
+
   private[sql] def createRelation(
       sqlContext: SQLContext,
       paths: Array[String],
@@ -409,7 +413,6 @@ abstract class OutputWriterFactory extends Serializable {
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the relation being written is partitioned.
    * @param context The Hadoop MapReduce task context.
-   *
    * @since 1.4.0
    */
   def newInstance(
@@ -464,20 +467,26 @@ abstract class OutputWriter {
   }
 }
 
-class HadoopFsRelation extends BaseRelation {
-  override def sqlContext: SQLContext = ???
 
-  override def schema: StructType = ???
 
-  def getBucketSpec: Option[BucketSpec] = ???
+case class HadoopFsRelation(
+    sqlContext: SQLContext,
+    paths: Seq[String],
+    dataSchema: StructType) extends BaseRelation {
+
+  case class WriteRelation(
+      sqlContext: SQLContext,
+      path: String,
+      prepareJobForWrite: Job => OutputWriterFactory,
+      bucketSpec: Option[BucketSpec])
+
+  def schema: StructType = ???
+
+  def bucketSpec: Option[BucketSpec] = ???
 
   def partitionSpec: PartitionSpec = ???
 
   def partitionColumns: StructType = partitionSpec.partitionColumns
-
-  def dataSchema: StructType = ???
-
-  def paths: Array[String] = ???
 
   def refresh(): Unit = ???
 
@@ -491,6 +500,108 @@ class HadoopFsRelation extends BaseRelation {
       bucketSet: Option[BitSet],
       inputPaths: Array[String],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = ???
+}
+
+trait FileFormat {
+  def inferSchema(files: Seq[FileStatus]): StructType
+}
+
+trait FileCatalog {
+  def inferPartitioning(): PartitionSpec
+  def allFiles(): Seq[FileStatus]
+  def refresh(): Unit
+}
+
+class HDFSFileCatalog(
+    sqlContext: SQLContext,
+    parameters: Map[String, String],
+    paths: Array[String])
+  extends FileCatalog with Logging {
+
+  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
+
+  var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
+
+  var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
+
+  def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
+
+  private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
+    if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
+    } else {
+      val statuses = paths.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(hadoopConf)
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        logInfo(s"Listing $qualified on driver")
+        // Dummy jobconf to get to the pathFilter defined in configuration
+        val jobConf = new JobConf(hadoopConf, this.getClass())
+        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+        if (pathFilter != null) {
+          Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
+        } else {
+          Try(fs.listStatus(qualified)).getOrElse(Array.empty)
+        }
+      }.filterNot { status =>
+        val name = status.getPath.getName
+        name.toLowerCase == "_temporary" || name.startsWith(".")
+      }
+
+      val (dirs, files) = statuses.partition(_.isDirectory)
+
+      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
+      if (dirs.isEmpty) {
+        mutable.LinkedHashSet(files: _*)
+      } else {
+        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath.toString))
+      }
+    }
+  }
+
+   def inferPartitioning(): PartitionSpec = {
+    // We use leaf dirs containing data files to discover the schema.
+    val leafDirs = leafDirToChildrenFiles.keys.toSeq
+    PartitioningUtils.parsePartitions(
+      leafDirs,
+      PartitioningUtils.DEFAULT_PARTITION_NAME,
+      typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
+      basePaths = basePaths)
+  }
+
+  /**
+   * Contains a set of paths that are considered as the base dirs of the input datasets.
+   * The partitioning discovery logic will make sure it will stop when it reaches any
+   * base path. By default, the paths of the dataset provided by users will be base paths.
+   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
+   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
+   * `something`. If users want to override the basePath. They can set `basePath` in the options
+   * to pass the new base path to the data source.
+   * For the above example, if the user-provided base path is `/path/`, the returned
+   * DataFrame will have the column of `something`.
+   */
+  private def basePaths: Set[Path] = {
+    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
+    userDefinedBasePath.getOrElse {
+      // If the user does not provide basePath, we will just use paths.
+      val pathSet = paths.toSet
+      pathSet.map(p => new Path(p))
+    }.map { hdfsPath =>
+      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    }
+  }
+
+  def refresh(): Unit = {
+    val files = listLeafFiles(paths)
+
+    leafFiles.clear()
+    leafDirToChildrenFiles.clear()
+
+    leafFiles ++= files.map(f => f.getPath -> f)
+    leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
+  }
 }
 
 /**
@@ -510,12 +621,10 @@ class HadoopFsRelation extends BaseRelation {
  *
  * @constructor This constructor is for internal uses only. The [[PartitionSpec]] argument is for
  *              implementing metastore table conversion.
- *
  * @param maybePartitionSpec An [[HadoopFsRelation]] can be created with an optional
  *        [[PartitionSpec]], so that partition discovery can be skipped.
- *
  * @since 1.4.0
- */
+
 @Experimental
 abstract class HadoopFsRelation2 private[sql](
     maybePartitionSpec: Option[PartitionSpec],
@@ -526,10 +635,6 @@ abstract class HadoopFsRelation2 private[sql](
 
   def this() = this(None, Map.empty[String, String])
 
-  //private[sql] def this(maybePartitionSpec: Option[PartitionSpec]) =
-   // this(maybePartitionSpec, Map.empty[String, String])
-
-  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
   private var _partitionSpec: PartitionSpec = _
 
@@ -540,54 +645,6 @@ abstract class HadoopFsRelation2 private[sql](
   final private[sql] def getBucketSpec: Option[BucketSpec] =
     maybeBucketSpec.filter(_ => sqlContext.conf.bucketingEnabled() && !malformedBucketFile)
 
-  private class FileStatusCache {
-    var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
-
-    var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
-
-    private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
-      if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
-        HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
-      } else {
-        val statuses = paths.flatMap { path =>
-          val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(hadoopConf)
-          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          logInfo(s"Listing $qualified on driver")
-          // Dummy jobconf to get to the pathFilter defined in configuration
-          val jobConf = new JobConf(hadoopConf, this.getClass())
-          val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-          if (pathFilter != null) {
-            Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
-          } else {
-            Try(fs.listStatus(qualified)).getOrElse(Array.empty)
-          }
-        }.filterNot { status =>
-          val name = status.getPath.getName
-          name.toLowerCase == "_temporary" || name.startsWith(".")
-        }
-
-        val (dirs, files) = statuses.partition(_.isDirectory)
-
-        // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-        if (dirs.isEmpty) {
-          mutable.LinkedHashSet(files: _*)
-        } else {
-          mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath.toString))
-        }
-      }
-    }
-
-    def refresh(): Unit = {
-      val files = listLeafFiles(paths)
-
-      leafFiles.clear()
-      leafDirToChildrenFiles.clear()
-
-      leafFiles ++= files.map(f => f.getPath -> f)
-      leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
-    }
-  }
 
   private lazy val fileStatusCache = {
     val cache = new FileStatusCache
@@ -645,29 +702,7 @@ abstract class HadoopFsRelation2 private[sql](
    */
   def paths: Array[String]
 
-  /**
-   * Contains a set of paths that are considered as the base dirs of the input datasets.
-   * The partitioning discovery logic will make sure it will stop when it reaches any
-   * base path. By default, the paths of the dataset provided by users will be base paths.
-   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
-   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
-   * `something`. If users want to override the basePath. They can set `basePath` in the options
-   * to pass the new base path to the data source.
-   * For the above example, if the user-provided base path is `/path/`, the returned
-   * DataFrame will have the column of `something`.
-   */
-  private def basePaths: Set[Path] = {
-    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
-    userDefinedBasePath.getOrElse {
-      // If the user does not provide basePath, we will just use paths.
-      val pathSet = paths.toSet
-      pathSet.map(p => new Path(p))
-    }.map { hdfsPath =>
-      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    }
-  }
+
 
   override def inputFiles: Array[String] = cachedLeafStatuses().map(_.getPath.toString).toArray
 
@@ -693,41 +728,6 @@ abstract class HadoopFsRelation2 private[sql](
     fileStatusCache.refresh()
     if (sqlContext.conf.partitionDiscoveryEnabled()) {
       _partitionSpec = discoverPartitions()
-    }
-  }
-
-  private def discoverPartitions(): PartitionSpec = {
-    // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = fileStatusCache.leafDirToChildrenFiles.keys.toSeq
-    userDefinedPartitionColumns match {
-      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
-        val spec = PartitioningUtils.parsePartitions(
-          leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = false,
-          basePaths = basePaths)
-
-        // Without auto inference, all of value in the `row` should be null or in StringType,
-        // we need to cast into the data type that user specified.
-        def castPartitionValuesToUserSchema(row: InternalRow) = {
-          InternalRow((0 until row.numFields).map { i =>
-            Cast(
-              Literal.create(row.getUTF8String(i), StringType),
-              userProvidedSchema.fields(i).dataType).eval()
-          }: _*)
-        }
-
-        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
-          part.copy(values = castPartitionValuesToUserSchema(part.values))
-        })
-
-      case _ =>
-        // user did not provide a partitioning schema
-        PartitioningUtils.parsePartitions(
-          leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
-          basePaths = basePaths)
     }
   }
 
@@ -832,7 +832,6 @@ abstract class HadoopFsRelation2 private[sql](
    * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
-   *
    * @since 1.4.0
    */
   def buildScan(inputFiles: Array[FileStatus]): RDD[Row] = {
@@ -849,7 +848,6 @@ abstract class HadoopFsRelation2 private[sql](
    * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
-   *
    * @since 1.4.0
    */
   // TODO Tries to eliminate the extra Catalyst-to-Scala conversion when `needConversion` is true
@@ -907,7 +905,6 @@ abstract class HadoopFsRelation2 private[sql](
    * @param inputFiles For a non-partitioned relation, it contains paths of all data files in the
    *        relation. For a partitioned relation, it contains paths of all data files in a single
    *        selected partition.
-   *
    * @since 1.4.0
    */
   def buildScan(
@@ -934,7 +931,6 @@ abstract class HadoopFsRelation2 private[sql](
    *        selected partition.
    * @param broadcastedConf A shared broadcast Hadoop Configuration, which can be used to reduce the
    *                        overhead of broadcasting the Configuration for every Hadoop RDD.
-   *
    * @since 1.4.0
    */
   private[sql] def buildScan(
@@ -996,6 +992,7 @@ abstract class HadoopFsRelation2 private[sql](
    */
   def prepareJobForWrite(job: Job): OutputWriterFactory
 }
+ */
 
 private[sql] object HadoopFsRelation extends Logging {
   // We don't filter files/directories whose name start with "_" except "_temporary" here, as

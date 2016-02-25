@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
+/*
 private[sql] class CSVRelation(
     private val inputRDD: Option[RDD[String]],
     override val paths: Array[String] = Array.empty[String],
@@ -301,3 +302,4 @@ private[sql] class CsvOutputWriter(
     recordWriter.close(context)
   }
 }
+*/

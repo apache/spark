@@ -38,7 +38,7 @@ import org.apache.spark.util.SerializableConfiguration
 
 /**
  * A data source for reading text files.
-
+ */
 class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
 
   override def createRelation(
@@ -48,7 +48,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, dataSchema, partitionColumns, paths, parameters)(sqlContext)
+    ??? //new TextRelation(None, dataSchema, partitionColumns, paths, parameters)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -66,6 +66,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
   }
 }
 
+ /*
 private[sql] class TextRelation(
     val maybePartitionSpec: Option[PartitionSpec],
     val textSchema: Option[StructType],

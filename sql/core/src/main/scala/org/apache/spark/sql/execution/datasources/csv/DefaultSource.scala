@@ -37,12 +37,12 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       dataSchema: Option[StructType],
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
-
-    new CSVRelation(
-      None,
-      paths,
-      dataSchema,
-      partitionColumns,
-      parameters)(sqlContext)
+???
+//    new CSVRelation(
+//      None,
+//      paths,
+//      dataSchema,
+//      partitionColumns,
+//      parameters)(sqlContext)
   }
 }

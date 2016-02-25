@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
@@ -132,29 +134,27 @@ object ResolvedDataSource extends Logging {
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
     def className: String = clazz.getCanonicalName
-    val relation = userSpecifiedSchema match {
-      case Some(schema: StructType) => clazz.newInstance() match {
-        case dataSource: SchemaRelationProvider =>
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          if (caseInsensitiveOptions.contains("paths")) {
-            throw new AnalysisException(s"$className does not support paths option.")
-          }
-          dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
-        case dataSource: HadoopFsRelationProvider =>
-          val maybePartitionsSchema = if (partitionColumns.isEmpty) {
-            None
-          } else {
-            Some(partitionColumnsSchema(
-              schema, partitionColumns, sqlContext.conf.caseSensitiveAnalysis))
-          }
 
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          val paths = {
-            if (caseInsensitiveOptions.contains("paths") &&
+    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+    val relation = (clazz.newInstance(), userSpecifiedSchema) match {
+      case (dataSource: SchemaRelationProvider, Some(schema)) =>
+        dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
+      case (dataSource: RelationProvider, None) =>
+        dataSource.createRelation(sqlContext, caseInsensitiveOptions)
+      case (_: SchemaRelationProvider, None) =>
+        throw new AnalysisException(s"A schema needs to be specified when using $className.")
+      case (_: RelationProvider, Some(_)) =>
+        throw new AnalysisException(s"$className does not allow user-specified schemas.")
+
+
+      case (format: FileFormat, _) =>
+        // TODO: this is ugly...
+        val paths = {
+          if (caseInsensitiveOptions.contains("paths") &&
               caseInsensitiveOptions.contains("path")) {
-              throw new AnalysisException(s"Both path and paths options are present.")
-            }
-            caseInsensitiveOptions.get("paths")
+            throw new AnalysisException(s"Both path and paths options are present.")
+          }
+          caseInsensitiveOptions.get("paths")
               .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
               .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
                 throw new IllegalArgumentException("'path' is not specified")
@@ -165,58 +165,17 @@ object ResolvedDataSource extends Logging {
                 val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
                 SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
               }
-          }
+        }
 
-          val dataSchema =
-            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
+        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, paths)
+        val schema = userSpecifiedSchema.getOrElse {
+          format.inferSchema(fileCatalog.allFiles())
+        }
 
-          dataSource.createRelation(
-            sqlContext,
-            paths,
-            Some(dataSchema),
-            maybePartitionsSchema,
-            bucketSpec,
-            caseInsensitiveOptions)
-        case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
-        case _ =>
-          throw new AnalysisException(s"$className is not a RelationProvider.")
-      }
-
-      case None => clazz.newInstance() match {
-        case dataSource: RelationProvider =>
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          if (caseInsensitiveOptions.contains("paths")) {
-            throw new AnalysisException(s"$className does not support paths option.")
-          }
-          dataSource.createRelation(sqlContext, caseInsensitiveOptions)
-        case dataSource: HadoopFsRelationProvider =>
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          val paths = {
-            if (caseInsensitiveOptions.contains("paths") &&
-              caseInsensitiveOptions.contains("path")) {
-              throw new AnalysisException(s"Both path and paths options are present.")
-            }
-            caseInsensitiveOptions.get("paths")
-              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-              .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
-                throw new IllegalArgumentException("'path' is not specified")
-              })))
-              .flatMap{ pathString =>
-                val hdfsPath = new Path(pathString)
-                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
-              }
-          }
-          dataSource.createRelation(sqlContext, paths, None, None, None, caseInsensitiveOptions)
-        case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-          throw new AnalysisException(
-            s"A schema needs to be specified when using $className.")
-        case _ =>
-          throw new AnalysisException(
-            s"$className is neither a RelationProvider nor a FSBasedRelationProvider.")
-      }
+        ???
+      case _ =>
+        throw new AnalysisException(
+          s"$className is not a valid Spark SQL Data Source.")
     }
     new ResolvedDataSource(clazz, relation)
   }
@@ -292,6 +251,8 @@ object ResolvedDataSource extends Logging {
         sqlContext.executePlan(
           InsertIntoHadoopFsRelation(
             r,
+            dataSchema.asNullable.map(_.name).map(UnresolvedAttribute),
+            bucketSpec
             data.logicalPlan,
             mode)).toRdd
         r

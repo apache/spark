@@ -182,7 +182,7 @@ private[sql] object PhysicalRDD {
     }
 
     val bucketSpec = relation match {
-      case r: HadoopFsRelation => r.getBucketSpec
+      case r: HadoopFsRelation => r.bucketSpec
       case _ => None
     }
 
