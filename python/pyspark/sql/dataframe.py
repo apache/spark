@@ -29,7 +29,8 @@ else:
 
 from pyspark import since
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
-from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, PickleSerializer, UTF8Deserializer
+from pyspark.serializers import AutoBatchedSerializer, BatchedSerializer, \
+    PickleSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
@@ -1402,7 +1403,7 @@ class PipelinedDataset(Dataset):
         self._lazy_rdd = None
 
         if not isinstance(prev, PipelinedDataset) or prev.is_cached:
-            # This transformation is the first in its stage:
+            # This is the beginning of this pipeline.
             self._func = func
             self._prev_jdf = prev._jdf
         else:
@@ -1449,7 +1450,8 @@ class PipelinedDataset(Dataset):
             serializer = AutoBatchedSerializer(PickleSerializer())
 
         from pyspark.rdd import _wrap_function
-        return _wrap_function(self._sc, lambda _, iterator: func(iterator), deserializer, serializer)
+        return _wrap_function(self._sc, lambda _, iterator: func(iterator),
+                              deserializer, serializer)
 
 
 def _pipeline_func(prev_func, next_func):

@@ -26,7 +26,7 @@ import org.apache.spark.api.python.{PythonFunction, PythonRunner}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericMutableRow, UnsafeProjection}
-import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 
 /**
  * Launches a Python runner, send all rows to it, then apply the given function to each row in the
@@ -74,13 +74,7 @@ case class PythonMapPartitions(
       // Output iterator for results from Python.
       val outputIterator =
         new PythonRunner(
-          func.command,
-          func.envVars,
-          func.pythonIncludes,
-          func.pythonExec,
-          func.pythonVer,
-          func.broadcastVars,
-          func.accumulator,
+          func,
           bufferSize,
           reuseWorker
         ).compute(inputIterator, context.partitionId(), context)
