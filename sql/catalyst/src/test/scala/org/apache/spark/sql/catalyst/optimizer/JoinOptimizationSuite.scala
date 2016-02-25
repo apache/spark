@@ -108,7 +108,7 @@ class JoinOptimizationSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           Project(Seq($"x.key"), SubqueryAlias("x", input)),
-          Project(Seq($"y.key"), BroadcastHint(SubqueryAlias("y", input))),
+          BroadcastHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
           Inner, None)).analyze
 
     comparePlans(optimized, expected)

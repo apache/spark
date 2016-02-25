@@ -194,6 +194,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("a", Seq("a"), 1) :: Nil)
   }
 
+  test("sort after generate with join=true") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select($"*", explode($"a").as("c")).sortWithinPartitions("b", "c"),
+      Row(Seq("a"), 1, "a") :: Nil)
+  }
+
   test("selectExpr") {
     checkAnswer(
       testData.selectExpr("abs(key)", "value"),
