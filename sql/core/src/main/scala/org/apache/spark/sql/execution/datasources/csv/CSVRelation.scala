@@ -292,34 +292,26 @@ private[csv] class EncodingTextInputFormat extends TextInputFormat {
 private[csv] object EncodingTextInputFormat {
   // configuration key for encoding type
   val ENCODING_KEY = "encodinginputformat.encoding"
+  // BOM bytes for UTF-8, UTF-16 and UTF-32
+  private val utf8BOM = Array(0xEF.toByte, 0xBB.toByte, 0xBF.toByte)
+  private val utf16beBOM = Array(0xFE.toByte, 0xFF.toByte)
+  private val utf16leBOM = Array(0xFF.toByte, 0xFE.toByte)
+  private val utf32beBOM = Array(0x00.toByte, 0x00.toByte, 0xFE.toByte, 0xFF.toByte)
+  private val utf32leBOM = Array(0xFF.toByte, 0xFE.toByte, 0x00.toByte, 0x00.toByte)
 
   def stripBOM(charsetName: String, bytes: Array[Byte]): Array[Byte] = {
     charsetName match {
-      case "UTF-8"
-          if bytes(0) == 0xEF.toByte &&
-            bytes(1) == 0xBB.toByte &&
-            bytes(2) == 0xBF.toByte =>
-        bytes.slice(3, bytes.length)
-      case "UTF-16" | "UTF-16BE"
-          if bytes(0) == 0xFE.toByte &&
-            bytes(1) == 0xFF.toByte =>
+      case "UTF-8" if bytes.startsWith(utf8BOM) =>
+        bytes.slice(utf8BOM.length, bytes.length)
+      case "UTF-16" | "UTF-16BE" if bytes.startsWith(utf16beBOM) =>
+        bytes.slice(utf16beBOM.length, bytes.length)
+      case "UTF-16LE" if bytes.startsWith(utf16leBOM) =>
+        bytes.slice(utf16leBOM.length, bytes.length)
         bytes.slice(2, bytes.length)
-      case "UTF-16LE"
-          if bytes(0) == 0xFF.toByte &&
-            bytes(1) == 0xFE.toByte =>
-        bytes.slice(2, bytes.length)
-      case "UTF-32" | "UTF-32BE"
-          if bytes(0) == 0x00.toByte &&
-            bytes(1) == 0x00.toByte &&
-            bytes(2) == 0xFE.toByte &&
-            bytes(3) == 0xFF.toByte =>
-        bytes.slice(4, bytes.length)
-      case "UTF-32LE"
-          if bytes(0) == 0xFF.toByte &&
-            bytes(1) == 0xFE.toByte &&
-            bytes(2) == 0x00.toByte &&
-            bytes(3) == 0x00.toByte =>
-        bytes.slice(4, bytes.length)
+      case "UTF-32" | "UTF-32BE" if bytes.startsWith(utf32beBOM) =>
+        bytes.slice(utf32beBOM.length, bytes.length)
+      case "UTF-32LE" if bytes.startsWith(utf32leBOM) =>
+        bytes.slice(utf32leBOM.length, bytes.length)
       case _ => bytes
     }
   }
