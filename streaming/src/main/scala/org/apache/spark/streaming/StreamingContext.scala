@@ -271,20 +271,6 @@ class StreamingContext private[streaming] (
 
   /**
    * Create an input stream with any arbitrary user implemented receiver.
-   * Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
-   * @param receiver Custom implementation of Receiver
-   *
-   * @deprecated As of 1.0.0 replaced by `receiverStream`.
-   */
-  @deprecated("Use receiverStream", "1.0.0")
-  def networkStream[T: ClassTag](receiver: Receiver[T]): ReceiverInputDStream[T] = {
-    withNamedScope("network stream") {
-      receiverStream(receiver)
-    }
-  }
-
-  /**
-   * Create an input stream with any arbitrary user implemented receiver.
    * Find more details at http://spark.apache.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of Receiver
    */
@@ -459,7 +445,7 @@ class StreamingContext private[streaming] (
    * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
-   * @param queue      Queue of RDDs
+   * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
    */
@@ -477,7 +463,7 @@ class StreamingContext private[streaming] (
    * NOTE: Arbitrary RDDs can be added to `queueStream`, there is no way to recover data of
    * those RDDs, so `queueStream` doesn't support checkpointing.
    *
-   * @param queue      Queue of RDDs
+   * @param queue      Queue of RDDs. Modifications to this data structure must be synchronized.
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @param defaultRDD Default RDD is returned by the DStream when the queue is empty.
    *                   Set as null if no RDD should be returned when empty
@@ -624,18 +610,6 @@ class StreamingContext private[streaming] (
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
-   * @param timeout time to wait in milliseconds
-   *
-   * @deprecated As of 1.3.0, replaced by `awaitTerminationOrTimeout(Long)`.
-   */
-  @deprecated("Use awaitTerminationOrTimeout(Long) instead", "1.3.0")
-  def awaitTermination(timeout: Long) {
-    waiter.waitForStopOrError(timeout)
-  }
-
-  /**
-   * Wait for the execution to stop. Any exceptions that occurs during the execution
-   * will be thrown in this thread.
    *
    * @param timeout time to wait in milliseconds
    * @return `true` if it's stopped; or throw the reported error during the execution; or `false`
@@ -775,18 +749,6 @@ object StreamingContext extends Logging {
     ACTIVATION_LOCK.synchronized {
       Option(activeContext.get())
     }
-  }
-
-  /**
-   * @deprecated As of 1.3.0, replaced by implicit functions in the DStream companion object.
-   *             This is kept here only for backward compatibility.
-   */
-  @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
-    "kept here only for backward compatibility.", "1.3.0")
-  def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null)
-    : PairDStreamFunctions[K, V] = {
-    DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 
   /**

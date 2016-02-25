@@ -25,8 +25,9 @@ import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
-import org.apache.spark.sql.{AnalysisException, SQLConf}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.{maxPrecisionForBytes, MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -37,7 +38,6 @@ import org.apache.spark.sql.types._
  * [[MessageType]] schemas.
  *
  * @see https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
- *
  * @constructor
  * @param assumeBinaryIsString Whether unannotated BINARY fields should be assumed to be Spark SQL
  *        [[StringType]] fields when converting Parquet a [[MessageType]] to Spark SQL
@@ -65,7 +65,8 @@ private[parquet] class CatalystSchemaConverter(
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
     assumeInt96IsTimestamp = conf.get(SQLConf.PARQUET_INT96_AS_TIMESTAMP.key).toBoolean,
-    writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key).toBoolean)
+    writeLegacyParquetFormat = conf.get(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key,
+      SQLConf.PARQUET_WRITE_LEGACY_FORMAT.defaultValue.get.toString).toBoolean)
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -543,7 +544,7 @@ private[parquet] object CatalystSchemaConverter {
       !name.matches(".*[ ,;{}()\n\t=].*"),
       s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
          |Please use alias to rename it.
-       """.stripMargin.split("\n").mkString(" "))
+       """.stripMargin.split("\n").mkString(" ").trim)
   }
 
   def checkFieldNames(schema: StructType): StructType = {

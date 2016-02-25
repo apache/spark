@@ -87,13 +87,38 @@ public final class VectorizedRleValuesReader extends ValuesReader
     this.offset = start;
     this.in = page;
     if (fixedWidth) {
-      int length = readIntLittleEndian();
-      this.end = this.offset + length;
+      if (bitWidth != 0) {
+        int length = readIntLittleEndian();
+        this.end = this.offset + length;
+      }
     } else {
       this.end = page.length;
       if (this.end != this.offset) init(page[this.offset++] & 255);
     }
-    this.currentCount = 0;
+    if (bitWidth == 0) {
+      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
+      this.mode = MODE.RLE;
+      this.currentCount = valueCount;
+      this.currentValue = 0;
+    } else {
+      this.currentCount = 0;
+    }
+  }
+
+  // Initialize the reader from a buffer. This is used for the V2 page encoding where the
+  // definition are in its own buffer.
+  public void initFromBuffer(int valueCount, byte[] data) {
+    this.offset = 0;
+    this.in = data;
+    this.end = data.length;
+    if (bitWidth == 0) {
+      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
+      this.mode = MODE.RLE;
+      this.currentCount = valueCount;
+      this.currentValue = 0;
+    } else {
+      this.currentCount = 0;
+    }
   }
 
   /**
@@ -125,7 +150,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
   public int readValueDictionaryId() {
     return readInteger();
   }
-
 
   @Override
   public int readInteger() {
@@ -189,6 +213,72 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   // TODO: can this code duplication be removed without a perf penalty?
+  public void readBooleans(int total, ColumnVector c,
+                        int rowId, int level, VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readBooleans(n, c, rowId);
+            c.putNotNulls(rowId, n);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putBoolean(rowId + i, data.readBoolean());
+              c.putNotNull(rowId + i);
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readIntsAsLongs(int total, ColumnVector c,
+                        int rowId, int level, VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            for (int i = 0; i < n; i++) {
+              c.putLong(rowId + i, data.readInteger());
+            }
+            c.putNotNulls(rowId, n);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putLong(rowId + i, data.readInteger());
+              c.putNotNull(rowId + i);
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   public void readBytes(int total, ColumnVector c,
                         int rowId, int level, VectorizedValuesReader data) {
     int left = total;
@@ -253,6 +343,70 @@ public final class VectorizedRleValuesReader extends ValuesReader
     }
   }
 
+  public void readFloats(int total, ColumnVector c, int rowId, int level,
+                        VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readFloats(n, c, rowId);
+            c.putNotNulls(rowId, n);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putFloat(rowId + i, data.readFloat());
+              c.putNotNull(rowId + i);
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readDoubles(int total, ColumnVector c, int rowId, int level,
+                         VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readDoubles(n, c, rowId);
+            c.putNotNulls(rowId, n);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putDouble(rowId + i, data.readDouble());
+              c.putNotNull(rowId + i);
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
   public void readBinarys(int total, ColumnVector c, int rowId, int level,
                         VectorizedValuesReader data) {
     int left = total;
@@ -272,7 +426,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
               c.putNotNull(rowId + i);
-              data.readBinary(1, c, rowId);
+              data.readBinary(1, c, rowId + i);
             } else {
               c.putNull(rowId + i);
             }
@@ -331,10 +485,24 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void skip(int n) {
+  public void readBooleans(int total, ColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
+  @Override
+  public void readFloats(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readDoubles(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public Binary readBinary(int len) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
 
   /**
    * Reads the next varint encoded int.

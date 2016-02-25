@@ -36,9 +36,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{EvaluatePython, ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.{ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
+import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -669,7 +672,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def as(alias: String): DataFrame = withPlan {
-    Subquery(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
@@ -1039,7 +1042,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = withPlan {
-    Sample(0.0, fraction, withReplacement, seed, logicalPlan)
+    Sample(0.0, fraction, withReplacement, seed, logicalPlan)()
   }
 
   /**
@@ -1071,7 +1074,7 @@ class DataFrame private[sql](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted))
+      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)())
     }.toArray
   }
 
@@ -1358,7 +1361,8 @@ class DataFrame private[sql](
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
-    val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
+    val outputCols =
+      (if (cols.isEmpty) numericColumns.map(usePrettyExpression(_).sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
@@ -1775,7 +1779,7 @@ class DataFrame private[sql](
   private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
     try {
       df.queryExecution.executedPlan.foreach { plan =>
-        plan.metrics.valuesIterator.foreach(_.reset())
+        plan.resetMetrics()
       }
       val start = System.nanoTime()
       val result = action(df)

@@ -240,6 +240,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         else {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
+
+          logInfo(s"Launching task ${task.taskId} on executor id: ${task.executorId} hostname: " +
+            s"${executorData.executorHost}.")
+
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
@@ -309,7 +313,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
 
     // TODO (prashant) send conf instead of properties
-    driverEndpoint = rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint(properties))
+    driverEndpoint = createDriverEndpointRef(properties)
+  }
+
+  protected def createDriverEndpointRef(
+      properties: ArrayBuffer[(String, String)]): RpcEndpointRef = {
+    rpcEnv.setupEndpoint(ENDPOINT_NAME, createDriverEndpoint(properties))
   }
 
   protected def createDriverEndpoint(properties: Seq[(String, String)]): DriverEndpoint = {

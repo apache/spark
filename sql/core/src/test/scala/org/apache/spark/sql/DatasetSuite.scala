@@ -525,7 +525,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {
@@ -553,9 +553,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       buildDataset(Row(Row("hello", null))).collect()
     }.getMessage
 
-    assert(message.contains(
-      "Null value appeared in non-nullable field org.apache.spark.sql.ClassData.b of type Int."
-    ))
+    assert(message.contains("Null value appeared in non-nullable field"))
   }
 
   test("SPARK-12478: top level null field") {
@@ -614,6 +612,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         "but failed as the number of fields does not line up.\n" +
         " - Input schema: struct<a:string,b:int>\n" +
         " - Target schema: struct<_1:string>")
+  }
+
+  test("SPARK-13440: Resolving option fields") {
+    val df = Seq(1, 2, 3).toDS()
+    val ds = df.as[Option[Int]]
+    checkAnswer(
+      ds.filter(_ => true),
+      Some(1), Some(2), Some(3))
   }
 }
 

@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.vectorized;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.execution.vectorized.ColumnVector.Array;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -376,7 +377,7 @@ public final class OnHeapColumnVector extends ColumnVector {
       short[] newData = new short[newCapacity];
       if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
       shortData = newData;
-    } else if (type instanceof IntegerType) {
+    } else if (type instanceof IntegerType || type instanceof DateType) {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;

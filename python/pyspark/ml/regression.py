@@ -68,25 +68,18 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> lr_path = path + "/lr"
+    >>> lr_path = temp_path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)
     >>> lr2.getMaxIter()
     5
-    >>> model_path = path + "/lr_model"
+    >>> model_path = temp_path + "/lr_model"
     >>> model.save(model_path)
     >>> model2 = LinearRegressionModel.load(model_path)
     >>> model.coefficients[0] == model2.coefficients[0]
     True
     >>> model.intercept == model2.intercept
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -850,7 +843,17 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)

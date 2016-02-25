@@ -449,6 +449,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * All the nodes that will be used to generate tree string.
+   */
+  protected def treeChildren: Seq[BaseType] = children
+
+  /**
    * Appends the string represent of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
@@ -470,9 +475,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     builder.append(simpleString)
     builder.append("\n")
 
-    if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
-      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+    if (treeChildren.nonEmpty) {
+      treeChildren.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
+      treeChildren.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
     }
 
     builder
@@ -656,6 +661,8 @@ object TreeNode {
       case t if t <:< definitions.DoubleTpe =>
         value.asInstanceOf[JDouble].num: java.lang.Double
 
+      case t if t <:< localTypeOf[java.lang.Boolean] =>
+        value.asInstanceOf[JBool].value: java.lang.Boolean
       case t if t <:< localTypeOf[BigInt] => value.asInstanceOf[JInt].num
       case t if t <:< localTypeOf[java.lang.String] => value.asInstanceOf[JString].s
       case t if t <:< localTypeOf[UUID] => UUID.fromString(value.asInstanceOf[JString].s)

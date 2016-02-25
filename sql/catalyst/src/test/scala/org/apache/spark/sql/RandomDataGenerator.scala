@@ -148,7 +148,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -163,7 +163,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }

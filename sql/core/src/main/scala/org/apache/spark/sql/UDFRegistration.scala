@@ -25,7 +25,8 @@ import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
+import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -42,10 +43,10 @@ class UDFRegistration private[sql] (sqlContext: SQLContext) extends Logging {
       s"""
         | Registering new PythonUDF:
         | name: $name
-        | command: ${udf.command.toSeq}
-        | envVars: ${udf.envVars}
-        | pythonIncludes: ${udf.pythonIncludes}
-        | pythonExec: ${udf.pythonExec}
+        | command: ${udf.func.command.toSeq}
+        | envVars: ${udf.func.envVars}
+        | pythonIncludes: ${udf.func.pythonIncludes}
+        | pythonExec: ${udf.func.pythonExec}
         | dataType: ${udf.dataType}
       """.stripMargin)
 
