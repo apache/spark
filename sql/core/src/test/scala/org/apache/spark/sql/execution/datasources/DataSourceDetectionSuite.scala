@@ -20,25 +20,27 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, SQLConf}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataSourceDetectionSuite extends QueryTest with SharedSQLContext  {
 
   test("detect datasource - parquet (by magic number)") {
     val data = (1 to 10).map(i => (i, i.toString))
-    withTempPath { file =>
-      val path = file.getCanonicalPath
-      sqlContext.createDataFrame(data).write.parquet(path)
-      file.listFiles().filterNot { file =>
-        file.toString.startsWith(".") || file.toString.startsWith("_")
-      }.foreach { file =>
-        // Remove extensions
-        file.renameTo(new File(file.toString.replace(".parquet", "")))
-      }
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "uncompressed") {
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        sqlContext.createDataFrame(data).write.parquet(path)
+        file.listFiles().filterNot { file =>
+          file.toString.startsWith(".") || file.toString.startsWith("_")
+        }.foreach { file =>
+          // Remove extensions
+          file.renameTo(new File(file.toString.replace(".parquet", "")))
+        }
 
-      val source = "parquet"
-      assert(DataSourceDetection.detect(sqlContext, path) == source)
+        val source = "parquet"
+        assert(DataSourceDetection.detect(sqlContext, path) == source)
+      }
     }
   }
 

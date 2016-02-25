@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.util.Try
+
 import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
@@ -95,33 +97,30 @@ private[sql] object DataSourceDetection extends Logging {
 
   private def headLeafFile(sqlContext: SQLContext, hdfsPath: Path): Option[FileStatus] = {
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
-    val fs = hdfsPath.getFileSystem(hadoopConf)
-    val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    logInfo(s"Listing $qualified on driver")
-    val pathIter = fs.listFiles(qualified, true)
-    // Dummy jobconf to get to the pathFilter defined in configuration
-    val jobConf = new JobConf(hadoopConf, this.getClass())
-    val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-    var isPathFound = false
-
-    // Find a single file by looking through one by one.
-    var maybeStatus: Option[FileStatus] = None
-    if (pathFilter != null) {
-      while (pathIter.hasNext && !isPathFound) {
-        val status = pathIter.next()
-        val path = status.getPath.toString
-        maybeStatus = Some(status)
-        isPathFound = pathFilter.accept(status.getPath) &&
-          !path.startsWith("_") && !path.startsWith(".")
+    val statuses = {
+      val fs = hdfsPath.getFileSystem(hadoopConf)
+      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      logInfo(s"Listing $qualified on driver")
+      // Dummy jobconf to get to the pathFilter defined in configuration
+      val jobConf = new JobConf(hadoopConf, this.getClass())
+      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
+      if (pathFilter != null) {
+        Try(fs.listStatus(qualified, pathFilter)).getOrElse(Array.empty)
+      } else {
+        Try(fs.listStatus(qualified)).getOrElse(Array.empty)
       }
-    } else {
-      while (pathIter.hasNext && !isPathFound) {
-        val status = pathIter.next()
-        val path = status.getPath.toString
-        maybeStatus = Some(status)
-        isPathFound = !path.startsWith("_") && !path.startsWith(".")
-      }
+    }.filterNot { status =>
+      val name = status.getPath.getName
+      name.startsWith("_") || name.startsWith(".")
     }
-    maybeStatus
+    val (dirs, files) = statuses.partition(_.isDirectory)
+
+    if (files.nonEmpty) {
+      Some(files.head)
+    } else if (dirs.isEmpty) {
+      None
+    } else {
+      headLeafFile(sqlContext, dirs.head.getPath)
+    }
   }
 }
