@@ -153,7 +153,7 @@ class DecisionTree(object):
                         impurity="gini", maxDepth=5, maxBins=32, minInstancesPerNode=1,
                         minInfoGain=0.0):
         """
-        Train a DecisionTreeModel for classification.
+        Train a decision tree model for classification.
 
         :param data:
           Training data: RDD of LabeledPoint. Labels should take values
@@ -225,7 +225,7 @@ class DecisionTree(object):
                        impurity="variance", maxDepth=5, maxBins=32, minInstancesPerNode=1,
                        minInfoGain=0.0):
         """
-        Train a DecisionTreeModel for regression.
+        Train a decision tree model for regression.
 
         :param data:
           Training data: RDD of LabeledPoint. Labels are real numbers.
@@ -327,7 +327,7 @@ class RandomForest(object):
                         featureSubsetStrategy="auto", impurity="gini", maxDepth=4, maxBins=32,
                         seed=None):
         """
-        Method to train a decision tree model for binary or multiclass
+        Train a random forest model for binary or multiclass
         classification.
 
         :param data:
@@ -418,7 +418,7 @@ class RandomForest(object):
     def trainRegressor(cls, data, categoricalFeaturesInfo, numTrees, featureSubsetStrategy="auto",
                        impurity="variance", maxDepth=4, maxBins=32, seed=None):
         """
-        Method to train a decision tree model for regression.
+        Train a random forest model for regression.
 
         :param data:
           Training dataset: RDD of LabeledPoint. Labels are real numbers.
@@ -523,8 +523,7 @@ class GradientBoostedTrees(object):
                         loss="logLoss", numIterations=100, learningRate=0.1, maxDepth=3,
                         maxBins=32):
         """
-        Method to train a gradient-boosted trees model for
-        classification.
+        Train a gradient-boosted trees model for classification.
 
         :param data:
           Training dataset: RDD of LabeledPoint. Labels should take values
@@ -593,7 +592,7 @@ class GradientBoostedTrees(object):
                        loss="leastSquaresError", numIterations=100, learningRate=0.1, maxDepth=3,
                        maxBins=32):
         """
-        Method to train a gradient-boosted trees model for regression.
+        Train a gradient-boosted trees model for regression.
 
         :param data:
           Training dataset: RDD of LabeledPoint. Labels are real numbers.
@@ -605,7 +604,7 @@ class GradientBoostedTrees(object):
           Loss function used for minimization during gradient boosting.
           Supported values: "logLoss", "leastSquaresError",
           "leastAbsoluteError".
-          (default: "logLoss")
+          (default: "leastSquaresError")
         :param numIterations:
           Number of iterations of boosting.
           (default: 100)
