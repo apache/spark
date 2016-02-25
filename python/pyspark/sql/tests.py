@@ -669,6 +669,13 @@ class SQLTests(ReusedPySparkTestCase):
                          functions.last(df2.id, True).alias('d'))
         self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
 
+    def test_approxQuantile(self):
+        df = self.sc.parallelize([Row(a=i) for i in range(10)]).toDF()
+        aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
+        self.assertTrue(isinstance(aq, list))
+        self.assertEqual(len(aq), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aq))
+
     def test_corr(self):
         import math
         df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
