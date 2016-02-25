@@ -87,13 +87,10 @@ class KolmogorovSmirnovTestResult(TestResult):
     """
 
 
+@since('2.0.0')
 class BinarySample(namedtuple("BinarySample", ["isExperiment", "value"])):
     """
     Represents a (isExperiment, value) tuple.
-
-    >>> bs = BinarySample(True, 1.0)
-    >>> (bs.isExperiment, bs.value)
-    (True, 1.0)
 
     .. versionadded:: 2.0.0
     """
@@ -102,20 +99,7 @@ class BinarySample(namedtuple("BinarySample", ["isExperiment", "value"])):
         return BinarySample, (bool(self.isExperiment), float(self.value))
 
 
-@inherit_doc
-class StreamingTestResult2(TestResult):
-    """
-    Contains test results for StreamingTest.
-    """
-
-    @property
-    def method(self):
-        """
-        Name of the test method
-        """
-        return self._java_model.method()
-
-
+@since('2.0.0')
 class StreamingTestResult(namedtuple("StreamingTestResult",
                                      ["pValue", "degreesOfFreedom", "statistic", "method",
                                       "nullHypothesis"])):
@@ -131,6 +115,7 @@ class StreamingTestResult(namedtuple("StreamingTestResult",
                                      str(self.method), str(self.nullHypothesis))
 
 
+@since('2.0.0')
 class StreamingTest(object):
     """
     .. note:: Experimental
@@ -163,7 +148,7 @@ class StreamingTest(object):
         """
         Update peacePeriod
         :param peacePeriod:
-        :return:
+          Set number of initial RDD batches of the DStream to be dropped from significance testing.
         """
         self._peacePeriod = peacePeriod
 
@@ -172,7 +157,7 @@ class StreamingTest(object):
         """
         Update windowSize
         :param windowSize:
-        :return:
+          Set the number of batches each significance test is to be performed over.
         """
         self._windowSize = windowSize
 
@@ -181,8 +166,10 @@ class StreamingTest(object):
         """
         Update test method
         :param testMethod:
-        :return:
+          Currently supported tests: `welch`, `student`.
         """
+        assert(testMethod in ("welch", "student"),
+               "Currently supported tests: \"welch\", \"student\"")
         self._testMethod = testMethod
 
     @since('2.0.0')
@@ -216,18 +203,3 @@ class StreamingTest(object):
         else:
             raise TypeError("BinarySample should be represented by a DStream, "
                             "but got %s." % type(samples))
-
-
-def _test():
-    import doctest
-    import pyspark.mllib.stat.test
-    globs = pyspark.mllib.stat.test.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'Statistical Test doctest')
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
-    if failure_count:
-        exit(-1)
-
-
-if __name__ == "__main__":
-    _test()
