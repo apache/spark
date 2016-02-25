@@ -103,6 +103,13 @@ final class QuantileDiscretizer(override val uid: String)
 
 @Since("1.6.0")
 object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] with Logging {
+
+  /**
+   * Minimum number of samples required for finding splits, regardless of number of bins.  If
+   * the dataset has fewer rows than this value, the entire dataset will be used.
+   */
+  private[spark] val minSamplesRequired: Int = 10000
+
   /**
    * Sampling from the given dataset to collect quantile statistics.
    */
@@ -110,8 +117,8 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
     val totalSamples = dataset.count()
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
-    val requiredSamples = math.max(numBins * numBins, 10000)
-    val fraction = math.min(requiredSamples / dataset.count(), 1.0)
+    val requiredSamples = math.max(numBins * numBins, minSamplesRequired)
+    val fraction = math.min(requiredSamples.toDouble / dataset.count(), 1.0)
     dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
   }
 
