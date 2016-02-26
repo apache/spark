@@ -80,7 +80,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             assert(f.getClass === filterClass)
           }
         }
-
         checkPlan(query)
         checker(query, expected)
       }
@@ -381,6 +380,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
     import testImplicits._
+
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -454,6 +454,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
     import testImplicits._
+
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
         withTempPath { dir =>
