@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
@@ -192,6 +193,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
+  }
+
+  test("sort after generate with join=true") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select($"*", explode($"a").as("c")).sortWithinPartitions("b", "c"),
+      Row(Seq("a"), 1, "a") :: Nil)
   }
 
   test("selectExpr") {

@@ -99,8 +99,8 @@ case class BroadcastHashJoin(
     }
   }
 
-  override def upstream(): RDD[InternalRow] = {
-    streamedPlan.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    streamedPlan.asInstanceOf[CodegenSupport].upstreams()
   }
 
   override def doProduce(ctx: CodegenContext): String = {
