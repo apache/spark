@@ -32,7 +32,12 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.types._
 
 
-private[sql] case class Partition(values: InternalRow, path: String)
+object Partition {
+  def apply(values: InternalRow, path: String): Partition =
+    apply(values, new Path(path))
+}
+
+private[sql] case class Partition(values: InternalRow, path: Path)
 
 private[sql] case class PartitionSpec(partitionColumns: StructType, partitions: Seq[Partition])
 
@@ -127,7 +132,7 @@ private[sql] object PartitioningUtils {
       // Finally, we create `Partition`s based on paths and resolved partition values.
       val partitions = resolvedPartitionValues.zip(pathsWithPartitionValues).map {
         case (PartitionValues(_, literals), (path, _)) =>
-          Partition(InternalRow.fromSeq(literals.map(_.value)), path.toString)
+          Partition(InternalRow.fromSeq(literals.map(_.value)), path)
       }
 
       PartitionSpec(StructType(fields), partitions)

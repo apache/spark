@@ -128,10 +128,10 @@ object ResolvedDataSource extends Logging {
   /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
-      paths: Seq[String],
-      userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      bucketSpec: Option[BucketSpec],
+      paths: Seq[String] = Nil,
+      userSpecifiedSchema: Option[StructType] = None,
+      partitionColumns: Array[String] = Array.empty,
+      bucketSpec: Option[BucketSpec] = None,
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
@@ -160,7 +160,6 @@ object ResolvedDataSource extends Logging {
 
         val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
         val dataSchema = userSpecifiedSchema.getOrElse {
-          println(s"call infer $options")
           format.inferSchema(
             sqlContext,
             caseInsensitiveOptions,
@@ -261,8 +260,7 @@ object ResolvedDataSource extends Logging {
 
     apply(
       sqlContext,
-      paths = Nil,
-      Some(data.schema),
+      userSpecifiedSchema = Some(data.schema),
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
       provider = provider,

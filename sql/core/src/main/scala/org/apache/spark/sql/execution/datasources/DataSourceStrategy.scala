@@ -105,9 +105,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
       val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
-      println(s"Selected ${selectedPartitions.toList}")
-
-      println {
+      logInfo {
         val total = t.partitionSpec.partitions.length
         val selected = selectedPartitions.length
         val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
@@ -215,7 +213,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             requiredDataColumns.map(_.name).toArray,
             filters,
             buckets,
-            Array(/* dir */),
+            relation.location.getStatus(dir),
             confBroadcast)
 
           // Merges data values with partition values.

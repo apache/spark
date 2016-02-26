@@ -481,7 +481,7 @@ case class HadoopFsRelation(
       prepareJobForWrite: Job => OutputWriterFactory,
       bucketSpec: Option[BucketSpec])
 
-  def schema: StructType = StructType(partitionSchema ++ dataSchema)
+  def schema: StructType = StructType(dataSchema ++ partitionSchema)
 
   def partitionSpec: PartitionSpec = location.partitionSpec
 
@@ -516,6 +516,8 @@ trait FileCatalog {
 
   def allFiles(): Seq[FileStatus]
 
+  def getStatus(path: Path): Array[FileStatus]
+
   def refresh(): Unit
 }
 
@@ -533,6 +535,8 @@ case class HDFSFileCatalog(
   refresh()
 
   def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
+
+  def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
   private def listLeafFiles(paths: Array[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {

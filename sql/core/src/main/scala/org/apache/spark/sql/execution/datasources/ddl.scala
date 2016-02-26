@@ -93,12 +93,9 @@ case class CreateTempTableUsing(
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
       sqlContext,
-      paths = Nil,
-      userSpecifiedSchema,
-      Array.empty[String],
-      bucketSpec = None,
-      provider,
-      options)
+      userSpecifiedSchema = userSpecifiedSchema,
+      provider = provider,
+      options = options)
     sqlContext.catalog.registerTable(
       tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)

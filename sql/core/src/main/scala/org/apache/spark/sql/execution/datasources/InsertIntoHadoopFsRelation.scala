@@ -69,8 +69,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
   override def children: Seq[LogicalPlan] = query :: Nil
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    println(s"RUNNING $this")
-
     // Most formats don't do well with duplicate columns, so lets not allow that
     if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
       val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
@@ -125,10 +123,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
             qualifiedOutputPath.toString,
             fileFormat.prepareWrite(sqlContext, _, dataColumns.toStructType),
             bucketSpec)
-
-        println(dataColumns)
-        println(partitionColumns)
-        println(query.output)
 
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)

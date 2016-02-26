@@ -126,10 +126,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def load(): DataFrame = {
     val resolved = ResolvedDataSource(
       sqlContext,
-      paths = Seq.empty,
       userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
@@ -366,8 +363,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     if (paths.isEmpty) {
       sqlContext.emptyDataFrame
     } else {
-      println(s"parquet: ${extraOptions}")
-
       sqlContext.baseRelationToDataFrame(
         ResolvedDataSource.apply(
           sqlContext,
