@@ -28,7 +28,7 @@ import org.apache.spark._
  * of them will be combined together, showed in one line.
  */
 private[spark] class ConsoleProgressBar(sc: SparkContext) extends Logging {
-  // Carrige return
+  // Carriage return
   val CR = '\r'
   // Update period of progress bar, in milliseconds
   val UPDATE_PERIOD = 200L
