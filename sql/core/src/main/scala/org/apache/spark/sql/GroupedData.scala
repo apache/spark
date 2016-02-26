@@ -306,6 +306,7 @@ class GroupedData protected[sql](
     val values = df.select(pivotColumn)
       .distinct()
       .sort(pivotColumn)  // ensure that the output columns are in a consistent logical order
+      .rdd
       .map(_.get(0))
       .take(maxValues + 1)
       .toSeq

@@ -138,7 +138,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
 
   override def fit(dataset: DataFrame): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
+    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
     val wordVectors = new feature.Word2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))

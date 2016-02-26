@@ -133,7 +133,7 @@ class CountVectorizer(override val uid: String)
   override def fit(dataset: DataFrame): CountVectorizerModel = {
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
-    val input = dataset.select($(inputCol)).map(_.getAs[Seq[String]](0))
+    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
     val minDf = if ($(minDF) >= 1.0) {
       $(minDF)
     } else {

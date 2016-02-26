@@ -52,7 +52,7 @@ object RDDRelation {
     val rddFromSql = sqlContext.sql("SELECT key, value FROM records WHERE key < 10")
 
     println("Result of RDD.map:")
-    rddFromSql.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect().foreach(println)
+    rddFromSql.rdd.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect().foreach(println)
 
     // Queries can also be written using a LINQ-like Scala DSL.
     df.where($"key" === 1).orderBy($"value".asc).select($"key").collect().foreach(println)

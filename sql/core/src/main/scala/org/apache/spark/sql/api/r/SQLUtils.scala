@@ -100,7 +100,7 @@ private[r] object SQLUtils {
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
-    df.map(r => rowToRBytes(r))
+    df.rdd.map(r => rowToRBytes(r))
   }
 
   private[this] def doConversion(data: Object, dataType: DataType): Object = {

@@ -1427,30 +1427,6 @@ class DataFrame private[sql](
   def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
 
   /**
-   * Returns a new RDD by applying a function to all rows of this DataFrame.
-   * @group rdd
-   * @since 1.3.0
-   */
-  def map[R: ClassTag](f: Row => R): RDD[R] = rdd.map(f)
-
-  /**
-   * Returns a new RDD by first applying a function to all rows of this [[DataFrame]],
-   * and then flattening the results.
-   * @group rdd
-   * @since 1.3.0
-   */
-  def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R] = rdd.flatMap(f)
-
-  /**
-   * Returns a new RDD by applying a function to each partition of this DataFrame.
-   * @group rdd
-   * @since 1.3.0
-   */
-  def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
-    rdd.mapPartitions(f)
-  }
-
-  /**
    * Applies a function `f` to all rows.
    * @group rdd
    * @since 1.3.0

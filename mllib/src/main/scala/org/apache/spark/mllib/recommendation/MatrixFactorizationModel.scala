@@ -369,13 +369,13 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
-      val userFeatures = sqlContext.read.parquet(userPath(path))
-        .map { case Row(id: Int, features: Seq[_]) =>
+      val userFeatures = sqlContext.read.parquet(userPath(path)).rdd.map {
+        case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
-        }
-      val productFeatures = sqlContext.read.parquet(productPath(path))
-        .map { case Row(id: Int, features: Seq[_]) =>
-        (id, features.asInstanceOf[Seq[Double]].toArray)
+      }
+      val productFeatures = sqlContext.read.parquet(productPath(path)).rdd.map {
+        case Row(id: Int, features: Seq[_]) =>
+          (id, features.asInstanceOf[Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }

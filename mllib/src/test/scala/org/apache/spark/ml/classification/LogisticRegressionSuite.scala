@@ -735,7 +735,7 @@ class LogisticRegressionSuite
     val model1 = trainer1.fit(binaryDataset)
     val model2 = trainer2.fit(binaryDataset)
 
-    val histogram = binaryDataset.map { case Row(label: Double, features: Vector) => label }
+    val histogram = binaryDataset.rdd.map { case Row(label: Double, features: Vector) => label }
       .treeAggregate(new MultiClassSummarizer)(
         seqOp = (c, v) => (c, v) match {
           case (classSummarizer: MultiClassSummarizer, label: Double) => classSummarizer.add(label)

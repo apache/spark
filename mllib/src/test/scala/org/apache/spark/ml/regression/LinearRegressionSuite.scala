@@ -686,17 +686,18 @@ class LinearRegressionSuite
 
       // Residuals in [[LinearRegressionResults]] should equal those manually computed
       val expectedResiduals = datasetWithDenseFeature.select("features", "label")
+        .rdd
         .map { case Row(features: DenseVector, label: Double) =>
-        val prediction =
-          features(0) * model.coefficients(0) + features(1) * model.coefficients(1) +
-            model.intercept
-        label - prediction
-      }
-        .zip(model.summary.residuals.map(_.getDouble(0)))
+          val prediction =
+            features(0) * model.coefficients(0) + features(1) * model.coefficients(1) +
+              model.intercept
+          label - prediction
+        }
+        .zip(model.summary.residuals.rdd.map(_.getDouble(0)))
         .collect()
         .foreach { case (manualResidual: Double, resultResidual: Double) =>
-        assert(manualResidual ~== resultResidual relTol 1E-5)
-      }
+          assert(manualResidual ~== resultResidual relTol 1E-5)
+        }
 
       /*
          # Use the following R code to generate model training results.

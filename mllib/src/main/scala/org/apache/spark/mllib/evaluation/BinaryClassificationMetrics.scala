@@ -58,7 +58,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * @param scoreAndLabels a DataFrame with two double columns: score and label
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
-    this(scoreAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Unpersist intermediate RDDs used in the computation.

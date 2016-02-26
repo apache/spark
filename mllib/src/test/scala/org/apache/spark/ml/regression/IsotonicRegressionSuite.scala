@@ -46,7 +46,7 @@ class IsotonicRegressionSuite
 
     val predictions = model
       .transform(dataset)
-      .select("prediction").map { case Row(pred) =>
+      .select("prediction").rdd.map { case Row(pred) =>
         pred
       }.collect()
 
@@ -66,7 +66,7 @@ class IsotonicRegressionSuite
 
     val predictions = model
       .transform(features)
-      .select("prediction").map {
+      .select("prediction").rdd.map {
         case Row(pred) => pred
       }.collect()
 
@@ -160,7 +160,7 @@ class IsotonicRegressionSuite
 
     val predictions = model
       .transform(features)
-      .select("prediction").map {
+      .select("prediction").rdd.map {
       case Row(pred) => pred
     }.collect()
 
