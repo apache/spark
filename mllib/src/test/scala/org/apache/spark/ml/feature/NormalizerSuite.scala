@@ -112,7 +112,7 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
     val normalizer = new Normalizer()
       .setInputCol("features")
-      .setOutputCol("polyFeatures")
+      .setOutputCol("normalized_features")
 
     val thrown = intercept[IllegalArgumentException] {
       normalizer.transform(df).collect()
