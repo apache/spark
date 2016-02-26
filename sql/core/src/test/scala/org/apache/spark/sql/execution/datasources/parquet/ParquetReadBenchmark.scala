@@ -160,8 +160,8 @@ object ParquetReadBenchmark {
 
         /*
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-        Parquet Reader Single Int Column Scan:     Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-        -------------------------------------------------------------------------------
+        Parquet Reader Single Int Column    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
         ParquetReader                             565 /  609         27.8          35.9       1.0X
         ParquetReader(Batched)                    165 /  174         95.3          10.5       3.4X
         ParquetReader(Batch -> Row)               158 /  188         99.3          10.1       3.6X
@@ -218,7 +218,7 @@ object ParquetReadBenchmark {
 
         /*
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-        Int and String Scan:               Avg Time(ms)    Avg Rate(M/s)  Relative Rate
+        Int and String Scan:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         -------------------------------------------------------------------------------
         SQL Parquet Reader                       1381 / 1679          7.6         131.7       1.0X
         SQL Parquet MR                           2005 / 2177          5.2         191.2       0.7X
