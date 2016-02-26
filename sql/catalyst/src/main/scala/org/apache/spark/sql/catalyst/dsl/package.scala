@@ -235,7 +235,7 @@ package object dsl {
 
     implicit class DslAttribute(a: AttributeReference) {
       def notNull: AttributeReference = a.withNullability(false)
-      def nullable: AttributeReference = a.withNullability(true)
+      def canBeNull: AttributeReference = a.withNullability(true)
       def at(ordinal: Int): BoundReference = BoundReference(ordinal, a.dataType, a.nullable)
     }
   }

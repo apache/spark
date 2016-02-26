@@ -145,48 +145,31 @@ abstract class Expression extends TreeNode[Expression] {
   def childrenResolved: Boolean = children.forall(_.resolved)
 
   /**
-   * Returns true when two expressions will always compute the same result, even if they differ
-   * cosmetically (i.e. capitalization of names in attributes may be different).
+   * Returns an expression where a best effort attempt has been made to transform `this` in a way
+   * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
+   * commutative operations, etc.)  See [[Canonicalize]] for more details.
+   *
+   * `deterministic` expressions where `this.canonicalized == other.canonicalized` will always
+   * evaluate to the same result.
    */
-  def semanticEquals(other: Expression): Boolean = this.getClass == other.getClass && {
-    def checkSemantic(elements1: Seq[Any], elements2: Seq[Any]): Boolean = {
-      elements1.length == elements2.length && elements1.zip(elements2).forall {
-        case (e1: Expression, e2: Expression) => e1 semanticEquals e2
-        case (Some(e1: Expression), Some(e2: Expression)) => e1 semanticEquals e2
-        case (t1: Traversable[_], t2: Traversable[_]) => checkSemantic(t1.toSeq, t2.toSeq)
-        case (i1, i2) => i1 == i2
-      }
-    }
-    // Non-deterministic expressions cannot be semantic equal
-    if (!deterministic || !other.deterministic) return false
-    val elements1 = this.productIterator.toSeq
-    val elements2 = other.asInstanceOf[Product].productIterator.toSeq
-    checkSemantic(elements1, elements2)
-  }
+   lazy val canonicalized: Expression = Canonicalize.execute(this)
 
   /**
-   * Returns the hash for this expression. Expressions that compute the same result, even if
-   * they differ cosmetically should return the same hash.
+   * Returns true when two expressions will always compute the same result, even if they differ
+   * cosmetically (i.e. capitalization of names in attributes may be different).
+   *
+   * See [[Canonicalize]] for more details.
    */
-  def semanticHash() : Int = {
-    def computeHash(e: Seq[Any]): Int = {
-      // See http://stackoverflow.com/questions/113511/hash-code-implementation
-      var hash: Int = 17
-      e.foreach(i => {
-        val h: Int = i match {
-          case e: Expression => e.semanticHash()
-          case Some(e: Expression) => e.semanticHash()
-          case t: Traversable[_] => computeHash(t.toSeq)
-          case null => 0
-          case other => other.hashCode()
-        }
-        hash = hash * 37 + h
-      })
-      hash
-    }
+  def semanticEquals(other: Expression): Boolean =
+    deterministic && other.deterministic  && canonicalized == other.canonicalized
 
-    computeHash(this.productIterator.toSeq)
-  }
+  /**
+   * Returns a `hashCode` for the calculation performed by this expression. Unlike the standard
+   * `hashCode`, an attempt has been made to eliminate cosmetic differences.
+   *
+   * See [[Canonicalize]] for more details.
+   */
+  def semanticHash(): Int = canonicalized.hashCode()
 
   /**
    * Checks the input data types, returns `TypeCheckResult.success` if it's valid,
@@ -368,7 +351,6 @@ abstract class UnaryExpression extends Expression {
     }
   }
 }
-
 
 /**
  * An expression with two inputs and one output. The output is by default evaluated to null
