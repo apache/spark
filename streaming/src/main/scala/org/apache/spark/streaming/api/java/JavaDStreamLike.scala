@@ -50,7 +50,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
 
   def wrapRDD(in: RDD[T]): R
 
-  implicit def scalaIntToJavaLong(in: DStream[Long]): JavaDStream[jl.Long] = {
+  implicit def scalaLongToJavaLong(in: DStream[Long]): JavaDStream[jl.Long] = {
     in.map(jl.Long.valueOf)
   }
 
