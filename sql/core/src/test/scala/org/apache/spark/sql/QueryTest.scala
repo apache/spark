@@ -141,7 +141,7 @@ abstract class QueryTest extends PlanTest {
     assertEmptyMissingInput(df)
 
     QueryTest.checkAnswer(analyzedDF, expectedAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
+      case Some(errorMessage) => Thread.sleep(100000); fail(errorMessage)
       case None =>
     }
   }

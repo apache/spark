@@ -43,8 +43,8 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
-private[sql] class DataSourceAnalysis extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan match {
+private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ logical.InsertIntoTable(
            l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
@@ -53,7 +53,8 @@ private[sql] class DataSourceAnalysis extends Rule[LogicalPlan] {
         t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
         t.bucketSpec,
         t.fileFormat,
-        plan,
+        () => t.refresh(),
+        query,
         mode)
   }
 }

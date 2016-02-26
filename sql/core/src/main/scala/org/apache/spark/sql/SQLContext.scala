@@ -196,6 +196,7 @@ class SQLContext private[sql](
       override val extendedResolutionRules =
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
+        DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(

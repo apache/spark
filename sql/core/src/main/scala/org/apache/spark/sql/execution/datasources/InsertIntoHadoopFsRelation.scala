@@ -61,6 +61,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
+    refreshFunction: () => Unit,
     @transient query: LogicalPlan,
     mode: SaveMode)
   extends RunnableCommand {
@@ -68,6 +69,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
   override def children: Seq[LogicalPlan] = query :: Nil
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
+    println(s"RUNNING $this")
+
+    // Most formats don't do well with duplicate columns, so lets not allow that
     if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
       val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
@@ -122,6 +126,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
             fileFormat.prepareWrite(sqlContext, _, dataColumns.toStructType),
             bucketSpec)
 
+        println(dataColumns)
+
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
         } else {
@@ -143,7 +149,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
         try {
           sqlContext.sparkContext.runJob(queryExecution.toRdd, writerContainer.writeRows _)
           writerContainer.commitJob()
-          // relation.refresh()
+          refreshFunction()
         } catch { case cause: Throwable =>
           logError("Aborting job.", cause)
           writerContainer.abortJob()

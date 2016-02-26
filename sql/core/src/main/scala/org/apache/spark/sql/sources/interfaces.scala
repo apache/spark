@@ -532,7 +532,6 @@ case class HDFSFileCatalog(
   def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
   private def listLeafFiles(paths: Array[String]): mutable.LinkedHashSet[FileStatus] = {
-    println(paths.toSeq)
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
     } else {
@@ -607,6 +606,8 @@ case class HDFSFileCatalog(
 
     leafFiles ++= files.map(f => f.getPath -> f)
     leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
+    println(s"refreshed:")
+    allFiles().map(_.getPath).toList.foreach(println)
   }
 }
 
