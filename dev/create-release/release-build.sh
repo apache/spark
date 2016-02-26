@@ -222,13 +222,13 @@ if [[ "$1" == "docs" ]]; then
   echo "Copying release documentation to $dest_dir"
   # Put to new directory:
   LFTP mkdir -p $dest_dir
-  LFTP put -O $REMOTE_PARENT_DIR '_site' -o "${DEST_DIR_NAME}-docs"
+  LFTP mirror -R _site $dest_dir
   # Delete /latest directory and rename new upload to /latest
   LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
   LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
   # Re-upload a second time and leave the files in the timestamped upload directory:
   LFTP mkdir -p $dest_dir
-  LFTP put -O $REMOTE_PARENT_DIR '_site' -o "${DEST_DIR_NAME}-docs"
+  LFTP mirror -R _site $dest_dir
   cd ..
   exit 0
 fi
