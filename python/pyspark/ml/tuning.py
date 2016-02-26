@@ -308,7 +308,7 @@ class TrainValidationSplit(Estimator, HasSeed):
     >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
     >>> tvsModel = tvs.fit(dataset)
     >>> evaluator.evaluate(tvsModel.transform(dataset))
-    0.8333...
+    0.83333333333333326
     .. versionadded:: 2.0.0
     """
 
