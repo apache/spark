@@ -121,5 +121,6 @@ class GoogleCloudStorageToBigQueryOperator(BaseOperator):
         if self.max_id_key:
             cursor.execute('SELECT MAX({}) FROM {}'.format(self.max_id_key, self.destination_dataset_table))
             row = cursor.fetchone()
-            logging.info('Loaded BQ data with max {}.{}={}'.format(self.destination_dataset_table, self.max_id_key, row[0]))
-            return row[0]
+            max_id = row[0] if row[0] else 0
+            logging.info('Loaded BQ data with max {}.{}={}'.format(self.destination_dataset_table, self.max_id_key, max_id))
+            return max_id

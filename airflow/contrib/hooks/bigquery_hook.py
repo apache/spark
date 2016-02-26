@@ -598,7 +598,9 @@ def _bq_cast(string_field, bq_type):
     Helper method that casts a BigQuery row to the appropriate data types.
     This is useful because BigQuery returns all fields as strings.
     """
-    if bq_type == 'INTEGER' or bq_type == 'TIMESTAMP':
+    if string_field is None:
+        return None
+    elif bq_type == 'INTEGER' or bq_type == 'TIMESTAMP':
         return int(string_field)
     elif bq_type == 'FLOAT':
         return float(string_field)
