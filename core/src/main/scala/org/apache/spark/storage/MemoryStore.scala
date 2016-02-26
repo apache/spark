@@ -95,7 +95,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level, returnValues = true)
     } else {
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false)
+      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()))
     }
   }
@@ -127,11 +127,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       returnValues: Boolean): PutResult = {
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
-      tryToPut(blockId, values, sizeEstimate, deserialized = true)
+      tryToPut(blockId, () => values, sizeEstimate, deserialized = true)
       PutResult(sizeEstimate, Left(values.iterator))
     } else {
       val bytes = blockManager.dataSerialize(blockId, values.iterator)
-      tryToPut(blockId, bytes, bytes.limit, deserialized = false)
+      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()))
     }
   }
@@ -208,7 +208,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
-    val entry = entries.synchronized { entries.remove(blockId) }
+    val entry = entries.synchronized {
+      entries.remove(blockId)
+    }
     if (entry != null) {
       memoryManager.releaseStorageMemory(entry.size)
       logDebug(s"Block $blockId of size ${entry.size} dropped " +
@@ -327,14 +329,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     blockId.asRDDId.map(_.rddId)
   }
 
-  private def tryToPut(
-      blockId: BlockId,
-      value: Any,
-      size: Long,
-      deserialized: Boolean): Boolean = {
-    tryToPut(blockId, () => value, size, deserialized)
-  }
-
   /**
    * Try to put in a set of values, if we can free up enough space. The value should either be
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
@@ -410,6 +404,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       var freedMemory = 0L
       val rddToAdd = blockId.flatMap(getRddId)
       val selectedBlocks = new ArrayBuffer[BlockId]
+      def blockIsEvictable(blockId: BlockId): Boolean = {
+        rddToAdd.isEmpty || rddToAdd != getRddId(blockId)
+      }
       // This is synchronized to ensure that the set of entries is not changed
       // (because of getValue or getBytes) while traversing the iterator, as that
       // can lead to exceptions.
@@ -418,9 +415,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         while (freedMemory < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
-          if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
-            selectedBlocks += blockId
-            freedMemory += pair.getValue.size
+          if (blockIsEvictable(blockId)) {
+            // We don't want to evict blocks which are currently being read, so we need to obtain
+            // an exclusive write lock on blocks which are candidates for eviction. We perform a
+            // non-blocking "tryLock" here in order to ignore blocks which are locked for reading:
+            if (blockManager.blockInfoManager.lockForWriting(blockId, blocking = false).isDefined) {
+              selectedBlocks += blockId
+              freedMemory += pair.getValue.size
+            }
           }
         }
       }
@@ -438,7 +440,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
             } else {
               Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
             }
-            blockManager.dropFromMemory(blockId, () => data)
+            val newEffectiveStorageLevel = blockManager.dropFromMemory(blockId, () => data)
+            if (newEffectiveStorageLevel.isValid) {
+              // The block is still present in at least one store, so release the lock
+              // but don't delete the block info
+              blockManager.releaseLock(blockId)
+            } else {
+              // The block isn't present in any store, so delete the block info so that the
+              // block can be stored again
+              blockManager.blockInfoManager.removeBlock(blockId)
+            }
           }
         }
         freedMemory
@@ -446,6 +457,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         blockId.foreach { id =>
           logInfo(s"Will not store $id as it would require dropping another block " +
             "from the same RDD")
+        }
+        selectedBlocks.foreach { id =>
+          blockManager.releaseLock(id)
         }
         0L
       }
@@ -463,6 +477,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
 
   /**
    * Reserve memory for unrolling the given block for this task.
+   *
    * @return whether the request is granted.
    */
   def reserveUnrollMemoryForThisTask(blockId: BlockId, memory: Long): Boolean = {
