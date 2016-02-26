@@ -218,15 +218,15 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
 
     val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
-                                                    masterUrl: String,
-                                                    scheduler: Scheduler,
-                                                    sparkUser: String,
-                                                    appName: String,
-                                                    conf: SparkConf,
-                                                    webuiUrl: Option[String] = None,
-                                                    checkpoint: Option[Boolean] = None,
-                                                    failoverTimeout: Option[Double] = None,
-                                                    frameworkId: Option[String] = None): SchedulerDriver = {
+        masterUrl: String,
+        scheduler: Scheduler,
+        sparkUser: String,
+        appName: String,
+        conf: SparkConf,
+        webuiUrl: Option[String] = None,
+        checkpoint: Option[Boolean] = None,
+        failoverTimeout: Option[Double] = None,
+        frameworkId: Option[String] = None): SchedulerDriver = {
         markRegistered()
         assert(webuiUrl.isDefined)
         assert(webuiUrl.get.equals("http://webui"))
