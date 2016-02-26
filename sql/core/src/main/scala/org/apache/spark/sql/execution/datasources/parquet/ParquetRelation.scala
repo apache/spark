@@ -58,6 +58,8 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
 
   override def shortName(): String = "parquet"
 
+  override def toString: String = "ParquetFormat"
+
   override def prepareWrite(
       sqlContext: SQLContext,
       job: Job,
@@ -153,6 +155,9 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
 
     val filesByType = splitFiles(files)
 
+    println(s"Infering $shouldMergeSchemas $parameters ${sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED)}")
+
+
     // Sees which file(s) we need to touch in order to figure out the schema.
     //
     // Always tries the summary files first if users don't require a merged schema.  In this case,
@@ -209,6 +214,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
           }
         needMerged ++ filesByType.metadata ++ filesByType.commonMetadata
       } else {
+        println(filesByType.commonMetadata.headOption)
         // Tries any "_common_metadata" first. Parquet files written by old versions or Parquet
         // don't have this.
         filesByType.commonMetadata.headOption

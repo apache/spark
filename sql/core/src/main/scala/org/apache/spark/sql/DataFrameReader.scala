@@ -126,6 +126,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def load(): DataFrame = {
     val resolved = ResolvedDataSource(
       sqlContext,
+      paths = Seq.empty,
       userSpecifiedSchema = userSpecifiedSchema,
       partitionColumns = Array.empty[String],
       bucketSpec = None,
@@ -365,21 +366,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     if (paths.isEmpty) {
       sqlContext.emptyDataFrame
     } else {
-      val globbedPaths = paths.flatMap { path =>
-        val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified)
-      }.toArray
+      println(s"parquet: ${extraOptions}")
 
       sqlContext.baseRelationToDataFrame(
         ResolvedDataSource.apply(
           sqlContext,
+          paths = paths,
           userSpecifiedSchema,
-          Array.empty,
-          None,
-          "parquet",
-          extraOptions.toMap + ("paths" -> globbedPaths.map(_.toString).mkString(","))).relation)
+          partitionColumns = Array.empty,
+          bucketSpec = None,
+          provider = "parquet",
+          options = extraOptions.toMap).relation)
     }
   }
 

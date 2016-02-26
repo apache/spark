@@ -34,6 +34,7 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
       try {
         val resolved = ResolvedDataSource(
           sqlContext,
+          paths = Seq.empty,
           userSpecifiedSchema = None,
           partitionColumns = Array(),
           bucketSpec = None,

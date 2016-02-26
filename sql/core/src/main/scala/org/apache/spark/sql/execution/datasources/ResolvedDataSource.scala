@@ -128,6 +128,7 @@ object ResolvedDataSource extends Logging {
   /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
+      paths: Seq[String],
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
       bucketSpec: Option[BucketSpec],
@@ -138,6 +139,7 @@ object ResolvedDataSource extends Logging {
 
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (clazz.newInstance(), userSpecifiedSchema) match {
+      // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
         dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
       case (dataSource: RelationProvider, None) =>
@@ -148,37 +150,28 @@ object ResolvedDataSource extends Logging {
         throw new AnalysisException(s"$className does not allow user-specified schemas.")
 
       case (format: FileFormat, _) =>
-        // TODO: this is ugly...
-        val paths = {
-          if (caseInsensitiveOptions.contains("paths") &&
-              caseInsensitiveOptions.contains("path")) {
-            throw new AnalysisException(s"Both path and paths options are present.")
-          }
-          caseInsensitiveOptions.get("paths")
-              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-              .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
-                throw new IllegalArgumentException("'path' is not specified")
-              })))
-              .flatMap{ pathString =>
-                val hdfsPath = new Path(pathString)
-                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
-              }
-        }
+        val allPaths = caseInsensitiveOptions.get("path") ++ paths
+        val globbedPaths = allPaths.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          SparkHadoopUtil.get.globPathIfNecessary(qualified)
+        }.toArray
 
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, paths)
+        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
         val dataSchema = userSpecifiedSchema.getOrElse {
+          println(s"call infer $options")
           format.inferSchema(
             sqlContext,
             caseInsensitiveOptions,
             fileCatalog.allFiles())
         }
 
+        val partitionSpec = fileCatalog.partitionSpec
         HadoopFsRelation(
           sqlContext,
           fileCatalog,
-          partitionSchema = StructType(Nil),
+          partitionSchema = partitionSpec.partitionColumns,
           dataSchema = dataSchema,
           bucketSpec = None,
           format)
@@ -266,6 +259,13 @@ object ResolvedDataSource extends Logging {
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
 
-    apply(sqlContext, Some(data.schema), partitionColumns, bucketSpec, provider, options)
+    apply(
+      sqlContext,
+      paths = Nil,
+      Some(data.schema),
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
+      provider = provider,
+      options = options)
   }
 }

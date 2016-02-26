@@ -127,6 +127,8 @@ private[sql] case class InsertIntoHadoopFsRelation(
             bucketSpec)
 
         println(dataColumns)
+        println(partitionColumns)
+        println(query.output)
 
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
@@ -136,7 +138,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             job,
             partitionColumns = partitionColumns,
             dataColumns = dataColumns,
-            inputSchema = output,
+            inputSchema = query.output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,
             sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
             isAppend)

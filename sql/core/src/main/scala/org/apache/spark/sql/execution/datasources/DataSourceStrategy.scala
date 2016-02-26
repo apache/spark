@@ -46,10 +46,10 @@ import org.apache.spark.util.collection.BitSet
 private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) =>
+           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) if query.resolved && t.schema == query.schema =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
       InsertIntoHadoopFsRelation(
-        new Path(t.location.paths.head), // TODO: Qualify?
+        t.location.paths.head, // TODO: Check only one...
         t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
         t.bucketSpec,
         t.fileFormat,
@@ -103,49 +103,49 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val partitionAndNormalColumnFilters =
         filters.toSet -- partitionFilters.toSet -- pushedFilters.toSet
 
-//      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
-//
-//      logInfo {
-//        val total = t.partitionSpec.partitions.length
-//        val selected = selectedPartitions.length
-//        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
-//        s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
-//      }
-//
-//      // need to add projections from "partitionAndNormalColumnAttrs" in if it is not empty
-//      val partitionAndNormalColumnAttrs = AttributeSet(partitionAndNormalColumnFilters)
-//      val partitionAndNormalColumnProjs = if (partitionAndNormalColumnAttrs.isEmpty) {
-//        projects
-//      } else {
-//        (partitionAndNormalColumnAttrs ++ projects).toSeq
-//      }
-//
-//      // Prune the buckets based on the pushed filters that do not contain partitioning key
-//      // since the bucketing key is not allowed to use the columns in partitioning key
-//      val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
-//
-//      val scan = buildPartitionedTableScan(
-//        l,
-//        partitionAndNormalColumnProjs,
-//        pushedFilters,
-//        bucketSet,
-//        t.partitionSpec.partitionColumns,
-//        selectedPartitions)
-//
-//      // Add a Projection to guarantee the original projection:
-//      // this is because "partitionAndNormalColumnAttrs" may be different
-//      // from the original "projects", in elements or their ordering
-//
-//      partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
-//        if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
-//          // if the original projection is empty, no need for the additional Project either
-//          execution.Filter(cf, scan)
-//        } else {
-//          execution.Project(projects, execution.Filter(cf, scan))
-//        }
-//      ).getOrElse(scan) :: Nil
+      val selectedPartitions = prunePartitions(partitionFilters, t.partitionSpec).toArray
 
-      ???
+      println(s"Selected ${selectedPartitions.toList}")
+
+      println {
+        val total = t.partitionSpec.partitions.length
+        val selected = selectedPartitions.length
+        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
+        s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
+      }
+
+      // need to add projections from "partitionAndNormalColumnAttrs" in if it is not empty
+      val partitionAndNormalColumnAttrs = AttributeSet(partitionAndNormalColumnFilters)
+      val partitionAndNormalColumnProjs = if (partitionAndNormalColumnAttrs.isEmpty) {
+        projects
+      } else {
+        (partitionAndNormalColumnAttrs ++ projects).toSeq
+      }
+
+      // Prune the buckets based on the pushed filters that do not contain partitioning key
+      // since the bucketing key is not allowed to use the columns in partitioning key
+      val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
+
+      val scan = buildPartitionedTableScan(
+        l,
+        partitionAndNormalColumnProjs,
+        pushedFilters,
+        bucketSet,
+        t.partitionSpec.partitionColumns,
+        selectedPartitions)
+
+      // Add a Projection to guarantee the original projection:
+      // this is because "partitionAndNormalColumnAttrs" may be different
+      // from the original "projects", in elements or their ordering
+
+      partitionAndNormalColumnFilters.reduceLeftOption(expressions.And).map(cf =>
+        if (projects.isEmpty || projects == partitionAndNormalColumnProjs) {
+          // if the original projection is empty, no need for the additional Project either
+          execution.Filter(cf, scan)
+        } else {
+          execution.Project(projects, execution.Filter(cf, scan))
+        }
+      ).getOrElse(scan) :: Nil
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _, _)) =>
