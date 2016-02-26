@@ -87,6 +87,9 @@ case class BroadcastNestedLoopJoin(
     }
   }
 
+  /**
+   * The implementation for InnerJoin.
+   */
   private def innerJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
@@ -103,6 +106,12 @@ case class BroadcastNestedLoopJoin(
     }
   }
 
+  /**
+   * The implementation for these joins:
+   *
+   *   LeftOuter with BuildRight
+   *   RightOuter with BuildLeft
+   */
   private def outerJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     streamed.execute().mapPartitionsInternal { streamedIter =>
       val buildRows = relation.value
@@ -160,6 +169,11 @@ case class BroadcastNestedLoopJoin(
     }
   }
 
+  /**
+   * The implementation for these joins:
+   *
+   *   LeftSemi with BuildRight
+   */
   private def leftSemiJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     assert(buildSide == BuildRight)
     streamed.execute().mapPartitionsInternal { streamedIter =>
@@ -177,12 +191,12 @@ case class BroadcastNestedLoopJoin(
   }
 
   /**
-   * The implementation these joins:
+   * The implementation for these joins:
    *
-   * LeftOuter with BuildLeft
-   * RightOuter with BuildRight
-   * FullOuter
-   * LeftSemi with BuildLeft
+   *   LeftOuter with BuildLeft
+   *   RightOuter with BuildRight
+   *   FullOuter
+   *   LeftSemi with BuildLeft
    */
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
     /** All rows that either match both-way, or rows from streamed joined with nulls. */
@@ -276,9 +290,7 @@ case class BroadcastNestedLoopJoin(
     val resultRdd = (joinType, buildSide) match {
       case (Inner, _) =>
         innerJoin(broadcastedRelation)
-      case (LeftOuter, BuildRight) =>
-        outerJoin(broadcastedRelation)
-      case (RightOuter, BuildLeft) =>
+      case (LeftOuter, BuildRight) | (RightOuter, BuildLeft) =>
         outerJoin(broadcastedRelation)
       case (LeftSemi, BuildRight) =>
         leftSemiJoin(broadcastedRelation)
