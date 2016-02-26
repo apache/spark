@@ -25,7 +25,7 @@ import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShortCompressionCodecNameMapper, Utils}
 
 /**
  * :: DeveloperApi ::
@@ -53,10 +53,14 @@ private[spark] object CompressionCodec {
       || codec.isInstanceOf[LZ4CompressionCodec])
   }
 
-  private val shortCompressionCodecNames = Map(
-    "lz4" -> classOf[LZ4CompressionCodec].getName,
-    "lzf" -> classOf[LZFCompressionCodec].getName,
-    "snappy" -> classOf[SnappyCompressionCodec].getName)
+  /** Maps the short versions of compression codec names to fully-qualified class names. */
+  private val shortCompressionCodecNameMapper = new ShortCompressionCodecNameMapper {
+    override def lz4: Option[String] = Some(classOf[LZ4CompressionCodec].getName)
+    override def lzf: Option[String] = Some(classOf[LZFCompressionCodec].getName)
+    override def snappy: Option[String] = Some(classOf[SnappyCompressionCodec].getName)
+  }
+
+  private val shortCompressionCodecMap = shortCompressionCodecNameMapper.getAsMap
 
   def getCodecName(conf: SparkConf): String = {
     conf.get(configKey, DEFAULT_COMPRESSION_CODEC)
@@ -67,7 +71,7 @@ private[spark] object CompressionCodec {
   }
 
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
-    val codecClass = shortCompressionCodecNames.getOrElse(codecName.toLowerCase, codecName)
+    val codecClass = shortCompressionCodecNameMapper.get(codecName).getOrElse(codecName)
     val codec = try {
       val ctor = Utils.classForName(codecClass).getConstructor(classOf[SparkConf])
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
@@ -84,10 +88,10 @@ private[spark] object CompressionCodec {
    * If it is already a short name, just return it.
    */
   def getShortName(codecName: String): String = {
-    if (shortCompressionCodecNames.contains(codecName)) {
+    if (shortCompressionCodecMap.contains(codecName)) {
       codecName
     } else {
-      shortCompressionCodecNames
+      shortCompressionCodecMap
         .collectFirst { case (k, v) if v == codecName => k }
         .getOrElse { throw new IllegalArgumentException(s"No short name for codec $codecName.") }
     }
@@ -95,7 +99,7 @@ private[spark] object CompressionCodec {
 
   val FALLBACK_COMPRESSION_CODEC = "snappy"
   val DEFAULT_COMPRESSION_CODEC = "lz4"
-  val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
+  val ALL_COMPRESSION_CODECS = shortCompressionCodecMap.values.toSeq
 }
 
 /**

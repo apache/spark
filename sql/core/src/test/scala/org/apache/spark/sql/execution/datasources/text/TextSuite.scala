@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -54,6 +54,15 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
     intercept[AnalysisException] {
       sqlContext.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
+    }
+  }
+
+  test("compression") {
+    Seq("bzip2", "deflate", "gzip").map { codecName =>
+      val tempDirPath = Utils.createTempDir().getAbsolutePath
+      val df = sqlContext.read.text(testFile)
+      df.write.option("compressionCodec", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
+      verifyFrame(sqlContext.read.text(tempDirPath))
     }
   }
 

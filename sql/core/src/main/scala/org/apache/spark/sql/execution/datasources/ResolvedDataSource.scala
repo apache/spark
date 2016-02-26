@@ -24,6 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.compress._
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
@@ -32,7 +33,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShortCompressionCodecNameMapper, Utils}
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
@@ -48,6 +49,14 @@ object ResolvedDataSource extends Logging {
     "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getCanonicalName,
     "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getCanonicalName
   )
+
+  /** Maps the short versions of compression codec names to fully-qualified class names. */
+  private val hadoopShortCodecNameMapper = new ShortCompressionCodecNameMapper {
+    override def bzip2: Option[String] = Some(classOf[BZip2Codec].getCanonicalName)
+    override def deflate: Option[String] = Some(classOf[DeflateCodec].getCanonicalName)
+    override def gzip: Option[String] = Some(classOf[GzipCodec].getCanonicalName)
+    override def snappy: Option[String] = Some(classOf[SnappyCodec].getCanonicalName)
+  }
 
   /** Given a provider name, look up the data source class definition. */
   def lookupDataSource(provider0: String): Class[_] = {
@@ -286,6 +295,16 @@ object ResolvedDataSource extends Logging {
           bucketSpec,
           caseInsensitiveOptions)
 
+        val compressionCodec = options
+          .get("compressionCodec")
+          .map { codecName =>
+            val codecFactory = new CompressionCodecFactory(
+              sqlContext.sparkContext.hadoopConfiguration)
+            val resolvedCodecName = hadoopShortCodecNameMapper.get(codecName).getOrElse(codecName)
+            Option(codecFactory.getCodecClassByName(resolvedCodecName))
+          }
+          .getOrElse(None)
+
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
@@ -293,7 +312,8 @@ object ResolvedDataSource extends Logging {
           InsertIntoHadoopFsRelation(
             r,
             data.logicalPlan,
-            mode)).toRdd
+            mode,
+            compressionCodec)).toRdd
         r
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
