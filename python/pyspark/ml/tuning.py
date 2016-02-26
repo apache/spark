@@ -292,6 +292,7 @@ class CrossValidatorModel(Model):
 class TrainValidationSplit(Estimator, HasSeed):
     """
     Train-Validation-Split.
+    
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.mllib.linalg import Vectors
