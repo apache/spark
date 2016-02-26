@@ -111,24 +111,24 @@ public class JavaDatasetSuite implements Serializable {
 
     Dataset<String> parMapped = ds.mapPartitions(new MapPartitionsFunction<String, String>() {
       @Override
-      public Iterable<String> call(Iterator<String> it) throws Exception {
-        List<String> ls = new LinkedList<String>();
+      public Iterator<String> call(Iterator<String> it) {
+        List<String> ls = new LinkedList<>();
         while (it.hasNext()) {
-          ls.add(it.next().toUpperCase());
+          ls.add(it.next().toUpperCase(Locale.ENGLISH));
         }
-        return ls;
+        return ls.iterator();
       }
     }, Encoders.STRING());
     Assert.assertEquals(Arrays.asList("HELLO", "WORLD"), parMapped.collectAsList());
 
     Dataset<String> flatMapped = ds.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String s) throws Exception {
-        List<String> ls = new LinkedList<String>();
+      public Iterator<String> call(String s) {
+        List<String> ls = new LinkedList<>();
         for (char c : s.toCharArray()) {
           ls.add(String.valueOf(c));
         }
-        return ls;
+        return ls.iterator();
       }
     }, Encoders.STRING());
     Assert.assertEquals(
@@ -192,12 +192,12 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> flatMapped = grouped.flatMapGroups(
       new FlatMapGroupsFunction<Integer, String, String>() {
         @Override
-        public Iterable<String> call(Integer key, Iterator<String> values) throws Exception {
+        public Iterator<String> call(Integer key, Iterator<String> values) {
           StringBuilder sb = new StringBuilder(key.toString());
           while (values.hasNext()) {
             sb.append(values.next());
           }
-          return Collections.singletonList(sb.toString());
+          return Collections.singletonList(sb.toString()).iterator();
         }
       },
       Encoders.STRING());
@@ -228,10 +228,7 @@ public class JavaDatasetSuite implements Serializable {
       grouped2,
       new CoGroupFunction<Integer, String, Integer, String>() {
         @Override
-        public Iterable<String> call(
-          Integer key,
-          Iterator<String> left,
-          Iterator<Integer> right) throws Exception {
+        public Iterator<String> call(Integer key, Iterator<String> left, Iterator<Integer> right) {
           StringBuilder sb = new StringBuilder(key.toString());
           while (left.hasNext()) {
             sb.append(left.next());
@@ -240,7 +237,7 @@ public class JavaDatasetSuite implements Serializable {
           while (right.hasNext()) {
             sb.append(right.next());
           }
-          return Collections.singletonList(sb.toString());
+          return Collections.singletonList(sb.toString()).iterator();
         }
       },
       Encoders.STRING());
@@ -853,9 +850,7 @@ public class JavaDatasetSuite implements Serializable {
     }
 
     nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage(
-      "Null value appeared in non-nullable field " +
-        "test.org.apache.spark.sql.JavaDatasetSuite$SmallBean.b of type int.");
+    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
 
     {
       Row row = new GenericRow(new Object[] {

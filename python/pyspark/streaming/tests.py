@@ -1013,11 +1013,11 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.setup()
 
     def tearDown(self):
+        super(KafkaStreamTests, self).tearDown()
+
         if self._kafkaTestUtils is not None:
             self._kafkaTestUtils.teardown()
             self._kafkaTestUtils = None
-
-        super(KafkaStreamTests, self).tearDown()
 
     def _randomTopic(self):
         return "topic-%d" % random.randint(0, 10000)

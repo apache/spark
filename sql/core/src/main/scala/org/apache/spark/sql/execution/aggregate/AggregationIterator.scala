@@ -238,7 +238,7 @@ abstract class AggregationIterator(
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {
-      // Grouping-only: we only output values of grouping expressions.
+      // Grouping-only: we only output values based on grouping expressions.
       val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
       (currentGroupingKey: UnsafeRow, currentBuffer: MutableRow) => {
         resultProjection(currentGroupingKey)

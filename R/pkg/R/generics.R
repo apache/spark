@@ -67,6 +67,13 @@ setGeneric("crosstab", function(x, col1, col2) { standardGeneric("crosstab") })
 # @export
 setGeneric("freqItems", function(x, cols, support = 0.01) { standardGeneric("freqItems") })
 
+# @rdname statfunctions
+# @export
+setGeneric("approxQuantile",
+           function(x, col, probabilities, relativeError) {
+             standardGeneric("approxQuantile")
+           })
+
 # @rdname distinct
 # @export
 setGeneric("distinct", function(x, numPartitions = 1) { standardGeneric("distinct") })
@@ -418,11 +425,19 @@ setGeneric("columns", function(x) {standardGeneric("columns") })
 
 #' @rdname statfunctions
 #' @export
-setGeneric("cov", function(x, col1, col2) {standardGeneric("cov") })
+setGeneric("cov", function(x, ...) {standardGeneric("cov") })
 
 #' @rdname statfunctions
 #' @export
 setGeneric("corr", function(x, ...) {standardGeneric("corr") })
+
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_samp", function(col1, col2) {standardGeneric("covar_samp") })
+
+#' @rdname statfunctions
+#' @export
+setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 
 #' @rdname summary
 #' @export
@@ -1152,3 +1167,11 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @rdname rbind
 #' @export
 setGeneric("rbind", signature = "...")
+
+#' @rdname kmeans
+#' @export
+setGeneric("kmeans")
+
+#' @rdname fitted
+#' @export
+setGeneric("fitted")

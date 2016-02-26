@@ -33,10 +33,12 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLConf}
+import org.apache.spark.sql.{DataFrame, Row => SparkRow}
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.{Utils => SparkUtils}
 
 private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
@@ -231,7 +233,7 @@ private[hive] class SparkExecuteStatementOperation(
         if (getStatus().getState() == OperationState.CANCELED) {
           return
         } else {
-          setState(OperationState.ERROR);
+          setState(OperationState.ERROR)
           throw e
         }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
@@ -241,7 +243,7 @@ private[hive] class SparkExecuteStatementOperation(
         logError(s"Error executing query, currentState $currentState, ", e)
         setState(OperationState.ERROR)
         HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, e.getStackTraceString)
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)

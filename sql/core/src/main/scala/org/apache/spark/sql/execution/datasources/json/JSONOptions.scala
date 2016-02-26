@@ -27,13 +27,15 @@ import org.apache.spark.sql.execution.datasources.CompressionCodecs
  * Most of these map directly to Jackson's internal options, specified in [[JsonParser.Feature]].
  */
 private[sql] class JSONOptions(
-    @transient parameters: Map[String, String])
+    @transient private val parameters: Map[String, String])
   extends Serializable  {
 
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   val primitivesAsString =
     parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
+  val floatAsBigDecimal =
+    parameters.get("floatAsBigDecimal").map(_.toBoolean).getOrElse(false)
   val allowComments =
     parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
   val allowUnquotedFieldNames =

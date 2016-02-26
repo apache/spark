@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.util.CompletionIterator
 
 /**
  * Spark class responsible for passing RDDs partition contents to the BlockManager and making
@@ -44,12 +45,13 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case Some(blockResult) =>
         // Partition is already materialized, so just return its values
         val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
-        existingMetrics.incBytesRead(blockResult.bytes)
+        existingMetrics.incBytesReadInternal(blockResult.bytes)
 
         val iter = blockResult.data.asInstanceOf[Iterator[T]]
+
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
-            existingMetrics.incRecordsRead(1)
+            existingMetrics.incRecordsReadInternal(1)
             delegate.next()
           }
         }
@@ -120,7 +122,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
    * The effective storage level refers to the level that actually specifies BlockManager put
    * behavior, not the level originally specified by the user. This is mainly for forcing a
    * MEMORY_AND_DISK partition to disk if there is not enough room to unroll the partition,
-   * while preserving the the original semantics of the RDD as specified by the application.
+   * while preserving the original semantics of the RDD as specified by the application.
    */
   private def putInBlockManager[T](
       key: BlockId,
@@ -156,7 +158,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         case Left(arr) =>
           // We have successfully unrolled the entire partition, so cache it in memory
           blockManager.putArray(key, arr, level, tellMaster = true, effectiveStorageLevel)
-          arr.iterator.asInstanceOf[Iterator[T]]
+          CompletionIterator[T, Iterator[T]](
+            arr.iterator.asInstanceOf[Iterator[T]],
+            blockManager.releaseLock(key))
         case Right(it) =>
           // There is not enough space to cache this partition in memory
           val returnValues = it.asInstanceOf[Iterator[T]]

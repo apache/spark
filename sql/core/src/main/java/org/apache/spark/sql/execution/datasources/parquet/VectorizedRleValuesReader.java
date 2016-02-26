@@ -23,6 +23,9 @@ import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.column.values.bitpacking.BytePacker;
 import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
+import org.apache.parquet.io.api.Binary;
+
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 
 /**
@@ -35,7 +38,8 @@ import org.apache.spark.sql.execution.vectorized.ColumnVector;
  *  - Definition/Repetition levels
  *  - Dictionary ids.
  */
-public final class VectorizedRleValuesReader extends ValuesReader {
+public final class VectorizedRleValuesReader extends ValuesReader
+    implements VectorizedValuesReader {
   // Current decoding mode. The encoded data contains groups of either run length encoded data
   // (RLE) or bit packed data. Each group contains a header that indicates which group it is and
   // the number of values in the group.
@@ -82,13 +86,38 @@ public final class VectorizedRleValuesReader extends ValuesReader {
     this.offset = start;
     this.in = page;
     if (fixedWidth) {
-      int length = readIntLittleEndian();
-      this.end = this.offset + length;
+      if (bitWidth != 0) {
+        int length = readIntLittleEndian();
+        this.end = this.offset + length;
+      }
     } else {
       this.end = page.length;
       if (this.end != this.offset) init(page[this.offset++] & 255);
     }
-    this.currentCount = 0;
+    if (bitWidth == 0) {
+      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
+      this.mode = MODE.RLE;
+      this.currentCount = valueCount;
+      this.currentValue = 0;
+    } else {
+      this.currentCount = 0;
+    }
+  }
+
+  // Initialize the reader from a buffer. This is used for the V2 page encoding where the
+  // definition are in its own buffer.
+  public void initFromBuffer(int valueCount, byte[] data) {
+    this.offset = 0;
+    this.in = data;
+    this.end = data.length;
+    if (bitWidth == 0) {
+      // 0 bit width, treat this as an RLE run of valueCount number of 0's.
+      this.mode = MODE.RLE;
+      this.currentCount = valueCount;
+      this.currentValue = 0;
+    } else {
+      this.currentCount = 0;
+    }
   }
 
   /**
@@ -138,17 +167,19 @@ public final class VectorizedRleValuesReader extends ValuesReader {
   /**
    * Reads `total` ints into `c` filling them in starting at `c[rowId]`. This reader
    * reads the definition levels and then will read from `data` for the non-null values.
-   * If the value is null, c will be populated with `nullValue`.
+   * If the value is null, c will be populated with `nullValue`. Note that `nullValue` is only
+   * necessary for readIntegers because we also use it to decode dictionaryIds and want to make
+   * sure it always has a value in range.
    *
    * This is a batched version of this logic:
    *  if (this.readInt() == level) {
    *    c[rowId] = data.readInteger();
    *  } else {
-   *    c[rowId] = nullValue;
+   *    c[rowId] = null;
    *  }
    */
   public void readIntegers(int total, ColumnVector c, int rowId, int level,
-      VectorizedValuesReader data, int nullValue) {
+      VectorizedValuesReader data) {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -157,7 +188,6 @@ public final class VectorizedRleValuesReader extends ValuesReader {
         case RLE:
           if (currentValue == level) {
             data.readIntegers(n, c, rowId);
-            c.putNotNulls(rowId, n);
           } else {
             c.putNulls(rowId, n);
           }
@@ -166,9 +196,7 @@ public final class VectorizedRleValuesReader extends ValuesReader {
           for (int i = 0; i < n; ++i) {
             if (currentBuffer[currentBufferIdx++] == level) {
               c.putInt(rowId + i, data.readInteger());
-              c.putNotNull(rowId + i);
             } else {
-              c.putInt(rowId + i, nullValue);
               c.putNull(rowId + i);
             }
           }
@@ -178,6 +206,318 @@ public final class VectorizedRleValuesReader extends ValuesReader {
       left -= n;
       currentCount -= n;
     }
+  }
+
+  // TODO: can this code duplication be removed without a perf penalty?
+  public void readBooleans(int total, ColumnVector c,
+                        int rowId, int level, VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readBooleans(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putBoolean(rowId + i, data.readBoolean());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readIntsAsLongs(int total, ColumnVector c,
+                        int rowId, int level, VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            for (int i = 0; i < n; i++) {
+              c.putLong(rowId + i, data.readInteger());
+            }
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putLong(rowId + i, data.readInteger());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readBytes(int total, ColumnVector c,
+                        int rowId, int level, VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readBytes(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putByte(rowId + i, data.readByte());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readLongs(int total, ColumnVector c, int rowId, int level,
+                        VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readLongs(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putLong(rowId + i, data.readLong());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readFloats(int total, ColumnVector c, int rowId, int level,
+                        VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readFloats(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putFloat(rowId + i, data.readFloat());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readDoubles(int total, ColumnVector c, int rowId, int level,
+                         VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readDoubles(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              c.putDouble(rowId + i, data.readDouble());
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  public void readBinarys(int total, ColumnVector c, int rowId, int level,
+                        VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readBinary(n, c, rowId);
+          } else {
+            c.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              data.readBinary(1, c, rowId + i);
+            } else {
+              c.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  /**
+   * Decoding for dictionary ids. The IDs are populated into `values` and the nullability is
+   * populated into `nulls`.
+   */
+  public void readIntegers(int total, ColumnVector values, ColumnVector nulls, int rowId, int level,
+                           VectorizedValuesReader data) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          if (currentValue == level) {
+            data.readIntegers(n, values, rowId);
+          } else {
+            nulls.putNulls(rowId, n);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < n; ++i) {
+            if (currentBuffer[currentBufferIdx++] == level) {
+              values.putInt(rowId + i, data.readInteger());
+            } else {
+              nulls.putNull(rowId + i);
+            }
+          }
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+
+  // The RLE reader implements the vectorized decoding interface when used to decode dictionary
+  // IDs. This is different than the above APIs that decodes definitions levels along with values.
+  // Since this is only used to decode dictionary IDs, only decoding integers is supported.
+  @Override
+  public void readIntegers(int total, ColumnVector c, int rowId) {
+    int left = total;
+    while (left > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int n = Math.min(left, this.currentCount);
+      switch (mode) {
+        case RLE:
+          c.putInts(rowId, n, currentValue);
+          break;
+        case PACKED:
+          c.putInts(rowId, n, currentBuffer, currentBufferIdx);
+          currentBufferIdx += n;
+          break;
+      }
+      rowId += n;
+      left -= n;
+      currentCount -= n;
+    }
+  }
+
+  @Override
+  public byte readByte() {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readBytes(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readLongs(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readBinary(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readBooleans(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readFloats(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public void readDoubles(int total, ColumnVector c, int rowId) {
+    throw new UnsupportedOperationException("only readInts is valid.");
+  }
+
+  @Override
+  public Binary readBinary(int len) {
+    throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   /**
@@ -236,12 +576,14 @@ public final class VectorizedRleValuesReader extends ValuesReader {
     throw new RuntimeException("Unreachable");
   }
 
+  private int ceil8(int value) {
+    return (value + 7) / 8;
+  }
+
   /**
    * Reads the next group.
    */
   private void readNextGroup()  {
-    Preconditions.checkArgument(this.offset < this.end,
-        "Reading past RLE/BitPacking stream. offset=" + this.offset + " end=" + this.end);
     int header = readUnsignedVarInt();
     this.mode = (header & 1) == 0 ? MODE.RLE : MODE.PACKED;
     switch (mode) {
@@ -252,14 +594,12 @@ public final class VectorizedRleValuesReader extends ValuesReader {
       case PACKED:
         int numGroups = header >>> 1;
         this.currentCount = numGroups * 8;
+        int bytesToRead = ceil8(this.currentCount * this.bitWidth);
 
         if (this.currentBuffer.length < this.currentCount) {
           this.currentBuffer = new int[this.currentCount];
         }
         currentBufferIdx = 0;
-        int bytesToRead = (int)Math.ceil((double)(this.currentCount * this.bitWidth) / 8.0D);
-
-        bytesToRead = Math.min(bytesToRead, this.end - this.offset);
         int valueIndex = 0;
         for (int byteIndex = offset; valueIndex < this.currentCount; byteIndex += this.bitWidth) {
           this.packer.unpack8Values(in, byteIndex, this.currentBuffer, valueIndex);

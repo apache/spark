@@ -36,15 +36,14 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.sequenceOption
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.hive.client.ClientWrapper
+import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.types._
 
 
 private[hive] class HiveFunctionRegistry(
     underlying: analysis.FunctionRegistry,
-    executionHive: ClientWrapper)
+    executionHive: HiveClientImpl)
   extends analysis.FunctionRegistry with HiveInspectors {
 
   def getFunctionInfo(name: String): FunctionInfo = {
@@ -70,18 +69,28 @@ private[hive] class HiveFunctionRegistry(
       // catch the exception and throw AnalysisException instead.
       try {
         if (classOf[GenericUDFMacro].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveGenericUDF(
+          val udf = HiveGenericUDF(
             name, new HiveFunctionWrapper(functionClassName, functionInfo.getGenericUDF), children)
+          udf.dataType // Force it to check input data types.
+          udf
         } else if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveSimpleUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          udf.dataType // Force it to check input data types.
+          udf
         } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveGenericUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          val udf = HiveGenericUDF(name, new HiveFunctionWrapper(functionClassName), children)
+          udf.dataType // Force it to check input data types.
+          udf
         } else if (
           classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
+          val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(functionClassName), children)
+          udaf.dataType // Force it to check input data types.
+          udaf
         } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-          HiveUDAFFunction(
+          val udaf = HiveUDAFFunction(
             name, new HiveFunctionWrapper(functionClassName), children, isUDAFBridgeRequired = true)
+          udaf.dataType  // Force it to check input data types.
+          udaf
         } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
           val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(functionClassName), children)
           udtf.elementTypes // Force it to check input data types.
@@ -163,7 +172,7 @@ private[hive] case class HiveSimpleUDF(
   @transient
   private lazy val conversionHelper = new ConversionHelper(method, arguments)
 
-  override val dataType = javaClassToDataType(method.getReturnType)
+  override lazy val dataType = javaClassToDataType(method.getReturnType)
 
   @transient
   lazy val returnInspector = ObjectInspectorFactory.getReflectionObjectInspector(
@@ -188,6 +197,8 @@ private[hive] case class HiveSimpleUDF(
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
+
+  override def prettyName: String = name
 
   override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
@@ -233,11 +244,11 @@ private[hive] case class HiveGenericUDF(
   }
 
   @transient
-  private lazy val deferedObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
+  private lazy val deferredObjects = argumentInspectors.zip(children).map { case (inspect, child) =>
     new DeferredObjectAdapter(inspect, child.dataType)
   }.toArray[DeferredObject]
 
-  override val dataType: DataType = inspectorToDataType(returnInspector)
+  override lazy val dataType: DataType = inspectorToDataType(returnInspector)
 
   override def eval(input: InternalRow): Any = {
     returnInspector // Make sure initialized.
@@ -245,20 +256,20 @@ private[hive] case class HiveGenericUDF(
     var i = 0
     while (i < children.length) {
       val idx = i
-      deferedObjects(i).asInstanceOf[DeferredObjectAdapter].set(
+      deferredObjects(i).asInstanceOf[DeferredObjectAdapter].set(
         () => {
           children(idx).eval(input)
         })
       i += 1
     }
-    unwrap(function.evaluate(deferedObjects), returnInspector)
+    unwrap(function.evaluate(deferredObjects), returnInspector)
   }
+
+  override def prettyName: String = name
 
   override def toString: String = {
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
-
-  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
 }
 
 /**
@@ -340,7 +351,7 @@ private[hive] case class HiveGenericUDTF(
     s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
   }
 
-  override def sql: String = s"$name(${children.map(_.sql).mkString(", ")})"
+  override def prettyName: String = name
 }
 
 /**
@@ -432,7 +443,9 @@ private[hive] case class HiveUDAFFunction(
 
   override def supportsPartial: Boolean = false
 
-  override val dataType: DataType = inspectorToDataType(returnInspector)
+  override lazy val dataType: DataType = inspectorToDataType(returnInspector)
+
+  override def prettyName: String = name
 
   override def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else " "

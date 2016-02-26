@@ -27,13 +27,13 @@ import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableJobConf
 
 private[hive]
@@ -205,7 +205,7 @@ case class InsertIntoHiveTable(
         val oldPart =
           catalog.client.getPartitionOption(
             catalog.client.getTable(table.databaseName, table.tableName),
-            partitionSpec.asJava)
+            partitionSpec)
 
         if (oldPart.isEmpty || !ifNotExists) {
             catalog.client.loadPartition(

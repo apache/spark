@@ -300,27 +300,27 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce.
+   * Merge the values for each key using an associative and commutative reduce function. This will
+   * also perform the merging locally on each mapper before sending results to a reducer, similarly
+   * to a "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: (V, V) => V): RDD[(K, V)] = self.withScope {
     combineByKeyWithClassTag[V]((v: V) => v, func, func, partitioner)
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
+   * Merge the values for each key using an associative and commutative reduce function. This will
+   * also perform the merging locally on each mapper before sending results to a reducer, similarly
+   * to a "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
    */
   def reduceByKey(func: (V, V) => V, numPartitions: Int): RDD[(K, V)] = self.withScope {
     reduceByKey(new HashPartitioner(numPartitions), func)
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
+   * Merge the values for each key using an associative and commutative reduce function. This will
+   * also perform the merging locally on each mapper before sending results to a reducer, similarly
+   * to a "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
    * parallelism level.
    */
   def reduceByKey(func: (V, V) => V): RDD[(K, V)] = self.withScope {
@@ -328,9 +328,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative reduce function, but return the results
-   * immediately to the master as a Map. This will also perform the merging locally on each mapper
-   * before sending results to a reducer, similarly to a "combiner" in MapReduce.
+   * Merge the values for each key using an associative and commutative reduce function, but return
+   * the results immediately to the master as a Map. This will also perform the merging locally on
+   * each mapper before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = self.withScope {
     val cleanedF = self.sparkContext.clean(func)
@@ -726,6 +726,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    *
    * Warning: this doesn't return a multimap (so if you have multiple values to the same key, only
    *          one value per key is preserved in the map returned)
+   *
+   * @note this method should only be used if the resulting data is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collectAsMap(): Map[K, V] = self.withScope {
     val data = self.collect()

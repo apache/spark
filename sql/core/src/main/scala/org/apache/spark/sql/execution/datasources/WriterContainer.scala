@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -145,7 +146,7 @@ private[sql] abstract class BaseWriterContainer(
       // If we are appending data to an existing dir, we will only use the output committer
       // associated with the file output format since it is not safe to use a custom
       // committer for appending. For example, in S3, direct parquet output committer may
-      // leave partial data in the destination dir when the the appending job fails.
+      // leave partial data in the destination dir when the appending job fails.
       //
       // See SPARK-8578 for more details
       logInfo(

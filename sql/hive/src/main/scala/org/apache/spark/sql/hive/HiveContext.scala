@@ -40,8 +40,6 @@ import org.apache.hadoop.util.VersionInfo
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.SQLConf.SQLConfEntry
-import org.apache.spark.sql.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.catalyst.{InternalRow, ParserInterface}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
@@ -52,6 +50,9 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PreInsert
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -79,8 +80,8 @@ class HiveContext private[hive](
     sc: SparkContext,
     cacheManager: CacheManager,
     listener: SQLListener,
-    @transient private val execHive: ClientWrapper,
-    @transient private val metaHive: ClientInterface,
+    @transient private val execHive: HiveClientImpl,
+    @transient private val metaHive: HiveClient,
     isRootContext: Boolean)
   extends SQLContext(sc, cacheManager, listener, isRootContext) with Logging {
   self =>
@@ -193,7 +194,7 @@ class HiveContext private[hive](
    * for storing persistent metadata, and only point to a dummy metastore in a temporary directory.
    */
   @transient
-  protected[hive] lazy val executionHive: ClientWrapper = if (execHive != null) {
+  protected[hive] lazy val executionHive: HiveClientImpl = if (execHive != null) {
     execHive
   } else {
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
@@ -203,7 +204,7 @@ class HiveContext private[hive](
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
-    loader.createClient().asInstanceOf[ClientWrapper]
+    loader.createClient().asInstanceOf[HiveClientImpl]
   }
 
   /**
@@ -222,7 +223,7 @@ class HiveContext private[hive](
    * in the hive-site.xml file.
    */
   @transient
-  protected[hive] lazy val metadataHive: ClientInterface = if (metaHive != null) {
+  protected[hive] lazy val metadataHive: HiveClient = if (metaHive != null) {
     metaHive
   } else {
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
@@ -316,7 +317,9 @@ class HiveContext private[hive](
   }
 
   protected[sql] override def parseSql(sql: String): LogicalPlan = {
-    super.parseSql(substitutor.substitute(hiveconf, sql))
+    executionHive.withHiveState {
+      super.parseSql(substitutor.substitute(hiveconf, sql))
+    }
   }
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
@@ -351,7 +354,7 @@ class HiveContext private[hive](
    */
   def analyze(tableName: String) {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubQueries(catalog.lookupRelation(tableIdent))
+    val relation = EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -463,7 +466,7 @@ class HiveContext private[hive](
         catalog.ParquetConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
-        ExtractPythonUDFs ::
+        python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
@@ -546,9 +549,7 @@ class HiveContext private[hive](
   }
 
   @transient
-  protected[sql] override val sqlParser: ParserInterface = {
-    new SparkSQLParser(new ExtendedHiveQlParser(this))
-  }
+  protected[sql] override val sqlParser: ParserInterface = new HiveQl(conf)
 
   @transient
   private val hivePlanner = new SparkPlanner(this) with HiveStrategies {
@@ -559,7 +560,7 @@ class HiveContext private[hive](
       HiveCommandStrategy(self),
       HiveDDLStrategy,
       DDLStrategy,
-      TakeOrderedAndProject,
+      SpecialLimits,
       InMemoryScans,
       HiveTableScans,
       DataSinks,

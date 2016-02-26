@@ -20,6 +20,12 @@
   text-shadow: none;
 }
 
+#plan-viz-graph svg g.cluster rect {
+  fill: #A0DFFF;
+  stroke: #3EC0FF;
+  stroke-width: 1px;
+}
+
 #plan-viz-graph svg g.node rect {
   fill: #C3EBFF;
   stroke: #3EC0FF;

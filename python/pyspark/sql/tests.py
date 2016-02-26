@@ -601,6 +601,24 @@ class SQLTests(ReusedPySparkTestCase):
         point = df1.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
+    def test_unionAll_with_udt(self):
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
+        row1 = (1.0, ExamplePoint(1.0, 2.0))
+        row2 = (2.0, ExamplePoint(3.0, 4.0))
+        schema = StructType([StructField("label", DoubleType(), False),
+                             StructField("point", ExamplePointUDT(), False)])
+        df1 = self.sqlCtx.createDataFrame([row1], schema)
+        df2 = self.sqlCtx.createDataFrame([row2], schema)
+
+        result = df1.unionAll(df2).orderBy("label").collect()
+        self.assertEqual(
+            result,
+            [
+                Row(label=1.0, point=ExamplePoint(1.0, 2.0)),
+                Row(label=2.0, point=ExamplePoint(3.0, 4.0))
+            ]
+        )
+
     def test_column_operators(self):
         ci = self.df.key
         cs = self.df.value
@@ -640,6 +658,23 @@ class SQLTests(ReusedPySparkTestCase):
                          tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
         self.assertTrue(95 < g.agg(functions.approxCountDistinct(df.key)).first()[0])
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
+
+    def test_first_last_ignorenulls(self):
+        from pyspark.sql import functions
+        df = self.sqlCtx.range(0, 100)
+        df2 = df.select(functions.when(df.id % 3 == 0, None).otherwise(df.id).alias("id"))
+        df3 = df2.select(functions.first(df2.id, False).alias('a'),
+                         functions.first(df2.id, True).alias('b'),
+                         functions.last(df2.id, False).alias('c'),
+                         functions.last(df2.id, True).alias('d'))
+        self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
+
+    def test_approxQuantile(self):
+        df = self.sc.parallelize([Row(a=i) for i in range(10)]).toDF()
+        aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
+        self.assertTrue(isinstance(aq, list))
+        self.assertEqual(len(aq), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aq))
 
     def test_corr(self):
         import math
@@ -746,6 +781,13 @@ class SQLTests(ReusedPySparkTestCase):
             self.assertEqual(1, 0)
         except ValueError:
             self.assertEqual(1, 1)
+
+    def test_metadata_null(self):
+        from pyspark.sql.types import StructType, StringType, StructField
+        schema = StructType([StructField("f1", StringType(), True, None),
+                             StructField("f2", StringType(), True, {'a': None})])
+        rdd = self.sc.parallelize([["a", "b"], ["c", "d"]])
+        self.sqlCtx.createDataFrame(rdd, schema)
 
     def test_save_and_load(self):
         df = self.df

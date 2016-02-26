@@ -23,7 +23,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
 
 private[sql] class CSVOptions(
-    @transient parameters: Map[String, String])
+    @transient private val parameters: Map[String, String])
   extends Logging with Serializable {
 
   private def getChar(paramName: String, default: Char): Char = {
@@ -33,6 +33,19 @@ private[sql] class CSVOptions(
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
+    }
+  }
+
+  private def getInt(paramName: String, default: Int): Int = {
+    val paramValue = parameters.get(paramName)
+    paramValue match {
+      case None => default
+      case Some(value) => try {
+        value.toInt
+      } catch {
+        case e: NumberFormatException =>
+          throw new RuntimeException(s"$paramName should be an integer. Found $value")
+      }
     }
   }
 
@@ -62,9 +75,6 @@ private[sql] class CSVOptions(
   val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
   val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
 
-  // Limit the number of lines we'll search for a header row that isn't comment-prefixed
-  val MAX_COMMENT_LINES_IN_HEADER = 10
-
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {
     logWarning(s"$parseMode is not a valid parse mode. Using ${ParseModes.DEFAULT}.")
@@ -81,9 +91,9 @@ private[sql] class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val maxColumns = 20480
+  val maxColumns = getInt("maxColumns", 20480)
 
-  val maxCharsPerColumn = 100000
+  val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
 
   val inputBufferSize = 128
 

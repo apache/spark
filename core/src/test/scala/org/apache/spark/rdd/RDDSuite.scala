@@ -914,6 +914,24 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+  test("RDD.partitions() fails fast when partitions indicies are incorrect (SPARK-13021)") {
+    class BadRDD[T: ClassTag](prev: RDD[T]) extends RDD[T](prev) {
+
+      override def compute(part: Partition, context: TaskContext): Iterator[T] = {
+        prev.compute(part, context)
+      }
+
+      override protected def getPartitions: Array[Partition] = {
+        prev.partitions.reverse // breaks contract, which is that `rdd.partitions(i).index == i`
+      }
+    }
+    val rdd = new BadRDD(sc.parallelize(1 to 100, 100))
+    val e = intercept[IllegalArgumentException] {
+      rdd.partitions
+    }
+    assert(e.getMessage.contains("partitions"))
+  }
+
   test("nested RDDs are not supported (SPARK-5063)") {
     val rdd: RDD[Int] = sc.parallelize(1 to 100)
     val rdd2: RDD[Int] = sc.parallelize(1 to 100)

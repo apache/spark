@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
-import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.RecordWriter
@@ -34,12 +33,13 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
-private[csv] class CSVRelation(
+private[sql] class CSVRelation(
     private val inputRDD: Option[RDD[String]],
-    override val paths: Array[String],
+    override val paths: Array[String] = Array.empty[String],
     private val maybeDataSchema: Option[StructType],
     override val userDefinedPartitionColumns: Option[StructType],
     private val parameters: Map[String, String])
@@ -50,16 +50,16 @@ private[csv] class CSVRelation(
     case None => inferSchema(paths)
   }
 
-  private val params = new CSVOptions(parameters)
+  private val options = new CSVOptions(parameters)
 
   @transient
   private var cachedRDD: Option[RDD[String]] = None
 
   private def readText(location: String): RDD[String] = {
-    if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
+    if (Charset.forName(options.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
-      val charset = params.charset
+      val charset = options.charset
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
             new String(pair._2.getBytes, 0, pair._2.getLength, charset)
@@ -81,8 +81,8 @@ private[csv] class CSVRelation(
   private def tokenRdd(header: Array[String], inputPaths: Array[String]): RDD[Array[String]] = {
     val rdd = baseRdd(inputPaths)
     // Make sure firstLine is materialized before sending to executors
-    val firstLine = if (params.headerFlag) findFirstLine(rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, params)
+    val firstLine = if (options.headerFlag) findFirstLine(rdd) else null
+    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
   }
 
   /**
@@ -96,20 +96,16 @@ private[csv] class CSVRelation(
     val pathsString = inputs.map(_.getPath.toUri.toString)
     val header = schema.fields.map(_.name)
     val tokenizedRdd = tokenRdd(header, pathsString)
-    CSVRelation.parseCsv(tokenizedRdd, schema, requiredColumns, inputs, sqlContext, params)
+    CSVRelation.parseCsv(tokenizedRdd, schema, requiredColumns, inputs, sqlContext, options)
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = job.getConfiguration
-    params.compressionCodec.foreach { codec =>
-      conf.set("mapreduce.output.fileoutputformat.compress", "true")
-      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
-      conf.set("mapreduce.map.output.compress", "true")
-      conf.set("mapreduce.map.output.compress.codec", codec)
+    options.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
-    new CSVOutputWriterFactory(params)
+    new CSVOutputWriterFactory(options)
   }
 
   override def hashCode(): Int = Objects.hashCode(paths.toSet, dataSchema, schema, partitionColumns)
@@ -127,19 +123,19 @@ private[csv] class CSVRelation(
   }
 
   private def inferSchema(paths: Array[String]): StructType = {
-    val rdd = baseRdd(Array(paths.head))
+    val rdd = baseRdd(paths)
     val firstLine = findFirstLine(rdd)
-    val firstRow = new LineCsvReader(params).parseLine(firstLine)
+    val firstRow = new LineCsvReader(options).parseLine(firstLine)
 
-    val header = if (params.headerFlag) {
+    val header = if (options.headerFlag) {
       firstRow
     } else {
       firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
     }
 
     val parsedRdd = tokenRdd(header, paths)
-    if (params.inferSchemaFlag) {
-      CSVInferSchema(parsedRdd, header, params.nullValue)
+    if (options.inferSchemaFlag) {
+      CSVInferSchema.infer(parsedRdd, header, options.nullValue)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -153,13 +149,15 @@ private[csv] class CSVRelation(
     * Returns the first line of the first non-empty file in path
     */
   private def findFirstLine(rdd: RDD[String]): String = {
-    if (params.isCommentSet) {
-      rdd.take(params.MAX_COMMENT_LINES_IN_HEADER)
-        .find(!_.startsWith(params.comment.toString))
-        .getOrElse(sys.error(s"No uncommented header line in " +
-          s"first ${params.MAX_COMMENT_LINES_IN_HEADER} lines"))
+    if (options.isCommentSet) {
+      val comment = options.comment.toString
+      rdd.filter { line =>
+        line.trim.nonEmpty && !line.startsWith(comment)
+      }.first()
     } else {
-      rdd.first()
+      rdd.filter { line =>
+        line.trim.nonEmpty
+      }.first()
     }
   }
 }
@@ -197,52 +195,48 @@ object CSVRelation extends Logging {
     } else {
       requiredFields
     }
-    if (requiredColumns.isEmpty) {
-      sqlContext.sparkContext.emptyRDD[Row]
-    } else {
-      val safeRequiredIndices = new Array[Int](safeRequiredFields.length)
-      schemaFields.zipWithIndex.filter {
-        case (field, _) => safeRequiredFields.contains(field)
-      }.foreach {
-        case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
-      }
-      val rowArray = new Array[Any](safeRequiredIndices.length)
-      val requiredSize = requiredFields.length
-      tokenizedRDD.flatMap { tokens =>
-        if (params.dropMalformed && schemaFields.length != tokens.size) {
-          logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-          None
-        } else if (params.failFast && schemaFields.length != tokens.size) {
-          throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
-            s"${tokens.mkString(params.delimiter.toString)}")
+    val safeRequiredIndices = new Array[Int](safeRequiredFields.length)
+    schemaFields.zipWithIndex.filter {
+      case (field, _) => safeRequiredFields.contains(field)
+    }.foreach {
+      case (field, index) => safeRequiredIndices(safeRequiredFields.indexOf(field)) = index
+    }
+    val rowArray = new Array[Any](safeRequiredIndices.length)
+    val requiredSize = requiredFields.length
+    tokenizedRDD.flatMap { tokens =>
+      if (params.dropMalformed && schemaFields.length != tokens.size) {
+        logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+        None
+      } else if (params.failFast && schemaFields.length != tokens.size) {
+        throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
+          s"${tokens.mkString(params.delimiter.toString)}")
+      } else {
+        val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.size) {
+          tokens ++ new Array[String](schemaFields.length - tokens.size)
+        } else if (params.permissive && schemaFields.length < tokens.size) {
+          tokens.take(schemaFields.length)
         } else {
-          val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.size) {
-            tokens ++ new Array[String](schemaFields.length - tokens.size)
-          } else if (params.permissive && schemaFields.length < tokens.size) {
-            tokens.take(schemaFields.length)
-          } else {
-            tokens
+          tokens
+        }
+        try {
+          var index: Int = 0
+          var subIndex: Int = 0
+          while (subIndex < safeRequiredIndices.length) {
+            index = safeRequiredIndices(subIndex)
+            val field = schemaFields(index)
+            rowArray(subIndex) = CSVTypeCast.castTo(
+              indexSafeTokens(index),
+              field.dataType,
+              field.nullable,
+              params.nullValue)
+            subIndex = subIndex + 1
           }
-          try {
-            var index: Int = 0
-            var subIndex: Int = 0
-            while (subIndex < safeRequiredIndices.length) {
-              index = safeRequiredIndices(subIndex)
-              val field = schemaFields(index)
-              rowArray(subIndex) = CSVTypeCast.castTo(
-                indexSafeTokens(index),
-                field.dataType,
-                field.nullable,
-                params.nullValue)
-              subIndex = subIndex + 1
-            }
-            Some(Row.fromSeq(rowArray.take(requiredSize)))
-          } catch {
-            case NonFatal(e) if params.dropMalformed =>
-              logWarning("Parse exception. " +
-                s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
-              None
-          }
+          Some(Row.fromSeq(rowArray.take(requiredSize)))
+        } catch {
+          case NonFatal(e) if params.dropMalformed =>
+            logWarning("Parse exception. " +
+              s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
+            None
         }
       }
     }

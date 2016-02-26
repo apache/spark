@@ -22,7 +22,8 @@ import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SQLConf, SQLContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
@@ -77,6 +78,12 @@ object ParquetReadBenchmark {
 
         sqlBenchmark.addCase("SQL Parquet MR") { iter =>
           withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+            sqlContext.sql("select sum(id) from tempTable").collect()
+          }
+        }
+
+        sqlBenchmark.addCase("SQL Parquet Vectorized") { iter =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
             sqlContext.sql("select sum(id) from tempTable").collect()
           }
         }
@@ -143,20 +150,21 @@ object ParquetReadBenchmark {
 
         /*
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-        Single Int Column Scan:            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-        -------------------------------------------------------------------------------
-        SQL Parquet Reader                       1682.6            15.58         1.00 X
-        SQL Parquet MR                           2379.6            11.02         0.71 X
+        SQL Single Int Column Scan:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        SQL Parquet Reader                       1042 / 1208         15.1          66.2       1.0X
+        SQL Parquet MR                           1544 / 1607         10.2          98.2       0.7X
+        SQL Parquet Vectorized                    674 /  739         23.3          42.9       1.5X
         */
         sqlBenchmark.run()
 
         /*
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-        Parquet Reader Single Int Column Scan:     Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-        -------------------------------------------------------------------------------
-        ParquetReader                            610.40            25.77         1.00 X
-        ParquetReader(Batched)                   172.66            91.10         3.54 X
-        ParquetReader(Batch -> Row)              192.28            81.80         3.17 X
+        Parquet Reader Single Int Column    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        ParquetReader                             565 /  609         27.8          35.9       1.0X
+        ParquetReader(Batched)                    165 /  174         95.3          10.5       3.4X
+        ParquetReader(Batch -> Row)               158 /  188         99.3          10.1       3.6X
         */
         parquetReaderBenchmark.run()
       }
@@ -185,6 +193,13 @@ object ParquetReadBenchmark {
           }
         }
 
+        benchmark.addCase("SQL Parquet Vectorized") { iter =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+            sqlContext.sql("select sum(c1), sum(length(c2)) from tempTable").collect
+          }
+        }
+
+
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
         benchmark.addCase("ParquetReader") { num =>
           var sum1 = 0L
@@ -202,12 +217,13 @@ object ParquetReadBenchmark {
         }
 
         /*
-          Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
-          Int and String Scan:         Avg Time(ms)    Avg Rate(M/s)  Relative Rate
-          -------------------------------------------------------------------------
-          SQL Parquet Reader                 2245.6             7.00         1.00 X
-          SQL Parquet MR                     2914.2             5.40         0.77 X
-          ParquetReader                      1544.6            10.18         1.45 X
+        Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+        Int and String Scan:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------
+        SQL Parquet Reader                       1381 / 1679          7.6         131.7       1.0X
+        SQL Parquet MR                           2005 / 2177          5.2         191.2       0.7X
+        SQL Parquet Vectorized                    919 / 1044         11.4          87.6       1.5X
+        ParquetReader                            1035 / 1163         10.1          98.7       1.3X
         */
         benchmark.run()
       }

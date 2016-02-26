@@ -324,9 +324,18 @@ KW_ISOLATION: 'ISOLATION';
 KW_LEVEL: 'LEVEL';
 KW_SNAPSHOT: 'SNAPSHOT';
 KW_AUTOCOMMIT: 'AUTOCOMMIT';
+KW_REFRESH: 'REFRESH';
+KW_OPTIONS: 'OPTIONS';
 KW_WEEK: 'WEEK'|'WEEKS';
 KW_MILLISECOND: 'MILLISECOND'|'MILLISECONDS';
 KW_MICROSECOND: 'MICROSECOND'|'MICROSECONDS';
+KW_CLEAR: 'CLEAR';
+KW_LAZY: 'LAZY';
+KW_CACHE: 'CACHE';
+KW_UNCACHE: 'UNCACHE';
+KW_DFS: 'DFS';
+
+KW_NATURAL: 'NATURAL';
 
 // Operators
 // NOTE: if you add a new function/operator, add it to sysFuncNames so that describe function _FUNC_ will work.
@@ -465,7 +474,7 @@ Identifier
 fragment    
 QuotedIdentifier 
     :
-    '`'  ( '``' | ~('`') )* '`' { setText(getText().substring(1, getText().length() -1 ).replaceAll("``", "`")); }
+    '`'  ( '``' | ~('`') )* '`' { setText(getText().replaceAll("``", "`")); }
     ;
 
 WS  :  (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;}
@@ -476,3 +485,7 @@ COMMENT
     { $channel=HIDDEN; }
   ;
 
+/* Prevent that the lexer swallows unknown characters. */
+ANY
+ :.
+ ;

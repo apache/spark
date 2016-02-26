@@ -13,7 +13,9 @@ export("print.jobj")
 # MLlib integration
 exportMethods("glm",
               "predict",
-              "summary")
+              "summary",
+              "kmeans",
+              "fitted")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -35,6 +37,8 @@ exportMethods("arrange",
               "count",
               "cov",
               "corr",
+              "covar_samp",
+              "covar_pop",
               "crosstab",
               "describe",
               "dim",
@@ -107,6 +111,7 @@ exportMethods("%in%",
               "add_months",
               "alias",
               "approxCountDistinct",
+              "approxQuantile",
               "array_contains",
               "asc",
               "ascii",

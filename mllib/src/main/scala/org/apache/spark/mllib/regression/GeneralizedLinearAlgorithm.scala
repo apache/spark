@@ -140,7 +140,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    * translated back to resulting model weights, so it's transparent to users.
    * Note: This technique is used in both libsvm and glmnet packages. Default false.
    */
-  private var useFeatureScaling = false
+  private[mllib] var useFeatureScaling = false
 
   /**
    * The dimension of training features.
@@ -196,12 +196,9 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
   }
 
   /**
-   * Run the algorithm with the configured parameters on an input
-   * RDD of LabeledPoint entries.
-   *
+   * Generate the initial weights when the user does not supply them
    */
-  @Since("0.8.0")
-  def run(input: RDD[LabeledPoint]): M = {
+  protected def generateInitialWeights(input: RDD[LabeledPoint]): Vector = {
     if (numFeatures < 0) {
       numFeatures = input.map(_.features.size).first()
     }
@@ -217,16 +214,23 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      * TODO: See if we can deprecate `intercept` in `GeneralizedLinearModel`, and always
      * have the intercept as part of weights to have consistent design.
      */
-    val initialWeights = {
-      if (numOfLinearPredictor == 1) {
-        Vectors.zeros(numFeatures)
-      } else if (addIntercept) {
-        Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
-      } else {
-        Vectors.zeros(numFeatures * numOfLinearPredictor)
-      }
+    if (numOfLinearPredictor == 1) {
+      Vectors.zeros(numFeatures)
+    } else if (addIntercept) {
+      Vectors.zeros((numFeatures + 1) * numOfLinearPredictor)
+    } else {
+      Vectors.zeros(numFeatures * numOfLinearPredictor)
     }
-    run(input, initialWeights)
+  }
+
+  /**
+   * Run the algorithm with the configured parameters on an input
+   * RDD of LabeledPoint entries.
+   *
+   */
+  @Since("0.8.0")
+  def run(input: RDD[LabeledPoint]): M = {
+    run(input, generateInitialWeights(input))
   }
 
   /**

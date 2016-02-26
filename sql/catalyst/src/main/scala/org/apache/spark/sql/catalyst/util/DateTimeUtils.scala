@@ -55,8 +55,16 @@ object DateTimeUtils {
   // this is year -17999, calculation: 50 * daysIn400Year
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
+  final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
+
+  // Reuse the Calendar object in each thread as it is expensive to create in each method call.
+  private val threadLocalGmtCalendar = new ThreadLocal[Calendar] {
+    override protected def initialValue: Calendar = {
+      Calendar.getInstance(TimeZoneGMT)
+    }
+  }
 
   // Java TimeZone has no mention of thread safety. Use thread local instance to be safe.
   private val threadLocalLocalTimeZone = new ThreadLocal[TimeZone] {
@@ -407,7 +415,8 @@ object DateTimeUtils {
         segments(2) < 1 || segments(2) > 31) {
       return None
     }
-    val c = Calendar.getInstance(TimeZone.getTimeZone("GMT"))
+    val c = threadLocalGmtCalendar.get()
+    c.clear()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
