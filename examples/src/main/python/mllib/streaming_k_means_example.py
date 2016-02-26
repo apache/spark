@@ -31,23 +31,30 @@ if __name__ == "__main__":
 
     # $example on$
     # we make an input stream of vectors for training,
-    # as well as a stream of labeled data points for testing
-    def parse(lp):
-        label = float(lp[lp.find('(') + 1: lp.find(')')])
-        vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
-        return LabeledPoint(label, vec)
+    # as well as a stream of vectors for testing
+    trainingData = sc.textFile("data/mllib/kmeans_data.txt")\
+        .map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
+    testingData = sc.textFile("data/mllib/streaming_kmeans_data_test.txt")\
+        .map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
 
-    trainingData = ssc.textFileStream("data/mllib/streaming_kmeans_data.txt").map(Vectors.parse)
-    testingData = ssc.textFileStream("data/mllib/streaming_kmeans_data_test.txt").map(parse)
+    trainingQueue = [trainingData, trainingData]
+    testingQueue = [testingData, testingData]
+
+    trainingStream = ssc.queueStream(trainingQueue)
+    testingStream = ssc.queueStream(testingQueue)
 
     # We create a model with random clusters and specify the number of clusters to find
     model = StreamingKMeans(k=2, decayFactor=1.0).setRandomCenters(3, 1.0, 0)
 
     # Now register the streams for training and testing and start the job,
     # printing the predicted cluster assignments on new data points as they arrive.
-    model.trainOn(trainingData)
-    print(model.predictOnValues(testingData.map(lambda lp: (lp.label, lp.features))))
+    model.trainOn(trainingStream)
+
+    result = model.predictOn(testingStream)
+    result.pprint()
 
     ssc.start()
-    ssc.awaitTermination()
+    ssc.stop(stopSparkContext=True, stopGraceFully=True)
     # $example off$
+
+    print("Final centers: " + str(model.latestModel().centers))
