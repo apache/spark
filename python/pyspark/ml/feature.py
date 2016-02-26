@@ -28,13 +28,14 @@ from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
-           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MaxAbsScaler', 'MaxAbsScalerModel', 'MinMaxScaler',
-           'MinMaxScalerModel', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
-           'PolynomialExpansion', 'QuantileDiscretizer', 'RegexTokenizer', 'RFormula',
-           'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
-           'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
-           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel',
-           'ChiSqSelector', 'ChiSqSelectorModel']
+           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString',
+           'MaxAbsScaler', 'MaxAbsScalerModel', 'MinMaxScaler', 'MinMaxScalerModel',
+           'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel', 'PolynomialExpansion',
+           'QuantileDiscretizer', 'RegexTokenizer', 'RFormula', 'RFormulaModel',
+           'SQLTransformer', 'StandardScaler', 'StandardScalerModel', 'StopWordsRemover',
+           'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler',
+           'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel', 'ChiSqSelector',
+           'ChiSqSelectorModel']
 
 
 @inherit_doc
@@ -548,16 +549,9 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
 
-    Rescale each feature individually to a common range [min, max] linearly using column summary
-    statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
-    feature E is calculated as,
-
-    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
-
-    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
-
-    Note that since zero values will probably be transformed to non-zero values, output of the
-    transformer will be DenseVector even for sparse input.
+    Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
+    absolute value in each feature. It does not shift/center the data, and thus does not destroy
+    any sparsity.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
