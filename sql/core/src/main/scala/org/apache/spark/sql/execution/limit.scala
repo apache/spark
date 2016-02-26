@@ -21,9 +21,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.metric.SQLMetrics
 
 
 /**
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchange
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
+case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
@@ -43,18 +44,60 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
         child.execute(), child.output, SinglePartition, serializer))
     shuffled.mapPartitionsInternal(_.take(limit))
   }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val countTerm = ctx.freshName("count")
+    ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
+    ctx.currentVars = input
+    s"""
+       | while ($countTerm < $limit) {
+       |   $countTerm += 1;
+       |   ${consume(ctx, ctx.currentVars)}
+       | }
+       | if (true) return;
+     """.stripMargin
+  }
 }
 
 /**
  * Helper trait which defines methods that are shared by both [[LocalLimit]] and [[GlobalLimit]].
  */
-trait BaseLimit extends UnaryNode {
+trait BaseLimit extends UnaryNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputPartitioning: Partitioning = child.outputPartitioning
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val countTerm = ctx.freshName("count")
+    ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
+    ctx.currentVars = input
+    s"""
+       | while ($countTerm < $limit) {
+       |   $countTerm += 1;
+       |   ${consume(ctx, ctx.currentVars)}
+       | }
+       | if (true) return;
+     """.stripMargin
   }
 }
 
