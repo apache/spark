@@ -61,7 +61,7 @@ class AssociationRules private[fpm] (
   /**
    * Sets the maximum size of consequents used by Apriori Algorithm (default: `1`).
    */
-  @Since("1.5.0")
+  @Since("2.0.0")
   def setMaxConsequent(maxConsequent: Int): this.type = {
     this.maxConsequent = maxConsequent
     this
@@ -76,58 +76,16 @@ class AssociationRules private[fpm] (
    */
   @Since("1.5.0")
   def run[Item: ClassTag](freqItemsets: RDD[FreqItemset[Item]]): RDD[Rule[Item]] = {
-
     val sc = freqItemsets.sparkContext
-
     val freqItems = freqItemsets.filter(_.items.length == 1).flatMap(_.items).collect()
-
-    val freqItemIndices = freqItemsets.mapPartitions {
-      it =>
-        val itemToRank = freqItems.zipWithIndex.toMap
-        it.map {
-          itemset =>
-            val indices = itemset.items.flatMap(itemToRank.get).sorted.toSeq
-            (indices, itemset.freq)
-        }
+    val itemToRank = freqItems.zipWithIndex.toMap
+    val freqItemIndices = freqItemsets.map {
+      itemset =>
+        val indices = itemset.items.flatMap(itemToRank.get).sorted.toSeq
+        (indices, itemset.freq)
     }
 
-    val rules = genRules(freqItemIndices, minConfidence, maxConsequent)
-
-    rules.mapPartitions {
-      it =>
-        it.map {
-          case (antecendent, consequent, freqUnion, freqAntecedent) =>
-            new Rule(antecendent.map(i => freqItems(i)).toArray,
-              consequent.map(i => freqItems(i)).toArray,
-              freqUnion, freqAntecedent)
-        }
-    }
-  }
-
-  /** Java-friendly version of [[run]]. */
-  @Since("1.5.0")
-  def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
-    val tag = fakeClassTag[Item]
-    run(freqItemsets.rdd)(tag)
-  }
-
-  /**
-   * Computes the union seq.
-   *
-   * @param freqItemIndices Frequent Items with Integer Indices.
-   * @param minConfidence   minConfidence.
-   * @param maxConsequent   maxConsequent.
-   * @return an ordered union Seq of s1 and s2.
-   *
-   */
-  @Since("2.0.0")
-  private def genRules(freqItemIndices: RDD[(Seq[Int], Long)],
-                       minConfidence: Double,
-                       maxConsequent: Int
-                      ): RDD[(Seq[Int], Seq[Int], Long, Long)] = {
-
-    val sc = freqItemIndices.sparkContext
-
+    // Generate the initial candidates for 1-consequent rules.
     val initCandidates = freqItemIndices.flatMap {
       case (indices, freq) =>
         indices.flatMap {
@@ -140,93 +98,130 @@ class AssociationRules private[fpm] (
         }
     }
 
+    // The initial empty rule set.
     val initRules = sc.emptyRDD[(Seq[Int], Seq[Int], Long, Long)]
 
-    @tailrec
-    def loop(candidates: RDD[(Seq[Int], (Seq[Int], Long))],
-             lenConsequent: Int,
-             rules: RDD[(Seq[Int], Seq[Int], Long, Long)]
-            ): RDD[(Seq[Int], Seq[Int], Long, Long)] = {
+    val rules = genRules(freqItemIndices, initCandidates, 1, initRules)
+    rules.map {
+      case (antecendent, consequent, freqUnion, freqAntecedent) =>
+        new Rule(antecendent.map(i => freqItems(i)).toArray,
+          consequent.map(i => freqItems(i)).toArray,
+          freqUnion, freqAntecedent)
+    }
+  }
 
-      val numCandidates = candidates.count()
+  /** Java-friendly version of [[run]]. */
+  @Since("1.5.0")
+  def run[Item](freqItemsets: JavaRDD[FreqItemset[Item]]): JavaRDD[Rule[Item]] = {
+    val tag = fakeClassTag[Item]
+    run(freqItemsets.rdd)(tag)
+  }
 
-      log.info(s"Candidates for ${lenConsequent}-consequent rules : ${numCandidates}")
+  /**
+   * Run the Apriori's Rule-Generation algorithm recursively.
+   *
+   * @param freqItemIndices Frequent items indices.
+   * @param candidates      Candidates for rules with corresponding consequent-length.
+   * @param lenConsequent   Consequent-length.
+   * @param rules           Already generated rules.
+   * @return                The generated rules.
+   *
+   */
+  @Since("2.0.0")
+  @tailrec
+  private def genRules(freqItemIndices: RDD[(Seq[Int], Long)],
+                       candidates: RDD[(Seq[Int], (Seq[Int], Long))],
+                       lenConsequent: Int,
+                       rules: RDD[(Seq[Int], Seq[Int], Long, Long)]
+                      ): RDD[(Seq[Int], Seq[Int], Long, Long)] = {
 
-      if (numCandidates == 0 || lenConsequent > maxConsequent) {
+    val numCandidates = candidates.count()
+    log.info(s"Candidates for $lenConsequent-consequent rules : $numCandidates")
+    if (numCandidates == 0 || lenConsequent > maxConsequent) {
+      rules
+    } else {
+      val sc = freqItemIndices.sparkContext
+      // Filter the candidates to get rules.
+      val newRules = candidates.join(freqItemIndices).flatMap {
+        case (antecendent, ((consequent, freqUnion), freqAntecedent))
+          if freqUnion >= minConfidence * freqAntecedent =>
+          Some(antecendent, consequent, freqUnion, freqAntecedent)
+        case _ => None
+      }.cache()
+
+      val numNewRules = newRules.count()
+      log.info(s"Generated $lenConsequent-consequent rules : $numNewRules")
+
+      if (numNewRules == 0) {
+        // No new rules generated.
         rules
+      } else if (lenConsequent == maxConsequent) {
+        // Meet the consequent-length condition.
+        sc.union(rules, newRules)
       } else {
-        val newRules = candidates.join(freqItemIndices).filter{
-          case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
-            freqUnion >= minConfidence * freqAntecedent
-        }.map {
-          case (antecendent, ((consequent, freqUnion), freqAntecedent)) =>
-            (antecendent, consequent, freqUnion, freqAntecedent)
-        }
-
-        val numNewRules = newRules.count()
-        log.info(s"Generated ${lenConsequent}-consequent rules : ${numNewRules}")
-
-        if (numNewRules == 0) {
-          rules
-        } else if (lenConsequent == maxConsequent) {
-          sc.union(rules, newRules)
-        } else {
-          val numPairs = (lenConsequent + 1) * lenConsequent / 2
-          val newCandidates = newRules.filter{
-            // rules whose antecendent's length equals to 1 can not be used to generate new rules
-            case (antecendent, consequent, freqUnion, freqAntecedent) =>
-              antecendent.size > 1
-          }.map {
-            case (antecendent, consequent, freqUnion, freqAntecedent) =>
-              val union = seqAdd(antecendent, consequent)
-              ((union, freqUnion), consequent)
-          }.groupByKey().filter {
-            // Rule pruning. For a (lenConsequent + 1)-consequent rules, at least
-            // (lenConsequent + 1) lenConsequent-consequent rules are needed.
-            case ((union, freqUnion), consequents) =>
-              consequents.size > lenConsequent
-          }.flatMap {
-            case ((union, freqUnion), consequents) =>
-              val array = consequents.toArray
-              val newConsequentCount = collection.mutable.Map[Seq[Int], Int]()
-              for (i <- 0 until array.length; j <- i + 1 until array.length) {
-                val newConsequent = seqAdd(array(i), array(j))
-                if (newConsequent.length == lenConsequent + 1) {
-                  val cnt = newConsequentCount.getOrElse(newConsequent, 0)
-                  newConsequentCount.update(newConsequent, cnt + 1)
-                }
-              }
-
-              newConsequentCount.filter{
-                // Rule pruning. For a (lenConsequent + 1)-consequent rules, all its
-                // (lenConsequent + 1) lenConsequent-consequent rules must satisfy
-                // confidence condition. The number 'numPairs' is used to check this.
-                // For example, suppose union (1,2,3,4) generate two checked
-                // 2-consequent rules: (1,2) -> (3,4) and (1,3)->(2,4). Candidate
-                // rule: (1) -> (2,3,4) should be pruned, because (1,4) -> (2,3) do
-                // not satisfy confidence condition. If and only if all those three
-                // 2-consequent rules are available, the generated 3-consequent rule need
-                // to be checked in next iteration.
-                case (newConsequents, cnt) =>
-                  cnt == numPairs
-              }.keys.map {
-                newConsequent =>
-                  val newAntecendent = seqMinus(union, newConsequent)
-                  (newAntecendent, (newConsequent, freqUnion))
-              }
-          }
-
-          loop(newCandidates, lenConsequent + 1, sc.union(rules, newRules))
-        }
+        // Generate the candidates for the next iteration.
+        val newCandidates = genCandidates(newRules, lenConsequent + 1)
+        // Generate the rules for the next iteration.
+        genRules(freqItemIndices, newCandidates, lenConsequent + 1, sc.union(rules, newRules))
       }
     }
+  }
 
-    loop(initCandidates, 1, initRules)
+  /**
+    * Generate the candidate for the assigned consequent-length.
+    *
+    * @param newRules      Rules whose consequent-length equals lenConsequent - 1.
+    * @param lenConsequent Consequent-length.
+    * @return              The generated candidate.
+    *
+    */
+  @Since("2.0.0")
+  private def genCandidates(newRules: RDD[(Seq[Int], Seq[Int], Long, Long)],
+                            lenConsequent: Int): RDD[(Seq[Int], (Seq[Int], Long))] = {
+    // A n-consequent rule has n (n-1)-consequent parent rules, and there are n*(n-1)/2
+    // pairs among them. If a n-consequent rule meet the confidence condition, all the
+    // n (n-1)-consequent parent rules should also meet the condition. That's to say,
+    // there are n*(n-1)/2 (n-1)-consequent rule pairs which can be merged into
+    // the n-consequent rule.
+    val numParis = lenConsequent * (lenConsequent - 1) / 2
+    newRules.filter {
+      // rules whose antecendent length equals to 1 can not be used to generate new rules
+      case (antecendent, consequent, freqUnion, freqAntecedent) =>
+        antecendent.size > 1
+    }.map {
+      case (antecendent, consequent, freqUnion, freqAntecedent) =>
+        val union = seqAdd(antecendent, consequent)
+        ((union, freqUnion), consequent)
+    }.groupByKey().filter {
+      case ((union, freqUnion), consequents) =>
+        // To generate a n-consequent candidate, there should be at least n
+        // (n-1)-consequent parent rules.
+        consequents.size >= lenConsequent
+    }.flatMap {
+      case ((union, freqUnion), consequents) =>
+        val array = consequents.toArray
+        val newConsequentCount = collection.mutable.Map[Seq[Int], Int]()
+        for (i <- 0 until array.length; j <- i + 1 until array.length) {
+          val newConsequent = seqAdd(array(i), array(j))
+          if (newConsequent.length == lenConsequent) {
+            val cnt = newConsequentCount.getOrElse(newConsequent, 0)
+            newConsequentCount.update(newConsequent, cnt + 1)
+          }
+        }
+        newConsequentCount.filter {
+          // Candidates pruning.
+          case (newConsequents, cnt) =>
+            cnt == numParis
+        }.keys.map {
+          newConsequent =>
+            val newAntecendent = seqMinus(union, newConsequent)
+            (newAntecendent, (newConsequent, freqUnion))
+        }
+    }
   }
 
   /**
    * Computes the union seq of two sorted seq.
-   *
    * @param s1 ordered Seq1
    * @param s2 ordered Seq2
    * @return an ordered union Seq of s1 and s2.
@@ -269,7 +264,6 @@ class AssociationRules private[fpm] (
 
   /**
    * Computes the complementary seq of two sorted seq.
-   *
    * @param s1 ordered Seq1
    * @param s2 ordered Seq2, must be a sub-sequence of s1
    * @return an ordered Seq, which equals to s1 -- s2.
