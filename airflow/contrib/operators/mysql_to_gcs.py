@@ -23,7 +23,7 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
                  bucket,
                  filename,
                  schema_filename=None,
-                 approx_max_file_size_bytes=1900000000L,
+                 approx_max_file_size_bytes=1900000000,
                  mysql_conn_id='mysql_default',
                  google_cloud_storage_conn_id='google_cloud_storage_default',
                  delegate_to=None,
