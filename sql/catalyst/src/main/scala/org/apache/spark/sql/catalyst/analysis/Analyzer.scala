@@ -631,6 +631,10 @@ class Analyzer(
             ExtractValue(child, fieldExpr, resolver)
         }
 
+        // Replaces attribute references in a filter if it has a join as a child and it references
+        // some columns on the base relations of the join. This is because outer joins change
+        // nullability on columns and this could cause wrong NULL propagation in Optimizer.
+        // See SPARK-13484 for the concrete query of this case.
         resolvedPlan.transform {
           case f @ Filter(filterCondition, j @ Join(_, _, _, _)) =>
             val joinOutput = new ArrayBuffer[(Attribute, Attribute)]
