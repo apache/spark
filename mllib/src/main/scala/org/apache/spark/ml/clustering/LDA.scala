@@ -282,7 +282,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
             "For Online LDA optimizer, docConcentration values must be >= 0.  Found values: " +
               getDocConcentration.mkString(","))
         case "em" =>
-          require(getDocConcentration.forall(_ >= 0),
+          require(getDocConcentration.forall(_ >= 1),
             "For EM optimizer, docConcentration values must be >= 1.  Found values: " +
               getDocConcentration.mkString(","))
       }
@@ -293,7 +293,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
           require(getTopicConcentration >= 0, s"For Online LDA optimizer, topicConcentration" +
             s" must be >= 0.  Found value: $getTopicConcentration")
         case "em" =>
-          require(getTopicConcentration >= 0, s"For EM optimizer, topicConcentration" +
+          require(getTopicConcentration >= 1, s"For EM optimizer, topicConcentration" +
             s" must be >= 1.  Found value: $getTopicConcentration")
       }
     }
