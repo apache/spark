@@ -77,7 +77,7 @@ private[spark] class TaskContextImpl(
       }
     }
     if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs)
+      throw new TaskCompletionListenerException(errorMsgs, Option(error))
     }
   }
 

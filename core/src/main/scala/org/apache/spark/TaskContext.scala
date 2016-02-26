@@ -106,6 +106,8 @@ abstract class TaskContext extends Serializable {
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
@@ -113,6 +115,8 @@ abstract class TaskContext extends Serializable {
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
   def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext = {
     addTaskCompletionListener(new TaskCompletionListener {

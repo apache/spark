@@ -103,15 +103,21 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   test("all TaskFailureListeners should be called even if some fail") {
     val context = TaskContext.empty()
     val listener = mock(classOf[TaskFailureListener])
-    context.addTaskFailureListener((_, _) => throw new Exception("blah"))
+    context.addTaskFailureListener((_, _) => throw new Exception("exception in listener1"))
     context.addTaskFailureListener(listener)
-    context.addTaskFailureListener((_, _) => throw new Exception("blah"))
+    context.addTaskFailureListener((_, _) => throw new Exception("exception in listener3"))
 
-    intercept[TaskCompletionListenerException] {
-      context.markTaskFailed(new Exception("damn error"))
+    val e = intercept[TaskCompletionListenerException] {
+      context.markTaskFailed(new Exception("exception in task"))
     }
 
+    // Make sure listener 2 was called.
     verify(listener, times(1)).onTaskFailure(any(), any())
+
+    // also need to check failure in TaskFailureListener does not mask earlier exception
+    assert(e.getMessage.contains("exception in listener1"))
+    assert(e.getMessage.contains("exception in listener3"))
+    assert(e.getMessage.contains("exception in task"))
   }
 
   test("TaskContext.attemptNumber should return attempt number, not task id (SPARK-4014)") {
