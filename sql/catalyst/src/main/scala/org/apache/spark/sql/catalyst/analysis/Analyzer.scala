@@ -288,25 +288,28 @@ class Analyzer(
 
   object ResolvePivot extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p: Pivot if !p.childrenResolved | !p.aggregates.forall(_.resolved) => p
+      case p: Pivot if !p.childrenResolved | !p.aggregates.forall(_.resolved)
+        | !p.groupByExprs.forall(_.resolved) | !p.pivotColumn.resolved => p
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
-        // TODO: change length threshold and add unit tests
-        if (singleAgg && pivotValues.length >= 1
-          && PivotFirst.supportedDataTypes.contains(aggregates.head.dataType)) {
+        if (singleAgg && pivotValues.length >= 10
+          && aggregates.forall(a => PivotFirst.supportedDataTypes.contains(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExp: NamedExpression = Alias(aggregates.head, "agg")()
-          val namedPivotCol = Alias(pivotColumn, "pivot_col")() // dont do this
+          val namedPivotCol = pivotColumn match {
+            case n: NamedExpression => n
+            case _ => Alias(pivotColumn, "__pivot_col")()
+          }
           val bigGroup = groupByExprs :+ namedPivotCol
           val firstAgg = Aggregate(bigGroup, bigGroup :+ namedAggExp, child)
           val castPivotValues = pivotValues.map(Cast(_, pivotColumn.dataType).eval(EmptyRow))
           val pivotAgg = Alias(
             PivotFirst(namedPivotCol.toAttribute, namedAggExp.toAttribute, castPivotValues)
               .toAggregateExpression()
-            , "pivot")()
+            , "__pivot")()
           val secondAgg =
-            Aggregate(groupByExprs, groupByExprs :+ pivotAgg, Subquery("foobar", firstAgg))
+            Aggregate(groupByExprs, groupByExprs :+ pivotAgg, firstAgg)
           val pivotAggAttribute = pivotAgg.toAttribute
           val pivotOutputs = pivotValues.zipWithIndex.map { case (Literal(label, _), i) =>
             Alias(ExtractValue(pivotAggAttribute, Literal(i), resolver), label.toString)()
@@ -337,11 +340,7 @@ class Analyzer(
               Alias(filteredAggregate, name)()
             }
           }
-          val newGroupByExprs = groupByExprs.map {
-            case UnresolvedAlias(e, _) => e
-            case e => e
-          }
-          Aggregate(newGroupByExprs, groupByExprs ++ pivotAggregates, child)
+          Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
         }
     }
   }

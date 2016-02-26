@@ -49,10 +49,14 @@ case class PivotFirst(pivotColumn: Expression,
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
     if (pivotColValue != null) {
-      val index = mutableAggBufferOffset + pivotIndex(pivotColValue)
-      val value = valueColumn.eval(inputRow)
-      // Can't do this with UnsafeRow: mutableAggBuffer.update(index, value)
-      updateRow(mutableAggBuffer, index, value)
+      val index = pivotIndex.getOrElse(pivotColValue, -1)
+      if (index >= 0) {
+        val value = valueColumn.eval(inputRow)
+        if (value != null) {
+          // Can't do this with UnsafeRow: mutableAggBuffer.update(index, value)
+          updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
+        }
+      }
     }
   }
 
@@ -110,6 +114,7 @@ case class PivotFirst(pivotColumn: Expression,
 
   // UnsafeRow.update throws UnsupportedOperationException so we need to do this
   private def updateRow(row: MutableRow, offset: Int, value: Any): Unit = valueDataType match {
+    case null => {} // this should not happen, but lets do nothing anyway
     case DoubleType => row.setDouble(offset, value.asInstanceOf[Double])
     case IntegerType => row.setInt(offset, value.asInstanceOf[Int])
     case LongType => row.setLong(offset, value.asInstanceOf[Long])
@@ -118,7 +123,9 @@ case class PivotFirst(pivotColumn: Expression,
     case ShortType => row.setShort(offset, value.asInstanceOf[Short])
     case ByteType => row.setByte(offset, value.asInstanceOf[Byte])
     case d: DecimalType => row.setDecimal(offset, value.asInstanceOf[Decimal], d.precision)
-    case _ => throw new UnsupportedOperationException(s"Unsupported datatype: $valueDataType")
+    case _ => throw new UnsupportedOperationException(
+      s"Unsupported datatype ($valueDataType) used in ${PivotFirst.toString}, this is a bug."
+    )
   }
 }
 

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -93,6 +92,40 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       courseSales.groupBy("year").pivot("course", Seq("dotNET", "Java"))
         .agg("earnings" -> "sum"),
       Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    )
+  }
+
+  // optimized pivot (repeated aggregate) tests
+  test("optimized pivot courses with literals") {
+    checkAnswer(
+      courseSales.groupBy("year")
+        // pivot wtith extra columns to trigger optimization
+        .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+        .agg(sum($"earnings"))
+        .select("year", "dotNET", "Java"),
+      Row(2012, 15000.0, 20000.0) :: Row(2013, 48000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("optimized pivot year with literals") {
+    checkAnswer(
+      courseSales.groupBy($"course")
+        // pivot wtith extra columns to trigger optimization
+        .pivot("year", Seq(2012, 2013) ++ (1 to 10))
+        .agg(sum($"earnings"))
+        .select("course", "2012", "2013"),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
+    )
+  }
+
+  test("optimized pivot year with string values (cast)") {
+    checkAnswer(
+      courseSales.groupBy("course")
+        // pivot wtith extra columns to trigger optimization
+        .pivot("year", Seq("2012", "2013") ++ (1 to 10).map(_.toString))
+        .sum("earnings")
+        .select("course", "2012", "2013"),
+      Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
   }
 }
