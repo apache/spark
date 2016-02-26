@@ -133,6 +133,44 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     }
   }
 
+  /**
+    * Obtains token for the Hive metastore and adds them to the credentials.
+    */
+  def obtainTokenForHiveMetastore(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials) {
+    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
+      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
+        credentials.addToken(new Text("hive.server2.delegation.token"), _)
+      }
+    }
+  }
+
+  /**
+    * Obtain a security token for HBase.
+    */
+  def obtainTokenForHBase(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials): Unit = {
+    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
+      YarnSparkHadoopUtil.get.obtainTokenForHBase(conf).foreach { token =>
+        credentials.addToken(token.getService, token)
+        logInfo("Added HBase security token to credentials.")
+      }
+    }
+  }
+
+  /**
+    * Return whether delegation tokens should be retrieved for the given service when security is
+    * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+    * a service-specific configuration.
+    */
+  private def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
+    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
+  }
+
   private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
     tokenRenewer = Some(new ExecutorDelegationTokenUpdater(sparkConf, conf))
     tokenRenewer.get.updateCredentialsIfRequired()
