@@ -17,18 +17,20 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
+
 // $example on$
 import scala.Tuple2;
 
-import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.classification.*;
+import org.apache.spark.mllib.classification.SVMModel;
+import org.apache.spark.mllib.classification.SVMWithSGD;
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.util.MLUtils;
 // $example off$
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 
 /**
  * Example for SVMWithSGD.
@@ -71,8 +73,8 @@ public class JavaSVMWithSGDExample {
     System.out.println("Area under ROC = " + auROC);
 
     // Save and load model
-    model.save(sc, "target/tmp/mySVMWithSGDModel");
-    SVMModel sameModel = SVMModel.load(sc, "target/tmp/mySVMWithSGDModel");
+    model.save(sc, "target/tmp/javaSVMWithSGDModel");
+    SVMModel sameModel = SVMModel.load(sc, "target/tmp/javaSVMWithSGDModel");
     // $example off$
 
     sc.stop();

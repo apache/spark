@@ -49,6 +49,6 @@ if __name__ == "__main__":
     print("Mean Squared Error = " + str(MSE))
 
     # Save and load model
-    model.save(sc, "target/tmp/myLinearRegressionWithSGDModel")
-    sameModel = LinearRegressionModel.load(sc, "target/tmp/myLinearRegressionWithSGDModel")
+    model.save(sc, "target/tmp/pythonLinearRegressionWithSGDModel")
+    sameModel = LinearRegressionModel.load(sc, "target/tmp/pythonLinearRegressionWithSGDModel")
     # $example off$

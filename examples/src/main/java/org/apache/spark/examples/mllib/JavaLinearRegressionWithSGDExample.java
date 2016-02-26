@@ -17,20 +17,20 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+
 // $example on$
 import scala.Tuple2;
 
-import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.JavaDoubleRDD;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.regression.LinearRegressionModel;
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD;
 // $example off$
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 
 /**
  * Example for LinearRegressionWithSGD.
@@ -84,8 +84,9 @@ public class JavaLinearRegressionWithSGDExample {
     System.out.println("training Mean Squared Error = " + MSE);
 
     // Save and load model
-    model.save(sc.sc(), "target/tmp/myLinearRegressionWithSGDModel");
-    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "target/tmp/myLinearRegressionWithSGDModel");
+    model.save(sc.sc(), "target/tmp/javaLinearRegressionWithSGDModel");
+    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(),
+      "target/tmp/javaLinearRegressionWithSGDModel");
     // $example off$
 
     sc.stop();

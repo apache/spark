@@ -60,8 +60,8 @@ object SVMWithSGDExample {
     println("Area under ROC = " + auROC)
 
     // Save and load model
-    model.save(sc, "target/tmp/mySVMWithSGDModel")
-    val sameModel = SVMModel.load(sc, "target/tmp/mySVMWithSGDModel")
+    model.save(sc, "target/tmp/scalaSVMWithSGDModel")
+    val sameModel = SVMModel.load(sc, "target/tmp/scalaSVMWithSGDModel")
     // $example off$
 
     sc.stop()

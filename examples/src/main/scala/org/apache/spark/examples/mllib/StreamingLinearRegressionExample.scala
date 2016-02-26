@@ -18,12 +18,12 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.SparkConf
 // $example on$
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.regression.StreamingLinearRegressionWithSGD
 // $example off$
-import org.apache.spark.SparkConf
 import org.apache.spark.streaming._
 
 object StreamingLinearRegressionExample {
@@ -43,7 +43,7 @@ object StreamingLinearRegressionExample {
 
     val numFeatures = 3
     val model = new StreamingLinearRegressionWithSGD()
-        .setInitialWeights(Vectors.zeros(numFeatures))
+      .setInitialWeights(Vectors.zeros(numFeatures))
 
     model.trainOn(trainingData)
     model.predictOnValues(testData.map(lp => (lp.label, lp.features))).print()

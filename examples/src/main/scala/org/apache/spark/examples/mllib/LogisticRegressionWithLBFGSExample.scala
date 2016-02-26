@@ -22,7 +22,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 // $example off$
@@ -59,9 +58,9 @@ object LogisticRegressionWithLBFGSExample {
     println("Precision = " + precision)
 
     // Save and load model
-    model.save(sc, "target/tmp/myLogisticRegressionWithLBFGSModel")
+    model.save(sc, "target/tmp/scalaLogisticRegressionWithLBFGSModel")
     val sameModel = LogisticRegressionModel.load(sc,
-      "target/tmp/myLogisticRegressionWithLBFGSModel")
+      "target/tmp/scalaLogisticRegressionWithLBFGSModel")
     // $example off$
 
     sc.stop()

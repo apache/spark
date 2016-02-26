@@ -180,7 +180,17 @@ this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
 
-{% include_example scala/org/apache/spark/examples/mllib/L1UpdaterExample.scala %}
+{% highlight scala %}
+
+import org.apache.spark.mllib.optimization.L1Updater
+
+val svmAlg = new SVMWithSGD()
+svmAlg.optimizer.
+  setNumIterations(200).
+  setRegParam(0.1).
+  setUpdater(new L1Updater)
+val modelL1 = svmAlg.run(training)
+{% endhighlight %}
 
 </div>
 
@@ -203,7 +213,16 @@ this way as well. For example, the following code produces an L1 regularized
 variant of SVMs with regularization parameter set to 0.1, and runs the training
 algorithm for 200 iterations.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaL1UpdaterExample.java %}
+{% highlight java %}
+import org.apache.spark.mllib.optimization.L1Updater;
+
+SVMWithSGD svmAlg = new SVMWithSGD();
+svmAlg.optimizer()
+  .setNumIterations(200)
+  .setRegParam(0.1)
+  .setUpdater(new L1Updater());
+final SVMModel modelL1 = svmAlg.run(training.rdd());
+{% endhighlight %}
 
 In order to run the above application, follow the instructions
 provided in the [Self-Contained
@@ -401,19 +420,18 @@ has already been created, see [Spark Streaming Programming Guide](streaming-prog
 for more info. For this example, we use labeled points in training and testing streams,
 but in practice you will likely want to use unlabeled vectors for test data.
 
-We create our model by initializing the weights to 0.
+We create our model by initializing the weights to zero and register the streams for training and
+testing then start the job. Printing predictions alongside true labels lets us easily see the
+result.
 
-Now we register the streams for training and testing and start the job.
-Printing predictions alongside true labels lets us easily see the result.
-
-We can now save text files with data to the training or testing folders.
+Finally we can save text files with data to the training or testing folders.
 Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
-and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir`
-the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions.
+and `x1,x2,x3` are the features. Anytime a text file is placed in `args(0)`
+the model will update. Anytime a text file is placed in `args(1)` you will see predictions.
 As you feed more data to the training directory, the predictions
 will get better!
 
-Here a complete example:
+Here is a complete example:
 {% include_example scala/org/apache/spark/examples/mllib/StreamingLinearRegressionExample.scala %}
 
 </div>
@@ -433,8 +451,8 @@ Now we register the streams for training and testing and start the job.
 
 We can now save text files with data to the training or testing folders.
 Each line should be a data point formatted as `(y,[x1,x2,x3])` where `y` is the label
-and `x1,x2,x3` are the features. Anytime a text file is placed in `/training/data/dir`
-the model will update. Anytime a text file is placed in `/testing/data/dir` you will see predictions.
+and `x1,x2,x3` are the features. Anytime a text file is placed in `sys.argv[1]`
+the model will update. Anytime a text file is placed in `sys.argv[2]` you will see predictions.
 As you feed more data to the training directory, the predictions
 will get better!
 

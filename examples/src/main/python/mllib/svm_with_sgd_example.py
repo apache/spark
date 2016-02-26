@@ -15,11 +15,11 @@
 # limitations under the License.
 #
 
+from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.classification import SVMWithSGD, SVMModel
 from pyspark.mllib.regression import LabeledPoint
 # $example off$
-from pyspark import SparkContext
 
 if __name__ == "__main__":
     sc = SparkContext(appName="PythonSVMWithSGDExample")
@@ -42,6 +42,6 @@ if __name__ == "__main__":
     print("Training Error = " + str(trainErr))
 
     # Save and load model
-    model.save(sc, "target/tmp/mySVMWithSGDModel")
-    sameModel = SVMModel.load(sc, "target/tmp/mySVMWithSGDModel")
+    model.save(sc, "target/tmp/pythonSVMWithSGDModel")
+    sameModel = SVMModel.load(sc, "target/tmp/pythonSVMWithSGDModel")
     # $example off$

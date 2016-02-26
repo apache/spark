@@ -48,6 +48,7 @@ if __name__ == "__main__":
     print("Training Error = " + str(trainErr))
 
     # Save and load model
-    model.save(sc, "target/tmp/myLogisticRegressionWithLBFGSModel")
-    sameModel = LogisticRegressionModel.load(sc, "target/tmp/myLogisticRegressionWithLBFGSModel")
+    model.save(sc, "target/tmp/pythonLogisticRegressionWithLBFGSModel")
+    sameModel = LogisticRegressionModel.load(sc,
+                                             "target/tmp/pythonLogisticRegressionWithLBFGSModel")
     # $example off$
