@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
  * is a single field row with pickled binary data, so we will just get the binary and send to Python
  * runner, without serializing it.
  */
-case class PythonMapPartitions(
+case class PhysicalMapPartitions(
     func: PythonFunction,
     output: Seq[Attribute],
     child: SparkPlan) extends UnaryNode {

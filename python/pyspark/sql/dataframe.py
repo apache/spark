@@ -41,7 +41,7 @@ from pyspark.sql.types import *
 __all__ = ["DataFrame", "Dataset", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
-class Dataset(object):
+class DataFrame(object):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
@@ -85,11 +85,7 @@ class Dataset(object):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            if self._jdf.isOutputPickled():
-                deserializer = PickleSerializer()
-            else:
-                deserializer = BatchedSerializer(PickleSerializer())
-            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, deserializer)
+            self._lazy_rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
         return self._lazy_rdd
 
     @property
@@ -271,11 +267,11 @@ class Dataset(object):
     @ignore_unicode_prefix
     @since(2.0)
     def applySchema(self, schema=None):
-        """Returns a new :class:`Dataset` by appling the given schema, or infer the schema
+        """Returns a new :class:`DataFrame` by appling the given schema, or infer the schema
         by all of the records if no schema is given.
 
-        It is only allowed to apply schema for Dataset which is returned by typed operations,
-        e.g. map, flatMap, etc. And the record type of the schema-applied Dataset will be row.
+        It is only allowed to apply schema for DataFrame which is returned by typed operations,
+        e.g. map, flatMap, etc. And the record type of the schema-applied DataFrame will be row.
 
         >>> ds = df.map(lambda row: row.name)
         >>> ds.collect()
@@ -293,15 +289,15 @@ class Dataset(object):
         >>> ds3.schema
         StructType(List(StructField(value,StringType,true)))
         """
-        msg = "Cannot apply schema to a Dataset which is not returned by typed operations"
+        msg = "Cannot apply schema to a DataFrame which is not returned by typed operations"
         raise RuntimeError(msg)
 
     @ignore_unicode_prefix
     @since(2.0)
     def mapPartitions(self, func):
-        """Returns a new :class:`Dataset` by applying the ``f`` function to each partition.
+        """Returns a new :class:`DataFrame` by applying the ``f`` function to each partition.
 
-        The schema of returned :class:`Dataset` is a single binary field struct type, please
+        The schema of returned :class:`DataFrame` is a single binary field struct type, please
         call `applySchema` to set the corrected schema before apply structured operations, e.g.
         select, sort, groupBy, etc.
 
@@ -310,14 +306,14 @@ class Dataset(object):
         >>> df.mapPartitions(f).collect()
         [1, 1]
         """
-        return PipelinedDataset(self, func)
+        return PipelinedDataFrame(self, func)
 
     @ignore_unicode_prefix
     @since(2.0)
     def map(self, func):
-        """ Returns a new :class:`Dataset` by applying a the ``f`` function to each record.
+        """ Returns a new :class:`DataFrame` by applying a the ``f`` function to each record.
 
-        The schema of returned :class:`Dataset` is a single binary field struct type, please
+        The schema of returned :class:`DataFrame` is a single binary field struct type, please
         call `applySchema` to set the corrected schema before apply structured operations, e.g.
         select, sort, groupBy, etc.
 
@@ -329,10 +325,10 @@ class Dataset(object):
     @ignore_unicode_prefix
     @since(2.0)
     def flatMap(self, func):
-        """ Returns a new :class:`Dataset` by first applying the ``f`` function to each record,
+        """ Returns a new :class:`DataFrame` by first applying the ``f`` function to each record,
         and then flattening the results.
 
-        The schema of returned :class:`Dataset` is a single binary field struct type, please
+        The schema of returned :class:`DataFrame` is a single binary field struct type, please
         call `applySchema` to set the corrected schema before apply structured operations, e.g.
         select, sort, groupBy, etc.
 
@@ -889,7 +885,7 @@ class Dataset(object):
         .. versionchanged:: 2.0
            Also allows condition parameter to be a function that takes record as input and
            returns boolean.
-           The schema of returned :class:`Dataset` is a single binary field struct type, please
+           The schema of returned :class:`DataFrame` is a single binary field struct type, please
            call `applySchema` to set the corrected schema before apply structured operations, e.g.
            select, sort, groupBy, etc.
 
@@ -904,7 +900,7 @@ class Dataset(object):
         [Row(age=2, name=u'Alice')]
 
         >>> df.filter(lambda row: row.age > 3).collect()
-        Row(age=5, name=u'Bob')]
+        [Row(age=5, name=u'Bob')]
         >>> df.map(lambda row: row.age).filter(lambda age: age > 3).collect()
         [5]
         """
@@ -1453,13 +1449,13 @@ class Dataset(object):
     drop_duplicates = dropDuplicates
 
 
-DataFrame = Dataset
+Dataset = DataFrame
 
 
-class PipelinedDataset(Dataset):
+class PipelinedDataFrame(DataFrame):
 
     """
-    Pipelined typed operations on :class:`Dataset`:
+    Pipelined typed operations on :class:`DataFrame`:
 
     >>> df.map(lambda row: 2 * row.age).cache().map(lambda i: 2 * i).collect()
     [8, 20]
@@ -1475,7 +1471,7 @@ class PipelinedDataset(Dataset):
         self._sc = self.sql_ctx and self.sql_ctx._sc
         self._lazy_rdd = None
 
-        if not isinstance(prev, PipelinedDataset) or prev.is_cached:
+        if not isinstance(prev, PipelinedDataFrame) or prev.is_cached:
             # This is the beginning of this pipeline.
             self._func = func
             self._prev_jdf = prev._jdf
@@ -1510,6 +1506,19 @@ class PipelinedDataset(Dataset):
             wrapped_func = self._wrap_func(self._func, True)
             self._jdf_val = self._prev_jdf.pythonMapPartitions(wrapped_func)
         return self._jdf_val
+
+    @property
+    @since(2.0)
+    def rdd(self):
+        """Returns the content as an :class:`pyspark.RDD` of custom objects."""
+        # We overwrite the `DataFrame.rdd` property as it's a little different here.
+        # After typed operations, the query engine don't know the real schema of data and will just
+        # keep the pickled binary for each custom object(no batch). So we need to set non-batched
+        # serializer and update the document to tell users it will return a RDD of custom objects.
+        if self._lazy_rdd is None:
+            jrdd = self._jdf.javaToPython()
+            self._lazy_rdd = RDD(jrdd, self._sc, PickleSerializer())
+        return self._lazy_rdd
 
     def _wrap_func(self, func, output_binary):
         if self._prev_jdf.isOutputPickled():

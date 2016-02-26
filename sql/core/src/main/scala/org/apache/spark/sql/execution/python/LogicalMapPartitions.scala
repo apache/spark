@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical
+package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonFunction
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 
 /**
  * A relation produced by applying the given python function to each partition of the `child`.
  */
-case class PythonMapPartitions(
+case class LogicalMapPartitions(
     func: PythonFunction,
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
