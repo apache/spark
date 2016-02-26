@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{PreInsertCastAndRename, ResolveDataSource}
-import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.exchange.{ReuseExchange, EnsureRequirements}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -93,7 +93,8 @@ private[sql] class SessionState(ctx: SQLContext) {
     override val batches: Seq[Batch] = Seq(
       Batch("Subquery", Once, PlanSubqueries(ctx)),
       Batch("Add exchange", Once, EnsureRequirements(ctx)),
-      Batch("Whole stage codegen", Once, CollapseCodegenStages(ctx))
+      Batch("Whole stage codegen", Once, CollapseCodegenStages(ctx)),
+      Batch("Reuse duplicated exchanges", Once, ReuseExchange(ctx))
     )
   }
 
