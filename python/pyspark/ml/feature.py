@@ -28,7 +28,7 @@ from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
-           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MinMaxScaler',
+           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MaxAbsScaler', 'MaxAbsScalerModel', 'MinMaxScaler',
            'MinMaxScalerModel', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
            'PolynomialExpansion', 'QuantileDiscretizer', 'RegexTokenizer', 'RFormula',
            'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
@@ -543,6 +543,71 @@ class IDFModel(JavaModel):
     .. versionadded:: 1.4.0
     """
 
+@inherit_doc
+class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    Rescale each feature individually to a common range [min, max] linearly using column summary
+    statistics, which is also known as min-max normalization or Rescaling. The rescaled value for
+    feature E is calculated as,
+
+    Rescaled(e_i) = (e_i - E_min) / (E_max - E_min) * (max - min) + min
+
+    For the case E_max == E_min, Rescaled(e_i) = 0.5 * (max + min)
+
+    Note that since zero values will probably be transformed to non-zero values, output of the
+    transformer will be DenseVector even for sparse input.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+    >>> model = maScaler.fit(df)
+    >>> model.transform(df).show()
+    +-----+------+
+    |    a|scaled|
+    +-----+------+
+    |[1.0]| [0.5]|
+    |[2.0]| [1.0]|
+    +-----+------+
+    ...
+
+    .. versionadded:: 2.0.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None):
+        """
+        __init__(self, inputCol=None, outputCol=None)
+        """
+        super(MaxAbsScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MaxAbsScaler", self.uid)
+        self._setDefault()
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, inputCol=None, outputCol=None):
+        """
+        setParams(self, inputCol=None, outputCol=None)
+        Sets params for this MaxAbsScaler.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return MaxAbsScalerModel(java_model)
+
+
+class MaxAbsScalerModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`MaxAbsScaler`.
+
+    .. versionadded:: 2.0.0
+    """
 
 @inherit_doc
 class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
