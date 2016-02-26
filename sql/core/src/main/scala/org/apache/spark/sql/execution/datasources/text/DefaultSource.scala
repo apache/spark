@@ -31,7 +31,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, PartitionSpec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -48,7 +48,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, dataSchema, partitionColumns, paths)(sqlContext)
+    new TextRelation(None, dataSchema, partitionColumns, paths, parameters)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -114,6 +114,15 @@ private[sql] class TextRelation(
 
   /** Write path. */
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+    val conf = job.getConfiguration
+    val compressionCodec = {
+      val name = parameters.get("compression").orElse(parameters.get("codec"))
+      name.map(CompressionCodecs.getCodecClassName)
+    }
+    compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+
     new OutputWriterFactory {
       override def newInstance(
           path: String,

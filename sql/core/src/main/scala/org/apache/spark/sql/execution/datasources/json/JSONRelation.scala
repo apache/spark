@@ -165,11 +165,7 @@ private[sql] class JSONRelation(
   override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
     val conf = job.getConfiguration
     options.compressionCodec.foreach { codec =>
-      conf.set("mapreduce.output.fileoutputformat.compress", "true")
-      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
-      conf.set("mapreduce.map.output.compress", "true")
-      conf.set("mapreduce.map.output.compress.codec", codec)
+      CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
     new BucketedOutputWriterFactory {
