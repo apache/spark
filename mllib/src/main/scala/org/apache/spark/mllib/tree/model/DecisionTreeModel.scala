@@ -247,7 +247,7 @@ object DecisionTreeModel extends Loader[DecisionTreeModel] with Logging {
       val dataRDD = sqlContext.read.parquet(datapath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[NodeData](dataRDD.schema)
-      val nodes = dataRDD.map(NodeData.apply)
+      val nodes = dataRDD.rdd.map(NodeData.apply)
       // Build node data into a tree.
       val trees = constructTrees(nodes)
       assert(trees.size == 1,
