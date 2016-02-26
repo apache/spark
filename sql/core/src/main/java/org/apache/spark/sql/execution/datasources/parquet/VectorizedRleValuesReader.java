@@ -577,7 +577,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   private int ceil8(int value) {
-    return value / 8 + (value % 8 == 0 ? 0 : 1);
+    return (value + 7) / 8;
   }
 
   /**
