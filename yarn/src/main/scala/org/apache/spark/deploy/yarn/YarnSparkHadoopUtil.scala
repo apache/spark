@@ -22,8 +22,6 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
-import org.apache.spark.deploy.yarn.Client._
-
 import scala.collection.mutable.HashMap
 import scala.reflect.runtime._
 import scala.util.Try
@@ -138,10 +136,10 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   /**
     * Obtains token for the Hive metastore and adds them to the credentials.
     */
-   def obtainTokenForHiveMetastore(
-       sparkConf: SparkConf,
-       conf: Configuration,
-       credentials: Credentials) {
+  def obtainTokenForHiveMetastore(
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials) {
     if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
       YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
         credentials.addToken(new Text("hive.server2.delegation.token"), _)
