@@ -81,11 +81,18 @@ class DataFrame(object):
     @property
     @since(1.3)
     def rdd(self):
-        """Returns the content as an :class:`pyspark.RDD` of :class:`Row`.
+        """Returns the content as an :class:`pyspark.RDD` of :class:`Row` or custom object.
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(jrdd, self._sc, BatchedSerializer(PickleSerializer()))
+            if self._jdf.isOutputPickled():
+                # If the underlying java DataFrame's output is pickled, which means the query
+                # engine don't know the real schema of the data and just keep the pickled binary
+                # for each custom object(no batch).  So we need to use non-batched serializer here.
+                deserializer = PickleSerializer()
+            else:
+                deserializer = BatchedSerializer(PickleSerializer())
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, deserializer)
         return self._lazy_rdd
 
     @property
@@ -1506,19 +1513,6 @@ class PipelinedDataFrame(DataFrame):
             wrapped_func = self._wrap_func(self._func, True)
             self._jdf_val = self._prev_jdf.pythonMapPartitions(wrapped_func)
         return self._jdf_val
-
-    @property
-    @since(2.0)
-    def rdd(self):
-        """Returns the content as an :class:`pyspark.RDD` of custom objects."""
-        # We overwrite the `DataFrame.rdd` property as it's a little different here.
-        # After typed operations, the query engine don't know the real schema of data and will just
-        # keep the pickled binary for each custom object(no batch). So we need to set non-batched
-        # serializer and update the document to tell users it will return a RDD of custom objects.
-        if self._lazy_rdd is None:
-            jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(jrdd, self._sc, PickleSerializer())
-        return self._lazy_rdd
 
     def _wrap_func(self, func, output_binary):
         if self._prev_jdf.isOutputPickled():
