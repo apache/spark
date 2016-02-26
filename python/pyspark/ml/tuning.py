@@ -290,6 +290,27 @@ class CrossValidatorModel(Model):
 
 
 class TrainValidationSplit(Estimator, HasSeed):
+    """
+    Train-Validation-Split.
+    >>> from pyspark.ml.classification import LogisticRegression
+    >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> dataset = sqlContext.createDataFrame(
+    ...     [(Vectors.dense([0.0]), 0.0),
+    ...      (Vectors.dense([0.4]), 1.0),
+    ...      (Vectors.dense([0.5]), 0.0),
+    ...      (Vectors.dense([0.6]), 1.0),
+    ...      (Vectors.dense([1.0]), 1.0)] * 10,
+    ...     ["features", "label"])
+    >>> lr = LogisticRegression()
+    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+    >>> evaluator = BinaryClassificationEvaluator()
+    >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> tvsModel = tvs.fit(dataset)
+    >>> evaluator.evaluate(tvsModel.transform(dataset))
+    0.8333...
+    .. versionadded:: 2.0.0
+    """
 
     estimator = Param(Params._dummy(), "estimator", "estimator to be tested")
     estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
