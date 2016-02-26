@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMem
 import org.apache.spark.sql.execution.commands.{DescribeCommand => RunnableDescribeCommand, _}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.internal.SQLConf
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -98,7 +99,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Join implementations are chosen with the following precedence:
    *
    * - Broadcast: if one side of the join has an estimated physical size that is smaller than the
-   *     user-configurable [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
+   *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
    *     or if that side has an explicit broadcast hint (e.g. the user applied the
    *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling

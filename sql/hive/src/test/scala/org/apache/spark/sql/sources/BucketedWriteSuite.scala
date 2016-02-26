@@ -20,12 +20,13 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, SQLConf}
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
