@@ -1,4 +1,3 @@
-import six
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 from airflow.contrib.hooks import QuboleHook
@@ -104,10 +103,11 @@ class QuboleOperator(BaseOperator):
         self.args = args
         self.kwargs = kwargs
         self.kwargs['qubole_conn_id'] = qubole_conn_id
-        self.hook =  None
+        self.hook = QuboleHook(*self.args, **self.kwargs)
         super(QuboleOperator, self).__init__(*args, **kwargs)
 
     def execute(self, context):
+        # Reinitiating the hook, as some template fields might have changed
         self.hook = QuboleHook(*self.args, **self.kwargs)
         return self.hook.execute(context)
 
