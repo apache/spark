@@ -2,9 +2,9 @@
   "id" : "local-1430917381534",
   "name" : "Spark shell",
   "attempts" : [ {
-    "startTimeL" : 1430917380893,
-    "endTimeL" : 1430917391398,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1430917380893,
+    "endTimeEpoch" : 1430917391398,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-05-06T13:03:00.893GMT",
     "endTime" : "2015-05-06T13:03:11.398GMT",
     "lastUpdated" : "",
@@ -17,9 +17,9 @@
   "name" : "Spark shell",
   "attempts" : [ {
     "attemptId" : "2",
-    "startTimeL" : 1430917380893,
-    "endTimeL" : 1430917380950,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1430917380893,
+    "endTimeEpoch" : 1430917380950,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-05-06T13:03:00.893GMT",
     "endTime" : "2015-05-06T13:03:00.950GMT",
     "lastUpdated" : "",
@@ -28,9 +28,9 @@
     "completed" : true
   }, {
     "attemptId" : "1",
-    "startTimeL" : 1430917380880,
-    "endTimeL" : 1430917380890,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1430917380880,
+    "endTimeEpoch" : 1430917380890,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-05-06T13:03:00.880GMT",
     "endTime" : "2015-05-06T13:03:00.890GMT",
     "lastUpdated" : "",
@@ -43,9 +43,9 @@
   "name" : "Spark shell",
   "attempts" : [ {
     "attemptId" : "2",
-    "startTimeL" : 1426633910242,
-    "endTimeL" : 1426633945177,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1426633910242,
+    "endTimeEpoch" : 1426633945177,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-03-17T23:11:50.242GMT",
     "endTime" : "2015-03-17T23:12:25.177GMT",
     "lastUpdated" : "",
@@ -54,9 +54,9 @@
     "completed" : true
   }, {
     "attemptId" : "1",
-    "startTimeL" : 1426533910242,
-    "endTimeL" : 1426533945177,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1426533910242,
+    "endTimeEpoch" : 1426533945177,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-03-16T19:25:10.242GMT",
     "endTime" : "2015-03-16T19:25:45.177GMT",
     "lastUpdated" : "",
@@ -69,9 +69,9 @@
     "name": "Spark shell",
     "attempts": [
       {
-        "startTimeL" : 1425081758277,
-        "endTimeL" : 1425081766912,
-        "lastUpdatedL" : "",
+        "startTimeEpoch" : 1425081758277,
+        "endTimeEpoch" : 1425081766912,
+        "lastUpdatedEpoch" : "",
         "startTime": "2015-02-28T00:02:38.277GMT",
         "endTime": "2015-02-28T00:02:46.912GMT",
         "lastUpdated" : "",

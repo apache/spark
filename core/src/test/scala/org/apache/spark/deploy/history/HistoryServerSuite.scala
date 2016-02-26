@@ -161,8 +161,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       val json = if (jsonOrg.indexOf("lastUpdated") >= 0) {
         val subStrings = jsonOrg.split(",")
         for (i <- subStrings.indices) {
-          if (subStrings(i).indexOf("lastUpdatedL") >= 0) {
-            subStrings(i) = "\"lastUpdatedL\":\"\""
+          if (subStrings(i).indexOf("lastUpdatedEpoch") >= 0) {
+            subStrings(i) = "\"lastUpdatedEpoch\":\"\""
           } else if (subStrings(i).indexOf("lastUpdated") >= 0) {
             subStrings(i) = "\"lastUpdated\":\"\""
           }

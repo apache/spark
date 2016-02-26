@@ -3,9 +3,9 @@
   "name" : "Spark shell",
   "attempts" : [ {
     "attemptId" : "2",
-    "startTimeL" : 1426633910242,
-    "endTimeL" : 1426633945177,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1426633910242,
+    "endTimeEpoch" : 1426633945177,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-03-17T23:11:50.242GMT",
     "endTime" : "2015-03-17T23:12:25.177GMT",
     "lastUpdated" : "",
@@ -14,9 +14,9 @@
     "completed" : true
   }, {
     "attemptId" : "1",
-    "startTimeL" : 1426533910242,
-    "endTimeL" : 1426533945177,
-    "lastUpdatedL" : "",
+    "startTimeEpoch" : 1426533910242,
+    "endTimeEpoch" : 1426533945177,
+    "lastUpdatedEpoch" : "",
     "startTime" : "2015-03-16T19:25:10.242GMT",
     "endTime" : "2015-03-16T19:25:45.177GMT",
     "lastUpdated" : "",
