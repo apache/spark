@@ -275,6 +275,12 @@ object MimaExcludes {
       ) ++ Seq (
         // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
+      ) ++ Seq(
+        // [SPARK-13486][SQL] Move SQLConf into an internal package
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry$")
       )
     case v if v.startsWith("1.6") =>
       Seq(
