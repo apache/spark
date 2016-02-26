@@ -57,6 +57,21 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
+    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "adwrasdf")
+
+    val tempFile = Utils.createTempDir()
+    tempFile.delete()
+    df.write
+      .option("compression", "gZiP")
+      .text(tempFile.getCanonicalPath)
+    val compressedFiles = tempFile.listFiles()
+    assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
+
+    Utils.deleteRecursively(tempFile)
+  }
+
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
   }
