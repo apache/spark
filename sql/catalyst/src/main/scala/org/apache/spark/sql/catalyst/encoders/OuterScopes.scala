@@ -21,6 +21,8 @@ import java.util.concurrent.ConcurrentMap
 
 import com.google.common.collect.MapMaker
 
+import org.apache.spark.util.Utils
+
 object OuterScopes {
   @transient
   lazy val outerScopes: ConcurrentMap[String, AnyRef] =
@@ -28,7 +30,7 @@ object OuterScopes {
 
   /**
    * Adds a new outer scope to this context that can be used when instantiating an `inner class`
-   * during deserialialization. Inner classes are created when a case class is defined in the
+   * during deserialization. Inner classes are created when a case class is defined in the
    * Spark REPL and registering the outer scope that this class was defined in allows us to create
    * new instances on the spark executors.  In normal use, users should not need to call this
    * function.
@@ -39,4 +41,35 @@ object OuterScopes {
   def addOuterScope(outer: AnyRef): Unit = {
     outerScopes.putIfAbsent(outer.getClass.getName, outer)
   }
+
+  def getOuterScope(innerCls: Class[_]): AnyRef = {
+    assert(innerCls.isMemberClass)
+    val outerCls = innerCls.getDeclaringClass.getName
+    val outer = outerScopes.get(outerCls)
+    if (outer == null) {
+      outerCls match {
+        case REPLClass(line) =>
+          val loader = Utils.getContextOrSparkClassLoader
+          def loadCls(clsName: String): Class[_] = Class.forName(clsName, true, loader)
+
+          val cls1 = loadCls(line + "$read$")
+          val obj1 = cls1.getField("MODULE$").get(null)
+
+          val obj2 = cls1.getMethod("INSTANCE").invoke(obj1)
+          val cls2 = loadCls(line + "$read")
+
+          val obj3 = cls2.getMethod("$iw").invoke(obj2)
+          val cls3 = loadCls(line + "$read$$iw")
+
+          cls3.getMethod("$iw").invoke(obj3)
+
+        case _ => null
+      }
+    } else {
+      outer
+    }
+  }
+
+  // The format of REPL generated wrapper class's name, e.g. `$line12.$read$$iw$$iw`
+  private[this] val REPLClass = """^(\$line(?:\d+)\.)\$read\$\$iw\$\$iw$""".r
 }
