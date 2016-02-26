@@ -36,7 +36,6 @@ class KafkaStreamSuite extends SparkFunSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
   private val data = Map("a" -> 5, "b" -> 3, "c" -> 10)
-  private val data2 = Map("d" -> 8, "e" -> 1, "f" -> 9)
 
   private var kafkaTestUtils: KafkaTestUtils = _
 
@@ -82,57 +81,7 @@ class KafkaStreamSuite extends SparkFunSuite
     kafkaTestUtils.createTopic(topic)
     kafkaTestUtils.sendMessages(topic, data)
 
-    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
-    val result = new mutable.HashMap[String, Long]() with mutable.SynchronizedMap[String, Long]
-    stream.map(_._2).countByValue().foreachRDD { r =>
-      val ret = r.collect()
-      ret.toMap.foreach { kv =>
-        val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-        result.put(kv._1, count)
-      }
-    }
-
-    ssc.start()
-
-    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(data === result)
-    }
-  }
-
-  test("Kafka input stream with WhiteList") {
-    val topic = "topic1"
-    kafkaTestUtils.createTopic(topic)
-    kafkaTestUtils.sendMessages(topic, data)
-
-    val topicFilter = KafkaRegexTopicFilter("topic1", 1, true)
-
-    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, topicFilter, StorageLevel.MEMORY_ONLY)
-    val result = new mutable.HashMap[String, Long]() with mutable.SynchronizedMap[String, Long]
-    stream.map(_._2).countByValue().foreachRDD { r =>
-      val ret = r.collect()
-      ret.toMap.foreach { kv =>
-        val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-        result.put(kv._1, count)
-      }
-    }
-
-    ssc.start()
-
-    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(data === result)
-    }
-  }
-
-  test("Kafka input stream with WhiteList 2") {
-    val topics = Map("topic1" -> data, "topic2" -> data2)
-    topics.foreach { case (t, d) =>
-      kafkaTestUtils.createTopic(t)
-      kafkaTestUtils.sendMessages(t, d)
-    }
-
-    val topicFilter = KafkaRegexTopicFilter("topic1", 1, true)
+    val topicFilter = KafkaTopicFilter(Map(topic -> 1))
 
     val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
       ssc, kafkaParams, topicFilter, StorageLevel.MEMORY_ONLY)

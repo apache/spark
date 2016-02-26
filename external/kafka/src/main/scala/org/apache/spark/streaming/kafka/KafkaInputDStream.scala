@@ -50,7 +50,7 @@ class KafkaInputDStream[
   T <: Decoder[_]: ClassTag](
     ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
-    topics: Map[String, Int],
+    topics: KafkaTopicFilter,
     useReliableReceiver: Boolean,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {

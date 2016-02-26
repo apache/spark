@@ -54,7 +54,7 @@ class ReliableKafkaReceiver[
   U <: Decoder[_]: ClassTag,
   T <: Decoder[_]: ClassTag](
     kafkaParams: Map[String, String],
-    topics: Map[String, Int],
+    topics: KafkaTopicFilter,
     storageLevel: StorageLevel
   ) extends Receiver[(K, V)](storageLevel) with Logging {
 
@@ -147,8 +147,8 @@ class ReliableKafkaReceiver[
       case filter: KafkaRegexTopicFilter => {
         filter.numStreams
       }
-      case _ => {
-        topics.values.sum
+      case filter: KafkaPlainTopicFilter => {
+        filter.topics.values.sum
       }
     }
   }
@@ -170,9 +170,9 @@ class ReliableKafkaReceiver[
           new MessageHandler(stream)
         }
       }
-      case _ => {
+      case filter: KafkaPlainTopicFilter => {
         val topicMessageStreams = consumerConnector.createMessageStreams(
-          topics, keyDecoder, valueDecoder)
+          filter.topics, keyDecoder, valueDecoder)
 
         topicMessageStreams.values.flatten { streams =>
           streams.map { stream =>

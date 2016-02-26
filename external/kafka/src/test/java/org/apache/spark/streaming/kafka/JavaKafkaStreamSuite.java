@@ -75,6 +75,8 @@ public class JavaKafkaStreamSuite implements Serializable {
     sent.put("b", 3);
     sent.put("c", 10);
 
+    KafkaTopicFilter topicFilter = new KafkaPlainTopicFilter(topics);
+
     kafkaTestUtils.createTopic(topic);
     kafkaTestUtils.sendMessages(topic, sent);
 
@@ -89,7 +91,7 @@ public class JavaKafkaStreamSuite implements Serializable {
       StringDecoder.class,
       StringDecoder.class,
       kafkaParams,
-      topics,
+      topicFilter,
       StorageLevel.MEMORY_ONLY_SER());
 
     final Map<String, Long> result = Collections.synchronizedMap(new HashMap<String, Long>());
@@ -131,6 +133,158 @@ public class JavaKafkaStreamSuite implements Serializable {
     }
     Assert.assertEquals(sent.size(), result.size());
     for (Map.Entry<String, Integer> e : sent.entrySet()) {
+      Assert.assertEquals(e.getValue().intValue(), result.get(e.getKey()).intValue());
+    }
+  }
+
+  @Test
+  public void testKafkaStreamWhiteListWildCard() throws InterruptedException {
+    String topic = "topic1";
+
+    KafkaRegexTopicFilter topicFilter = new KafkaRegexTopicFilter(".*", 1, false);
+
+    Map<String, Integer> sent = new HashMap<>();
+    sent.put("a", 5);
+    sent.put("b", 3);
+    sent.put("c", 10);
+
+    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.sendMessages(topic, sent);
+
+    Map<String, String> kafkaParams = new HashMap<>();
+    kafkaParams.put("zookeeper.connect", kafkaTestUtils.zkAddress());
+    kafkaParams.put("group.id", "test-consumer-" + random.nextInt(10000));
+    kafkaParams.put("auto.offset.reset", "smallest");
+
+    JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
+            String.class,
+            String.class,
+            StringDecoder.class,
+            StringDecoder.class,
+            kafkaParams,
+            topicFilter,
+            StorageLevel.MEMORY_ONLY_SER());
+
+    final Map<String, Long> result = Collections.synchronizedMap(new HashMap<String, Long>());
+
+    JavaDStream<String> words = stream.map(
+            new Function<Tuple2<String, String>, String>() {
+              @Override
+              public String call(Tuple2<String, String> tuple2) {
+                return tuple2._2();
+              }
+            }
+    );
+
+    words.countByValue().foreachRDD(
+            new Function<JavaPairRDD<String, Long>, Void>() {
+              @Override
+              public Void call(JavaPairRDD<String, Long> rdd) {
+                List<Tuple2<String, Long>> ret = rdd.collect();
+                for (Tuple2<String, Long> r : ret) {
+                  if (result.containsKey(r._1())) {
+                    result.put(r._1(), result.get(r._1()) + r._2());
+                  } else {
+                    result.put(r._1(), r._2());
+                  }
+                }
+
+                return null;
+              }
+            }
+    );
+
+    ssc.start();
+
+    long startTime = System.currentTimeMillis();
+    boolean sizeMatches = false;
+    while (!sizeMatches && System.currentTimeMillis() - startTime < 20000) {
+      sizeMatches = sent.size() == result.size();
+      Thread.sleep(200);
+    }
+    Assert.assertEquals(sent.size(), result.size());
+    for (Map.Entry<String, Integer> e : sent.entrySet()) {
+      Assert.assertEquals(e.getValue().intValue(), result.get(e.getKey()).intValue());
+    }
+  }
+
+  @Test
+  public void testKafkaStreamBackListTopic() throws InterruptedException {
+    String topic1 = "topic1";
+
+    Map<String, Integer> sent1 = new HashMap<>();
+    sent1.put("a", 5);
+    sent1.put("b", 3);
+    sent1.put("c", 10);
+
+    kafkaTestUtils.createTopic(topic1);
+    kafkaTestUtils.sendMessages(topic1, sent1);
+
+    String topic2 = "topic2";
+
+    Map<String, Integer> sent2 = new HashMap<>();
+    sent2.put("a", 6);
+    sent2.put("b", 4);
+    sent2.put("c", 11);
+
+    kafkaTestUtils.createTopic(topic2);
+    kafkaTestUtils.sendMessages(topic2, sent2);
+
+    KafkaRegexTopicFilter topicFilter = new KafkaRegexTopicFilter("topic2", 1, true);
+
+    Map<String, String> kafkaParams = new HashMap<>();
+    kafkaParams.put("zookeeper.connect", kafkaTestUtils.zkAddress());
+    kafkaParams.put("group.id", "test-consumer-" + random.nextInt(10000));
+    kafkaParams.put("auto.offset.reset", "smallest");
+
+    JavaPairDStream<String, String> stream = KafkaUtils.createStream(ssc,
+            String.class,
+            String.class,
+            StringDecoder.class,
+            StringDecoder.class,
+            kafkaParams,
+            topicFilter,
+            StorageLevel.MEMORY_ONLY_SER());
+
+    final Map<String, Long> result = Collections.synchronizedMap(new HashMap<String, Long>());
+
+    JavaDStream<String> words = stream.map(
+            new Function<Tuple2<String, String>, String>() {
+              @Override
+              public String call(Tuple2<String, String> tuple2) {
+                return tuple2._2();
+              }
+            }
+    );
+
+    words.countByValue().foreachRDD(
+            new Function<JavaPairRDD<String, Long>, Void>() {
+              @Override
+              public Void call(JavaPairRDD<String, Long> rdd) {
+                List<Tuple2<String, Long>> ret = rdd.collect();
+                for (Tuple2<String, Long> r : ret) {
+                  if (result.containsKey(r._1())) {
+                    result.put(r._1(), result.get(r._1()) + r._2());
+                  } else {
+                    result.put(r._1(), r._2());
+                  }
+                }
+
+                return null;
+              }
+            }
+    );
+
+    ssc.start();
+
+    long startTime = System.currentTimeMillis();
+    boolean sizeMatches = false;
+    while (!sizeMatches && System.currentTimeMillis() - startTime < 20000) {
+      sizeMatches = sent1.size() == result.size();
+      Thread.sleep(200);
+    }
+    Assert.assertEquals(sent1.size(), result.size());
+    for (Map.Entry<String, Integer> e : sent1.entrySet()) {
       Assert.assertEquals(e.getValue().intValue(), result.get(e.getKey()).intValue());
     }
   }

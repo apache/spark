@@ -40,7 +40,7 @@ class KafkaReceiver[
   U <: Decoder[_] : ClassTag,
   T <: Decoder[_] : ClassTag](
      kafkaParams: Map[String, String],
-     topics: Map[String, Int],
+     topics: KafkaTopicFilter,
      storageLevel: StorageLevel
    ) extends Receiver[(K, V)](storageLevel) with Logging {
 
@@ -68,6 +68,9 @@ class KafkaReceiver[
     consumerConnector = Consumer.create(consumerConfig)
     logInfo("Connected to " + zkConnect)
 
+    val messageHandlerThreadPool =
+      ThreadUtils.newDaemonFixedThreadPool(computeNumberOfThreads(), "KafkaMessageHandler")
+
     val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[K]]
@@ -75,11 +78,6 @@ class KafkaReceiver[
     val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
-
-
-
-    val messageHandlerThreadPool =
-      ThreadUtils.newDaemonFixedThreadPool(computeNumberOfThreads(), "KafkaMessageHandler")
 
     try {
       createMessageHandlers(keyDecoder, valueDecoder).foreach(messageHandlerThreadPool.submit)
@@ -94,8 +92,8 @@ class KafkaReceiver[
       case filter: KafkaRegexTopicFilter => {
         filter.numStreams
       }
-      case _ => {
-        topics.values.sum
+      case filter: KafkaPlainTopicFilter => {
+        filter.topics.values.sum
       }
     }
   }
@@ -117,9 +115,9 @@ class KafkaReceiver[
           new MessageHandler(stream)
         }
       }
-      case _ => {
+      case filter: KafkaPlainTopicFilter => {
         val topicMessageStreams = consumerConnector.createMessageStreams(
-          topics, keyDecoder, valueDecoder)
+          filter.topics, keyDecoder, valueDecoder)
 
         topicMessageStreams.values.flatten { streams =>
           streams.map { stream =>

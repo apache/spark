@@ -17,20 +17,38 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.collection.immutable.HashMap
+import java.lang.{Integer => JInt}
+import java.util.{Map => JMap}
 
-class KafkaRegexTopicFilter  (
-  val regexFilter: String,
-  val numStreams: Int,
-  val blackList: Boolean
-) extends HashMap[String, Int]() {
+import scala.collection.JavaConverters._
 
-}
+abstract class KafkaTopicFilter extends Serializable {}
 
-object KafkaRegexTopicFilter {
+object KafkaTopicFilter {
   def apply (
     regexFilter: String,
     numStreams: Int,
     blackList: Boolean = false
-  ) = new KafkaRegexTopicFilter(regexFilter, numStreams, blackList)
+  ) : KafkaTopicFilter = new KafkaRegexTopicFilter(regexFilter, numStreams, blackList)
+
+  def apply (topics: Map[String, Int]) : KafkaTopicFilter = new KafkaPlainTopicFilter(topics)
+
+  def apply (topics: JMap[String, JInt]) : KafkaTopicFilter = new KafkaPlainTopicFilter(topics)
+}
+
+class KafkaRegexTopicFilter  (
+   val regexFilter: String,
+   val numStreams: Int,
+   val blackList: Boolean
+ ) extends KafkaTopicFilter {
+
+}
+
+class KafkaPlainTopicFilter  (
+   val topics: Map[String, Int]
+ ) extends KafkaTopicFilter {
+
+  def this(topics: JMap[String, JInt]) {
+    this(Map(topics.asScala.mapValues(_.intValue()).toSeq: _*));
+  }
 }

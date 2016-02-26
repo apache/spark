@@ -47,8 +47,7 @@ object KafkaUtils {
    * @param ssc       StreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
    * @param groupId   The group id for this consumer
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread
+   * @param topicsFilter Filter.
    * @param storageLevel  Storage level to use for storing the received objects
    *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    * @return DStream of (Kafka message key, Kafka message value)
@@ -57,14 +56,14 @@ object KafkaUtils {
       ssc: StreamingContext,
       zkQuorum: String,
       groupId: String,
-      topics: Map[String, Int],
+      topicsFilter: KafkaTopicFilter,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): ReceiverInputDStream[(String, String)] = {
     val kafkaParams = Map[String, String](
       "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
       "zookeeper.connection.timeout.ms" -> "10000")
     createStream[String, String, StringDecoder, StringDecoder](
-      ssc, kafkaParams, topics, storageLevel)
+      ssc, kafkaParams, topicsFilter, storageLevel)
   }
 
   /**
@@ -72,8 +71,7 @@ object KafkaUtils {
    * @param ssc         StreamingContext object
    * @param kafkaParams Map of kafka configuration parameters,
    *                    see http://kafka.apache.org/08/configuration.html
-   * @param topics      Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                    in its own thread.
+   * @param topicsFilter Filter.
    * @param storageLevel Storage level to use for storing the received objects
    * @tparam K type of Kafka message key
    * @tparam V type of Kafka message value
@@ -84,71 +82,68 @@ object KafkaUtils {
   def createStream[K: ClassTag, V: ClassTag, U <: Decoder[_]: ClassTag, T <: Decoder[_]: ClassTag](
       ssc: StreamingContext,
       kafkaParams: Map[String, String],
-      topics: Map[String, Int],
+      topicsFilter: KafkaTopicFilter,
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
     val walEnabled = WriteAheadLogUtils.enableReceiverLog(ssc.conf)
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topicsFilter, walEnabled, storageLevel)
   }
 
   /**
-   * Create an input stream that pulls messages from Kafka Brokers.
-   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
-   * @param jssc      JavaStreamingContext object
-   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
-   * @param groupId   The group id for this consumer
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread
-   * @return DStream of (Kafka message key, Kafka message value)
-   */
+    * Create an input stream that pulls messages from Kafka Brokers.
+    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
+    * @param jssc      JavaStreamingContext object
+    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
+    * @param groupId   The group id for this consumer
+    * @param topicsFilter Filter.
+    * @return DStream of (Kafka message key, Kafka message value)
+    */
   def createStream(
       jssc: JavaStreamingContext,
       zkQuorum: String,
       groupId: String,
-      topics: JMap[String, JInt]
+      topicsFilter: KafkaTopicFilter
     ): JavaPairReceiverInputDStream[String, String] = {
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.asScala.mapValues(_.intValue()).toSeq: _*))
+    createStream(jssc.ssc, zkQuorum, groupId, topicsFilter)
   }
 
   /**
-   * Create an input stream that pulls messages from Kafka Brokers.
-   * @param jssc      JavaStreamingContext object
-   * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
-   * @param groupId   The group id for this consumer.
-   * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                  in its own thread.
-   * @param storageLevel RDD storage level.
-   * @return DStream of (Kafka message key, Kafka message value)
-   */
+    * Create an input stream that pulls messages from Kafka Brokers.
+    * @param jssc      JavaStreamingContext object
+    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
+    * @param groupId   The group id for this consumer.
+    * @param topicsFilter Filter.
+    * @param storageLevel RDD storage level.
+    * @return DStream of (Kafka message key, Kafka message value)
+    */
   def createStream(
       jssc: JavaStreamingContext,
       zkQuorum: String,
       groupId: String,
-      topics: JMap[String, JInt],
+      topicsFilter: KafkaTopicFilter,
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[String, String] = {
-    createStream(jssc.ssc, zkQuorum, groupId, Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
+    createStream(jssc.ssc, zkQuorum, groupId, topicsFilter,
       storageLevel)
   }
 
   /**
-   * Create an input stream that pulls messages from Kafka Brokers.
-   * @param jssc      JavaStreamingContext object
-   * @param keyTypeClass Key type of DStream
-   * @param valueTypeClass value type of Dstream
-   * @param keyDecoderClass Type of kafka key decoder
-   * @param valueDecoderClass Type of kafka value decoder
-   * @param kafkaParams Map of kafka configuration parameters,
-   *                    see http://kafka.apache.org/08/configuration.html
-   * @param topics  Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *                in its own thread
-   * @param storageLevel RDD storage level.
-   * @tparam K type of Kafka message key
-   * @tparam V type of Kafka message value
-   * @tparam U type of Kafka message key decoder
-   * @tparam T type of Kafka message value decoder
-   * @return DStream of (Kafka message key, Kafka message value)
-   */
+    * Create an input stream that pulls messages from Kafka Brokers.
+    * @param jssc      JavaStreamingContext object
+    * @param keyTypeClass Key type of DStream
+    * @param valueTypeClass value type of Dstream
+    * @param keyDecoderClass Type of kafka key decoder
+    * @param valueDecoderClass Type of kafka value decoder
+    * @param kafkaParams Map of kafka configuration parameters,
+    *                    see http://kafka.apache.org/08/configuration.html
+    * @param topicsFilter Filter.
+    * @param storageLevel RDD storage level.
+    * @tparam K type of Kafka message key
+    * @tparam V type of Kafka message value
+    * @tparam U type of Kafka message key decoder
+    * @tparam T type of Kafka message value decoder
+    * @return DStream of (Kafka message key, Kafka message value)
+    */
   def createStream[K, V, U <: Decoder[_], T <: Decoder[_]](
       jssc: JavaStreamingContext,
       keyTypeClass: Class[K],
@@ -156,7 +151,7 @@ object KafkaUtils {
       keyDecoderClass: Class[U],
       valueDecoderClass: Class[T],
       kafkaParams: JMap[String, String],
-      topics: JMap[String, JInt],
+      topicsFilter: KafkaTopicFilter,
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[K, V] = {
     implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
@@ -168,7 +163,7 @@ object KafkaUtils {
     createStream[K, V, U, T](
       jssc.ssc,
       kafkaParams.asScala.toMap,
-      Map(topics.asScala.mapValues(_.intValue()).toSeq: _*),
+      topicsFilter,
       storageLevel)
   }
 
@@ -627,7 +622,7 @@ private[kafka] class KafkaUtilsPythonHelper {
   def createStream(
       jssc: JavaStreamingContext,
       kafkaParams: JMap[String, String],
-      topics: JMap[String, JInt],
+      topicsFilter: KafkaPlainTopicFilter,
       storageLevel: StorageLevel): JavaPairReceiverInputDStream[Array[Byte], Array[Byte]] = {
     KafkaUtils.createStream[Array[Byte], Array[Byte], DefaultDecoder, DefaultDecoder](
       jssc,
@@ -636,7 +631,7 @@ private[kafka] class KafkaUtilsPythonHelper {
       classOf[DefaultDecoder],
       classOf[DefaultDecoder],
       kafkaParams,
-      topics,
+      topicsFilter,
       storageLevel)
   }
 
