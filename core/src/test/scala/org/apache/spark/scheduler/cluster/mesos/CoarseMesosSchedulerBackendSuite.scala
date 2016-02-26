@@ -208,6 +208,35 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     verify(driver, times(1)).killTask(createTaskId("0"))
   }
 
+  test("weburi is set in created scheduler driver") {
+    setBackend()
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+    val securityManager = mock[SecurityManager]
+
+    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
+      override protected def createSchedulerDriver(
+                                                    masterUrl: String,
+                                                    scheduler: Scheduler,
+                                                    sparkUser: String,
+                                                    appName: String,
+                                                    conf: SparkConf,
+                                                    webuiUrl: Option[String] = None,
+                                                    checkpoint: Option[Boolean] = None,
+                                                    failoverTimeout: Option[Double] = None,
+                                                    frameworkId: Option[String] = None): SchedulerDriver = {
+        markRegistered()
+        assert(webuiUrl.isDefined)
+        assert(webuiUrl.get.equals("http://webui"))
+        driver
+      }
+    }
+
+    backend.start()
+  }
+
   private def verifyDeclinedOffer(driver: SchedulerDriver,
       offerId: OfferID,
       filter: Boolean = false): Unit = {
@@ -334,33 +363,5 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     driverEndpoint = mock[RpcEndpointRef]
 
     backend = createSchedulerBackend(taskScheduler, driver, externalShuffleClient, driverEndpoint)
-  }
-
-  test("weburi is set in created scheduler driver") {
-    val taskScheduler = mock[TaskSchedulerImpl]
-    when(taskScheduler.sc).thenReturn(sc)
-    val driver = mock[SchedulerDriver]
-    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
-    val securityManager = mock[SecurityManager]
-
-    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
-      override protected def createSchedulerDriver(
-        masterUrl: String,
-        scheduler: Scheduler,
-        sparkUser: String,
-        appName: String,
-        conf: SparkConf,
-        webuiUrl: Option[String] = None,
-        checkpoint: Option[Boolean] = None,
-        failoverTimeout: Option[Double] = None,
-        frameworkId: Option[String] = None): SchedulerDriver = {
-        markRegistered()
-        assert(webuiUrl.isDefined)
-        assert(webuiUrl.get.equals("http://webui"))
-        driver
-      }
-    }
-
-    backend.start()
   }
 }
