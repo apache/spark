@@ -150,7 +150,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
  * So we may not need to check nullability of keys while joining. Besides, by filtering
  * out keys with null, we can also reduce data size in Join.
  */
-object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
+object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
       val leftConditions = leftKeys.distinct.map { l =>
@@ -161,9 +161,9 @@ object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] {
         IsNotNull(r)
       }.reduceLeft(And)
 
-      val keysConditions = leftKeys.zip(rightKeys).map { lr =>
+      val keysConditions = ExpressionSet(leftKeys.zip(rightKeys).map { lr =>
         EqualTo(lr._2, lr._1)
-      }.reduceLeft(And)
+      }).reduceLeft(And)
 
       val finalConditions = if (condition.isDefined) {
         And(keysConditions, condition.get)

@@ -123,9 +123,6 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
         case EqualTo(l, r) =>
           canEvaluate(l, left) && canEvaluate(r, right) ||
             canEvaluate(l, right) && canEvaluate(r, left)
-        case EqualNullSafe(l, r) =>
-          canEvaluate(l, left) && canEvaluate(r, right) ||
-            canEvaluate(l, right) && canEvaluate(r, left)
         case other => false
       }
 
