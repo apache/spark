@@ -87,6 +87,7 @@ class CacheManagerSuite extends SparkFunSuite with LocalSparkContext with Before
     val context = TaskContext.empty()
     try {
       TaskContext.setTaskContext(context)
+      sc.env.blockManager.registerTask(0)
       cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
       assert(context.taskMetrics.updatedBlockStatuses.size === 2)
     } finally {

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 
@@ -69,13 +70,14 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
         ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData RIGHT JOIN testData2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+        ("SELECT * FROM testData LEFT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
-          classOf[CartesianProduct]),
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
           classOf[CartesianProduct]),

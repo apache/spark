@@ -40,6 +40,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -598,7 +599,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("null and non-null strings") {
     // Create a dataset where the first values are NULL and then some non-null values. The
     // number of non-nulls needs to be bigger than the ParquetReader batch size.
-    val data = sqlContext.range(200).map { i =>
+    val data = sqlContext.range(200).rdd.map { i =>
       if (i.getLong(0) < 150) Row(None)
       else Row("a")
     }

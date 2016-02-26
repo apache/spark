@@ -15,20 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql
 
 /**
- * Exception thrown when there is an exception in
- * executing the callback in TaskCompletionListener.
+ * All classes in this package are considered an internal API to Spark and
+ * are subject to change between minor releases.
  */
-private[spark]
-class TaskCompletionListenerException(errorMessages: Seq[String]) extends Exception {
-
-  override def getMessage: String = {
-    if (errorMessages.size == 1) {
-      errorMessages.head
-    } else {
-      errorMessages.zipWithIndex.map { case (msg, i) => s"Exception $i: $msg" }.mkString("\n")
-    }
-  }
-}
+package object internal

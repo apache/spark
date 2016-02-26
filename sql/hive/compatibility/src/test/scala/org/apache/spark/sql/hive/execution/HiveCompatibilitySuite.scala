@@ -23,8 +23,8 @@ import java.util.{Locale, TimeZone}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Runs the test cases that are included in the hive distribution.

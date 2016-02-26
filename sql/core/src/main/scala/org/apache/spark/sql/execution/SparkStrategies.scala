@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeComman
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
+import org.apache.spark.sql.internal.SQLConf
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -98,7 +99,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Join implementations are chosen with the following precedence:
    *
    * - Broadcast: if one side of the join has an estimated physical size that is smaller than the
-   *     user-configurable [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
+   *     user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold
    *     or if that side has an explicit broadcast hint (e.g. the user applied the
    *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame), then that side
    *     of the join will be broadcasted and the other side will be streamed, with no shuffling
@@ -252,22 +253,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BroadcastNestedLoop extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(
-             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemi =>
+      case j @ logical.Join(CanBroadcast(left), right, Inner | RightOuter, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
-      case logical.Join(
-             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemi =>
+          planLater(left), planLater(right), joins.BuildLeft, j.joinType, condition) :: Nil
+      case j @ logical.Join(left, CanBroadcast(right), Inner | LeftOuter | LeftSemi, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
+          planLater(left), planLater(right), joins.BuildRight, j.joinType, condition) :: Nil
       case _ => Nil
     }
   }
 
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // TODO CartesianProduct doesn't support the Left Semi Join
-      case logical.Join(left, right, joinType, None) if joinType != LeftSemi =>
+      case logical.Join(left, right, Inner, None) =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
@@ -285,6 +283,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           } else {
             joins.BuildLeft
           }
+        // This join could be very slow or even hang forever
         joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
       case _ => Nil
