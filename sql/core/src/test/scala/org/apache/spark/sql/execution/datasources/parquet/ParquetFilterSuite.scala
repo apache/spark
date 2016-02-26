@@ -25,7 +25,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.{PhysicalRDD, WholeStageCodegen}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -80,9 +80,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             assert(f.getClass === filterClass)
           }
         }
-        // Check if SparkPlan Filter is removed and this plan only has PhysicalRDD.
-        val executedPlan = query.queryExecution.executedPlan
-        assert(executedPlan.isInstanceOf[PhysicalRDD])
+
+        checkPlan(query)
         checker(query, expected)
       }
     }
@@ -110,6 +109,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     checkFilterPredicate(df, predicate, filterClass, checkBinaryAnswer _, expected)
+  }
+
+  private def checkPlan(df: DataFrame): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    assert(executedPlan.isInstanceOf[WholeStageCodegen])
+    // Check if SparkPlan Filter is removed and this plan only has `PhysicalRDD`.
+    val childPlan = executedPlan.asInstanceOf[WholeStageCodegen].plan
+    assert(childPlan.isInstanceOf[PhysicalRDD])
   }
 
   private def checkBinaryFilterPredicate
@@ -454,9 +461,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
           val df = sqlContext.read.parquet(path).filter("a = 2")
 
-          // Check if SparkPlan Filter is removed and this plan only has PhysicalRDD.
-          val executedPlan = df.queryExecution.executedPlan
-          assert(executedPlan.isInstanceOf[PhysicalRDD])
+          // Check if SparkPlan Filter is removed and this plan only has `PhysicalRDD`.
+          checkPlan(df)
           // The result should be single row.
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
@@ -527,12 +533,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
       withTempPath { dir =>
-        def checkPlan(df: DataFrame): Unit = {
-          // Check if SparkPlan Filter is removed and this plan only has PhysicalRDD.
-          val executedPlan = df.queryExecution.executedPlan
-          assert(executedPlan.isInstanceOf[PhysicalRDD])
-        }
-
         val path = s"${dir.getCanonicalPath}/table1"
         (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
 
