@@ -491,19 +491,22 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   val feb29T = "2016-02-29T00:00:00Z"
   val feb29_midnight = "2016-02-29 00:00:00"
   val feb29Date = new Date(2016 - 1900, 1, 29)
-  
+
   test("SQLDate leap years") {
     val c = Calendar.getInstance()
     c.set(2016, 1, 29, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
-    val feb29SqlDate = stringToDate(UTF8String.fromString("2016-02-29")).get
-    assert(feb29SqlDate === millisToDays(c.getTimeInMillis))
-    val mar31SqlDate = stringToDate(UTF8String.fromString("2016-03-31")).get
-    val feb28SqlDate = stringToDate(UTF8String.fromString("2016-02-28")).get
-    val april1SqlDate = stringToDate(UTF8String.fromString("2016-04-01")).get
-    val april30SqlDate = stringToDate(UTF8String.fromString("2016-04-30")).get
+    def sqlDate(d: String): SQLDate = {
+      stringToDate(UTF8String.fromString(d)).get
+    }
+    val feb29 = sqlDate("2016-02-29")
+    assert(feb29 === millisToDays(c.getTimeInMillis))
+    val mar31 = sqlDate("2016-03-31")
+    val feb28 = sqlDate("2016-02-28")
+    val april1 = sqlDate("2016-04-01")
+    val april30 = sqlDate("2016-04-30")
 
-    def assertDate(r: (Int, Int, Int, Int), q: Int,  d1: SQLDate): Unit = {
+    def assertDate(r: (Int, Int, Int, Int), q: Int, d1: SQLDate): Unit = {
       assert(r === splitDate(d1),
        s"Split date of ${dateToString(d1)}"
       )
@@ -515,24 +518,24 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       )
     }
 
-    Seq(((2016, 2, 28, 1), 1, feb28SqlDate),
-      ((2016, 2, 29, 0), 1, feb29SqlDate),
-      ((2016, 3, 31, 0), 1, mar31SqlDate),
-      ((2016, 4, 1, 29), 2, april1SqlDate),
-      ((2016, 4, 30, 0), 2, april30SqlDate)).foreach { t =>
+    Seq(((2016, 2, 28, 1), 1, feb28),
+      ((2016, 2, 29, 0), 1, feb29),
+      ((2016, 3, 31, 0), 1, mar31),
+      ((2016, 4, 1, 29), 2, april1),
+      ((2016, 4, 30, 0), 2, april30)).foreach { t =>
       assertDate(t._1, t._2, t._3)
     }
   }
 
-
   test("SQLTimestamp leap years") {
-    val feb29 = stringToTimestamp(UTF8String.fromString(feb29T)).get
+    def timestamp(d: String): SQLTimestamp = {
+      stringToTimestamp(UTF8String.fromString(d)).get
+    }
+    val feb29 = timestamp(feb29T)
     assert(feb29_midnight === timestampToString(feb29))
-    val mar31= stringToTimestamp(UTF8String.fromString("2016-03-31")).get
-
-    val feb28 = stringToTimestamp(UTF8String.fromString("2016-02-28")).get
-    val april1 = stringToTimestamp(UTF8String.fromString("2016-04-01")).get
-    val april30 = stringToTimestamp(UTF8String.fromString("2016-04-30")).get
+    val mar31 = timestamp("2016-03-31")
+    val feb28 = timestamp("2016-02-28")
+    val april30 = timestamp("2016-04-30")
 
     def assertMonthsBetween(m: SQLDate, t1: SQLTimestamp, t2: SQLTimestamp): Unit = {
       val mb = monthsBetween(t1, t2)
