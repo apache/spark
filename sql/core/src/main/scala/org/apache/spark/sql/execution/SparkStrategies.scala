@@ -253,22 +253,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object BroadcastNestedLoop extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Join(
-             CanBroadcast(left), right, joinType, condition) if joinType != LeftSemi =>
+      case j @ logical.Join(CanBroadcast(left), right, Inner | RightOuter, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joins.BuildLeft, joinType, condition) :: Nil
-      case logical.Join(
-             left, CanBroadcast(right), joinType, condition) if joinType != LeftSemi =>
+          planLater(left), planLater(right), joins.BuildLeft, j.joinType, condition) :: Nil
+      case j @ logical.Join(left, CanBroadcast(right), Inner | LeftOuter | LeftSemi, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joins.BuildRight, joinType, condition) :: Nil
+          planLater(left), planLater(right), joins.BuildRight, j.joinType, condition) :: Nil
       case _ => Nil
     }
   }
 
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      // TODO CartesianProduct doesn't support the Left Semi Join
-      case logical.Join(left, right, joinType, None) if joinType != LeftSemi =>
+      case logical.Join(left, right, Inner, None) =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
@@ -286,6 +283,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           } else {
             joins.BuildLeft
           }
+        // This join could be very slow or even hang forever
         joins.BroadcastNestedLoopJoin(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
       case _ => Nil
