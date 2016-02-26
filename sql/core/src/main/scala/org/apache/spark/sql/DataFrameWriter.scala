@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.io.compress.CompressionCodec
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -175,6 +177,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   @scala.annotation.varargs
   def sortBy(colName: String, colNames: String*): DataFrameWriter = {
     this.sortColumnNames = Option(colName +: colNames)
+    this
+  }
+  /*
+   * Specify the compression codec when saving it on hdfs.
+   *
+   * @since 2.0.0
+   */
+  def compress(codec: Class[_ <: CompressionCodec]): DataFrameWriter = {
+    this.extraOptions += ("compression.codec" -> codec.getCanonicalName)
     this
   }
 
