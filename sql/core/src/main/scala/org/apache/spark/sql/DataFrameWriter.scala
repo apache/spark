@@ -453,6 +453,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   format("json").save(path)
    * }}}
    *
+   * You can set the following JSON-specific options for writing JSON files:
+   * <li>`compression` or `codec` (default `null`): compression codec to use when saving to file.
+   * This should be the fully qualified name of a class implementing
+   * [[org.apache.hadoop.io.compress.CompressionCodec]] or one of the known case-insensitive
+   * shorten names(`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   *
    * @since 1.4.0
    */
   def json(path: String): Unit = format("json").save(path)
@@ -463,12 +469,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * {{{
    *   format("parquet").save(path)
    * }}}
-   *
-   * You can set the following JSON-specific options for writing JSON files:
-   * <li>`compression` or `codec` (default `null`): compression codec to use when saving to file.
-   * This should be the fully qualified name of a class implementing
-   * [[org.apache.hadoop.io.compress.CompressionCodec]] or one of the known case-insensitive
-   * shorten names(`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
    *
    * @since 1.4.0
    */
