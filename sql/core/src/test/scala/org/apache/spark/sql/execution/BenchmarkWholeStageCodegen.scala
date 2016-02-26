@@ -73,14 +73,14 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   ignore("range/limit/sum") {
     val N = 500 << 20
     runBenchmark("range/limit/sum", N) {
-      sqlContext.range(N).limit(100000).groupBy().sum().collect()
+      sqlContext.range(N).limit(100).groupBy().sum().collect()
     }
     /*
     Westmere E56xx/L56xx/X56xx (Nehalem-C)
     range/limit/sum:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/limit/sum codegen=false             191 /  248       2748.0           0.4       1.0X
-    range/limit/sum codegen=true              140 /  153       3747.5           0.3       1.4X
+    range/limit/sum codegen=false             154 /  201       3402.0           0.3       1.0X
+    range/limit/sum codegen=true              110 /  129       4760.9           0.2       1.4X
     */
   }
 

@@ -58,11 +58,12 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode with Cod
     ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
     ctx.currentVars = input
     s"""
-       | while ($countTerm < $limit) {
+       | if ($countTerm < $limit) {
        |   $countTerm += 1;
        |   ${consume(ctx, ctx.currentVars)}
+       | } else {
+       |   setStopEarly(true);
        | }
-       | if (true) return;
      """.stripMargin
   }
 }
@@ -92,11 +93,12 @@ trait BaseLimit extends UnaryNode with CodegenSupport {
     ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
     ctx.currentVars = input
     s"""
-       | while ($countTerm < $limit) {
+       | if ($countTerm < $limit) {
        |   $countTerm += 1;
        |   ${consume(ctx, ctx.currentVars)}
+       | } else {
+       |   setStopEarly(true);
        | }
-       | if (true) return;
      """.stripMargin
   }
 }
