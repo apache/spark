@@ -26,7 +26,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: int") {
     val conf = new SparkConf()
-    val iConf = ConfigEntry.intConf("spark.int", defaultValue = Some(1))
+    val iConf = ConfigBuilder("spark.int").intConf.withDefault(1)
     assert(conf.get(iConf) === 1)
     conf.set(iConf, 2)
     assert(conf.get(iConf) === 2)
@@ -34,37 +34,29 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: long") {
     val conf = new SparkConf()
-    val lConf = ConfigEntry.longConf("spark.long")
+    val lConf = ConfigBuilder("spark.long").longConf.withDefault(0L)
     conf.set(lConf, 1234L)
     assert(conf.get(lConf) === 1234L)
   }
 
   test("conf entry: double") {
     val conf = new SparkConf()
-    val dConf = ConfigEntry.doubleConf("spark.double")
+    val dConf = ConfigBuilder("spark.double").doubleConf.withDefault(0.0)
     conf.set(dConf, 20.0)
     assert(conf.get(dConf) === 20.0)
   }
 
   test("conf entry: boolean") {
     val conf = new SparkConf()
-    val bConf = ConfigEntry.booleanConf("spark.boolean", defaultValue = Some(false))
+    val bConf = ConfigBuilder("spark.boolean").booleanConf.withDefault(false)
     assert(!conf.get(bConf))
     conf.set(bConf, true)
     assert(conf.get(bConf))
   }
 
-  test("conf entry: required") {
-    val conf = new SparkConf()
-    val requiredConf = ConfigEntry.longConf("spark.noDefault")
-    intercept[NoSuchElementException] {
-      conf.get(requiredConf)
-    }
-  }
-
   test("conf entry: optional") {
     val conf = new SparkConf()
-    val optionalConf = ConfigEntry.intConf("spark.optional").optional
+    val optionalConf = ConfigBuilder("spark.optional").intConf.optional
     assert(conf.get(optionalConf) === None)
     conf.set(optionalConf, 1)
     assert(conf.get(optionalConf) === Some(1))
@@ -72,8 +64,8 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: fallback") {
     val conf = new SparkConf()
-    val parentConf = ConfigEntry.intConf("spark.int", defaultValue = Some(1))
-    val confWithFallback = ConfigEntry.fallbackConf("spark.fallback", parentConf)
+    val parentConf = ConfigBuilder("spark.int").intConf.withDefault(1)
+    val confWithFallback = ConfigBuilder("spark.fallback").fallbackConf(parentConf)
     assert(conf.get(confWithFallback) === 1)
     conf.set(confWithFallback, 2)
     assert(conf.get(parentConf) === 1)
@@ -82,7 +74,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: time") {
     val conf = new SparkConf()
-    val time = ConfigEntry.timeConf("spark.time", TimeUnit.SECONDS, defaultValue = Some("1h"))
+    val time = ConfigBuilder("spark.time").timeConf(TimeUnit.SECONDS).withDefaultString("1h")
     assert(conf.get(time) === 3600L)
     conf.set(time.key, "1m")
     assert(conf.get(time) === 60L)
@@ -90,7 +82,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: bytes") {
     val conf = new SparkConf()
-    val bytes = ConfigEntry.bytesConf("spark.bytes", ByteUnit.KiB, defaultValue = Some("1m"))
+    val bytes = ConfigBuilder("spark.bytes").bytesConf(ByteUnit.KiB).withDefaultString("1m")
     assert(conf.get(bytes) === 1024L)
     conf.set(bytes.key, "1k")
     assert(conf.get(bytes) === 1L)
@@ -98,7 +90,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: string seq") {
     val conf = new SparkConf()
-    val seq = ConfigEntry.stringSeqConf("spark.seq")
+    val seq = ConfigBuilder("spark.seq").stringSeqConf.withDefault(Seq())
     conf.set(seq.key, "1,,2, 3 , , 4")
     assert(conf.get(seq) === Seq("1", "2", "3", "4"))
     conf.set(seq, Seq("1", "2"))
@@ -107,8 +99,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: enum") {
     val conf = new SparkConf()
-    val enum = ConfigEntry.enumConf("spark.enum", v => v, Set("a", "b", "c"),
-      defaultValue = Some("a"))
+    val enum = ConfigBuilder("spark.enum").stringEnumConf(Set("a", "b", "c")).withDefault("a")
     assert(conf.get(enum) === "a")
 
     conf.set(enum, "b")
@@ -123,7 +114,7 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: conversion error") {
     val conf = new SparkConf()
-    val conversionTest = ConfigEntry.doubleConf("spark.conversionTest")
+    val conversionTest = ConfigBuilder("spark.conversionTest").doubleConf.optional
     conf.set(conversionTest.key, "abc")
     val conversionError = intercept[IllegalArgumentException] {
       conf.get(conversionTest)
