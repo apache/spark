@@ -504,13 +504,18 @@ with the secrets needed to log in to Kerberos directly: a keytab.
 
 ## Launching your application with Apache Oozie
 
-Apache Oozie can launch Spark. In a secure cluster, the launched application will need the relevant
+Apache Oozie can launch Spark.
+In a secure cluster, the launched application will need the relevant
 tokens to access the cluster's services.
-If Spark is launched with a keytab, this is automatic. However, if Spark is to be
-launched without a keytab, the responsibility for setting up security must be handed
+If Spark is launched with a keytab, this is automatic.
+However, if Spark is to be launched without a keytab, the responsibility for setting up security must be handed
 over to Oozie.
+
+The details of configuring Oozie for secure clusters and obtaining
+credentials for a job can be found on the [Oozie web site](http://oozie.apache.org/)
+in the "Authentication" section of the specific release's documentation.
  
-The Oozie workflow configuration must be set up for Oozie to request all tokens, including:
+For Spark applications, the Oozie workflow must be set up for Oozie to request all tokens, including:
 
 - The YARN resource manager.
 - The local HDFS filesystem.

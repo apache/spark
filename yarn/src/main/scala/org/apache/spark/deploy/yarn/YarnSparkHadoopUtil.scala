@@ -312,7 +312,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-<<<<<<< 6c77c543addb861d7455bf3f050eb33026381cab
    * Run some code as the real logged in user (which may differ from the current user, for
    * example, when using proxying).
    */
@@ -349,7 +348,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-   * Dump the credentials's tokens to string values.
+   * Dump the credentials' tokens to string values.
    * @param credentials credentials
    * @return an iterator over the string values. If no credentials are passed in: an empty list
    */
@@ -362,9 +361,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-   * Convert a token to a string. If its an abstract delegation token,
-   * attempt to unmarshall it and then print more details, including
-   * timestamps in human-readable form.
+   * Convert a token to a string.
+   * If its an abstract delegation token, attempt to unmarshall it and then
+   * print more details, including timestamps in human-readable form.
    * @param token token to convert to a string
    * @return a printable string value.
    */
