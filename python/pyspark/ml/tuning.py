@@ -292,7 +292,7 @@ class CrossValidatorModel(Model):
 class TrainValidationSplit(Estimator, HasSeed):
     """
     Train-Validation-Split.
-    
+
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.mllib.linalg import Vectors
@@ -339,7 +339,7 @@ class TrainValidationSplit(Estimator, HasSeed):
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
                   seed=None):
         """
-        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio= 0.75,\
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
                   seed=None):
         Sets params for the train validation split.
         """
