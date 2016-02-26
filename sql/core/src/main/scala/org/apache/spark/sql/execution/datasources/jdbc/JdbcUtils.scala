@@ -276,7 +276,7 @@ object JdbcUtils extends Logging {
     val rddSchema = df.schema
     val getConnection: () => Connection = createConnectionFactory(url, properties)
     val batchSize = properties.getProperty("batchsize", "1000").toInt
-    df.rdd.foreachPartition { iterator =>
+    df.foreachPartition { iterator =>
       savePartition(getConnection, table, iterator, rddSchema, nullTypes, batchSize, dialect)
     }
   }

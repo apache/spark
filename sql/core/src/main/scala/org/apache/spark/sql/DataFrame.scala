@@ -1427,6 +1427,24 @@ class DataFrame private[sql](
   def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
 
   /**
+   * Applies a function `f` to all rows.
+   * @group rdd
+   * @since 1.3.0
+   */
+  def foreach(f: Row => Unit): Unit = withNewExecutionId {
+    rdd.foreach(f)
+  }
+
+  /**
+   * Applies a function f to each partition of this [[DataFrame]].
+   * @group rdd
+   * @since 1.3.0
+   */
+  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecutionId {
+    rdd.foreachPartition(f)
+  }
+
+  /**
    * Returns the first `n` rows in the [[DataFrame]].
    *
    * Running take requires moving data into the application's driver process, and doing so with
