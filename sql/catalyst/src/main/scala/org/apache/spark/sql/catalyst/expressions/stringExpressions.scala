@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.{HashMap, Locale, Map => JMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
-import java.text.DecimalFormatSymbols
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -940,7 +940,7 @@ case class FormatNumber(x: Expression, d: Expression)
   private val pattern: StringBuffer = new StringBuffer()
 
   @transient
-  private val numberFormat: DecimalFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
+  private val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
   override protected def nullSafeEval(xObject: Any, dObject: Any): Any = {
     val dValue = dObject.asInstanceOf[Int]
