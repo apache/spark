@@ -132,7 +132,8 @@ public class TransportConf {
    * memory mapping has high overhead for blocks close to or below the page size of the OS.
    */
   public int memoryMapBytes() {
-    return conf.getInt("spark.storage.memoryMapThreshold", 2 * 1024 * 1024);
+    return Ints.checkedCast(JavaUtils.byteStringAsBytes(
+      conf.get("spark.storage.memoryMapThreshold", "2m")));
   }
 
   /**
