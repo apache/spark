@@ -28,7 +28,7 @@ import io.netty.buffer.Unpooled;
 /**
  * A {@link ManagedBuffer} backed by {@link ByteBuffer}.
  */
-public final class NioManagedBuffer extends ManagedBuffer {
+public class NioManagedBuffer extends ManagedBuffer {
   private final ByteBuffer buf;
 
   public NioManagedBuffer(ByteBuffer buf) {

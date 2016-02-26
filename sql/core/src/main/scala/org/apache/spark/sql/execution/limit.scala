@@ -21,7 +21,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 
 
 /**
@@ -37,7 +39,8 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   protected override def doExecute(): RDD[InternalRow] = {
     val shuffled = new ShuffledRowRDD(
-      Exchange.prepareShuffleDependency(child.execute(), child.output, SinglePartition, serializer))
+      ShuffleExchange.prepareShuffleDependency(
+        child.execute(), child.output, SinglePartition, serializer))
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -88,11 +91,8 @@ case class TakeOrderedAndProject(
 
   override def outputPartitioning: Partitioning = SinglePartition
 
-  // We need to use an interpreted ordering here because generated orderings cannot be serialized
-  // and this ordering needs to be created on the driver in order to be passed into Spark core code.
-  private val ord: InterpretedOrdering = new InterpretedOrdering(sortOrder, child.output)
-
   override def executeCollect(): Array[InternalRow] = {
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val data = child.execute().map(_.copy()).takeOrdered(limit)(ord)
     if (projectList.isDefined) {
       val proj = UnsafeProjection.create(projectList.get, child.output)
@@ -105,13 +105,15 @@ case class TakeOrderedAndProject(
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
   protected override def doExecute(): RDD[InternalRow] = {
+    val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val localTopK: RDD[InternalRow] = {
       child.execute().map(_.copy()).mapPartitions { iter =>
         org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
       }
     }
     val shuffled = new ShuffledRowRDD(
-      Exchange.prepareShuffleDependency(localTopK, child.output, SinglePartition, serializer))
+      ShuffleExchange.prepareShuffleDependency(
+        localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList.isDefined) {

@@ -25,12 +25,11 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
+import org.apache.spark.sql.execution.{SparkPlan, SparkSqlSerializer}
 import org.apache.spark.sql.execution.local.LocalNode
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetrics}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
-import org.apache.spark.unsafe.memory.MemoryLocation
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -159,18 +158,17 @@ private[joins] class UniqueKeyHashedRelation(
 private[execution] object HashedRelation {
 
   def apply(localNode: LocalNode, keyGenerator: Projection): HashedRelation = {
-    apply(localNode.asIterator, SQLMetrics.nullLongMetric, keyGenerator)
+    apply(localNode.asIterator, keyGenerator)
   }
 
   def apply(
       input: Iterator[InternalRow],
-      numInputRows: LongSQLMetric,
       keyGenerator: Projection,
       sizeEstimate: Int = 64): HashedRelation = {
 
     if (keyGenerator.isInstanceOf[UnsafeProjection]) {
       return UnsafeHashedRelation(
-        input, numInputRows, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
+        input, keyGenerator.asInstanceOf[UnsafeProjection], sizeEstimate)
     }
 
     // TODO: Use Spark's HashMap implementation.
@@ -184,7 +182,6 @@ private[execution] object HashedRelation {
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
       currentRow = input.next()
-      numInputRows += 1
       val rowKey = keyGenerator(currentRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
@@ -427,7 +424,6 @@ private[joins] object UnsafeHashedRelation {
 
   def apply(
       input: Iterator[InternalRow],
-      numInputRows: LongSQLMetric,
       keyGenerator: UnsafeProjection,
       sizeEstimate: Int): HashedRelation = {
 
@@ -437,7 +433,6 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
-      numInputRows += 1
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val existingMatchList = hashTable.get(rowKey)
@@ -604,7 +599,6 @@ private[joins] object LongHashedRelation {
 
   def apply(
     input: Iterator[InternalRow],
-    numInputRows: LongSQLMetric,
     keyGenerator: Projection,
     sizeEstimate: Int): HashedRelation = {
 
@@ -619,7 +613,6 @@ private[joins] object LongHashedRelation {
     while (input.hasNext) {
       val unsafeRow = input.next().asInstanceOf[UnsafeRow]
       numFields = unsafeRow.numFields()
-      numInputRows += 1
       val rowKey = keyGenerator(unsafeRow)
       if (!rowKey.anyNull) {
         val key = rowKey.getLong(0)
@@ -681,3 +674,20 @@ private[joins] object LongHashedRelation {
     }
   }
 }
+
+/** The HashedRelationBroadcastMode requires that rows are broadcasted as a HashedRelation. */
+private[execution] case class HashedRelationBroadcastMode(
+    canJoinKeyFitWithinLong: Boolean,
+    keys: Seq[Expression],
+    attributes: Seq[Attribute]) extends BroadcastMode {
+
+  def transform(rows: Array[InternalRow]): HashedRelation = {
+    val generator = UnsafeProjection.create(keys, attributes)
+    if (canJoinKeyFitWithinLong) {
+      LongHashedRelation(rows.iterator, generator, rows.length)
+    } else {
+      HashedRelation(rows.iterator, generator, rows.length)
+    }
+  }
+}
+

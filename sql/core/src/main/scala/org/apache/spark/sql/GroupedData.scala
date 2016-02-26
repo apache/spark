@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, Unresolved
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.NumericType
 
 /**
@@ -74,7 +76,7 @@ class GroupedData protected[sql](
   private[this] def alias(expr: Expression): NamedExpression = expr match {
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
-    case expr: Expression => Alias(expr, expr.prettyString)()
+    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
 
   private[this] def aggregateNumericColumns(colNames: String*)(f: Expression => AggregateFunction)
