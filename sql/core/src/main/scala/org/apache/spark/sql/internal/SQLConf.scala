@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.Properties
+import java.util.{NoSuchElementException, Properties}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -649,6 +649,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
+  @throws[NoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {
     Option(settings.get(key)).
       orElse {
