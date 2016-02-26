@@ -49,9 +49,9 @@ public class JavaL1UpdaterExample {
     // $example on$
     SVMWithSGD svmAlg = new SVMWithSGD();
     svmAlg.optimizer()
-            .setNumIterations(200)
-            .setRegParam(0.1)
-            .setUpdater(new L1Updater());
+      .setNumIterations(200)
+      .setRegParam(0.1)
+      .setUpdater(new L1Updater());
     final SVMModel modelL1 = svmAlg.run(training.rdd());
     // $example off$
 
@@ -60,17 +60,17 @@ public class JavaL1UpdaterExample {
 
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
-            new Function<LabeledPoint, Tuple2<Object, Object>>() {
-              public Tuple2<Object, Object> call(LabeledPoint p) {
-                Double score = modelL1.predict(p.features());
-                return new Tuple2<Object, Object>(score, p.label());
-              }
-            }
+      new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(LabeledPoint p) {
+          Double score = modelL1.predict(p.features());
+          return new Tuple2<Object, Object>(score, p.label());
+        }
+      }
     );
 
     // Get evaluation metrics.
     BinaryClassificationMetrics metrics =
-            new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
+      new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
     double auROC = metrics.areaUnderROC();
 
     System.out.println("Area under ROC = " + auROC);

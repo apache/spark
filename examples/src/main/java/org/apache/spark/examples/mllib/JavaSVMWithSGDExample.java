@@ -55,17 +55,17 @@ public class JavaSVMWithSGDExample {
 
     // Compute raw scores on the test set.
     JavaRDD<Tuple2<Object, Object>> scoreAndLabels = test.map(
-            new Function<LabeledPoint, Tuple2<Object, Object>>() {
-                public Tuple2<Object, Object> call(LabeledPoint p) {
-                    Double score = model.predict(p.features());
-                    return new Tuple2<Object, Object>(score, p.label());
-                }
-            }
+      new Function<LabeledPoint, Tuple2<Object, Object>>() {
+        public Tuple2<Object, Object> call(LabeledPoint p) {
+          Double score = model.predict(p.features());
+          return new Tuple2<Object, Object>(score, p.label());
+        }
+      }
     );
 
     // Get evaluation metrics.
     BinaryClassificationMetrics metrics =
-            new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
+      new BinaryClassificationMetrics(JavaRDD.toRDD(scoreAndLabels));
     double auROC = metrics.areaUnderROC();
 
     System.out.println("Area under ROC = " + auROC);
