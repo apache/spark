@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
+import org.apache.spark.util.CompletionIterator
 
 /**
  * Spark class responsible for passing RDDs partition contents to the BlockManager and making
@@ -47,6 +48,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         existingMetrics.incBytesReadInternal(blockResult.bytes)
 
         val iter = blockResult.data.asInstanceOf[Iterator[T]]
+
         new InterruptibleIterator[T](context, iter) {
           override def next(): T = {
             existingMetrics.incRecordsReadInternal(1)
@@ -156,7 +158,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         case Left(arr) =>
           // We have successfully unrolled the entire partition, so cache it in memory
           blockManager.putArray(key, arr, level, tellMaster = true, effectiveStorageLevel)
-          arr.iterator.asInstanceOf[Iterator[T]]
+          CompletionIterator[T, Iterator[T]](
+            arr.iterator.asInstanceOf[Iterator[T]],
+            blockManager.releaseLock(key))
         case Right(it) =>
           // There is not enough space to cache this partition in memory
           val returnValues = it.asInstanceOf[Iterator[T]]

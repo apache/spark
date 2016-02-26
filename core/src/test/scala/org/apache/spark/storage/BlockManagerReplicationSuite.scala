@@ -190,6 +190,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
 
     def putBlockAndGetLocations(blockId: String, level: StorageLevel): Set[BlockManagerId] = {
       stores.head.putSingle(blockId, new Array[Byte](blockSize), level)
+      stores.head.releaseLock(blockId)
       val locations = master.getLocations(blockId).sortBy { _.executorId }.toSet
       stores.foreach { _.removeBlock(blockId) }
       master.removeBlock(blockId)
@@ -251,6 +252,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     // Insert a block with 2x replication and return the number of copies of the block
     def replicateAndGetNumCopies(blockId: String): Int = {
       store.putSingle(blockId, new Array[Byte](1000), StorageLevel.MEMORY_AND_DISK_2)
+      store.releaseLock(blockId)
       val numLocations = master.getLocations(blockId).size
       allStores.foreach { _.removeBlock(blockId) }
       numLocations
@@ -288,6 +290,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
     def replicateAndGetNumCopies(blockId: String, replicationFactor: Int): Int = {
       val storageLevel = StorageLevel(true, true, false, true, replicationFactor)
       initialStores.head.putSingle(blockId, new Array[Byte](blockSize), storageLevel)
+      initialStores.head.releaseLock(blockId)
       val numLocations = master.getLocations(blockId).size
       allStores.foreach { _.removeBlock(blockId) }
       numLocations
@@ -355,6 +358,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       val blockId = new TestBlockId(
         "block-with-" + storageLevel.description.replace(" ", "-").toLowerCase)
       stores(0).putSingle(blockId, new Array[Byte](blockSize), storageLevel)
+      stores(0).releaseLock(blockId)
 
       // Assert that master know two locations for the block
       val blockLocations = master.getLocations(blockId).map(_.executorId).toSet
@@ -367,6 +371,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       }.foreach { testStore =>
         val testStoreName = testStore.blockManagerId.executorId
         assert(testStore.getLocal(blockId).isDefined, s"$blockId was not found in $testStoreName")
+        testStore.releaseLock(blockId)
         assert(master.getLocations(blockId).map(_.executorId).toSet.contains(testStoreName),
           s"master does not have status for ${blockId.name} in $testStoreName")
 
@@ -392,6 +397,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
           (1 to 10).foreach {
             i =>
               testStore.putSingle(s"dummy-block-$i", new Array[Byte](1000), MEMORY_ONLY_SER)
+              testStore.releaseLock(s"dummy-block-$i")
           }
           (1 to 10).foreach {
             i => testStore.removeBlock(s"dummy-block-$i")

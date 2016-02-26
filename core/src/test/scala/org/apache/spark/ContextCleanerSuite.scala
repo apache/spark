@@ -485,7 +485,8 @@ class CleanerTester(
   def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
     try {
       eventually(waitTimeout, interval(100 millis)) {
-        assert(isAllCleanedUp)
+        assert(isAllCleanedUp,
+          "The following resources were not cleaned up:\n" + uncleanedResourcesToString)
       }
       postCleanupValidate()
     } finally {

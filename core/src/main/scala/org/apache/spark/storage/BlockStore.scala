@@ -60,8 +60,10 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
 
   /**
    * Remove a block, if it exists.
+   *
    * @param blockId the block to remove.
    * @return True if the block was found and removed, False otherwise.
+   * @throws IllegalStateException if the block is pinned by a task.
    */
   def remove(blockId: BlockId): Boolean
 
