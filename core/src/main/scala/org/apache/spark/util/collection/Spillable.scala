@@ -65,6 +65,14 @@ private[spark] trait Spillable[C] extends Logging {
   // Number of spills
   private[this] var _spillCount = 0
 
+  protected def reset(): Unit = {
+    releaseMemory()
+    //myMemoryThreshold = initialMemoryThreshold
+    _elementsRead = 0
+    _memoryBytesSpilled = 0L
+    _spillCount = 0
+  }
+
   /**
    * Spills the current in-memory collection to disk if needed. Attempts to acquire more
    * memory before spilling.
