@@ -196,9 +196,9 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       .map { case Row(features: Vector) =>
         features.size
       }.first()
-    if (numFeatures > WeightedLeastSquares.MaxNumFeatures) {
+    if (numFeatures > WeightedLeastSquares.MAX_NUM_FEATURES) {
       val msg = "Currently, GeneralizedLinearRegression only supports number of features" +
-        s" <= ${WeightedLeastSquares.MaxNumFeatures}. Found $numFeatures in the input dataset."
+        s" <= ${WeightedLeastSquares.MAX_NUM_FEATURES}. Found $numFeatures in the input dataset."
       throw new SparkException(msg)
     }
 
