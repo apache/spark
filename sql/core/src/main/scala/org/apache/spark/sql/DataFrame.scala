@@ -1761,12 +1761,6 @@ class DataFrame private[sql](
     }
   }
 
-  protected[sql] def collectToPython(): Int = {
-    withNewExecutionId {
-      PythonRDD.collectAndServe(javaToPython.rdd)
-    }
-  }
-
   protected[sql] def isOutputPickled: Boolean = EvaluatePython.schemaOfPickled == schema
 
   protected[sql] def pythonMapPartitions(func: PythonFunction): DataFrame = withPlan {

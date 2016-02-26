@@ -30,6 +30,11 @@ import functools
 import time
 import datetime
 
+from itertools import chain
+
+if sys.version < '3':
+    from itertools import imap as map, ifilter as filter
+
 import py4j
 try:
     import xmlrunner
@@ -1211,14 +1216,33 @@ class SQLTests(ReusedPySparkTestCase):
         result = ds.map2(lambda row: row.value + "#").collect()
         check_result(result, lambda k, v: v + "#")
 
+        # cannot appply schema to Dataset not returned by typed operations.
+        msg = "Cannot apply schema to a Dataset which is not returned by typed operations"
+        self.assertRaisesRegexp(RuntimeError, msg, lambda: ds.applySchema())
+
         # row count should be corrected even no schema is specified.
         self.assertEqual(ds.map2(lambda row: row.key + 1).count(), 100)
 
         # call cache() in the middle of 2 typed operations.
-        ds3 = ds.map2(lambda row: row.key * 2).cache().map2(lambda key: key + 1)
-        self.assertEqual(ds3.count(), 100)
-        result = ds3.collect()
+        ds2 = ds.map2(lambda row: row.key * 2).cache().map2(lambda key: key + 1)
+        self.assertEqual(ds2.count(), 100)
+        result = ds2.collect()
         check_result(result, lambda k, v: k * 2 + 1)
+
+        # other typed operations
+        ds2 = ds.map(lambda row: row.key * 2)
+
+        result = ds2.flatMap(lambda i: iter([i, i + 1])).collect()
+        expected_result = chain.from_iterable(map(lambda i: [i * 2, i * 2 + 1], range(100)))
+        self.assertEqual(result, list(expected_result))
+
+        result = ds2.mapPartitions(lambda it: map(lambda i: i + 1, it)).collect()
+        expected_result = map(lambda i: i * 2 + 1, range(100))
+        self.assertEqual(result, list(expected_result))
+
+        result = ds2.filter(lambda i: i > 33).collect()
+        expected_result = filter(lambda i: i > 33, map(lambda i: i * 2, range(100)))
+        self.assertEqual(result, list(expected_result))
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):

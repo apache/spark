@@ -85,7 +85,11 @@ class Dataset(object):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, BatchedSerializer(PickleSerializer()))
+            if self._jdf.isOutputPickled():
+                deserializer = PickleSerializer()
+            else:
+                deserializer = BatchedSerializer(PickleSerializer())
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, deserializer)
         return self._lazy_rdd
 
     @property
@@ -239,13 +243,7 @@ class Dataset(object):
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        if self._jdf.isOutputPickled():
-            deserializer = PickleSerializer()
-        else:
-            deserializer = BatchedSerializer(PickleSerializer())
-        with SCCallSiteSync(self._sc) as css:
-            port = self._jdf.collectToPython()
-        return list(_load_from_socket(port, deserializer))
+        return self.rdd.collect()
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -273,70 +271,75 @@ class Dataset(object):
     @ignore_unicode_prefix
     @since(2.0)
     def applySchema(self, schema=None):
-        """ TODO """
-        raise RuntimeError("Can't apply schema to a Dataset with non-default schema")
+        """Returns a new :class:`Dataset` by appling the given schema, or infer the schema
+        by all of the records if no schema is given.
+
+        It is only allowed to apply schema for Dataset which is returned by typed operations,
+        e.g. map, flatMap, etc. And the record type of the schema-applied Dataset will be row.
+
+        >>> ds = df.map(lambda row: row.name)
+        >>> ds.collect()
+        [u'Alice', u'Bob']
+        >>> ds.schema
+        StructType(List(StructField(value,BinaryType,false)))
+        >>> ds2 = ds.applySchema(StringType())
+        >>> ds2.collect()
+        [Row(value=u'Alice'), Row(value=u'Bob')]
+        >>> ds2.schema
+        StructType(List(StructField(value,StringType,true)))
+        >>> ds3 = ds.applySchema()
+        >>> ds3.collect()
+        [Row(value=u'Alice'), Row(value=u'Bob')]
+        >>> ds3.schema
+        StructType(List(StructField(value,StringType,true)))
+        """
+        msg = "Cannot apply schema to a Dataset which is not returned by typed operations"
+        raise RuntimeError(msg)
 
     @ignore_unicode_prefix
     @since(2.0)
-    def mapPartitions2(self, func):
-        """ TODO """
+    def mapPartitions(self, func):
+        """Returns a new :class:`Dataset` by applying the ``f`` function to each partition.
+
+        The schema of returned :class:`Dataset` is a single binary field struct type, please
+        call `applySchema` to set the corrected schema before apply structured operations, e.g.
+        select, sort, groupBy, etc.
+
+        >>> def f(iterator):
+        ...     return map(lambda i: 1, iterator)
+        >>> df.mapPartitions(f).collect()
+        [1, 1]
+        """
         return PipelinedDataset(self, func)
 
     @ignore_unicode_prefix
     @since(2.0)
-    def map2(self, func):
-        """ TODO """
-        return self.mapPartitions2(lambda iterator: map(func, iterator))
+    def map(self, func):
+        """ Returns a new :class:`Dataset` by applying a the ``f`` function to each record.
 
-    @ignore_unicode_prefix
-    @since(2.0)
-    def flatMap2(self, func):
-        """ TODO """
-        return self.mapPartitions2(lambda iterator: chain.from_iterable(map(func, iterator)))
-
-    @ignore_unicode_prefix
-    @since(2.0)
-    def filter2(self, func):
-        """ TODO """
-        return self.mapPartitions2(lambda iterator: filter(func, iterator))
-
-    @ignore_unicode_prefix
-    @since(1.3)
-    def map(self, f):
-        """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
-
-        This is a shorthand for ``df.rdd.map()``.
+        The schema of returned :class:`Dataset` is a single binary field struct type, please
+        call `applySchema` to set the corrected schema before apply structured operations, e.g.
+        select, sort, groupBy, etc.
 
         >>> df.map(lambda p: p.name).collect()
         [u'Alice', u'Bob']
         """
-        return self.rdd.map(f)
+        return self.mapPartitions(lambda iterator: map(func, iterator))
 
     @ignore_unicode_prefix
-    @since(1.3)
-    def flatMap(self, f):
-        """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
+    @since(2.0)
+    def flatMap(self, func):
+        """ Returns a new :class:`Dataset` by first applying the ``f`` function to each record,
         and then flattening the results.
 
-        This is a shorthand for ``df.rdd.flatMap()``.
+        The schema of returned :class:`Dataset` is a single binary field struct type, please
+        call `applySchema` to set the corrected schema before apply structured operations, e.g.
+        select, sort, groupBy, etc.
 
         >>> df.flatMap(lambda p: p.name).collect()
         [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
         """
-        return self.rdd.flatMap(f)
-
-    @since(1.3)
-    def mapPartitions(self, f, preservesPartitioning=False):
-        """Returns a new :class:`RDD` by applying the ``f`` function to each partition.
-
-        This is a shorthand for ``df.rdd.mapPartitions()``.
-
-        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
-        >>> def f(iterator): yield 1
-        >>> rdd.mapPartitions(f).sum()
-        4
-        """
-        return self.rdd.mapPartitions(f, preservesPartitioning)
+        return self.mapPartitions(lambda iterator: chain.from_iterable(map(func, iterator)))
 
     @since(1.3)
     def foreach(self, f):
@@ -348,7 +351,7 @@ class Dataset(object):
         ...     print(person.name)
         >>> df.foreach(f)
         """
-        return self.rdd.foreach(f)
+        self.rdd.foreach(f)
 
     @since(1.3)
     def foreachPartition(self, f):
@@ -361,7 +364,7 @@ class Dataset(object):
         ...         print(person.name)
         >>> df.foreachPartition(f)
         """
-        return self.rdd.foreachPartition(f)
+        self.rdd.foreachPartition(f)
 
     @since(1.3)
     def cache(self):
@@ -778,7 +781,7 @@ class Dataset(object):
 
         :param n: int, default 1. Number of rows to return.
         :return: If n is greater than 1, return a list of :class:`Row`.
-            If n is 1, return a single Row.
+            If n is None, return a single Row.
 
         >>> df.head()
         Row(age=2, name=u'Alice')
@@ -876,12 +879,19 @@ class Dataset(object):
     @ignore_unicode_prefix
     @since(1.3)
     def filter(self, condition):
-        """Filters rows using the given condition.
+        """Filters records using the given condition.
 
         :func:`where` is an alias for :func:`filter`.
 
         :param condition: a :class:`Column` of :class:`types.BooleanType`
             or a string of SQL expression.
+
+        .. versionchanged:: 2.0
+           Also allows condition parameter to be a function that takes record as input and
+           returns boolean.
+           The schema of returned :class:`Dataset` is a single binary field struct type, please
+           call `applySchema` to set the corrected schema before apply structured operations, e.g.
+           select, sort, groupBy, etc.
 
         >>> df.filter(df.age > 3).collect()
         [Row(age=5, name=u'Bob')]
@@ -892,14 +902,20 @@ class Dataset(object):
         [Row(age=5, name=u'Bob')]
         >>> df.where("age = 2").collect()
         [Row(age=2, name=u'Alice')]
+
+        >>> df.filter(lambda row: row.age > 3).collect()
+        Row(age=5, name=u'Bob')]
+        >>> df.map(lambda row: row.age).filter(lambda age: age > 3).collect()
+        [5]
         """
         if isinstance(condition, basestring):
-            jdf = self._jdf.filter(condition)
+            return DataFrame(self._jdf.filter(condition), self.sql_ctx)
         elif isinstance(condition, Column):
-            jdf = self._jdf.filter(condition._jc)
+            return DataFrame(self._jdf.filter(condition._jc), self.sql_ctx)
+        elif hasattr(condition, '__call__'):
+            return self.mapPartitions(lambda iterator: filter(condition, iterator))
         else:
             raise TypeError("condition should be string or Column")
-        return DataFrame(jdf, self.sql_ctx)
 
     where = filter
 
@@ -1393,10 +1409,18 @@ DataFrame = Dataset
 
 class PipelinedDataset(Dataset):
 
-    """ TODO """
+    """
+    Pipelined typed operations on :class:`Dataset`:
+
+    >>> df.map(lambda row: 2 * row.age).cache().map(lambda i: 2 * i).collect()
+    [8, 20]
+    >>> df.map(lambda row: 2 * row.age).map(lambda i: 2 * i).collect()
+    [8, 20]
+    """
 
     def __init__(self, prev, func):
         self._jdf_val = None
+        self._schema = None
         self.is_cached = False
         self.sql_ctx = prev.sql_ctx
         self._sc = self.sql_ctx and self.sql_ctx._sc
