@@ -42,7 +42,7 @@ object RecoverableWordsCounter {
     }
   }
 
-  def getInstance(): Accumulator[Long] = if (instance == null){
+  def getInstance(): Accumulator[Long] = if (instance == null) {
     throw new SparkException("Please init WordsCounter first")
   } else instance
 }

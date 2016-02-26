@@ -26,7 +26,7 @@ import org.apache.spark.{Accumulable, AccumulableParam, SparkException}
 class AccumulableCheckpoint[R, T] private (
   val name: String,
   val value: R,
-  val param: AccumulableParam[R, T]) extends Serializable{
+  val param: AccumulableParam[R, T]) extends Serializable {
 
   def this(accu : Accumulable[R, T]) = {
     this(accu.name match {
