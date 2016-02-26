@@ -544,6 +544,7 @@ class IDFModel(JavaModel):
     .. versionadded:: 1.4.0
     """
 
+
 @inherit_doc
 class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
     """
@@ -602,6 +603,7 @@ class MaxAbsScalerModel(JavaModel):
 
     .. versionadded:: 2.0.0
     """
+
 
 @inherit_doc
 class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
