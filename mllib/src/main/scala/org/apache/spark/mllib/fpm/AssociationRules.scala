@@ -39,8 +39,8 @@ import org.apache.spark.SparkException
 @Since("1.5.0")
 @Experimental
 class AssociationRules private[fpm] (
-  private var minConfidence: Double,
-  private var maxConsequent: Int = 1) extends Logging with Serializable {
+    private var minConfidence: Double,
+    private var maxConsequent: Int = 1) extends Logging with Serializable {
 
   /**
    * Constructs a default instance with default parameters {minConfidence = 0.8}.
