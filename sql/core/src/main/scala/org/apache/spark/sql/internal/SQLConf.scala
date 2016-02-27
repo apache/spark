@@ -51,6 +51,10 @@ object SQLConf {
   private class SQLTypedConfigBuilder[T](parent: TypedConfigBuilder[T])
     extends TypedConfigBuilder(parent.parent, parent.converter, parent.stringConverter) {
 
+    override def transform(fn: T => T): TypedConfigBuilder[T] = {
+      new SQLTypedConfigBuilder(super.transform(fn))
+    }
+
     override def optional: OptionalConfigEntry[T] = register(super.optional)
 
     override def withDefault(default: T): ConfigEntry[T] = register(super.withDefault(default))
@@ -82,10 +86,6 @@ object SQLConf {
 
     override def stringConf: TypedConfigBuilder[String] = {
       new SQLTypedConfigBuilder(super.stringConf)
-    }
-
-    override def stringEnumConf(validValues: Set[String]): TypedConfigBuilder[String] = {
-      new SQLTypedConfigBuilder(super.stringEnumConf(validValues))
     }
 
     override def stringSeqConf: TypedConfigBuilder[Seq[String]] = {
@@ -224,7 +224,9 @@ object SQLConf {
   val PARQUET_COMPRESSION = SQLConfigBuilder("spark.sql.parquet.compression.codec")
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
       "uncompressed, snappy, gzip, lzo.")
-    .stringEnumConf(Set("uncompressed", "snappy", "gzip", "lzo"))
+    .stringConf
+    .transform(_.toLowerCase())
+    .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
     .withDefault("gzip")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.parquet.filterPushdown")

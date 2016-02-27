@@ -97,9 +97,24 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conf.get(seq) === Seq("1", "2"))
   }
 
-  test("conf entry: enum") {
+  test("conf entry: transformation") {
     val conf = new SparkConf()
-    val enum = ConfigBuilder("spark.enum").stringEnumConf(Set("a", "b", "c")).withDefault("a")
+    val transformationConf = ConfigBuilder("spark.transformation")
+      .stringConf
+      .transform(_.toLowerCase())
+      .withDefault("FOO")
+
+    assert(conf.get(transformationConf) === "foo")
+    conf.set(transformationConf, "BAR")
+    assert(conf.get(transformationConf) === "bar")
+  }
+
+  test("conf entry: valid values check") {
+    val conf = new SparkConf()
+    val enum = ConfigBuilder("spark.enum")
+      .stringConf
+      .checkValues(Set("a", "b", "c"))
+      .withDefault("a")
     assert(conf.get(enum) === "a")
 
     conf.set(enum, "b")

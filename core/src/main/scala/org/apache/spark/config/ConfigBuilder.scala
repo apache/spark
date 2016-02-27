@@ -41,15 +41,6 @@ private object ConfigHelpers {
     }
   }
 
-  def enumConverter[T](v: String, key: String, converter: String => T, validValues: Set[T]): T = {
-    val _v = converter(v)
-    if (!validValues.contains(_v)) {
-      throw new IllegalArgumentException(
-        s"The value of $key should be one of ${validValues.mkString(", ")}, but was $v")
-    }
-    _v
-  }
-
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
     str.split(",").map(_.trim()).filter(_.nonEmpty).map(converter)
   }
@@ -89,13 +80,28 @@ private[spark] class TypedConfigBuilder[T](
     this(parent, converter, _.toString)
   }
 
+  def transform(fn: T => T): TypedConfigBuilder[T] = {
+    new TypedConfigBuilder(parent, s => fn(converter(s)), stringConverter)
+  }
+
+  def checkValues(validValues: Set[T]): TypedConfigBuilder[T] = {
+    transform { v =>
+      if (!validValues.contains(v)) {
+        throw new IllegalArgumentException(
+          s"The value of ${parent.key} should be one of ${validValues.mkString(", ")}, but was $v")
+      }
+      v
+    }
+  }
+
   def optional: OptionalConfigEntry[T] = {
     new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc, parent._public)
   }
 
   def withDefault(default: T): ConfigEntry[T] = {
-    new ConfigEntryWithDefault[T](parent.key, default, converter, stringConverter, parent._doc,
-      parent._public)
+    val transformedDefault = converter(stringConverter(default))
+    new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter, stringConverter,
+      parent._doc, parent._public)
   }
 
   def withDefaultString(default: String): ConfigEntry[T] = {
@@ -141,10 +147,6 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def stringConf: TypedConfigBuilder[String] = {
     new TypedConfigBuilder(this, v => v)
-  }
-
-  def stringEnumConf(validValues: Set[String]): TypedConfigBuilder[String] = {
-    new TypedConfigBuilder(this, enumConverter(_, key, v => v, validValues))
   }
 
   def stringSeqConf: TypedConfigBuilder[Seq[String]] = {

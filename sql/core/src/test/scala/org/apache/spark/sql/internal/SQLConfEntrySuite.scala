@@ -97,7 +97,10 @@ class SQLConfEntrySuite extends SparkFunSuite {
 
   test("enumConf") {
     val key = "spark.sql.SQLConfEntrySuite.enum"
-    val confEntry = SQLConfigBuilder(key).stringEnumConf( Set("a", "b", "c")).withDefault("a")
+    val confEntry = SQLConfigBuilder(key)
+      .stringConf
+      .checkValues(Set("a", "b", "c"))
+      .withDefault("a")
     assert(conf.getConf(confEntry) === "a")
 
     conf.setConf(confEntry, "b")
