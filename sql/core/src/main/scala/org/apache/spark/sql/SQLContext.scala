@@ -30,8 +30,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
-import org.apache.spark.sql.{execution => sparkexecution}
-import org.apache.spark.sql.catalyst.{InternalRow, _}
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
@@ -114,15 +113,26 @@ class SQLContext private[sql](
   }
 
   /**
-   * Blargh blargh blargh track the session state of this context blargh.
+   * Per-session state, e.g. configuration, functions, temporary tables etc.
    */
   @transient
   protected[sql] val sessionState: SessionState = new SessionState(self)
+  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[sql] def catalog: Catalog = sessionState.catalog
+  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
+  protected[sql] def analyzer: Analyzer = sessionState.analyzer
+  protected[sql] def optimizer: Optimizer = sessionState.optimizer
+  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
+  protected[sql] def planner: SparkPlanner = sessionState.planner
+  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] = sessionState.prepareForExecution
+  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
 
   /**
-   * @return Spark SQL configuration
+   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
+   * that listen for execution metrics.
    */
-  protected[sql] def conf: SQLConf = sessionState.conf
+  @Experimental
+  def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
   /**
    * Set Spark SQL configuration properties.
@@ -184,36 +194,11 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  /**
-   * Blargh blargh I listen to punk rock blargh!
-   */
-  def listenerManager: ExecutionListenerManager = sessionState.listenerManager
-
-  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
-
-  protected[sql] def catalog: Catalog = sessionState.catalog
-
-  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
-
-  protected[sql] def analyzer: Analyzer = sessionState.analyzer
-
-  protected[sql] def optimizer: Optimizer = sessionState.optimizer
-
-  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
-
-  protected[sql] def planner: sparkexecution.SparkPlanner = sessionState.planner
-
-  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] = {
-    sessionState.prepareForExecution
-  }
-
   protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
-  protected[sql] def executeSql(sql: String):
-    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) =
-    new sparkexecution.QueryExecution(this, plan)
+  protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
 
   /**
    * Add a jar to SQLContext

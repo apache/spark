@@ -19,20 +19,21 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ParserInterface
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, Catalog, OverrideCatalog}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.execution.{python, SparkPlanner}
-import org.apache.spark.sql.execution.datasources.{PreWriteCheck, ResolveDataSource, PreInsertCastAndRename, DataSourceStrategy}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.execution.{python, SparkPlanner}
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
- * blargh.
+ * A class that holds all session-specific state in a given [[HiveContext]].
  */
 private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
 
-  // TODO: add all the comments. ALL OF THEM.
-
+  /**
+   * A metadata catalog that points to the Hive metastore.
+   */
   val metastoreCatalog: HiveMetastoreCatalog = {
     new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
   }
@@ -43,17 +44,21 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
 
   override lazy val catalog: Catalog = metastoreCatalog
 
+  /**
+   * Internal catalog for managing functions registered by the user.
+   * Note that HiveUDFs will be overridden by functions registered in this context.
+   */
   override lazy val functionRegistry: FunctionRegistry = {
-    // Note that HiveUDFs will be overridden by functions registered in this context.
     val registry = new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
-    // The Hive UDF current_database() is foldable, will be evaluated by optimizer, but the optimizer
-    // can't access the SessionState of metadataHive.
-    registry.registerFunction(
-      "current_database", (expressions: Seq[Expression]) => new CurrentDatabase(ctx))
+    // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
+    // but the optimizer can't access the SessionState of metadataHive.
+    registry.registerFunction("current_database", (e: Seq[Expression]) => new CurrentDatabase(ctx))
     registry
   }
 
-  /* An analyzer that uses the Hive metastore. */
+  /**
+   * An analyzer that uses the Hive metastore.
+   */
   override val analyzer: Analyzer = {
     new Analyzer(metastoreCatalog, functionRegistry, conf) {
       override val extendedResolutionRules =
@@ -68,8 +73,14 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
     }
   }
 
+  /**
+   * Parser for HiveQl query texts.
+   */
   override val sqlParser: ParserInterface = new HiveQl(conf)
 
+  /**
+   * Planner that takes into account Hive-specific strategies.
+   */
   override val planner: SparkPlanner = {
     new SparkPlanner(ctx) with HiveStrategies {
       override val hiveContext = ctx
