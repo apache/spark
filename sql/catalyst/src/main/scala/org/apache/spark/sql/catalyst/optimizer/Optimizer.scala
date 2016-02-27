@@ -774,8 +774,7 @@ object CombineFilters extends Rule[LogicalPlan] {
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case f @ Filter(fc, p: LogicalPlan)
-        if splitConjunctivePredicates(fc).filter(_.deterministic).exists(p.constraints.contains) =>
+    case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
           cond.deterministic && p.constraints.contains(cond)
