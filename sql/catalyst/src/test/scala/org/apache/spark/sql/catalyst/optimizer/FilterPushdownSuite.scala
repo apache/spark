@@ -36,7 +36,6 @@ class FilterPushdownSuite extends PlanTest {
       Batch("Filter Pushdown", Once,
         SamplePushDown,
         CombineFilters,
-        PruneFilters,
         PushPredicateThroughProject,
         BooleanSimplification,
         PushPredicateThroughJoin,
@@ -62,100 +61,6 @@ class FilterPushdownSuite extends PlanTest {
         .select('a.attr)
         .analyze
 
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Filter removal #1 -- isNull + LeftOuter") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-
-    val query = x.where("x.b".attr.isNull).join(y, LeftOuter)
-    val queryWithUselessFilter = query.where("x.b".attr.isNull)
-
-    val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-    val correctAnswer = query.analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Filter removal #2 -- unionall") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int)
-    val tr2 = LocalRelation('d.int, 'e.int, 'f.int)
-    val tr3 = LocalRelation('g.int, 'h.int, 'i.int)
-
-    val query =
-      tr1.where('a.attr > 10)
-        .unionAll(tr2.where('d.attr > 10)
-        .unionAll(tr3.where('g.attr > 10)))
-    val queryWithUselessFilter = query.where('a.attr > 10)
-
-    val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-    val correctAnswer = query.analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Filter removal #3 -- multiple constraints") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
-    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
-
-    val query = tr1
-      .where("tr1.a".attr > 10 || "tr1.c".attr < 10)
-      .join(tr2.where('d.attr < 100), Inner, Some("tr1.a".attr === "tr2.a".attr))
-    // different order of "tr2.a" and "tr1.a"
-    val queryWithUselessFilter =
-      query.where(
-        ("tr1.a".attr > 10 || "tr1.c".attr < 10) &&
-        'd.attr < 100 &&
-        "tr2.a".attr === "tr1.a".attr)
-
-    val optimized = Optimize.execute(queryWithUselessFilter.analyze)
-    val correctAnswer = query.analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Filter removal #4 -- partial pruned") {
-    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
-    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
-
-    // One of the filter condition does not exist in the constraints of its child
-    // Thus, the filter is not removed
-    val query = tr1
-      .where("tr1.a".attr > 10)
-      .join(tr2.where('d.attr < 100), Inner, Some("tr1.a".attr === "tr2.d".attr))
-    val queryWithExtraFilters =
-      query.where("tr1.a".attr > 10 && 'd.attr < 100 && "tr1.a".attr === "tr2.a".attr)
-
-    val optimized = Optimize.execute(queryWithExtraFilters.analyze)
-    val correctAnswer = tr1
-      .where("tr1.a".attr > 10)
-      .join(tr2.where('d.attr < 100),
-        Inner,
-        Some("tr1.a".attr === "tr2.a".attr && "tr1.a".attr === "tr2.d".attr)).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Filter removal #5 -- no predicate is pruned") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-
-    val query = x.where("x.b".attr.isNull).join(y, LeftOuter)
-    val queryWithExtraFilters = query.where("x.b".attr.isNotNull)
-
-    val optimized = Optimize.execute(queryWithExtraFilters.analyze)
-    val correctAnswer =
-      testRelation.where("b".attr.isNull).where("b".attr.isNotNull)
-        .join(testRelation, LeftOuter).analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Filter removal #6 -- nondeterministic predicate is not pruned") {
-    val originalQuery = testRelation.where(Rand(10) > 5).select('a).where(Rand(10) > 5).analyze
-    val optimized = Optimize.execute(originalQuery)
-    val correctAnswer = testRelation.where(Rand(10) > 5).where(Rand(10) > 5).select('a).analyze
     comparePlans(optimized, correctAnswer)
   }
 
