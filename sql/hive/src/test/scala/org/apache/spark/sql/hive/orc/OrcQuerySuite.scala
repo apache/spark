@@ -309,7 +309,6 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val path = dir.getCanonicalPath
 
       withTable("empty_orc") {
-        withTempTable("empty", "single") {
           sqlContext.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
@@ -319,18 +318,18 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
           emptyDF.registerTempTable("empty")
 
-          // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
-          // Spark SQL ORC data source always avoids write empty ORC files.
+          // No data file would be generated
           sqlContext.sql(
             s"""INSERT INTO TABLE empty_orc
                |SELECT key, value FROM empty
              """.stripMargin)
 
-          val errorMessage = intercept[AnalysisException] {
+          // IllegalArgumentException as no ORC files are stored
+          val errorMessage = intercept[IllegalArgumentException] {
             sqlContext.read.orc(path)
           }.getMessage
 
-          assert(errorMessage.contains("Failed to discover schema from ORC files"))
+          assert(errorMessage.contains("does not have valid orc files"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.registerTempTable("single")
@@ -343,7 +342,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           val df = sqlContext.read.orc(path)
           assert(df.schema === singleRowDF.schema.asNullable)
           checkAnswer(df, singleRowDF)
-        }
+
+          sqlContext.dropTempTable("empty")
+          sqlContext.dropTempTable("single")
       }
     }
   }

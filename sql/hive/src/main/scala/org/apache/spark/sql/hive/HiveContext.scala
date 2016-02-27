@@ -118,6 +118,12 @@ class HiveContext private[hive](
   protected[sql] def convertMetastoreParquet: Boolean = getConf(CONVERT_METASTORE_PARQUET)
 
   /**
+    * When true, orc SerDe are automatically converted to use the Spark SQL
+    * orc table scan, instead of the Hive SerDe.
+    */
+  protected[sql] def convertMetastoreOrc: Boolean = getConf(CONVERT_METASTORE_ORC)
+
+  /**
    * When true, also tries to merge possibly different but compatible Parquet schemas in different
    * Parquet data files.
    *
@@ -464,6 +470,7 @@ class HiveContext private[hive](
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         catalog.ParquetConversions ::
+        catalog.OrcConversions ::
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         python.ExtractPythonUDFs ::
@@ -672,6 +679,11 @@ private[hive] object HiveContext {
   val CONVERT_METASTORE_PARQUET = booleanConf("spark.sql.hive.convertMetastoreParquet",
     defaultValue = Some(true),
     doc = "When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
+      "the built in support.")
+
+  val CONVERT_METASTORE_ORC = booleanConf("spark.sql.hive.convertMetastoreOrc",
+    defaultValue = Some(true),
+    doc = "When set to false, Spark SQL will use the Hive SerDe for orc tables instead of " +
       "the built in support.")
 
   val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING = booleanConf(

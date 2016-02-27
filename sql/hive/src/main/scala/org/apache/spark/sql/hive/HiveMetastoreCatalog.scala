@@ -41,10 +41,11 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.execution.{datasources, FileRelation}
-import org.apache.spark.sql.execution.datasources.{Partition => ParquetPartition, _}
+import org.apache.spark.sql.execution.datasources.{Partition => TPartition, _}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.hive.orc.OrcRelation
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -500,7 +501,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val values = InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
         })
-        ParquetPartition(values, location)
+        TPartition(values, location)
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val paths = partitions.map(_.path)
@@ -527,6 +528,87 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       }
 
       parquetRelation
+    }
+
+    result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
+  }
+
+  private def convertToOrcRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
+    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+
+    val orcOptions = Map[String, String]()
+    val tableIdentifier =
+      QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
+
+    def getCached(
+         tableIdentifier: QualifiedTableName,
+         pathsInMetastore: Seq[String],
+         schemaInMetastore: StructType,
+         partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
+      cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+        case null => None // Cache miss
+        case logical @ LogicalRelation(orcRelation: OrcRelation, _, _) =>
+          // If we have the same paths, same schema, and same partition spec,
+          // we will use the cached orc Relation.
+          val useCached =
+            orcRelation.paths.toSet == pathsInMetastore.toSet &&
+              logical.schema.sameType(metastoreSchema) &&
+              orcRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
+                PartitionSpec(StructType(Nil), Array.empty[datasources.Partition])
+              }
+
+          if (useCached) {
+            Some(logical)
+          } else {
+            // If the cached relation is not updated, we invalidate it right away.
+            cachedDataSourceTables.invalidate(tableIdentifier)
+            None
+          }
+        case other =>
+          logWarning(
+            s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
+              s"as Orc. However, we are getting a $other from the metastore " +
+              s"cache. This cached entry will be invalidated.")
+          cachedDataSourceTables.invalidate(tableIdentifier)
+          None
+      }
+    }
+
+    val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
+      val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
+      val partitionColumnDataTypes = partitionSchema.map(_.dataType)
+      val partitions = metastoreRelation.getHiveQlPartitions().map { p =>
+        val location = p.getLocation
+        val values = InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
+          case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
+        })
+        TPartition(values, location)
+      }
+      val partitionSpec = PartitionSpec(partitionSchema, partitions)
+      val paths = partitions.map(_.path)
+
+      val cached = getCached(tableIdentifier, paths, metastoreSchema, Some(partitionSpec))
+      val orcRelation = cached.getOrElse {
+        val created = LogicalRelation(
+          new OrcRelation(
+            paths.toArray, Some(metastoreSchema), Some(partitionSpec), orcOptions)(hive))
+        cachedDataSourceTables.put(tableIdentifier, created)
+        created
+      }
+
+      orcRelation
+    } else {
+      val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
+
+      val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
+      val orcRelation = cached.getOrElse {
+        val created = LogicalRelation(
+          new OrcRelation(paths.toArray, Some(metastoreSchema), None, orcOptions)(hive))
+        cachedDataSourceTables.put(tableIdentifier, created)
+        created
+      }
+
+      orcRelation
     }
 
     result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
@@ -570,6 +652,42 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
           val parquetRelation = convertToParquetRelation(relation)
           SubqueryAlias(relation.alias.getOrElse(relation.tableName), parquetRelation)
+      }
+    }
+  }
+
+  /**
+    * When scanning or writing to non-partitioned Metastore Orc tables, convert
+    * them to Orc data source relations for better performance.
+    */
+  object OrcConversions extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.resolved || plan.analyzed) {
+        return plan
+      }
+
+      plan transformUp {
+        // Write path
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
+          // Inserting into partitioned table is not supported in ORC data source (yet).
+          if !r.hiveQlTable.isPartitioned && hive.convertMetastoreOrc &&
+            r.tableDesc.getSerdeClassName.toLowerCase.contains("orc") =>
+          val orcRelation = convertToOrcRelation(r)
+          InsertIntoTable(orcRelation, partition, child, overwrite, ifNotExists)
+
+        // Write path
+        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
+          // Inserting into partitioned table is not supported in ORC data source (yet).
+          if !r.hiveQlTable.isPartitioned && hive.convertMetastoreOrc &&
+            r.tableDesc.getSerdeClassName.toLowerCase.contains("orc") =>
+          val orcRelation = convertToOrcRelation(r)
+          InsertIntoTable(orcRelation, partition, child, overwrite, ifNotExists)
+
+        // Read path
+        case relation: MetastoreRelation if hive.convertMetastoreOrc &&
+          relation.tableDesc.getSerdeClassName.toLowerCase.contains("orc") =>
+          val orcRelation = convertToOrcRelation(relation)
+          Subquery(relation.alias.getOrElse(relation.tableName), orcRelation)
       }
     }
   }
