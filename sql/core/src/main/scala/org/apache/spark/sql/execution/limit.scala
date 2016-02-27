@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  * This operator will be used when a logical `Limit` operation is the final operator in an
  * logical plan, which happens when the user is collecting results back to the driver.
  */
-case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode with CodegenSupport {
+case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = SinglePartition
   override def executeCollect(): Array[InternalRow] = child.executeTake(limit)
@@ -43,28 +43,6 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode with Cod
       ShuffleExchange.prepareShuffleDependency(
         child.execute(), child.output, SinglePartition, serializer))
     shuffled.mapPartitionsInternal(_.take(limit))
-  }
-
-  override def upstreams(): Seq[RDD[InternalRow]] = {
-    child.asInstanceOf[CodegenSupport].upstreams()
-  }
-
-  protected override def doProduce(ctx: CodegenContext): String = {
-    child.asInstanceOf[CodegenSupport].produce(ctx, this)
-  }
-
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val countTerm = ctx.freshName("count")
-    ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
-    ctx.currentVars = input
-    s"""
-       | if ($countTerm < $limit) {
-       |   $countTerm += 1;
-       |   ${consume(ctx, ctx.currentVars)}
-       | } else {
-       |   setStopEarly(true);
-       | }
-     """.stripMargin
   }
 }
 
