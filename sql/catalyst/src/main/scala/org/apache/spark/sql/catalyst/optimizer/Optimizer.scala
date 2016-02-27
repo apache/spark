@@ -83,6 +83,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
+      PruneFilters,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -765,6 +766,28 @@ object CombineUnions extends Rule[LogicalPlan] {
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+  }
+}
+
+/**
+ * Remove all the deterministic conditions in a [[Filter]] that are contained in the Child.
+ */
+object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(fc, p: LogicalPlan)
+        if splitConjunctivePredicates(fc).filter(_.deterministic).exists(p.constraints.contains) =>
+      val (prunedPredicates, remainingPredicates) =
+        splitConjunctivePredicates(fc).partition { cond =>
+          cond.deterministic && p.constraints.contains(cond)
+        }
+      if (prunedPredicates.isEmpty) {
+        f
+      } else if (remainingPredicates.isEmpty) {
+        p
+      } else {
+        val newCond = remainingPredicates.reduceOption(And).getOrElse(Literal(true))
+        Filter(newCond, p: LogicalPlan)
+      }
   }
 }
 
