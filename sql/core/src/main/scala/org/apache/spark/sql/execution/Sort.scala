@@ -130,9 +130,9 @@ case class Sort(
         | }
       """.stripMargin.trim)
 
-    val outputRow = metricTerm(ctx, "outputRow")
+    val outputRow = ctx.freshName("outputRow")
     val dataSize = metricTerm(ctx, "dataSize")
-    val spillSize = ctx.freshName("spillSize")
+    val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
     ctx.addMutableState(classOf[Long].getName, spillSizeBefore, "")
     s"""
@@ -149,6 +149,7 @@ case class Sort(
        | while ($sortedIterator.hasNext()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
        |   ${consume(ctx, null, outputRow)}
+       |   if (shouldStop()) return;
        | }
      """.stripMargin.trim
   }
