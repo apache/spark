@@ -69,17 +69,17 @@ case class CreateTableAsSelect(
         withFormat
       }
 
-      hiveContext.catalog.client.createTable(withSchema, ignoreIfExists = false)
+      hiveContext.hcatalog.client.createTable(withSchema, ignoreIfExists = false)
 
       // Get the Metastore Relation
-      hiveContext.catalog.lookupRelation(tableIdentifier, None) match {
+      hiveContext.hcatalog.lookupRelation(tableIdentifier, None) match {
         case r: MetastoreRelation => r
       }
     }
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
-    if (hiveContext.catalog.tableExists(tableIdentifier)) {
+    if (hiveContext.hcatalog.tableExists(tableIdentifier)) {
       if (allowExisting) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {

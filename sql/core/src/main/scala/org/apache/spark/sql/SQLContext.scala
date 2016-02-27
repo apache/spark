@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
@@ -115,9 +114,15 @@ class SQLContext private[sql](
   }
 
   /**
+   * Blargh blargh blargh track the session state of this context blargh.
+   */
+  @transient
+  protected[sql] val sessionState: SessionState = new SessionState(self)
+
+  /**
    * @return Spark SQL configuration
    */
-  protected[sql] lazy val conf = new SQLConf
+  protected[sql] def conf: SQLConf = sessionState.conf
 
   /**
    * Set Spark SQL configuration properties.
@@ -179,35 +184,28 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  @transient
-  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
+  /**
+   * Blargh blargh I listen to punk rock blargh!
+   */
+  def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
-  protected[sql] lazy val continuousQueryManager = new ContinuousQueryManager(this)
+  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
 
-  @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
+  protected[sql] def catalog: Catalog = sessionState.catalog
 
-  @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
 
-  @transient
-  protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, conf) {
-      override val extendedResolutionRules =
-        python.ExtractPythonUDFs ::
-        PreInsertCastAndRename ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
+  protected[sql] def analyzer: Analyzer = sessionState.analyzer
 
-      override val extendedCheckRules = Seq(
-        datasources.PreWriteCheck(catalog)
-      )
-    }
+  protected[sql] def optimizer: Optimizer = sessionState.optimizer
 
-  @transient
-  protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
+  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
 
-  @transient
-  protected[sql] val sqlParser: ParserInterface = new SparkQl(conf)
+  protected[sql] def planner: sparkexecution.SparkPlanner = sessionState.planner
+
+  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] = {
+    sessionState.prepareForExecution
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
@@ -299,10 +297,8 @@ class SQLContext private[sql](
    *
    * @group basic
    * @since 1.3.0
-   * TODO move to SQLSession?
    */
-  @transient
-  val udf: UDFRegistration = new UDFRegistration(this)
+  def udf: UDFRegistration = sessionState.udf
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -873,23 +869,7 @@ class SQLContext private[sql](
   }
 
   @transient
-  protected[sql] val planner: sparkexecution.SparkPlanner = new sparkexecution.SparkPlanner(this)
-
-  @transient
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
-
-  /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
-   * row format conversions as needed.
-   */
-  @transient
-  protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches = Seq(
-      Batch("Subquery", Once, PlanSubqueries(self)),
-      Batch("Add exchange", Once, EnsureRequirements(self)),
-      Batch("Whole stage codegen", Once, CollapseCodegenStages(self))
-    )
-  }
 
   /**
    * Parses the data type in our internal string representation. The data type string should

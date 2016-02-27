@@ -35,15 +35,11 @@ private[sql] class SessionState(ctx: SQLContext) {
 
   // TODO: add comments everywhere
 
-  val conf = new SQLConf
+  lazy val conf = new SQLConf
 
-  val catalog: Catalog = new SimpleCatalog(conf)
+  lazy val catalog: Catalog = new SimpleCatalog(conf)
 
-  val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
-
-  val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
-
-  val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
+  lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
 
   val udf: UDFRegistration = new UDFRegistration(ctx)
 
@@ -69,11 +65,15 @@ private[sql] class SessionState(ctx: SQLContext) {
    * row format conversions as needed.
    */
   val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches = Seq(
+    override val batches: Seq[Batch] = Seq(
       Batch("Subquery", Once, PlanSubqueries(ctx)),
       Batch("Add exchange", Once, EnsureRequirements(ctx)),
       Batch("Whole stage codegen", Once, CollapseCodegenStages(ctx))
     )
   }
+
+  val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
+
+  val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
 
 }
