@@ -58,13 +58,21 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
+    val testDf = sqlContext.read.text(testFile)
+
     Seq("bzip2", "deflate", "gzip").map { codecName =>
       val tempDir = Utils.createTempDir()
       val tempDirPath = tempDir.getAbsolutePath()
-      val df = sqlContext.read.text(testFile)
-      df.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
+      testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
       verifyFrame(sqlContext.read.text(tempDirPath))
     }
+
+    val errMsg = intercept[IllegalArgumentException] {
+      val tempDirPath = Utils.createTempDir().getAbsolutePath()
+      testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
+    }
+    assert(errMsg.getMessage === "Codec [illegal] is not available. " +
+      "Known codecs are bzip2, deflate, lz4, gzip, snappy.")
   }
 
   private def testFile: String = {
