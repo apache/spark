@@ -168,13 +168,13 @@ class AssociationRules private[fpm] (
   }
 
   /**
-    * Generate the candidate for the assigned consequent-length.
-    *
-    * @param newRules      Rules whose consequent-length equals lenConsequent - 1.
-    * @param lenConsequent Consequent-length.
-    * @return              The generated candidate.
-    *
-    */
+   * Generate the candidate for the assigned consequent-length.
+   *
+   * @param newRules      Rules whose consequent-length equals lenConsequent - 1.
+   * @param lenConsequent Consequent-length.
+   * @return              The generated candidate.
+   *
+   */
   @Since("2.0.0")
   private def genCandidates(newRules: RDD[(Seq[Int], Seq[Int], Long, Long)],
                             lenConsequent: Int): RDD[(Seq[Int], (Seq[Int], Long))] = {
