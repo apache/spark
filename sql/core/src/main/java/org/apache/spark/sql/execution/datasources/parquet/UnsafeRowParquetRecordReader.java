@@ -765,6 +765,9 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       } else if (DecimalType.is64BitDecimalType(column.dataType())) {
         defColumn.readIntsAsLongs(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      } else if (column.dataType() == DataTypes.ShortType) {
+        defColumn.readShorts(
+            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
         throw new NotImplementedException("Unimplemented type: " + column.dataType());
       }
