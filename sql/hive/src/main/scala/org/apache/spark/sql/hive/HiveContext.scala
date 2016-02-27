@@ -108,11 +108,9 @@ class HiveContext private[hive](
       isRootContext = false)
   }
 
-  private val hiveSessionState = new HiveSessionState(self)
+  protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
-  protected[sql] override lazy val sessionState = hiveSessionState
-
-  protected[sql] val hiveCatalog = hiveSessionState.metastoreCatalog
+  protected[sql] override lazy val catalog = sessionState.catalog
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -339,12 +337,12 @@ class HiveContext private[hive](
    */
   def refreshTable(tableName: String): Unit = {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    hiveCatalog.refreshTable(tableIdent)
+    catalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    hiveCatalog.invalidateTable(tableIdent)
+    catalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -358,7 +356,7 @@ class HiveContext private[hive](
    */
   def analyze(tableName: String) {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(hiveCatalog.lookupRelation(tableIdent))
+    val relation = EliminateSubqueryAliases(catalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -419,7 +417,7 @@ class HiveContext private[hive](
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          hiveCatalog.client.alterTable(
+          catalog.client.alterTable(
             relation.table.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))

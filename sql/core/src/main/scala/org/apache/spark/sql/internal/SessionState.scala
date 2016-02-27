@@ -33,6 +33,9 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  */
 private[sql] class SessionState(ctx: SQLContext) {
 
+  // Note: These are all lazy vals because they depend on each other (e.g. conf) and we
+  // want subclasses to override some of the fields. Otherwise, we would get a lot of NPEs.
+
   /**
    * SQL-specific key-value configurations.
    */
@@ -51,12 +54,12 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Interface exposed to the user for registering user-defined functions.
    */
-  val udf: UDFRegistration = new UDFRegistration(functionRegistry)
+  lazy val udf: UDFRegistration = new UDFRegistration(functionRegistry)
 
   /**
    * Logical query plan analyzer for resolving unresolved attributes and relations.
    */
-  val analyzer: Analyzer = {
+  lazy val analyzer: Analyzer = {
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         python.ExtractPythonUDFs ::
@@ -70,23 +73,23 @@ private[sql] class SessionState(ctx: SQLContext) {
   /**
    * Logical query plan optimizer.
    */
-  val optimizer: Optimizer = new SparkOptimizer(ctx)
+  lazy val optimizer: Optimizer = new SparkOptimizer(ctx)
 
   /**
    * Parser that extracts expressions, plans, table identifiers etc. from SQL texts.
    */
-  val sqlParser: ParserInterface = new SparkQl(conf)
+  lazy val sqlParser: ParserInterface = new SparkQl(conf)
 
   /**
    * Planner that converts optimized logical plans to physical plans.
    */
-  val planner: SparkPlanner = new SparkPlanner(ctx)
+  lazy val planner: SparkPlanner = new SparkPlanner(ctx)
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
    * row format conversions as needed.
    */
-  val prepareForExecution = new RuleExecutor[SparkPlan] {
+  lazy val prepareForExecution = new RuleExecutor[SparkPlan] {
     override val batches: Seq[Batch] = Seq(
       Batch("Subquery", Once, PlanSubqueries(ctx)),
       Batch("Add exchange", Once, EnsureRequirements(ctx)),
@@ -98,11 +101,11 @@ private[sql] class SessionState(ctx: SQLContext) {
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    */
-  val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
+  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
    * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
    */
-  val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
+  lazy val continuousQueryManager: ContinuousQueryManager = new ContinuousQueryManager(ctx)
 
 }

@@ -71,7 +71,7 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.hiveCatalog.unregisterTable(TableIdentifier(tableName))
+    hiveContext.catalog.unregisterTable(TableIdentifier(tableName))
     Seq.empty[Row]
   }
 }
@@ -130,7 +130,7 @@ case class CreateMetastoreDataSource(
     val tableName = tableIdent.unquotedString
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
 
-    if (hiveContext.hiveCatalog.tableExists(tableIdent)) {
+    if (hiveContext.catalog.tableExists(tableIdent)) {
       if (allowExisting) {
         return Seq.empty[Row]
       } else {
@@ -142,12 +142,12 @@ case class CreateMetastoreDataSource(
     val optionsWithPath =
       if (!options.contains("path") && managedIfNoPath) {
         isExternal = false
-        options + ("path" -> hiveContext.hiveCatalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
 
-    hiveContext.hiveCatalog.createDataSourceTable(
+    hiveContext.catalog.createDataSourceTable(
       tableIdent,
       userSpecifiedSchema,
       Array.empty[String],
@@ -192,7 +192,7 @@ case class CreateMetastoreDataSourceAsSelect(
     val optionsWithPath =
       if (!options.contains("path")) {
         isExternal = false
-        options + ("path" -> hiveContext.hiveCatalog.hiveDefaultTableFilePath(tableIdent))
+        options + ("path" -> hiveContext.catalog.hiveDefaultTableFilePath(tableIdent))
       } else {
         options
       }
@@ -274,7 +274,7 @@ case class CreateMetastoreDataSourceAsSelect(
       // We will use the schema of resolved.relation as the schema of the table (instead of
       // the schema of df). It is important since the nullability may be changed by the relation
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
-      hiveContext.hiveCatalog.createDataSourceTable(
+      hiveContext.catalog.createDataSourceTable(
         tableIdent,
         Some(resolved.relation.schema),
         partitionColumns,
@@ -285,7 +285,7 @@ case class CreateMetastoreDataSourceAsSelect(
     }
 
     // Refresh the cache of the table in the catalog.
-    hiveContext.hiveCatalog.refreshTable(tableIdent)
+    hiveContext.catalog.refreshTable(tableIdent)
     Seq.empty[Row]
   }
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ParserInterface
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, OverrideCatalog}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
@@ -31,18 +31,14 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
  */
 private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx) {
 
-  /**
-   * A metadata catalog that points to the Hive metastore.
-   */
-  val metastoreCatalog: HiveMetastoreCatalog = {
-    new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
-  }
-
   override lazy val conf: SQLConf = new SQLConf {
     override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
   }
 
-  override lazy val catalog: Catalog = metastoreCatalog
+  /**
+   * A metadata catalog that points to the Hive metastore.
+   */
+  override lazy val catalog = new HiveMetastoreCatalog(ctx.metadataHive, ctx) with OverrideCatalog
 
   /**
    * Internal catalog for managing functions registered by the user.
@@ -59,12 +55,12 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * An analyzer that uses the Hive metastore.
    */
-  override val analyzer: Analyzer = {
-    new Analyzer(metastoreCatalog, functionRegistry, conf) {
+  override lazy val analyzer: Analyzer = {
+    new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
-        metastoreCatalog.ParquetConversions ::
-        metastoreCatalog.CreateTables ::
-        metastoreCatalog.PreInsertionCasts ::
+        catalog.ParquetConversions ::
+        catalog.CreateTables ::
+        catalog.PreInsertionCasts ::
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
@@ -76,12 +72,12 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
   /**
    * Parser for HiveQl query texts.
    */
-  override val sqlParser: ParserInterface = new HiveQl(conf)
+  override lazy val sqlParser: ParserInterface = new HiveQl(conf)
 
   /**
    * Planner that takes into account Hive-specific strategies.
    */
-  override val planner: SparkPlanner = {
+  override lazy val planner: SparkPlanner = {
     new SparkPlanner(ctx) with HiveStrategies {
       override val hiveContext = ctx
 
