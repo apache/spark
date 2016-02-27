@@ -120,6 +120,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution(plan)
 
+  @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(this) {
     override lazy val conf: SQLConf = {
       new SQLConf {

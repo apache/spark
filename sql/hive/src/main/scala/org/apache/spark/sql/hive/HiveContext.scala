@@ -108,6 +108,7 @@ class HiveContext private[hive](
       isRootContext = false)
   }
 
+  @transient
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
   protected[sql] override def catalog = sessionState.catalog
