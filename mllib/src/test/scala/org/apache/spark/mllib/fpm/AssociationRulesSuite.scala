@@ -110,17 +110,29 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     /* Verify results using the CMD with SPMF library (http://www.philippe-fournier-viger.com/spmf/)
        Note: Arules package in R do not support rules with consequent-length larger than 1.
-       Note: Because SPMF's implementation of Association Rules only support integer as item, the above dataset
-        was encoded into integers.
-       echo '1 2 3 4 5\n2 6 7 8 9 10 11 12\n12 7 13 14 1\n7 2 6 15 11 12 16 17\n2\n7 2 6 1 16 11 5' > dataset
+       Note: Because SPMF's implementation of Association Rules only support integer as item,
+        the above dataset was encoded into integers.
+
+        Edit a file named 'dataset' with following lines:
+        1 2 3 4 5
+        2 6 7 8 9 10 11 12
+        12 7 13 14 1
+        7 2 6 15 11 12 16 17
+        2
+        7 2 6 1 16 11 5
+
        java -jar spmf.jar run FPGrowth_association_rules dataset rules1 50% 90%
-       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"} {n=split($2,a," "); s[n]++}
-        END{for(i in s) print i,s[i]}' rules1
+
+       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"}
+             {n=split($2,a," "); s[n]++}
+             END{for(i in s) print i,s[i]}' rules1
        > 1 23
          2 12
          3 2
-       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"} {n=split($2,a," "); s[n][$NF]++}
-        END{for(i in s)for(j in s[i]) print i,j,s[i][j]}' rules2
+
+       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"}
+             {n=split($2,a," "); s[n][$NF]++}
+             END{for(i in s)for(j in s[i]) print i,j,s[i][j]}' rules1
        > 1  1.0 23
          2  1.0 12
          3  1.0 2
@@ -139,17 +151,21 @@ class AssociationRulesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     /* Verify results using the CMD with SPMF library (http://www.philippe-fournier-viger.com/spmf/)
        Note: Arules package in R do not support rules with consequent-length larger than 1.
-       Note: Because SPMF's implementation of Association Rules only support integer as item, the above dataset
-        was encoded into integers.
-       echo '1 2 3 4 5\n2 6 7 8 9 10 11 12\n12 7 13 14 1\n7 2 6 15 11 12 16 17\n2\n7 2 6 1 16 11 5' > dataset
+       Note: Because SPMF's implementation of Association Rules only support integer as item,
+        the above dataset was encoded into integers.
+
        java -jar spmf.jar run FPGrowth_association_rules dataset rules2 50% 50%
-       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"} {n=split($2,a," "); s[n]++}
-        END{for(i in s) print i,s[i]}' rules2
+
+       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"}
+             {n=split($2,a," "); s[n]++}
+             END{for(i in s) print i,s[i]}' rules2
        > 1 30
          2 18
          3 4
-       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"} {n=split($2,a," "); s[n][$NF]++}
-        END{for(i in s)for(j in s[i]) print i,j,s[i][j]}' rules2
+
+       awk 'BEGIN{FS="[=#:>]+"; PROCINFO["sorted_in"]="@ind_num_asc"}
+             {n=split($2,a," "); s[n][$NF]++}
+             END{for(i in s)for(j in s[i]) print i,j,s[i][j]}' rules2
        > 1  0.6 3
          1  0.75 4
          1  1.0 23
