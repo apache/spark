@@ -106,6 +106,8 @@ class Analyzer(
       TimeWindowing ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("Solve", Once,
+      SolveIllegalReferences),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -1456,6 +1458,30 @@ class Analyzer(
           s"output by the UDTF expected ${elementAttrs.size} aliases but got " +
           s"${names.mkString(",")} ")
       }
+    }
+  }
+
+  /**
+   * Replaces attribute references in a filter if it has a join as a child and it references some
+   * columns on the base relations of the join. This is because outer joins change nullability on
+   * columns and this could cause wrong NULL propagation in Optimizer.
+   * See SPARK-13484 for the concrete query of this case.
+   */
+  object SolveIllegalReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+       case q: LogicalPlan =>
+        q.transform {
+          case f @ Filter(filterCondition, j @ Join(_, _, _, _)) =>
+            val joinOutput = new ArrayBuffer[(Attribute, Attribute)]
+            j.output.map {
+              case a: AttributeReference => joinOutput += ((a, a))
+            }
+            val joinOutputMap = AttributeMap(joinOutput)
+            val newFilterCond = filterCondition.transform {
+              case a: AttributeReference => joinOutputMap.get(a).getOrElse(a)
+            }
+            Filter(newFilterCond, j)
+        }
     }
   }
 
