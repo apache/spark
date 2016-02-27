@@ -42,7 +42,7 @@ import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.LeafExpression
+import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution._
@@ -112,6 +112,11 @@ class HiveContext private[hive](
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
   protected[sql] override def catalog = sessionState.catalog
+
+  // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
+  // but the optimizer can't access the SessionState of metadataHive.
+  sessionState.functionRegistry.registerFunction(
+    "current_database", (e: Seq[Expression]) => new CurrentDatabase(self))
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe

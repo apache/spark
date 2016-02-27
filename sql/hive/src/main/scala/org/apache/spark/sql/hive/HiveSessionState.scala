@@ -45,11 +45,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
    * Note that HiveUDFs will be overridden by functions registered in this context.
    */
   override lazy val functionRegistry: FunctionRegistry = {
-    val registry = new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
-    // The Hive UDF current_database() is foldable, will be evaluated by optimizer,
-    // but the optimizer can't access the SessionState of metadataHive.
-    registry.registerFunction("current_database", (e: Seq[Expression]) => new CurrentDatabase(ctx))
-    registry
+    new HiveFunctionRegistry(FunctionRegistry.builtin.copy(), ctx.executionHive)
   }
 
   /**
