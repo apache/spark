@@ -167,8 +167,8 @@ object MimaExcludes {
         // SPARK-12149 Added new fields to ExecutorSummary
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
       ) ++
+      // SPARK-12665 Remove deprecated and unused classes
       Seq(
-        // SPARK-12665 Remove deprecated and unused classes
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.graphx.GraphKryoRegistrator"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.util.Vector$Multiplier"),
@@ -281,7 +281,8 @@ object MimaExcludes {
         // [SPARK-13486][SQL] Move SQLConf into an internal package
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry$")
       )
     case v if v.startsWith("1.6") =>
       Seq(
