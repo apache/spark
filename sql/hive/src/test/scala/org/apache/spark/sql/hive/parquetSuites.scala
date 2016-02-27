@@ -854,7 +854,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     test(s"hive udfs $table") {
       checkAnswer(
         sql(s"SELECT concat(stringField, stringField) FROM $table"),
-        sql(s"SELECT stringField FROM $table").map {
+        sql(s"SELECT stringField FROM $table").rdd.map {
           case Row(s: String) => Row(s + s)
         }.collect().toSeq)
     }
