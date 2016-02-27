@@ -110,7 +110,7 @@ class HiveContext private[hive](
 
   private val hiveSessionState = new HiveSessionState(self)
 
-  protected[sql] override val sessionState = hiveSessionState
+  protected[sql] override lazy val sessionState = hiveSessionState
 
   protected[sql] val hiveCatalog = hiveSessionState.metastoreCatalog
 

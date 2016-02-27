@@ -116,10 +116,10 @@ class SQLContext private[sql](
    * Per-session state, e.g. configuration, functions, temporary tables etc.
    */
   @transient
-  protected[sql] val sessionState: SessionState = new SessionState(self)
-  protected[sql] def conf: SQLConf = sessionState.conf
-  protected[sql] def catalog: Catalog = sessionState.catalog
-  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
+  protected[sql] lazy val sessionState: SessionState = new SessionState(self)
+  protected[sql] val conf: SQLConf = sessionState.conf
+  protected[sql] val catalog: Catalog = sessionState.catalog
+  protected[sql] val functionRegistry: FunctionRegistry = sessionState.functionRegistry
   protected[sql] def analyzer: Analyzer = sessionState.analyzer
   protected[sql] def optimizer: Optimizer = sessionState.optimizer
   protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
