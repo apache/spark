@@ -54,8 +54,7 @@ an application to gain back cores on one node when it has work to do. To use thi
 
 Note that none of the modes currently provide memory sharing across applications. If you would like to share
 data this way, we recommend running a single server application that can serve multiple requests by querying
-the same RDDs. In future releases, in-memory storage systems such as [Tachyon](http://tachyon-project.org) will
-provide another approach to share RDDs.
+the same RDDs.
 
 ## Dynamic Resource Allocation
 
