@@ -220,19 +220,8 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
 
 class LinearRegressionWithSGD(object):
     """
-    Train a linear regression model with no regularization using Stochastic Gradient Descent.
-    This solves the least squares regression formulation
-
-        f(weights) = 1/n ||A weights-y||^2
-
-    which is the mean squared error.
-    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
-    its corresponding right hand side label y.
-    See also the documentation for the precise formulation.
-
     .. versionadded:: 0.9.0
     """
-
     @classmethod
     @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
@@ -240,15 +229,15 @@ class LinearRegressionWithSGD(object):
               validateData=True, convergenceTol=0.001):
         """
         Train a linear regression model using Stochastic Gradient
-        Descent (SGD).
-        This solves the least squares regression formulation
+        Descent (SGD). This solves the least squares regression
+        formulation
 
-            f(weights) = 1/(2n) ||A weights - y||^2,
+            f(weights) = 1/(2n) ||A weights - y||^2
 
-        which is the mean squared error.
-        Here the data matrix has n rows, and the input RDD holds the
-        set of rows of A, each with its corresponding right hand side
-        label y. See also the documentation for the precise formulation.
+        which is the mean squared error. Here the data matrix has n rows,
+        and the input RDD holds the set of rows of A, each with its
+        corresponding right hand side label y.
+        See also the documentation for the precise formulation.
 
         :param data:
           The training data, an RDD of LabeledPoint.
@@ -269,11 +258,11 @@ class LinearRegressionWithSGD(object):
           (default: 0.0)
         :param regType:
           The type of regularizer used for training our model.
-          :Allowed values:
-          - "l1" for using L1 regularization (lasso),
-          - "l2" for using L2 regularization (ridge),
-          - None for no regularization
-          (default: None)
+          Supported values:
+
+            - "l1" for using L1 regularization
+            - "l2" for using L2 regularization
+            - None for no regularization (default)
         :param intercept:
           Boolean parameter which indicates the use or not of the
           augmented representation for training data (i.e., whether bias
@@ -376,34 +365,23 @@ class LassoModel(LinearRegressionModelBase):
 
 class LassoWithSGD(object):
     """
-    Train a regression model with L1-regularization using Stochastic Gradient Descent.
-    This solves the L1-regularized least squares regression formulation
-
-        f(weights) = 1/2n ||A weights-y||^2  + regParam ||weights||_1
-
-    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
-    its corresponding right hand side label y.
-    See also the documentation for the precise formulation.
-
     .. versionadded:: 0.9.0
     """
-
     @classmethod
     @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True, convergenceTol=0.001):
         """
-        Train a regression model with L1-regularization using
-        Stochastic Gradient Descent.
-        This solves the l1-regularized least squares regression
-        formulation
+        Train a regression model with L1-regularization using Stochastic
+        Gradient Descent. This solves the l1-regularized least squares
+        regression formulation
 
-            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1.
+            f(weights) = 1/(2n) ||A weights - y||^2  + regParam ||weights||_1
 
-        Here the data matrix has n rows, and the input RDD holds the
-        set of rows of A, each with its corresponding right hand side
-        label y. See also the documentation for the precise formulation.
+        Here the data matrix has n rows, and the input RDD holds the set
+        of rows of A, each with its corresponding right hand side label y.
+        See also the documentation for the precise formulation.
 
         :param data:
           The training data, an RDD of LabeledPoint.
@@ -524,34 +502,23 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 class RidgeRegressionWithSGD(object):
     """
-    Train a regression model with L2-regularization using Stochastic Gradient Descent.
-    This solves the L2-regularized least squares regression formulation
-
-          f(weights) = 1/2n ||A weights-y||^2  + regParam/2 ||weights||^2
-
-    Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
-    its corresponding right hand side label y.
-    See also the documentation for the precise formulation.
-
     .. versionadded:: 0.9.0
     """
-
     @classmethod
     @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True, convergenceTol=0.001):
         """
-        Train a regression model with L2-regularization using
-        Stochastic Gradient Descent.
-        This solves the l2-regularized least squares regression
-        formulation
+        Train a regression model with L2-regularization using Stochastic
+        Gradient Descent. This solves the l2-regularized least squares
+        regression formulation
 
-            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2.
+            f(weights) = 1/(2n) ||A weights - y||^2 + regParam/2 ||weights||^2
 
-        Here the data matrix has n rows, and the input RDD holds the
-        set of rows of A, each with its corresponding right hand side
-        label y. See also the documentation for the precise formulation.
+        Here the data matrix has n rows, and the input RDD holds the set
+        of rows of A, each with its corresponding right hand side label y.
+        See also the documentation for the precise formulation.
 
         :param data:
           The training data, an RDD of LabeledPoint.
@@ -597,11 +564,11 @@ class IsotonicRegressionModel(Saveable, Loader):
     Regression model for isotonic regression.
 
     :param boundaries:
-      Array of boundaries for which predictions are known. Boundaries must
-      be sorted in increasing order.
+      Array of boundaries for which predictions are known. Boundaries
+      must be sorted in increasing order.
     :param predictions:
-      Array of predictions associated to the boundaries at the same index.
-      Results of isotonic regression and therefore monotone.
+      Array of predictions associated to the boundaries at the same
+      index. Results of isotonic regression and therefore monotone.
     :param isotonic:
       Indicates whether this is isotonic or antitonic.
 
@@ -684,8 +651,8 @@ class IsotonicRegressionModel(Saveable, Loader):
 class IsotonicRegression(object):
     """
     Isotonic regression.
-    Currently implemented using parallelized pool adjacent violators algorithm.
-    Only univariate (single feature) algorithm supported.
+    Currently implemented using parallelized pool adjacent violators
+    algorithm. Only univariate (single feature) algorithm supported.
 
     Sequential PAV implementation based on:
 
@@ -751,9 +718,11 @@ class StreamingLinearAlgorithm(object):
     @since("1.5.0")
     def predictOn(self, dstream):
         """
-        Make predictions on a dstream.
+        Use the model to make predictions on batches of data from a
+        DStream.
 
-        :return: Transformed dstream object.
+        :return:
+          DStream containing predictions.
         """
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
@@ -761,9 +730,11 @@ class StreamingLinearAlgorithm(object):
     @since("1.5.0")
     def predictOnValues(self, dstream):
         """
-        Make predictions on a keyed dstream.
+        Use the model to make predictions on the values of a DStream and
+        carry over its keys.
 
-        :return: Transformed dstream object.
+        :return:
+          DStream containing the input keys and the predictions as values.
         """
         self._validate(dstream)
         return dstream.mapValues(lambda x: self._model.predict(x))
@@ -772,14 +743,15 @@ class StreamingLinearAlgorithm(object):
 @inherit_doc
 class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     """
-    Train or predict a linear regression model on streaming data. Training uses
-    Stochastic Gradient Descent to update the model based on each new batch of
-    incoming data from a DStream (see `LinearRegressionWithSGD` for model equation).
+    Train or predict a linear regression model on streaming data.
+    Training uses Stochastic Gradient Descent to update the model
+    based on each new batch of incoming data from a DStream
+    (see `LinearRegressionWithSGD` for model equation).
 
     Each batch of data is assumed to be an RDD of LabeledPoints.
     The number of data points per batch can vary, but the number
-    of features must be constant. An initial weight
-    vector must be provided.
+    of features must be constant. An initial weight vector must
+    be provided.
 
     :param stepSize:
       Step size for each iteration of gradient descent.
