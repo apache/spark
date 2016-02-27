@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -58,18 +58,13 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
-    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "adwrasdf")
-
-    val tempFile = Utils.createTempDir()
-    tempFile.delete()
-    df.write
-      .option("compression", "gZiP")
-      .text(tempFile.getCanonicalPath)
-    val compressedFiles = tempFile.listFiles()
-    assert(compressedFiles.exists(_.getName.endsWith(".gz")))
-    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath))
-
-    Utils.deleteRecursively(tempFile)
+    Seq("bzip2", "deflate", "gzip").map { codecName =>
+      val tempDir = Utils.createTempDir()
+      val tempDirPath = tempDir.getAbsolutePath()
+      val df = sqlContext.read.text(testFile)
+      df.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
+      verifyFrame(sqlContext.read.text(tempDirPath))
+    }
   }
 
   private def testFile: String = {

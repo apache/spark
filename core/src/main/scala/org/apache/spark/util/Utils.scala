@@ -60,6 +60,51 @@ private[spark] object CallSite {
   val empty = CallSite("", "")
 }
 
+/** An utility class to map short compression codec names to qualified ones. */
+private[spark] class ShortCompressionCodecNameMapper {
+
+  def get(codecName: String): Option[String] = codecName.toLowerCase match {
+    case "none" => none
+    case "uncompressed" => uncompressed
+    case "bzip2" => bzip2
+    case "deflate" => deflate
+    case "gzip" => gzip
+    case "lzo" => lzo
+    case "lz4" => lz4
+    case "lzf" => lzf
+    case "snappy" => snappy
+    case _ => None
+  }
+
+  def getAsMap: Map[String, String] = {
+    Seq(
+      ("none", none),
+      ("uncompressed", uncompressed),
+      ("bzip2", bzip2),
+      ("deflate", deflate),
+      ("gzip", gzip),
+      ("lzo", lzo),
+      ("lz4", lz4),
+      ("lzf", lzf),
+      ("snappy", snappy)
+    ).flatMap { case (shortCodecName, codecName) =>
+      if (codecName.isDefined) Some(shortCodecName, codecName.get) else None
+    }.toMap
+  }
+
+  // To support short codec names, derived classes need to override the methods below that return
+  // corresponding qualified codec names.
+  def none: Option[String] = None
+  def uncompressed: Option[String] = None
+  def bzip2: Option[String] = None
+  def deflate: Option[String] = None
+  def gzip: Option[String] = None
+  def lzo: Option[String] = None
+  def lz4: Option[String] = None
+  def lzf: Option[String] = None
+  def snappy: Option[String] = None
+}
+
 /**
  * Various utility methods used by Spark.
  */
