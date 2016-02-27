@@ -74,10 +74,10 @@ statement
     ;
 
 query
-    :  with? queryNoWith
+    :  ctes? queryNoWith
     ;
 
-with
+ctes
     : WITH namedQuery (',' namedQuery)*
     ;
 
@@ -97,7 +97,6 @@ queryNoWith:
       queryTerm
       (ORDER BY sortItem (',' sortItem)*)?
       (LIMIT limit=(INTEGER_VALUE | ALL))?
-      (APPROXIMATE AT confidence=number CONFIDENCE)?
     ;
 
 queryTerm
@@ -143,7 +142,7 @@ groupingSet
     ;
 
 namedQuery
-    : name=identifier (columnAliases)? AS '(' query ')'
+    : name=identifier AS? '(' query ')'
     ;
 
 setQuantifier
@@ -208,7 +207,7 @@ relationPrimary
     ;
 
 namedExpression
-    : expression (AS? identifier)?
+    : expression (AS? (identifier | columnAliases))?
     ;
 
 expression
@@ -255,9 +254,9 @@ primaryExpression
     | identifier STRING                                                              #typeConstructor
     | number                                                                         #numericLiteral
     | booleanValue                                                                   #booleanLiteral
-    | STRING                                                                         #stringLiteral
-    | (identifier '.')* ASTERISK                                                     #star
+    | STRING+                                                                        #stringLiteral
     | '(' expression (',' expression)+ ')'                                           #rowConstructor
+    | qualifiedName '(' (setQuantifier? ASTERISK) ')' over?                          #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' over?     #functionCall
     | '(' query ')'                                                                  #subqueryExpression
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END         #simpleCase

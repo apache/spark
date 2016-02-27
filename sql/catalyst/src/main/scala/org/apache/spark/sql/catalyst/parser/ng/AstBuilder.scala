@@ -16,19 +16,41 @@
  */
 package org.apache.spark.sql.catalyst.parser.ng
 
+import java.sql.{Date, Timestamp}
+
 import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.ParseUtils
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.CalendarInterval
 
+/**
+ * The AstBuilder converts an ANTLR ParseTree into a catalyst Expression, LogicalPlan or
+ * TableIdentifier.
+ *
+ * DDL
+ * - Everything
+ *
+ * Query TODO's
+ * - Lateral View.
+ * - Transform
+ * - Window spec definitions.
+ * - distribute by
+ * - queryPrimary rule???
+ * - TABLE/VALUES spec?
+ *
+ * Expression TODO's
+ * -Hive Hintlist???
+ */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
   import AstBuilder._
 
@@ -41,13 +63,57 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
   }
 
   override def visitSingleExpression(ctx: SingleExpressionContext): Expression = withOrigin(ctx) {
-    typedVisit(ctx.namedExpression)
+    // typedVisit(ctx.namedExpression)
+    ctx.namedExpression.accept(this).asInstanceOf[Expression]
   }
 
   /* --------------------------------------------------------------------------------------------
    * Plan parsing
    * -------------------------------------------------------------------------------------------- */
-  private def query(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
+  private def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
+
+  override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
+    val query = plan(ctx.queryNoWith)
+    if (ctx.ctes != null) {
+      val ctes = ctx.ctes.namedQuery.asScala.map {
+        case nCtx =>
+          val namedQuery = visitNamedQuery(nCtx)
+          (namedQuery.alias, namedQuery)
+      }.toMap
+      With(query, ctes)
+    } else {
+      query
+    }
+  }
+
+  override def visitNamedQuery(ctx: NamedQueryContext): SubqueryAlias = withOrigin(ctx) {
+    SubqueryAlias(ctx.name.getText, plan(ctx.query))
+  }
+
+  override def visitSetOperation(ctx: SetOperationContext): LogicalPlan = withOrigin(ctx) {
+    val left = plan(ctx.left)
+    val right = plan(ctx.right)
+    val all = Option(ctx.setQuantifier()).exists(_.ALL != null)
+    ctx.operator.getType match {
+      case SqlBaseParser.UNION if all =>
+        Union(left, right)
+      case SqlBaseParser.UNION =>
+        Distinct(Union(left, right))
+      case SqlBaseParser.INTERSECT if all =>
+        notSupported("INTERSECT ALL is not supported.", ctx)
+      case SqlBaseParser.INTERSECT =>
+        Intersect(left, right)
+      case SqlBaseParser.EXCEPT if all =>
+        notSupported("EXCEPT ALL is not supported.", ctx)
+      case SqlBaseParser.EXCEPT =>
+        Except(left, right)
+    }
+  }
+
+  override def visitQuerySpecification(
+      ctx: QuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
+    null
+  }
 
   /* --------------------------------------------------------------------------------------------
    * Expression parsing
@@ -62,11 +128,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
     }
   }
 
+  override def visitSelectAll(ctx: SelectAllContext): Expression = withOrigin(ctx) {
+    UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText)))
+  }
 
   override def visitNamedExpression(ctx: NamedExpressionContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
-      Alias(e, cleanIdentifier(ctx.identifier.getText))()
+      Alias(e, ctx.identifier.getText)()
+    } else if (ctx.columnAliases != null) {
+      MultiAlias(e, ctx.columnAliases.identifier.asScala.map(_.getText))
     } else {
       e
     }
@@ -87,7 +158,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
     Not(expression(ctx.booleanExpression()))
   }
 
-  override def visitExists(ctx: ExistsContext): Expression = notImplemented(ctx)
+  override def visitExists(ctx: ExistsContext): Expression = {
+    notSupported("Exists is not supported.", ctx)
+  }
 
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.value)
@@ -124,7 +197,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
     invertIfNotDefined(in, ctx.NOT)
   }
 
-  override def visitInSubquery(ctx: InSubqueryContext): Expression = notImplemented(ctx)
+  override def visitInSubquery(ctx: InSubqueryContext): Expression = {
+    notSupported("IN with a Sub-query is currently not supported.", ctx)
+  }
 
   override def visitLike(ctx: LikeContext): Expression = {
     val left = expression(ctx.value)
@@ -200,11 +275,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => TimestampType
       case ("char" | "varchar" | "string", Nil) => StringType
+      case ("char" | "varchar", _ :: Nil) => StringType
       case ("decimal", Nil) => DecimalType.USER_DEFAULT
       case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
       case ("decimal", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
-      case _ => notImplemented(ctx)
+      case other => notSupported(s"DataType '$other' is not supported.", ctx)
     }
   }
 
@@ -223,7 +299,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
           }
 
           StructField(
-            cleanIdentifier(col.identifier.getText),
+            col.identifier.getText,
             typedVisit(col.dataType),
             nullable = true,
             builder.build())
@@ -233,10 +309,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
   }
 
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
+    val arguments = if (ctx.ASTERISK != null) {
+      Seq(UnresolvedStar(None))
+    } else {
+      ctx.expression().asScala.map(expression)
+    }
+
     val function = UnresolvedFunction(
-      ctx.qualifiedName().getText,
-      ctx.expression().asScala.map(expression),
-      ctx.setQuantifier().DISTINCT() != null)
+      ctx.qualifiedName.getText,
+      arguments,
+      Option(ctx.setQuantifier()).exists(_.DISTINCT != null))
 
     // Check if the function is evaluated in a windowed context.
     ctx.over match {
@@ -302,7 +384,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
     }
   }
 
-
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
     CreateStruct(ctx.expression().asScala.map(expression))
   }
@@ -313,7 +394,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
 
   override def visitSubqueryExpression(
       ctx: SubqueryExpressionContext): Expression = withOrigin(ctx) {
-    ScalarSubquery(query(ctx.query))
+    ScalarSubquery(plan(ctx.query))
   }
 
   override def visitSimpleCase(ctx: SimpleCaseContext): Expression = withOrigin(ctx) {
@@ -332,7 +413,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
   }
 
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
-    val attr = cleanIdentifier(ctx.fieldName.getText)
+    val attr = ctx.fieldName.getText
     expression(ctx.base) match {
       case UnresolvedAttribute(nameParts) =>
         UnresolvedAttribute(nameParts :+ attr)
@@ -342,18 +423,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
   }
 
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
-    UnresolvedAttribute.quoted(cleanIdentifier(ctx.getText))
+    UnresolvedAttribute.quoted(ctx.getText)
   }
 
   override def visitSubscript(ctx: SubscriptContext): Expression = withOrigin(ctx) {
     UnresolvedExtractValue(expression(ctx.value), expression(ctx.index))
-  }
-
-  override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
-    val target = Option(ctx.identifier()).map(_.asScala.map {
-      lCtx => cleanIdentifier(lCtx.getText)
-    })
-    UnresolvedStar(target)
   }
 
   override def visitSortItem(ctx: SortItemContext): SortOrder = withOrigin(ctx) {
@@ -361,6 +435,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
       SortOrder(expression(ctx.expression), Descending)
     } else {
       SortOrder(expression(ctx.expression), Ascending)
+    }
+  }
+
+  override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
+    val value = unquote(ctx.STRING.getText)
+    ctx.identifier.getText.toUpperCase match {
+      case "DATE" =>
+        Literal(Date.valueOf(value))
+      case "TIMESTAMP" =>
+        Literal(Timestamp.valueOf(value))
+      case other =>
+        notSupported(s"Literals of type '$other' are currently not supported.", ctx)
     }
   }
 
@@ -403,7 +489,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
   }
 
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal(UTF8String.fromString(unquote(ctx.getText)))
+    Literal(ctx.STRING().asScala.map(s => unquote(s.getText)).mkString)
   }
 
   override def visitDtsIntervalLiteral(ctx: DtsIntervalLiteralContext): Literal = withOrigin(ctx) {
@@ -426,29 +512,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] {
 
 private[spark] object AstBuilder {
 
-  def cleanIdentifier(raw: String): String = {
-    var cleaned = raw
-    val last = raw.length - 1
-    if (last >= 1) {
-      if (raw(0) == '`' && raw(last) == '`') {
-        cleaned = raw.substring(1, last).replace("``", "`")
-      }
-    }
-    cleaned
-  }
-
   def unquote(raw: String): String = {
     var unquoted = raw
-    val last = raw.length - 1
-    if (last >= 1) {
-      unquoted = raw(0) match {
-        case '\'' if raw(last) == '\'' =>
-          raw.substring(1, last).replace("''", "'")
-        case '"' if raw(last) == '"' =>
-          raw.substring(1, last).replace("\"\"", "\"")
-        case _ =>
-          raw
+    val lastIndex = raw.length - 1
+    if (lastIndex >= 1) {
+      val first = raw(0)
+      if ((first == '\'' || first == '"') && raw(lastIndex) == first) {
+        unquoted = unquoted.substring(1, lastIndex)
       }
+      unquoted = ParseUtils.unescapeSQLString(raw)
     }
     unquoted
   }
@@ -464,7 +536,11 @@ private[spark] object AstBuilder {
     }
   }
 
-  def notImplemented(ctx: ParserRuleContext): Nothing = {
-    throw new UnsupportedOperationException(ctx.toString)
+  def notSupported(message: String, ctx: ParserRuleContext): Nothing = {
+    val token = ctx.getStart
+    throw new AnalysisException(
+      message + s"\n$ctx",
+      Some(token.getLine),
+      Some(token.getCharPositionInLine))
   }
 }

@@ -22,39 +22,38 @@ import org.antlr.v4.runtime.misc.ParseCancellationException
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser.{StringLiteralContext, DigitIdentifierContext, QuotedIdentifierContext}
-import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf}
+import org.apache.spark.sql.catalyst.{ParserInterface, TableIdentifier}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-object ParseDriver extends Logging {
+object ParseDriver extends ParserInterface with Logging {
 
-  /** Create an LogicalPlan ASTNode from a SQL command. */
-  def parsePlan(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
-    parser.statement()
-  }
-
-  /** Create an Expression ASTNode from a SQL command. */
-  def parseExpression(command: String, conf: ParserConf): ASTNode = parse(command, conf) { parser =>
+  /** Creates Expression for a given SQL string. */
+  override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
     parser.singleExpression()
   }
 
-  // TODO add table identifier parsing.
+  /** Creates TableIdentifier for a given SQL string. */
+  override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
+    parser.singleQualifiedName()
+  }
 
-  def parse[T](
-      command: String,
-      conf: ParserConf)(
-      toTree: SqlBaseParser => ParserRuleContext): T = {
-    // TODO conf is unused.
+  /** Creates LogicalPlan for a given SQL string. */
+  override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
+    parser.statement()
+  }
 
-
+  def parse[T](command: String)(toTree: SqlBaseParser => ParserRuleContext): T = {
     logInfo(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
-    val tokenStream = new CommonTokenStream(lexer)
-    val parser = new SqlBaseParser(tokenStream)
-
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
 
+    val tokenStream = new CommonTokenStream(lexer)
+    val parser = new SqlBaseParser(tokenStream)
+    parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
 
@@ -118,11 +117,43 @@ case object ParseErrorListener extends BaseErrorListener {
 }
 
 case object PostProcessor extends SqlBaseBaseListener {
-  override def exitStringLiteral(ctx: StringLiteralContext): Unit = {
+
+  override def exitDigitIdentifier(ctx: DigitIdentifierContext): Unit = {
+    val token = ctx.DIGIT_IDENTIFIER.getSymbol
+    throw new AnalysisException(
+      s"Identifier cannot start with a digit; " +
+        s"please surround the identifier ${token.getText} with back ticks",
+      Some(token.getLine),
+      Some(token.getCharPositionInLine))
 
   }
 
-  override def exitDigitIdentifier(ctx: DigitIdentifierContext): Unit = super.exitDigitIdentifier(ctx)
+  /** Remove the backticks from an Identifier. */
+  override def exitQuotedIdentifier(ctx: QuotedIdentifierContext): Unit = {
+    replaceTokenByIdentifier(ctx, 1) { token =>
+      // Remove the double backticks in the string.
+      token.setText(token.getText.replace("``", "`"))
+      token
+    }
+  }
 
-  override def exitQuotedIdentifier(ctx: QuotedIdentifierContext): Unit = super.exitQuotedIdentifier(ctx)
+  /** Treat non-reserved keywords as Identifiers. */
+  override def exitNonReserved(ctx: NonReservedContext): Unit = {
+    replaceTokenByIdentifier(ctx, 0)(identity)
+  }
+
+  private def replaceTokenByIdentifier(
+      ctx: ParserRuleContext,
+      stripMargins: Int)(
+      f: CommonToken => CommonToken = identity): Unit = {
+    val parent = ctx.getParent
+    parent.removeLastChild()
+    val token = ctx.getChild(0).getPayload.asInstanceOf[Token]
+    parent.addChild(f(new CommonToken(
+      new org.antlr.v4.runtime.misc.Pair(token.getTokenSource, token.getInputStream),
+      SqlBaseParser.IDENTIFIER,
+      token.getChannel,
+      token.getStartIndex + stripMargins,
+      token.getStopIndex - stripMargins)))
+  }
 }
