@@ -69,7 +69,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   def tableDir: File = {
     val identifier = hiveContext.sqlParser.parseTableIdentifier("bucketed_table")
-    new File(URI.create(hiveContext.catalog.hiveDefaultTableFilePath(identifier)))
+    new File(URI.create(hiveContext.hiveCatalog.hiveDefaultTableFilePath(identifier)))
   }
 
   /**

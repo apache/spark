@@ -112,7 +112,7 @@ class HiveContext private[hive](
 
   protected[sql] override val sessionState = hiveSessionState
 
-  protected[hive] val hiveCatalog = hiveSessionState.metastoreCatalog
+  protected[sql] val hiveCatalog = hiveSessionState.metastoreCatalog
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
