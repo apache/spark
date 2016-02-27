@@ -68,10 +68,12 @@ private[spark] object ExtractPythonUDFs extends Rule[LogicalPlan] {
               case p: PythonUDF if p.fastEquals(udf) => evaluation.resultAttribute
             }.withNewChildren(newChildren)
 
+            // If plan is an [[Aggregate]], return evaluated plan as is for
+            // [[ResolveAggregateFunctions]] rule in a batch for further resolution.
+            // Otherwise, construct a [[Project]] with evaluated udf.
             if (plan.isInstanceOf[Aggregate]) {
               transformed
-            }
-            else {
+            } else {
               logical.Project(plan.output, transformed)
             }
 
