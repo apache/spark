@@ -23,7 +23,7 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
                  bucket,
                  filename,
                  schema_filename=None,
-                 approx_max_file_size_bytes=1900000000L,
+                 approx_max_file_size_bytes=1900000000,
                  mysql_conn_id='mysql_default',
                  google_cloud_storage_conn_id='google_cloud_storage_default',
                  delegate_to=None,
@@ -157,6 +157,7 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
         Google cloud storage.
         """
         hook = GoogleCloudStorageHook(google_cloud_storage_conn_id=self.google_cloud_storage_conn_id,
+                                      scope='https://www.googleapis.com/auth/devstorage.read_write',
                                       delegate_to=self.delegate_to)
         for object, tmp_file_handle in files_to_upload.items():
             hook.upload(self.bucket, object, tmp_file_handle.name, 'application/json')
