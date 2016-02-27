@@ -110,7 +110,7 @@ class HiveContext private[hive](
 
   protected[sql] override lazy val sessionState = new HiveSessionState(self)
 
-  protected[sql] override lazy val catalog = sessionState.catalog
+  protected[sql] override def catalog = sessionState.catalog
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe

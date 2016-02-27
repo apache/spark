@@ -117,15 +117,15 @@ class SQLContext private[sql](
    */
   @transient
   protected[sql] lazy val sessionState: SessionState = new SessionState(self)
-  protected[sql] lazy val conf: SQLConf = sessionState.conf
-  protected[sql] lazy val catalog: Catalog = sessionState.catalog
-  protected[sql] lazy val functionRegistry: FunctionRegistry = sessionState.functionRegistry
-  protected[sql] lazy val analyzer: Analyzer = sessionState.analyzer
-  protected[sql] lazy val optimizer: Optimizer = sessionState.optimizer
-  protected[sql] lazy val sqlParser: ParserInterface = sessionState.sqlParser
-  protected[sql] lazy val planner: SparkPlanner = sessionState.planner
-  protected[sql] lazy val continuousQueryManager = sessionState.continuousQueryManager
-  protected[sql] lazy val prepareForExecution: RuleExecutor[SparkPlan] =
+  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[sql] def catalog: Catalog = sessionState.catalog
+  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
+  protected[sql] def analyzer: Analyzer = sessionState.analyzer
+  protected[sql] def optimizer: Optimizer = sessionState.optimizer
+  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
+  protected[sql] def planner: SparkPlanner = sessionState.planner
+  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
+  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] =
     sessionState.prepareForExecution
 
   /**
@@ -284,7 +284,7 @@ class SQLContext private[sql](
    * @group basic
    * @since 1.3.0
    */
-  lazy val udf: UDFRegistration = sessionState.udf
+  def udf: UDFRegistration = sessionState.udf
 
   /**
    * Returns true if the table is currently cached in-memory.
