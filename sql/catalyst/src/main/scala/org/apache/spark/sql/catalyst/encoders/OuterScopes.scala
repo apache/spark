@@ -49,20 +49,16 @@ object OuterScopes {
     if (outer == null) {
       outerCls match {
         case REPLClass(line) =>
-          val loader = Utils.getContextOrSparkClassLoader
-          def loadCls(clsName: String): Class[_] = Class.forName(clsName, true, loader)
-
-          val cls1 = loadCls(line + "$read$")
+          val cls1 = Utils.classForName(line + "$read$")
           val obj1 = cls1.getField("MODULE$").get(null)
 
           val obj2 = cls1.getMethod("INSTANCE").invoke(obj1)
-          val cls2 = loadCls(line + "$read")
+          val cls2 = Utils.classForName(line + "$read")
 
           val obj3 = cls2.getMethod("$iw").invoke(obj2)
-          val cls3 = loadCls(line + "$read$$iw")
+          val cls3 = Utils.classForName(line + "$read$$iw")
 
           cls3.getMethod("$iw").invoke(obj3)
-
         case _ => null
       }
     } else {
