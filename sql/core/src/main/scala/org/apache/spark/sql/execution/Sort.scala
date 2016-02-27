@@ -130,11 +130,9 @@ case class Sort(
         | }
       """.stripMargin.trim)
 
-    val outputRow = ctx.freshName("outputRow")
-    val dataSize = ctx.freshName("dataSize")
-    ctx.addMutableState(classOf[Long].getName, dataSize, "")
+    val outputRow = metricTerm(ctx, "outputRow")
+    val dataSize = metricTerm(ctx, "dataSize")
     val spillSize = ctx.freshName("spillSize")
-    ctx.addMutableState(classOf[Long].getName, spillSize, "")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
     ctx.addMutableState(classOf[Long].getName, spillSizeBefore, "")
     s"""
@@ -142,8 +140,8 @@ case class Sort(
        |   $addToSorter();
        |   $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $sortedIterator = $sorterVariable.sort();
-       |   $dataSize += $sorterVariable.getPeakMemoryUsage();
-       |   $spillSize += $metrics.memoryBytesSpilled() - $spillSizeBefore;
+       |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
+       |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
        |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
        |   $needToSort = false;
        | }
