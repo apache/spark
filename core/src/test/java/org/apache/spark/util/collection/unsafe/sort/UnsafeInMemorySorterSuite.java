@@ -19,6 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Arrays;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
