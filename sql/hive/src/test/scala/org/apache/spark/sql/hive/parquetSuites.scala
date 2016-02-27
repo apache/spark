@@ -492,7 +492,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    tableIdentifier = hiveCatalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
+    tableIdentifier =
+      hiveCatalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
     assert(hiveCatalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """
