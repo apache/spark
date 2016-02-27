@@ -112,7 +112,7 @@ class HiveContext private[hive](
 
   protected[sql] override val sessionState = hiveSessionState
 
-  protected[hive] val hcatalog = hiveSessionState.metastoreCatalog
+  protected[hive] val hiveCatalog = hiveSessionState.metastoreCatalog
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -339,12 +339,12 @@ class HiveContext private[hive](
    */
   def refreshTable(tableName: String): Unit = {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    hcatalog.refreshTable(tableIdent)
+    hiveCatalog.refreshTable(tableIdent)
   }
 
   protected[hive] def invalidateTable(tableName: String): Unit = {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    hcatalog.invalidateTable(tableIdent)
+    hiveCatalog.invalidateTable(tableIdent)
   }
 
   /**
@@ -358,7 +358,7 @@ class HiveContext private[hive](
    */
   def analyze(tableName: String) {
     val tableIdent = sqlParser.parseTableIdentifier(tableName)
-    val relation = EliminateSubqueryAliases(hcatalog.lookupRelation(tableIdent))
+    val relation = EliminateSubqueryAliases(hiveCatalog.lookupRelation(tableIdent))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -419,7 +419,7 @@ class HiveContext private[hive](
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          hcatalog.client.alterTable(
+          hiveCatalog.client.alterTable(
             relation.table.copy(
               properties = relation.table.properties +
                 (StatsSetupConst.TOTAL_SIZE -> newTotalSize.toString)))

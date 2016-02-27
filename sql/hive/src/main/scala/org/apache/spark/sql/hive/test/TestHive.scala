@@ -420,9 +420,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
       cacheManager.clearCache()
       loadedTables.clear()
-      hcatalog.cachedDataSourceTables.invalidateAll()
-      hcatalog.client.reset()
-      hcatalog.unregisterAllTables()
+      hiveCatalog.cachedDataSourceTables.invalidateAll()
+      hiveCatalog.client.reset()
+      hiveCatalog.unregisterAllTables()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
