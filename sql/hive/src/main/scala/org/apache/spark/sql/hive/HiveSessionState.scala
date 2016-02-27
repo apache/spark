@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegist
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.{python, SparkPlanner}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
 /**

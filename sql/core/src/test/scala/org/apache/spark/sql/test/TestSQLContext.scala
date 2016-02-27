@@ -18,8 +18,8 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SessionState, SQLContext}
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
  * A special [[SQLContext]] prepared for testing.

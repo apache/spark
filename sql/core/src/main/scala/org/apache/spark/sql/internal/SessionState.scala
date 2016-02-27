@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.catalyst.ParserInterface
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.{ContinuousQueryManager, UDFRegistration, SQLContext}
 
 
 /**
