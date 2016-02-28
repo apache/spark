@@ -938,6 +938,8 @@ case class FormatNumber(x: Expression, d: Expression)
   @transient
   private val pattern: StringBuffer = new StringBuffer()
 
+  // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+  // as a decimal separator.
   @transient
   private val numberFormat = new DecimalFormat("", new DecimalFormatSymbols(Locale.US))
 
@@ -993,7 +995,9 @@ case class FormatNumber(x: Expression, d: Expression)
       val df = classOf[DecimalFormat].getName
       val dfs = classOf[DecimalFormatSymbols].getName
       val l = classOf[Locale].getName
-      val US = "US"
+      // SPARK-13515: US Locale configures the DecimalFormat object to use a dot ('.')
+      // as a decimal separator.
+      val usLocale = "US"
       val lastDValue = ctx.freshName("lastDValue")
       val pattern = ctx.freshName("pattern")
       val numberFormat = ctx.freshName("numberFormat")
@@ -1001,7 +1005,8 @@ case class FormatNumber(x: Expression, d: Expression)
       val dFormat = ctx.freshName("dFormat")
       ctx.addMutableState("int", lastDValue, s"$lastDValue = -100;")
       ctx.addMutableState(sb, pattern, s"$pattern = new $sb();")
-      ctx.addMutableState(df, numberFormat, s"""$numberFormat = new $df("", new $dfs($l.$US));""")
+      ctx.addMutableState(df, numberFormat,
+      s"""$numberFormat = new $df("", new $dfs($l.$usLocale));""")
 
       s"""
         if ($d >= 0) {
