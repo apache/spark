@@ -23,13 +23,13 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
+import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedAlias}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{Queryable, QueryExecution}
+import org.apache.spark.sql.execution.{ExplainCommand, Queryable, QueryExecution}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -91,6 +91,10 @@ class Dataset[T] private[sql](
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
 
+  /* ***************************** *
+   *  Basic Inspection Operations  *
+   * ***************************** */
+
   /**
    * Returns the schema of the encoded form of the objects in this [[Dataset]].
    * @since 1.6.0
@@ -101,19 +105,62 @@ class Dataset[T] private[sql](
    * Prints the schema of the underlying [[Dataset]] to the console in a nice tree format.
    * @since 1.6.0
    */
-  override def printSchema(): Unit = toDF().printSchema()
+  // scalastyle:off println
+  override def printSchema(): Unit = println(schema.treeString)
+  // scalastyle:on println
 
   /**
    * Prints the plans (logical and physical) to the console for debugging purposes.
    * @since 1.6.0
    */
-  override def explain(extended: Boolean): Unit = toDF().explain(extended)
+  override def explain(extended: Boolean): Unit = {
+    val explain = ExplainCommand(queryExecution.logical, extended = extended)
+    sqlContext.executePlan(explain).executedPlan.executeCollect().foreach {
+      // scalastyle:off println
+      r => println(r.getString(0))
+      // scalastyle:on println
+    }
+  }
 
   /**
    * Prints the physical plan to the console for debugging purposes.
    * @since 1.6.0
    */
-  override def explain(): Unit = toDF().explain()
+  override def explain(): Unit = explain(extended = false)
+
+  /**
+   * Returns all column names and their data types as an array.
+   * @since 2.0.0
+   */
+  def dtypes: Array[(String, String)] = schema.fields.map { field =>
+    (field.name, field.dataType.toString)
+  }
+
+  /**
+   * Returns all column names as an array.
+   * @since 2.0.0
+   */
+  def columns: Array[String] = schema.fields.map(_.name)
+
+  /**
+   * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
+   * @since 2.0.0
+   */
+  def apply(colName: String): Column = col(colName)
+
+  /**
+   * Selects column based on the column name and return it as a [[Column]].
+   * Note that the column name can also reference to a nested column like `a.b`.
+   * @since 2.0.0
+   */
+  def col(colName: String): Column = colName match {
+    case "*" =>
+      Column(ResolvedStar(queryExecution.analyzed.output))
+    case _ =>
+      val expr = resolve(colName)
+      Column(expr)
+  }
 
   /* ************* *
    *  Conversions  *
@@ -791,4 +838,11 @@ class Dataset[T] private[sql](
       other: Dataset[_])(
       f: (LogicalPlan, LogicalPlan) => LogicalPlan): Dataset[R] =
     new Dataset[R](sqlContext, f(logicalPlan, other.logicalPlan))
+
+  protected[sql] def resolve(colName: String): NamedExpression = {
+    queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
+      throw new AnalysisException(
+        s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+    }
+  }
 }

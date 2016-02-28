@@ -621,6 +621,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds.filter(_ => true),
       Some(1), Some(2), Some(3))
   }
+
+  // Tests for operations migrated from DataFrame
+
+  test("column selection") {
+    val df = Seq(Tuple1(1)).toDS().as("t")
+    // We should allow empty string as column name
+    df.col("_1")
+    df.col("t.`_1`")
+  }
 }
 
 class OuterClass extends Serializable {
