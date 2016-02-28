@@ -79,7 +79,7 @@ private[spark] class TypedConfigBuilder[T](
   import ConfigHelpers._
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, Option(_).map(_.toString).getOrElse(null))
+    this(parent, converter, Option(_).map(_.toString).orNull)
   }
 
   def transform(fn: T => T): TypedConfigBuilder[T] = {
