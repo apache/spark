@@ -454,6 +454,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def treeChildren: Seq[BaseType] = children
 
   /**
+   * All the nodes those are parts of this node.
+   */
+  protected def innerChildren: Seq[BaseType] = Nil
+
+  /**
    * Appends the string represent of this node and its children to the given StringBuilder.
    *
    * The `i`-th element in `lastChildren` indicates whether the ancestor of the current node at
@@ -474,6 +479,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
     builder.append(simpleString)
     builder.append("\n")
+
+    if (innerChildren.nonEmpty) {
+      innerChildren.init.foreach(_.generateTreeString(
+        depth + 2, lastChildren :+ false :+ false, builder))
+      innerChildren.last.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
+    }
 
     if (treeChildren.nonEmpty) {
       treeChildren.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
