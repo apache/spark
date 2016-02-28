@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
@@ -29,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
 import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 
 /**
@@ -169,10 +167,6 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def doPrepare(): Unit = {
-    child.prepare()
-  }
-
   override def doExecute(): RDD[InternalRow] = {
     child.execute()
   }
@@ -180,8 +174,6 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
   override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
     child.doExecuteBroadcast()
   }
-
-  override def supportCodegen: Boolean = false
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
     child.execute() :: Nil
@@ -245,21 +237,15 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
   * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
   * used to generated code for BoundReference.
   */
-case class WholeStageCodegen(child: CodegenSupport) extends UnaryNode with CodegenSupport {
-
-  override def supportCodegen: Boolean = false
+case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def doPrepare(): Unit = {
-    child.prepare()
-  }
-
   override def doExecute(): RDD[InternalRow] = {
     val ctx = new CodegenContext
-    val code = child.produce(ctx, this)
+    val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val references = ctx.references.toArray
     val source = s"""
       public Object generate(Object[] references) {
@@ -295,7 +281,7 @@ case class WholeStageCodegen(child: CodegenSupport) extends UnaryNode with Codeg
     // println(s"${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
 
-    val rdds = child.upstreams()
+    val rdds = child.asInstanceOf[CodegenSupport].upstreams()
     assert(rdds.size <= 2, "Up to two upstream RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitions { iter =>
@@ -424,7 +410,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
    */
   private def insertWholeStageCodegen(plan: SparkPlan): SparkPlan = plan match {
     case plan: CodegenSupport if supportCodegen(plan) =>
-      WholeStageCodegen(insertInputAdapter(plan).asInstanceOf[CodegenSupport])
+      WholeStageCodegen(insertInputAdapter(plan))
     case other =>
       other.withNewChildren(other.children.map(insertWholeStageCodegen))
   }
