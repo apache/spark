@@ -255,14 +255,11 @@ object SQLConf {
       .booleanConf
       .withDefault(true)
 
-  // Note: this can not be enabled all the time because the reader will not be returning UnsafeRows.
-  // Doing so is very expensive and we should remove this requirement instead of fixing it here.
-  // Initial testing seems to indicate only sort requires this.
   val PARQUET_VECTORIZED_READER_ENABLED =
     SQLConfigBuilder("spark.sql.parquet.enableVectorizedReader")
       .doc("Enables vectorized parquet decoding.")
       .booleanConf
-      .withDefault(false)
+      .withDefault(true)
 
   val ORC_FILTER_PUSHDOWN_ENABLED = SQLConfigBuilder("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
