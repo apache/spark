@@ -1340,4 +1340,12 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     // another invalid table name test as below
     intercept[AnalysisException](df.registerTempTable("table!#"))
   }
+
+  test("SPARK-13493: Enable case sensitiveness in json schema inference") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val data = List("{'field': 1}", "{'field': 2}", "{'field': 3}", "{'FIELD': 4}")
+      val df = sqlContext.read.json(sc.parallelize(data))
+      assert(df.schema.map(_.name) === Seq("field"))
+    }
+  }
 }
