@@ -679,7 +679,7 @@ class Analyzer(
 
     /**
       * Resolve the expression on a specified logical plan and it's child (recursively), until
-      * the expression is resolved or meet a non-unary node or Subquery.
+      * the expression is resolved or meet a non-unary node, SubqueryAlias or ScriptTransformation.
       */
     private def resolveExpressionRecursively(expr: Expression, plan: LogicalPlan): Expression = {
       val resolved = resolveExpression(expr, plan)
@@ -687,7 +687,8 @@ class Analyzer(
         resolved
       } else {
         plan match {
-          case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
+          case u: UnaryNode
+              if !u.isInstanceOf[SubqueryAlias] && !u.isInstanceOf[ScriptTransformation] =>
             resolveExpressionRecursively(resolved, u.child)
           case other => resolved
         }
