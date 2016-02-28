@@ -621,9 +621,18 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds.filter(_ => true),
       Some(1), Some(2), Some(3))
   }
+
+  test("SPARK-13540 add Scala object to OuterScopes") {
+    OuterScopes.addOuterScope(OuterObject)
+    Seq(OuterObject.InnerClass("foo")).toDS()
+  }
 }
 
 class OuterClass extends Serializable {
+  case class InnerClass(a: String)
+}
+
+object OuterObject {
   case class InnerClass(a: String)
 }
 

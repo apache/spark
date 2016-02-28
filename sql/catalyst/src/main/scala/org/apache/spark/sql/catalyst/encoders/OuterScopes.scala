@@ -37,6 +37,6 @@ object OuterScopes {
    * given wrapper class.
    */
   def addOuterScope(outer: AnyRef): Unit = {
-    outerScopes.putIfAbsent(outer.getClass.getName, outer)
+    outerScopes.putIfAbsent(outer.getClass.getName.stripSuffix("$"), outer)
   }
 }
