@@ -137,4 +137,10 @@ class ConfigEntrySuite extends SparkFunSuite {
     assert(conversionError.getMessage === s"${conversionTest.key} should be double, but was abc")
   }
 
+  test("default value handling is null-safe") {
+    val conf = new SparkConf()
+    val stringConf = ConfigBuilder("spark.string").stringConf.withDefault(null)
+    assert(conf.get(stringConf) === null)
+  }
+
 }

@@ -77,7 +77,7 @@ private[spark] class TypedConfigBuilder[T](
   val stringConverter: T => String) {
 
   def this(parent: ConfigBuilder, converter: String => T) = {
-    this(parent, converter, _.toString)
+    this(parent, converter, Option(_).map(_.toString).getOrElse(null))
   }
 
   def transform(fn: T => T): TypedConfigBuilder[T] = {
