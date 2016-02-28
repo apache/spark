@@ -173,12 +173,12 @@ private[sql] object PhysicalRDD {
       rdd: RDD[InternalRow],
       relation: BaseRelation,
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
-    val outputUnsafeRows = if (relation.isInstanceOf[ParquetRelation]) {
-      // The vectorized parquet reader does not produce unsafe rows.
-      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
-    } else {
-      // All HadoopFsRelations output UnsafeRows
-      relation.isInstanceOf[HadoopFsRelation]
+
+    val outputUnsafeRows = relation match {
+      case r: HadoopFsRelation if r.fileFormat == "ParquetFormat" =>
+        !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+      case _: HadoopFsRelation => true
+      case _ => false
     }
 
     val bucketSpec = relation match {

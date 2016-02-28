@@ -58,7 +58,7 @@ private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with D
       sqlContext.isInstanceOf[HiveContext],
       "The ORC data source can only be used with HiveContext.")
 
-    new OrcRelation(paths, dataSchema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
+    ??? //new OrcRelation(paths, dataSchema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
   }
 }
 
@@ -150,7 +150,7 @@ private[orc] class OrcOutputWriter(
     }
   }
 }
-
+/*
 private[sql] class OrcRelation(
     override val paths: Array[String],
     maybeDataSchema: Option[StructType],
@@ -332,6 +332,7 @@ private[orc] case class OrcTableScan(
     }
   }
 }
+*/
 
 private[orc] object OrcTableScan {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.

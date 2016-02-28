@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{SerializableWritable, Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, UnionRDD}
@@ -481,7 +481,20 @@ case class HadoopFsRelation(
       prepareJobForWrite: Job => OutputWriterFactory,
       bucketSpec: Option[BucketSpec])
 
-  def schema: StructType = StructType(dataSchema ++ partitionSchema)
+  /**
+   * Schema of this relation.  It consists of columns appearing in [[dataSchema]] and all partition
+   * columns not appearing in [[dataSchema]].
+   *
+   * TODO... this is kind of weird since we don't read partition columns from data when possible
+   *
+   * @since 1.4.0
+   */
+  val schema: StructType = {
+    val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
+    StructType(dataSchema ++ partitionSchema.filterNot { column =>
+      dataSchemaColumnNames.contains(column.name.toLowerCase)
+    })
+  }
 
   def partitionSpec: PartitionSpec = location.partitionSpec
 
@@ -1047,7 +1060,9 @@ private[sql] object HadoopFsRelation extends Logging {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val fakeStatuses = sparkContext.parallelize(paths).flatMap { path =>
+    val serializedPaths = paths.map(_.toString)
+
+    val fakeStatuses = sparkContext.parallelize(serializedPaths).map(new Path(_)).flatMap { path =>
       val fs = path.getFileSystem(serializableConfiguration.value)
       Try(listLeafFiles(fs, fs.getFileStatus(path))).getOrElse(Array.empty)
     }.map { status =>

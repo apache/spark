@@ -22,10 +22,10 @@ import java.io.File
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.{ExecutedCommand, PhysicalRDD}
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -283,10 +283,10 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       )
 
       table("test_parquet_ctas").queryExecution.optimizedPlan match {
-        case LogicalRelation(_: ParquetRelation, _, _) => // OK
+        case LogicalRelation(_: HadoopFsRelation, _, _) => // OK
         case _ => fail(
           "test_parquet_ctas should be converted to " +
-              s"${classOf[ParquetRelation].getCanonicalName }")
+              s"${classOf[HadoopFsRelation ].getCanonicalName }")
       }
     }
   }
@@ -307,9 +307,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
       df.queryExecution.sparkPlan match {
-        case ExecutedCommand(InsertIntoHadoopFsRelation(_: ParquetRelation, _, _)) => // OK
+        case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
-          s"${classOf[ParquetRelation].getCanonicalName} and " +
+          s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
           s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan. " +
           s"However, found a ${o.toString} ")
       }
@@ -337,9 +337,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
       df.queryExecution.sparkPlan match {
-        case ExecutedCommand(InsertIntoHadoopFsRelation(r: ParquetRelation, _, _)) => // OK
+        case ExecutedCommand(_: InsertIntoHadoopFsRelation) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
-          s"${classOf[ParquetRelation].getCanonicalName} and " +
+          s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
           s"${classOf[InsertIntoDataSource].getCanonicalName} is expcted as the SparkPlan." +
           s"However, found a ${o.toString} ")
       }
@@ -370,18 +370,18 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       assertResult(2) {
         analyzed.collect {
-          case r @ LogicalRelation(_: ParquetRelation, _, _) => r
+          case r @ LogicalRelation(_: HadoopFsRelation, _, _) => r
         }.size
       }
     }
   }
 
-  def collectParquetRelation(df: DataFrame): ParquetRelation = {
+  def collectHadoopFsRelation (df: DataFrame): HadoopFsRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r: ParquetRelation, _, _) => r
+      case LogicalRelation(r:  HadoopFsRelation, _, _) => r
     }.getOrElse {
-      fail(s"Expecting a ParquetRelation2, but got:\n$plan")
+      fail(s"Expecting a HadoopFsRelation 2, but got:\n$plan")
     }
   }
 
@@ -396,9 +396,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
          """.stripMargin)
 
       // First lookup fills the cache
-      val r1 = collectParquetRelation(table("nonPartitioned"))
+      val r1 = collectHadoopFsRelation (table("nonPartitioned"))
       // Second lookup should reuse the cache
-      val r2 = collectParquetRelation(table("nonPartitioned"))
+      val r2 = collectHadoopFsRelation (table("nonPartitioned"))
       // They should be the same instance
       assert(r1 eq r2)
     }
@@ -416,9 +416,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
        """.stripMargin)
 
       // First lookup fills the cache
-      val r1 = collectParquetRelation(table("partitioned"))
+      val r1 = collectHadoopFsRelation (table("partitioned"))
       // Second lookup should reuse the cache
-      val r2 = collectParquetRelation(table("partitioned"))
+      val r2 = collectHadoopFsRelation (table("partitioned"))
       // They should be the same instance
       assert(r1 eq r2)
     }
@@ -429,7 +429,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation: ParquetRelation, _, _) => // OK
+        case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
