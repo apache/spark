@@ -476,6 +476,15 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     private final Dictionary dictionary;
 
     /**
+     * Offsets into the column vector containing the decoded dictionary. When decoding dictionary
+     * encoded string data, we decode the entire dictionary into this column's ColumnVector and
+     * then when decoding values, just update the length and offset, meaning the dictionary is
+     * not exploded.
+     */
+    private int[] byteArrayDictionaryOffsets;
+    private int[] byteArrayDictionaryLengths;
+
+    /**
      * If true, the current page is dictionary encoded.
      */
     private boolean useDictionary;
@@ -535,6 +544,23 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       this.totalValueCount = pageReader.getTotalValueCount();
       if (totalValueCount == 0) {
         throw new IOException("totalValueCount == 0");
+      }
+    }
+
+    /**
+     * Prepares the dictionary if it makes sense to decode it. This is currently used just for
+     * string columns and we pre-decode the dictionary into `c`.
+     */
+    public void prepareDictionary(ColumnVector c) {
+      if (!useDictionary || descriptor.getType() != PrimitiveType.PrimitiveTypeName.BINARY) return;
+      assert(c.isArray());
+      ColumnVector dataArray = c.arrayData();
+      byteArrayDictionaryOffsets = new int[dictionary.getMaxId() + 1];
+      byteArrayDictionaryLengths = new int[dictionary.getMaxId() + 1];
+      for (int i = 0; i <= dictionary.getMaxId(); i++) {
+        Binary v = dictionary.decodeToBinary(i);
+        byteArrayDictionaryOffsets[i] = dataArray.appendBytes(v.length(), v.getBytes(), 0);
+        byteArrayDictionaryLengths[i] = v.length();
       }
     }
 
@@ -727,13 +753,9 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
           break;
 
         case BINARY:
-          // TODO: this is incredibly inefficient as it blows up the dictionary right here. We
-          // need to do this better. We should probably add the dictionary data to the ColumnVector
-          // and reuse it across batches. This should mean adding a ByteArray would just update
-          // the length and offset.
           for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putByteArray(i, v.getBytes());
+            int id = dictionaryIds.getInt(i);
+            column.putArray(i, byteArrayDictionaryOffsets[id], byteArrayDictionaryLengths[id]);
           }
           break;
 
@@ -965,6 +987,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     columnReaders = new ColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       columnReaders[i] = new ColumnReader(columns.get(i), pages.getPageReader(columns.get(i)));
+      if (vectorizedDecode()) columnReaders[i].prepareDictionary(resultBatch().column(i));
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }
