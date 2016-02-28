@@ -133,7 +133,7 @@ class SQLContext private[sql](
    * that listen for execution metrics.
    */
   @Experimental
-  lazy val listenerManager: ExecutionListenerManager = sessionState.listenerManager
+  def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
   /**
    * Set Spark SQL configuration properties.
