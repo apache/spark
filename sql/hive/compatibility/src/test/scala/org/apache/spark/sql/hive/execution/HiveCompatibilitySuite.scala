@@ -55,7 +55,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Use Hive hash expression instead of the native one
-    TestHive.functionRegistry.unregisterFunction("hash")
+    TestHive.sessionState.functionRegistry.unregisterFunction("hash")
     RuleExecutor.resetTime()
   }
 
@@ -65,7 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-    TestHive.functionRegistry.restore()
+    TestHive.sessionState.functionRegistry.restore()
 
     // For debugging dump some statistics about how much time was spent in various optimizer rules.
     logWarning(RuleExecutor.dumpTimeSpent())

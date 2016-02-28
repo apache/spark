@@ -425,7 +425,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
   }
 
   test("Caching converted data source Parquet Relations") {
-    def checkCached(tableIdentifier: catalog.QualifiedTableName): Unit = {
+    val _catalog = catalog
+    def checkCached(tableIdentifier: _catalog.QualifiedTableName): Unit = {
       // Converted test_parquet should be cached.
       catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
@@ -452,7 +453,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    var tableIdentifier = catalog.QualifiedTableName("default", "test_insert_parquet")
+    var tableIdentifier = _catalog.QualifiedTableName("default", "test_insert_parquet")
 
     // First, make sure the converted test_parquet is not cached.
     assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
@@ -492,7 +493,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
         |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
       """.stripMargin)
 
-    tableIdentifier = catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
+    tableIdentifier = _catalog.QualifiedTableName("default", "test_parquet_partitioned_cache_test")
     assert(catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) === null)
     sql(
       """

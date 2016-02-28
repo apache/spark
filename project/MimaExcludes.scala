@@ -271,12 +271,17 @@ object MimaExcludes {
       ) ++ Seq(
         // SPARK-13220 Deprecate yarn-client and yarn-cluster mode
         ProblemFilters.exclude[MissingMethodProblem](
-          "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler"),
+          "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+      ) ++ Seq(
         // SPARK-13465 TaskContext.
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.addTaskFailureListener")
       ) ++ Seq (
         // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
+      ) ++ Seq(
+        // SPARK-13526 Move SQLContext per-session states to new class
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.sql.UDFRegistration.this")
       ) ++ Seq(
         // [SPARK-13486][SQL] Move SQLConf into an internal package
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf"),
