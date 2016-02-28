@@ -29,7 +29,8 @@ package object config {
   private[spark] val APPLICATION_TAGS = ConfigBuilder("spark.yarn.tags")
     .doc("Comma-separated list of strings to pass through as YARN application tags appearing " +
       "in YARN Application Reports, which can be used for filtering when querying YARN.")
-    .stringSeqConf
+    .stringConf
+    .toSequence
     .optional
 
   private[spark] val ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
@@ -144,7 +145,8 @@ package object config {
 
   private[spark] val SCHEDULER_SERVICES = ConfigBuilder("spark.yarn.services")
     .doc("A comma-separated list of class names of services to add to the scheduler.")
-    .stringSeqConf
+    .stringConf
+    .toSequence
     .withDefault(Nil)
 
   /* Client-mode AM configuration. */
@@ -208,7 +210,8 @@ package object config {
   private[spark] val NAMENODES_TO_ACCESS = ConfigBuilder("spark.yarn.access.namenodes")
     .doc("Extra NameNode URLs for which to request delegation tokens. The NameNode that hosts " +
       "fs.defaultFS does not need to be listed here.")
-    .stringSeqConf
+    .stringConf
+    .toSequence
     .withDefault(Nil)
 
   private[spark] val TOKEN_RENEWAL_INTERVAL = ConfigBuilder("spark.yarn.token.renewal.interval")
@@ -233,7 +236,8 @@ package object config {
   // of the executors
   private[spark] val SECONDARY_JARS = ConfigBuilder("spark.yarn.secondary.jars")
     .internal
-    .stringSeqConf
+    .stringConf
+    .toSequence
     .optional
 
 }

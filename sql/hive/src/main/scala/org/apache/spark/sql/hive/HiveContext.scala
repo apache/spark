@@ -698,7 +698,8 @@ private[hive] object HiveContext {
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
       "classes that need to be shared are those that interact with classes that are already " +
       "shared. For example, custom appenders that are used by log4j.")
-    .stringSeqConf
+    .stringConf
+    .toSequence
     .withDefault(jdbcPrefixes)
 
   private def jdbcPrefixes = Seq(
@@ -708,7 +709,8 @@ private[hive] object HiveContext {
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
       "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
-    .stringSeqConf
+    .stringConf
+    .toSequence
     .withDefault(Nil)
 
   val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")

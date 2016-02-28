@@ -90,11 +90,20 @@ class ConfigEntrySuite extends SparkFunSuite {
 
   test("conf entry: string seq") {
     val conf = new SparkConf()
-    val seq = ConfigBuilder("spark.seq").stringSeqConf.withDefault(Seq())
+    val seq = ConfigBuilder("spark.seq").stringConf.toSequence.withDefault(Seq())
     conf.set(seq.key, "1,,2, 3 , , 4")
     assert(conf.get(seq) === Seq("1", "2", "3", "4"))
     conf.set(seq, Seq("1", "2"))
     assert(conf.get(seq) === Seq("1", "2"))
+  }
+
+  test("conf entry: int seq") {
+    val conf = new SparkConf()
+    val seq = ConfigBuilder("spark.seq").intConf.toSequence.withDefault(Seq())
+    conf.set(seq.key, "1,,2, 3 , , 4")
+    assert(conf.get(seq) === Seq(1, 2, 3, 4))
+    conf.set(seq, Seq(1, 2))
+    assert(conf.get(seq) === Seq(1, 2))
   }
 
   test("conf entry: transformation") {

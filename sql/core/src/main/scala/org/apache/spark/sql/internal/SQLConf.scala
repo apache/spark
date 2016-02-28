@@ -55,6 +55,10 @@ object SQLConf {
       new SQLTypedConfigBuilder(super.transform(fn))
     }
 
+    override def toSequence: TypedConfigBuilder[Seq[T]] = {
+      new SQLTypedConfigBuilder(super.toSequence)
+    }
+
     override def optional: OptionalConfigEntry[T] = register(super.optional)
 
     override def withDefault(default: T): ConfigEntry[T] = register(super.withDefault(default))
@@ -86,10 +90,6 @@ object SQLConf {
 
     override def stringConf: TypedConfigBuilder[String] = {
       new SQLTypedConfigBuilder(super.stringConf)
-    }
-
-    override def stringSeqConf: TypedConfigBuilder[Seq[String]] = {
-      new SQLTypedConfigBuilder(super.stringSeqConf)
     }
 
     override def bytesConf(unit: ByteUnit): TypedConfigBuilder[Long] = {
