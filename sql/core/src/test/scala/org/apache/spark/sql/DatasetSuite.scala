@@ -624,7 +624,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-13540 add Scala object to OuterScopes") {
     OuterScopes.addOuterScope(OuterObject)
-    Seq(OuterObject.InnerClass("foo")).toDS()
+    checkAnswer(
+      Seq(OuterObject.InnerClass("foo")).toDS(),
+      OuterObject.InnerClass("foo"))
   }
 }
 
