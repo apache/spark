@@ -23,14 +23,49 @@ import java.sql.{Date, Timestamp}
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SQLTestData.{ComplexData, TestData, TestData2, UpperCaseData}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 case class OtherTuple(_1: String, _2: Int)
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  /**
+   * Verifies that there is no Exchange between the Aggregations for `df`
+   */
+  private def verifyNonExchangingAgg[T: Encoder](ds: Dataset[T]) = {
+    var atFirstAgg: Boolean = false
+    ds.queryExecution.executedPlan.foreach {
+      case agg: TungstenAggregate =>
+        atFirstAgg = !atFirstAgg
+      case _ =>
+        if (atFirstAgg) {
+          fail("Should not have operators between the two aggregations")
+        }
+    }
+  }
+
+  /**
+   * Verifies that there is an Exchange between the Aggregations for `df`
+   */
+  private def verifyExchangingAgg[T: Encoder](ds: Dataset[T]) = {
+    var atFirstAgg: Boolean = false
+    ds.queryExecution.executedPlan.foreach {
+      case agg: TungstenAggregate => {
+        if (atFirstAgg) {
+          fail("Should not have back to back Aggregates")
+        }
+        atFirstAgg = true
+      }
+      case e: ShuffleExchange => atFirstAgg = false
+      case _ =>
+    }
+  }
 
   test("toDS") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
@@ -629,6 +664,170 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // We should allow empty string as column name
     df.col("_1")
     df.col("t.`_1`")
+  }
+
+  protected lazy val complexDataDS: Dataset[ComplexData] =
+    sqlContext.sparkContext.parallelize(
+      ComplexData(Map("1" -> 1), TestData(1, "1"), Seq(1, 1, 1), true) ::
+        ComplexData(Map("2" -> 2), TestData(2, "2"), Seq(2, 2, 2), false) ::
+        Nil).toDS()
+
+  protected lazy val upperCaseDataDS: Dataset[UpperCaseData] =
+    sqlContext.sparkContext.parallelize(
+      UpperCaseData(1, "A") ::
+        UpperCaseData(2, "B") ::
+        UpperCaseData(3, "C") ::
+        UpperCaseData(4, "D") ::
+        UpperCaseData(5, "E") ::
+        UpperCaseData(6, "F") :: Nil).toDS()
+
+  protected lazy val testDataDS: Dataset[TestData] =
+    sqlContext.sparkContext.parallelize(
+      (1 to 100).map(i => TestData(i, i.toString))).toDS()
+
+  test("df-to-ds: access complex data") {
+    assert(complexDataDS.filter(complexDataDS("a").getItem(0) === 2).count() == 1)
+    assert(complexDataDS.filter(complexDataDS("m").getItem("1") === 1).count() == 1)
+    assert(complexDataDS.filter(complexDataDS("s").getField("key") === 1).count() == 1)
+  }
+
+  test("df-to-ds: SPARK-7133: Implement struct, array, and map field accessor") {
+    assert(complexDataDS.filter(complexDataDS("a")(0) === 2).count() == 1)
+    assert(complexDataDS.filter(complexDataDS("m")("1") === 1).count() == 1)
+    assert(complexDataDS.filter(complexDataDS("s")("key") === 1).count() == 1)
+    assert(complexDataDS.filter(complexDataDS("m")(complexDataDS("s")("value")) === 1).count() == 1)
+    assert(complexDataDS.filter(complexDataDS("a")(complexDataDS("s")("key")) === 1).count() == 1)
+  }
+
+  test("df-to-ds: Sorting columns are not in Filter and Project") {
+    checkAnswer(
+      upperCaseDataDS.filter('N > 1).select('N.as[Int]).filter('N < 6).orderBy('L.asc),
+      2, 3, 4, 5)
+  }
+
+  test("df-to-ds: filterExpr") {
+    val res = testDataDS.collect().filter(_.key > 90).toSeq
+    checkAnswer(testDataDS.filter("key > 90"), res: _*)
+    checkAnswer(testDataDS.filter("key > 9.0e1"), res: _*)
+    checkAnswer(testDataDS.filter("key > .9e+2"), res: _*)
+    checkAnswer(testDataDS.filter("key > 0.9e+2"), res: _*)
+    checkAnswer(testDataDS.filter("key > 900e-1"), res: _*)
+    checkAnswer(testDataDS.filter("key > 900.0E-1"), res: _*)
+    checkAnswer(testDataDS.filter("key > 9.e+1"), res: _*)
+  }
+
+  test("df-to-ds: filterExpr using where") {
+    checkAnswer(
+      testDataDS.where("key > 50"),
+      testDataDS.collect().filter(_.key > 50).toSeq: _*)
+  }
+
+  test("df-to-ds: limit") {
+    checkAnswer(
+      testDataDS.limit(10),
+      testDataDS.take(10).toSeq: _*)
+
+    checkAnswer(
+      arrayData.toDS().limit(1),
+      arrayData.take(1): _*)
+
+    checkAnswer(
+      mapData.toDS().limit(1),
+      mapData.take(1): _*)
+
+    // SPARK-12340: overstep the bounds of Int in SparkPlan.executeTake
+    checkAnswer(
+      (0 until 2).toDS().limit(2147483638),
+      0, 1
+    )
+  }
+
+  test("df-to-ds: repartition by key") {
+    val ds1 = testDataDS.repartition(1)
+    assert(ds1.rdd.partitions.length == 1)
+
+    val ds2 = ds1.repartition(5, $"key")
+    assert(ds2.rdd.partitions.length == 5)
+
+    checkAnswer(ds2, ds1.collect(): _*)
+  }
+
+  test("df-to-ds: group by after distributed by") {
+    // Group by the column we are distributed by. This should generate a plan with no exchange
+    // between the aggregates
+    verifyNonExchangingAgg(
+      testDataDS
+        .repartition($"key")
+        .groupBy(_.key)
+        .count())
+
+    verifyNonExchangingAgg(
+      testDataDS
+        .repartition($"key", $"value")
+        .groupBy(data => data.key -> data.value)
+        .count())
+
+    // Grouping by just the first distributeBy expr, need to exchange.
+    verifyExchangingAgg(
+      testDataDS
+        .repartition($"key", $"value")
+        .groupBy(_.key)
+        .count())
+  }
+
+  test("df-to-ds: distribute and order by") {
+    val ds1 = (1 to 100).map(i => TestData2(i % 10, i)).toDS()
+    val ds2 = ds1.repartition(2, $"a").sortWithinPartitions($"b".desc)
+
+    assert(ds2.rdd.partitions.length == 2)
+
+    ds2.rdd.collectPartitions().foreach { data =>
+      assert(data.sliding(2).forall {
+        case Array(TestData2(_, b1), TestData2(_, b2)) => b1 > b2
+      }, "Partition is not ordered")
+    }
+
+    assert(ds2.collect().sliding(2).exists {
+      case Array(TestData2(_, b1), TestData2(_, b2)) => b1 < b2
+    }, "Dataset should not be globally ordered")
+  }
+
+  test("df-to-ds: distribute and order by with multiple sort orders") {
+    // For comparing tuples
+    import scala.math.Ordering.Implicits._
+
+    val ds1 = (1 to 100).map(i => TestData2(i % 10, i)).toDS()
+    val ds2 = ds1.repartition(2, $"a").sortWithinPartitions($"b".desc, $"a".asc)
+
+    assert(ds2.rdd.partitions.length == 2)
+
+    ds2.rdd.collectPartitions().foreach { data =>
+      assert(data.sliding(2).forall {
+        case Array(TestData2(a1, b1), TestData2(a2, b2)) =>
+          (b1, a1) > (b2, a2)
+      }, "Partition is not ordered")
+    }
+
+    assert(ds2.collect().sliding(2).exists {
+      case Array(TestData2(a1, b1), TestData2(a2, b2)) => (b1, a1) < (b2, a2)
+    }, "Dataset should not be globally ordered")
+  }
+
+  test("df-to-ds: distribute into one partition and order by") {
+    val ds1 = (1 to 100).map(i => TestData2(i % 10, i)).toDS()
+    val ds2 = ds1.repartition(1, $"a").sortWithinPartitions("b")
+
+    assert(ds2.rdd.partitions.length == 1)
+
+    ds2.rdd.collectPartitions().foreach { data =>
+      assert(data.sliding(2).forall {
+        case Array(TestData2(a1, b1), TestData2(a2, b2)) => b1 < b2
+      }, "Partition is not ordered")
+    }
+
+    assert(ds2.collect().sliding(2).forall {
+      case Array(TestData2(a1, b1), TestData2(a2, b2)) => b1 < b2
+    }, "Dataset should be globally ordered")
   }
 }
 

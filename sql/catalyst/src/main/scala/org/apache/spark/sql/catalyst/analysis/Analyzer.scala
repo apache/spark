@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.lang.reflect.Modifier
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
@@ -559,7 +561,11 @@ class Analyzer(
       }
 
       resolveExpression(unbound, LocalRelation(attributes), throws = true) transform {
-        case n: NewInstance if n.outerPointer.isEmpty && n.cls.isMemberClass =>
+        case n: NewInstance
+          if n.outerPointer.isEmpty &&
+             n.cls.isMemberClass &&
+             !Modifier.isStatic(n.cls.getModifiers) =>
+          n.cls.getEnclosingClass
           val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
           if (outer == null) {
             throw new AnalysisException(
