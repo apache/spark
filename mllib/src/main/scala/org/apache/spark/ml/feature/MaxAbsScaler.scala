@@ -69,7 +69,7 @@ class MaxAbsScaler @Since("2.0.0") (override val uid: String)
 
   override def fit(dataset: DataFrame): MaxAbsScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val summary = Statistics.colStats(input)
     val minVals = summary.min.toArray
     val maxVals = summary.max.toArray
