@@ -445,4 +445,9 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(agg.getCatalystType(1, "", 1, null) == Some(StringType))
   }
 
+  test("OracleDialect type mapping") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracleDialect.getJDBCType(StringType).
+      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
 }
