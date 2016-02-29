@@ -834,7 +834,7 @@ private[spark] class BlockManager(
         }
       } finally {
         if (blockWasSuccessfullyStored) {
-          blockInfoManager.downgradeLock(blockId)
+          blockInfoManager.unlock(blockId)
         } else {
           blockInfoManager.removeBlock(blockId)
           logWarning(s"Putting block $blockId failed")

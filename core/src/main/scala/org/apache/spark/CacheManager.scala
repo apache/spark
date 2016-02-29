@@ -158,9 +158,10 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         case Left(arr) =>
           // We have successfully unrolled the entire partition, so cache it in memory
           blockManager.putArray(key, arr, level, tellMaster = true, effectiveStorageLevel)
-          CompletionIterator[T, Iterator[T]](
-            arr.iterator.asInstanceOf[Iterator[T]],
-            blockManager.releaseLock(key))
+          arr.iterator.asInstanceOf[Iterator[T]]
+//          CompletionIterator[T, Iterator[T]](
+//            arr.iterator.asInstanceOf[Iterator[T]],
+//            blockManager.releaseLock(key))
         case Right(it) =>
           // There is not enough space to cache this partition in memory
           val returnValues = it.asInstanceOf[Iterator[T]]
