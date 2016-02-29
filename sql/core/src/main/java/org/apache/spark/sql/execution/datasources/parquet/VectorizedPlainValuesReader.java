@@ -85,7 +85,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     for (int i = 0; i < total; i++) {
       // Bytes are stored as a 4-byte little endian int. Just read the first byte.
       // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
-      c.putByte(rowId + i, buffer[offset]);
+      c.putByte(rowId + i, Platform.getByte(buffer, offset));
       offset += 4;
     }
   }
