@@ -75,7 +75,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *       byte[]
  *       java.sql.Date
  *       java.sql.Timestamp
- *   Writables :
+ *   Writables:
  *       org.apache.hadoop.hive.serde2.io.HiveVarcharWritable
  *       org.apache.hadoop.hive.serde2.io.HiveCharWritable
  *       org.apache.hadoop.io.Text
