@@ -478,9 +478,10 @@ private[spark] class Executor(
     } catch {
       case NonFatal(e) =>
         logWarning("Issue communicating with driver in heartbeater", e)
-        logError(s"Unable to send heartbeats to driver more than $HEARTBEAT_MAX_FAILURES times")
         heartbeatFailures += 1
         if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
+          logError(s"Exit as unable to send heartbeats to driver " +
+            s"more than $HEARTBEAT_MAX_FAILURES times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
     }
