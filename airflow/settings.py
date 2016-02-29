@@ -55,8 +55,9 @@ DAGS_FOLDER = os.path.expanduser(conf.get('core', 'DAGS_FOLDER'))
 engine_args = {}
 if 'sqlite' not in SQL_ALCHEMY_CONN:
     # Engine args not supported by sqlite
-    engine_args['pool_size'] = 5
-    engine_args['pool_recycle'] = 3600
+    engine_args['pool_size'] = conf.getint('core', 'SQL_ALCHEMY_POOL_SIZE')
+    engine_args['pool_recycle'] = conf.getint('core',
+                                              'SQL_ALCHEMY_POOL_RECYCLE')
 
 engine = create_engine(SQL_ALCHEMY_CONN, **engine_args)
 Session = scoped_session(
