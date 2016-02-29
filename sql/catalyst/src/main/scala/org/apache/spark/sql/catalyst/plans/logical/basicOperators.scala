@@ -444,9 +444,6 @@ case class Window(
 
   override def output: Seq[Attribute] =
     projectList ++ windowExpressions.map(_.toAttribute)
-
-  override def validConstraints: Set[Expression] =
-    child.constraints.union(getAliasedConstraints(projectList))
 }
 
 private[sql] object Expand {
