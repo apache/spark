@@ -1047,13 +1047,13 @@ test_that("column functions", {
                         schema = c("a", "b", "c"))
   result <- collect(select(df, struct("a", "c")))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,c)" <- list(listToStruct(list(a = 1L, c = 3L)),
+  expected$"struct(a, c)" <- list(listToStruct(list(a = 1L, c = 3L)),
                                  listToStruct(list(a = 4L, c = 6L)))
   expect_equal(result, expected)
 
   result <- collect(select(df, struct(df$a, df$b)))
   expected <- data.frame(row.names = 1:2)
-  expected$"struct(a,b)" <- list(listToStruct(list(a = 1L, b = 2L)),
+  expected$"struct(a, b)" <- list(listToStruct(list(a = 1L, b = 2L)),
                                  listToStruct(list(a = 4L, b = 5L)))
   expect_equal(result, expected)
 
@@ -1783,6 +1783,14 @@ test_that("sampleBy() on a DataFrame", {
   result <- collect(orderBy(count(groupBy(sample, "key")), "key"))
   expect_identical(as.list(result[1, ]), list(key = "0", count = 3))
   expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
+})
+
+test_that("approxQuantile() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) { i })
+  df <- createDataFrame(sqlContext, l, "key")
+  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
+  expect_equal(quantiles[[1]], 50)
+  expect_equal(quantiles[[2]], 80)
 })
 
 test_that("SQL error message is returned from JVM", {

@@ -23,13 +23,13 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubQueries, FunctionRegistry}
-import org.apache.spark.sql.catalyst.parser.ParserConf
-import org.apache.spark.sql.execution.SparkQl
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.hive.{HiveContext, HiveQl, MetastoreRelation}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -265,7 +265,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("CTAS without serde") {
     def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
-      val relation = EliminateSubQueries(catalog.lookupRelation(TableIdentifier(tableName)))
+      val relation = EliminateSubqueryAliases(catalog.lookupRelation(TableIdentifier(tableName)))
       relation match {
         case LogicalRelation(r: ParquetRelation, _, _) =>
           if (!isDataSourceParquet) {
@@ -925,6 +925,33 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         (5, "c", 1, 5),
         (6, "c", 0, 6)
       ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
+  test("Sorting columns are not in Generate") {
+    withTempTable("data") {
+      sqlContext.range(1, 5)
+        .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
+        .registerTempTable("data")
+
+      // case 1: missing sort columns are resolvable if join is true
+      checkAnswer(
+        sql("SELECT explode(a) AS val, b FROM data WHERE b < 2 order by val, c"),
+        Row(1, 1) :: Row(2, 1) :: Nil)
+
+      // case 2: missing sort columns are resolvable if join is false
+      checkAnswer(
+        sql("SELECT explode(a) AS val FROM data order by val, c"),
+        Seq(1, 2, 2, 3, 3, 4, 4, 5).map(i => Row(i)))
+
+      // case 3: missing sort columns are resolvable if join is true and outer is true
+      checkAnswer(
+        sql(
+          """
+            |SELECT C.val, b FROM data LATERAL VIEW OUTER explode(a) C as val
+            |where b < 2 order by c, val, b
+          """.stripMargin),
+        Row(1, 1) :: Row(2, 1) :: Nil)
+    }
   }
 
   test("window function: Sorting columns are not in Project") {

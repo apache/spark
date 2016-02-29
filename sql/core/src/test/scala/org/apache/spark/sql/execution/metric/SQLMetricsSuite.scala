@@ -29,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -209,20 +210,20 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
-  test("BroadcastHashOuterJoin metrics") {
+  test("BroadcastHashJoin(outer) metrics") {
     val df1 = Seq((1, "a"), (1, "b"), (4, "c")).toDF("key", "value")
     val df2 = Seq((1, "a"), (1, "b"), (2, "c"), (3, "d")).toDF("key2", "value")
     // Assume the execution plan is
-    // ... -> BroadcastHashOuterJoin(nodeId = 0)
+    // ... -> BroadcastHashJoin(nodeId = 0)
     val df = df1.join(broadcast(df2), $"key" === $"key2", "left_outer")
     testSparkPlanMetrics(df, 2, Map(
-      0L -> ("BroadcastHashOuterJoin", Map(
+      0L -> ("BroadcastHashJoin", Map(
         "number of output rows" -> 5L)))
     )
 
     val df3 = df1.join(broadcast(df2), $"key" === $"key2", "right_outer")
     testSparkPlanMetrics(df3, 2, Map(
-      0L -> ("BroadcastHashOuterJoin", Map(
+      0L -> ("BroadcastHashJoin", Map(
         "number of output rows" -> 6L)))
     )
   }

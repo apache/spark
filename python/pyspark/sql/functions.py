@@ -25,7 +25,7 @@ if sys.version < "3":
     from itertools import imap as map
 
 from pyspark import since, SparkContext
-from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
+from pyspark.rdd import _wrap_function, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
@@ -223,22 +223,22 @@ def coalesce(*cols):
     +----+----+
 
     >>> cDf.select(coalesce(cDf["a"], cDf["b"])).show()
-    +-------------+
-    |coalesce(a,b)|
-    +-------------+
-    |         null|
-    |            1|
-    |            2|
-    +-------------+
+    +--------------+
+    |coalesce(a, b)|
+    +--------------+
+    |          null|
+    |             1|
+    |             2|
+    +--------------+
 
     >>> cDf.select('*', coalesce(cDf["a"], lit(0.0))).show()
-    +----+----+---------------+
-    |   a|   b|coalesce(a,0.0)|
-    +----+----+---------------+
-    |null|null|            0.0|
-    |   1|null|            1.0|
-    |null|   2|            0.0|
-    +----+----+---------------+
+    +----+----+----------------+
+    |   a|   b|coalesce(a, 0.0)|
+    +----+----+----------------+
+    |null|null|             0.0|
+    |   1|null|             1.0|
+    |null|   2|             0.0|
+    +----+----+----------------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.coalesce(_to_seq(sc, cols, _to_java_column))
@@ -479,7 +479,7 @@ def round(col, scale=0):
 
 @since(1.5)
 def shiftLeft(col, numBits):
-    """Shift the the given value numBits left.
+    """Shift the given value numBits left.
 
     >>> sqlContext.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
     [Row(r=42)]
@@ -490,7 +490,7 @@ def shiftLeft(col, numBits):
 
 @since(1.5)
 def shiftRight(col, numBits):
-    """Shift the the given value numBits right.
+    """Shift the given value numBits right.
 
     >>> sqlContext.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
     [Row(r=21)]
@@ -502,7 +502,7 @@ def shiftRight(col, numBits):
 
 @since(1.5)
 def shiftRightUnsigned(col, numBits):
-    """Unsigned shift the the given value numBits right.
+    """Unsigned shift the given value numBits right.
 
     >>> df = sqlContext.createDataFrame([(-42,)], ['a'])
     >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
@@ -1528,7 +1528,7 @@ def array_contains(col, value):
 
     >>> df = sqlContext.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(array_contains(df.data, "a")).collect()
-    [Row(array_contains(data,a)=True), Row(array_contains(data,a)=False)]
+    [Row(array_contains(data, a)=True), Row(array_contains(data, a)=False)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
@@ -1645,16 +1645,14 @@ class UserDefinedFunction(object):
         f, returnType = self.func, self.returnType  # put them in closure `func`
         func = lambda _, it: map(lambda x: returnType.toInternal(f(*x)), it)
         ser = AutoBatchedSerializer(PickleSerializer())
-        command = (func, None, ser, ser)
         sc = SparkContext.getOrCreate()
-        pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command, self)
+        wrapped_func = _wrap_function(sc, func, ser, ser)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            name, bytearray(pickled_command), env, includes, sc.pythonExec, sc.pythonVer,
-            broadcast_vars, sc._javaAccumulator, jdt)
+            name, wrapped_func, jdt)
         return judf
 
     def __del__(self):

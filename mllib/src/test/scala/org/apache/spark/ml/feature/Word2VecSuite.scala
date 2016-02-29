@@ -100,7 +100,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .fit(docDF)
 
-    val realVectors = model.getVectors.sort("word").select("vector").map {
+    val realVectors = model.getVectors.sort("word").select("vector").rdd.map {
       case Row(v: Vector) => v
     }.collect()
     // These expectations are just magic values, characterizing the current
@@ -133,8 +133,8 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .fit(docDF)
 
-    val expectedSimilarity = Array(0.18032623242822343, -0.5717976464798823)
-    val (synonyms, similarity) = model.findSynonyms("a", 2).map {
+    val expectedSimilarity = Array(0.2608488929093532, -0.8271274846926078)
+    val (synonyms, similarity) = model.findSynonyms("a", 2).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
 
@@ -161,7 +161,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .fit(docDF)
 
-    val (synonyms, similarity) = model.findSynonyms("a", 6).map {
+    val (synonyms, similarity) = model.findSynonyms("a", 6).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
 
@@ -174,7 +174,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setWindowSize(10)
       .fit(docDF)
 
-    val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).map {
+    val (synonymsLarger, similarityLarger) = model.findSynonyms("a", 6).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
     // The similarity score should be very different with the larger window

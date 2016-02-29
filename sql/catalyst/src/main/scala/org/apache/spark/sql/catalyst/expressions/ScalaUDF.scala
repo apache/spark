@@ -39,11 +39,11 @@ case class ScalaUDF(
     dataType: DataType,
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil)
-  extends Expression with ImplicitCastInputTypes {
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression {
 
   override def nullable: Boolean = true
 
-  override def toString: String = s"UDF(${children.mkString(",")})"
+  override def toString: String = s"UDF(${children.mkString(", ")})"
 
   // scalastyle:off line.size.limit
 

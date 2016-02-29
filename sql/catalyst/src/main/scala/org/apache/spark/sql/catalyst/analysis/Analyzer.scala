@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 
 /**
@@ -80,6 +81,7 @@ class Analyzer(
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
+      ResolveSubquery ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalJoin ::
@@ -116,10 +118,16 @@ class Analyzer(
         // see https://github.com/apache/spark/pull/4929#discussion_r27186638 for more info
         case u : UnresolvedRelation =>
           val substituted = cteRelations.get(u.tableIdentifier.table).map { relation =>
-            val withAlias = u.alias.map(Subquery(_, relation))
+            val withAlias = u.alias.map(SubqueryAlias(_, relation))
             withAlias.getOrElse(relation)
           }
           substituted.getOrElse(u)
+        case other =>
+          // This cannot be done in ResolveSubquery because ResolveSubquery does not know the CTE.
+          other transformExpressions {
+            case e: SubqueryExpression =>
+              e.withNewPlan(substituteCTE(e.query, cteRelations))
+          }
       }
     }
   }
@@ -157,7 +165,8 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case other => Alias(other, optionalAliasName.getOrElse(s"_c$i"))()
+              case e: ExtractValue => Alias(e, usePrettyExpression(e).sql)()
+              case e => Alias(e, optionalAliasName.getOrElse(usePrettyExpression(e).sql))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -320,7 +329,7 @@ class Analyzer(
               throw new AnalysisException(
                 s"Aggregate expression required for pivot, found '$aggregate'")
             }
-            val name = if (singleAgg) value.toString else value + "_" + aggregate.prettyString
+            val name = if (singleAgg) value.toString else value + "_" + aggregate.sql
             Alias(filteredAggregate, name)()
           }
         }
@@ -347,7 +356,7 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubQueries(getTable(u)))
+        i.copy(table = EliminateSubqueryAliases(getTable(u)))
       case u: UnresolvedRelation =>
         try {
           getTable(u)
@@ -432,7 +441,8 @@ class Analyzer(
             case r if r == oldRelation => newRelation
           } transformUp {
             case other => other transformExpressions {
-              case a: Attribute => attributeRewrites.get(a).getOrElse(a)
+              case a: Attribute =>
+                attributeRewrites.get(a).getOrElse(a).withQualifiers(a.qualifiers)
             }
           }
           newRight
@@ -608,17 +618,24 @@ class Analyzer(
       case sa @ Sort(_, _, child: Aggregate) => sa
 
       case s @ Sort(order, _, child) if !s.resolved && child.resolved =>
-        val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
-        val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
-        val missingAttrs = requiredAttrs -- child.outputSet
-        if (missingAttrs.nonEmpty) {
-          // Add missing attributes and then project them away after the sort.
-          Project(child.output,
-            Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
-        } else if (newOrder != order) {
-          s.copy(order = newOrder)
-        } else {
-          s
+        try {
+          val newOrder = order.map(resolveExpressionRecursively(_, child).asInstanceOf[SortOrder])
+          val requiredAttrs = AttributeSet(newOrder).filter(_.resolved)
+          val missingAttrs = requiredAttrs -- child.outputSet
+          if (missingAttrs.nonEmpty) {
+            // Add missing attributes and then project them away after the sort.
+            Project(child.output,
+              Sort(newOrder, s.global, addMissingAttr(child, missingAttrs)))
+          } else if (newOrder != order) {
+            s.copy(order = newOrder)
+          } else {
+            s
+          }
+        } catch {
+          // Attempting to resolve it might fail. When this happens, return the original plan.
+          // Users will see an AnalysisException for resolution failure of missing attributes
+          // in Sort
+          case ae: AnalysisException => s
         }
     }
 
@@ -648,6 +665,11 @@ class Analyzer(
           }
           val newAggregateExpressions = a.aggregateExpressions ++ missingAttrs
           a.copy(aggregateExpressions = newAggregateExpressions)
+        case g: Generate =>
+          // If join is false, we will convert it to true for getting from the child the missing
+          // attributes that its child might have or could have.
+          val missing = missingAttrs -- g.child.outputSet
+          g.copy(join = true, child = addMissingAttr(g.child, missing))
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>
@@ -665,7 +687,7 @@ class Analyzer(
         resolved
       } else {
         plan match {
-          case u: UnaryNode if !u.isInstanceOf[Subquery] =>
+          case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
             resolveExpressionRecursively(resolved, u.child)
           case other => resolved
         }
@@ -699,6 +721,30 @@ class Analyzer(
                 case other => other
               }
             }
+        }
+    }
+  }
+
+  /**
+   * This rule resolve subqueries inside expressions.
+   *
+   * Note: CTE are handled in CTESubstitution.
+   */
+  object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
+
+    private def hasSubquery(e: Expression): Boolean = {
+      e.find(_.isInstanceOf[SubqueryExpression]).isDefined
+    }
+
+    private def hasSubquery(q: LogicalPlan): Boolean = {
+      q.expressions.exists(hasSubquery)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case q: LogicalPlan if q.childrenResolved && hasSubquery(q) =>
+        q transformExpressions {
+          case e: SubqueryExpression if !e.query.resolved =>
+            e.withNewPlan(execute(e.query))
         }
     }
   }
@@ -1325,12 +1371,12 @@ class Analyzer(
 }
 
 /**
- * Removes [[Subquery]] operators from the plan. Subqueries are only required to provide
+ * Removes [[SubqueryAlias]] operators from the plan. Subqueries are only required to provide
  * scoping information for attributes and can be removed once analysis is complete.
  */
-object EliminateSubQueries extends Rule[LogicalPlan] {
+object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-    case Subquery(_, child) => child
+    case SubqueryAlias(_, child) => child
   }
 }
 
@@ -1411,7 +1457,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
  */
 object ResolveUpCast extends Rule[LogicalPlan] {
   private def fail(from: Expression, to: DataType, walkedTypePath: Seq[String]) = {
-    throw new AnalysisException(s"Cannot up cast `${from.prettyString}` from " +
+    throw new AnalysisException(s"Cannot up cast ${from.sql} from " +
       s"${from.dataType.simpleString} to ${to.simpleString} as it may truncate\n" +
       "The type path of the target object is:\n" + walkedTypePath.mkString("", "\n", "\n") +
       "You can either add an explicit cast to the input data or choose a higher precision " +
