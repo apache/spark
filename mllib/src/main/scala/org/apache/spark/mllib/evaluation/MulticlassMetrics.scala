@@ -38,7 +38,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue()
   private lazy val labelCount: Long = labelCountByClass.values.sum
