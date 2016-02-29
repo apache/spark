@@ -72,5 +72,5 @@ class PigCliHook(BaseHook):
     def kill(self):
         if hasattr(self, 'sp'):
             if self.sp.poll() is None:
-                print("Killing the Hive job")
+                print("Killing the Pig job")
                 self.sp.kill()
