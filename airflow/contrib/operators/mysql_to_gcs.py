@@ -169,6 +169,7 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
         when a schema_filename is set.
         """
         d = {
+            FIELD_TYPE.TINY: 'INTEGER',
             FIELD_TYPE.BIT: 'INTEGER',
             FIELD_TYPE.DATETIME: 'TIMESTAMP',
             FIELD_TYPE.DECIMAL: 'FLOAT',
