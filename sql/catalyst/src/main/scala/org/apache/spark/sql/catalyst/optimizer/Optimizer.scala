@@ -431,10 +431,9 @@ object CollapseProject extends Rule[LogicalPlan] {
     // Substitute any attributes that are produced by the child projection, so that we safely
     // eliminate it.
     // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
-    // TODO: Fix TransformBase to avoid the cast below.
     val substitutedProjection = projectList1.map(_.transform {
       case a: Attribute => aliasMap.getOrElse(a, a)
-    }).asInstanceOf[Seq[NamedExpression]]
+    })
     // collapse 2 projects may introduce unnecessary Aliases, trim them here.
     substitutedProjection.map(p =>
       CleanupAliases.trimNonTopLevelAliases(p).asInstanceOf[NamedExpression]
