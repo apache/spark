@@ -149,7 +149,8 @@ $(document).ready(function() {
                         {name: 'seventh'},
                         {name: 'eighth'},
                     ],
-                    "autoWidth": false
+                    "autoWidth": false,
+                    "order": [[ 0, "desc" ]]
         };
 
         var rowGroupConf = {
