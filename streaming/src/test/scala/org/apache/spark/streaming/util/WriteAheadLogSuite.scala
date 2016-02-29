@@ -228,7 +228,7 @@ class FileBasedWriteAheadLogSuite
      the list of files.
      */
     val numThreads = 8
-    val fpool = ThreadUtils.newForkJoinPool(numThreads)
+    val fpool = ThreadUtils.newForkJoinPool("wal-test-thread-pool", numThreads)
     val executionContext = ExecutionContext.fromExecutorService(fpool)
 
     class GetMaxCounter {

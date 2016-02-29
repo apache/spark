@@ -158,9 +158,19 @@ private[spark] object ThreadUtils {
   }
 
   /**
-   * Construct a new ForkJoinPool with a specified max parallelism.
+   * Construct a new Java ForkJoinPool with a specified max parallelism and name prefix.
    */
-  def newForkJoinPool(maxThreadNumber: Int): scala.concurrent.forkjoin.ForkJoinPool = {
-    new scala.concurrent.forkjoin.ForkJoinPool(maxThreadNumber)
+  def newForkJoinPool(prefix: String, maxThreadNumber: Int): ForkJoinPool = {
+    class SparkForkJoinWorkerThread(pool: ForkJoinPool) extends ForkJoinWorkerThread(pool) {
+    }
+    class SparkForkJoinFactory extends ForkJoinPool.ForkJoinWorkerThreadFactory {
+      override def newThread(pool: ForkJoinPool): ForkJoinWorkerThread = {
+        val th = new SparkForkJoinWorkerThread(pool)
+        th.setName(prefix + "-" + th.getName())
+        th
+      }
+    }
+    val factory = new SparkForkJoinFactory()
+    new ForkJoinPool(maxThreadNumber, factory, null /* handler */, false /* asyncMode */)
   }
 }
