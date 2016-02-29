@@ -51,25 +51,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  /**
-   * Generates an additional set of aliased constraints by replacing the original constraint
-   * expressions with the corresponding alias
-   */
-  private def getAliasedConstraints: Set[Expression] = {
-    projectList.flatMap {
-      case a @ Alias(e, _) =>
-        child.constraints.map(_ transform {
-          case expr: Expression if expr.semanticEquals(e) =>
-            a.toAttribute
-        }).union(Set(EqualNullSafe(e, a.toAttribute)))
-      case _ =>
-        Set.empty[Expression]
-    }.toSet
-  }
-
-  override def validConstraints: Set[Expression] = {
-    child.constraints.union(getAliasedConstraints)
-  }
+  override def validConstraints: Set[Expression] =
+    child.constraints.union(getAliasedConstraints(projectList))
 }
 
 /**
@@ -126,9 +109,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] =
     child.constraints.union(splitConjunctivePredicates(condition).toSet)
-  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -157,9 +139,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
-  }
 
   // Intersect are only resolved if they don't introduce ambiguous expression ids,
   // since the Optimizer will convert Intersect to Join.
@@ -441,6 +422,9 @@ case class Aggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+
+  override def validConstraints: Set[Expression] =
+    child.constraints.union(getAliasedConstraints(aggregateExpressions))
 
   override def statistics: Statistics = {
     if (groupingExpressions.isEmpty) {

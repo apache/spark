@@ -72,6 +72,21 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(resolveColumn(tr, "c"))))
   }
 
+  test("propagating constraints in aggregate") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+
+    assert(tr.analyze.constraints.isEmpty)
+
+    val aliasedRelation = tr.where('c.attr > 10 && 'a.attr < 5)
+      .groupBy('a, 'c, 'b)('a, 'c.as("c1"), count('a).as("a3")).select('c1, 'a).analyze
+
+    verifyConstraints(aliasedRelation.analyze.constraints,
+      Set(resolveColumn(aliasedRelation.analyze, "c1") > 10,
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "c1")),
+        resolveColumn(aliasedRelation.analyze, "a") < 5,
+        IsNotNull(resolveColumn(aliasedRelation.analyze, "a"))))
+  }
+
   test("propagating constraints in aliases") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
 

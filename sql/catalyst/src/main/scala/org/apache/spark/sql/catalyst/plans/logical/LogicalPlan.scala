@@ -315,6 +315,22 @@ abstract class UnaryNode extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
 
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+    projectList.flatMap {
+      case a @ Alias(e, _) =>
+        child.constraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(e) =>
+            a.toAttribute
+        }).union(Set(EqualNullSafe(e, a.toAttribute)))
+      case _ =>
+        Set.empty[Expression]
+    }.toSet
+  }
+
   override protected def validConstraints: Set[Expression] = child.constraints
 
   override def statistics: Statistics = {
