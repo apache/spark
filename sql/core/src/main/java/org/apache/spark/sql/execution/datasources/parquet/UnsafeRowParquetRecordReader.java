@@ -628,7 +628,8 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
             dictionaryIds.reserve(total);
           }
           // Read and decode dictionary ids.
-          readIntBatch(rowId, num, dictionaryIds);
+          defColumn.readIntegers(
+              num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
           decodeDictionaryIds(rowId, num, column);
         } else {
           switch (descriptor.getType()) {
@@ -739,18 +740,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         default:
           throw new NotImplementedException("Unsupported type: " + descriptor.getType());
       }
-
-      if (dictionaryIds.numNulls() > 0) {
-        // Copy the NULLs over.
-        // TODO: we can improve this by decoding the NULLs directly into column. This would
-        // mean we decode the int ids into `dictionaryIds` and the NULLs into `column` and then
-        // just do the ID remapping as above.
-        for (int i = 0; i < num; ++i) {
-          if (dictionaryIds.getIsNull(rowId + i)) {
-            column.putNull(rowId + i);
-          }
-        }
-      }
     }
 
     /**
@@ -769,12 +758,15 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       // TODO: implement remaining type conversions
       if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType) {
         defColumn.readIntegers(
-            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, 0);
+            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else if (column.dataType() == DataTypes.ByteType) {
         defColumn.readBytes(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else if (DecimalType.is64BitDecimalType(column.dataType())) {
         defColumn.readIntsAsLongs(
+            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+      } else if (column.dataType() == DataTypes.ShortType) {
+        defColumn.readShorts(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else {
         throw new NotImplementedException("Unimplemented type: " + column.dataType());

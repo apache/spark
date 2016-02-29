@@ -143,7 +143,7 @@ object KMeansModel extends Loader[KMeansModel] {
       val k = (metadata \ "k").extract[Int]
       val centroids = sqlContext.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centroids.schema)
-      val localCentroids = centroids.map(Cluster.apply).collect()
+      val localCentroids = centroids.rdd.map(Cluster.apply).collect()
       assert(k == localCentroids.size)
       new KMeansModel(localCentroids.sortBy(_.id).map(_.point))
     }
