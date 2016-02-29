@@ -55,12 +55,16 @@ object EvaluatePython {
     new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
 
   def takeAndServe(df: DataFrame, n: Int): Int = {
-    registerPicklers()
+    val rows = df.queryExecution.executedPlan.executeTake(n).iterator
+    val iter = if (df.isOutputPickled) {
+      rows.map(_.getBinary(0))
+    } else {
+      registerPicklers()
+      new SerDeUtil.AutoBatchedPickler(
+        rows.map { row => EvaluatePython.toJava(row, df.schema) }
+      )
+    }
     df.withNewExecutionId {
-      val iter = new SerDeUtil.AutoBatchedPickler(
-        df.queryExecution.executedPlan.executeTake(n).iterator.map { row =>
-          EvaluatePython.toJava(row, df.schema)
-        })
       PythonRDD.serveIterator(iter, s"serve-DataFrame")
     }
   }
@@ -257,5 +261,13 @@ object EvaluatePython {
       registerPicklers()  // let it called in executor
       new SerDeUtil.AutoBatchedPickler(iter)
     }
+  }
+
+  /**
+   * The default schema for Python Dataset which is returned by typed operation.
+   */
+  val schemaOfPickled = {
+    val metaPickled = new MetadataBuilder().putBoolean("pickled", true).build()
+    new StructType().add("value", BinaryType, nullable = false, metadata = metaPickled)
   }
 }

@@ -30,6 +30,11 @@ import functools
 import time
 import datetime
 
+from itertools import chain
+
+if sys.version < '3':
+    from itertools import imap as map, ifilter as filter
+
 import py4j
 try:
     import xmlrunner
@@ -346,7 +351,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.read.json(self.sc.parallelize(["""{"a":2}"""]))
-        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema)
+        df2 = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df.schema)
         self.assertEqual(df.collect(), df2.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
@@ -1177,6 +1182,74 @@ class SQLTests(ReusedPySparkTestCase):
 
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
+
+    def test_basic_typed_operations(self):
+        data = [(i, str(i)) for i in range(100)]
+        ds = self.sqlCtx.createDataFrame(data, ("key", "value"))
+
+        def check_result(result, f):
+            expected_result = []
+            for k, v in data:
+                expected_result.append(f(k, v))
+            self.assertEqual(result, expected_result)
+
+        # convert row to python dict
+        ds2 = ds.map(lambda row: {"key": row.key + 1, "value": row.value})
+        schema = StructType().add("key", IntegerType()).add("value", StringType())
+        ds3 = ds2.applySchema(schema)
+        result = ds3.select("key").collect()
+        check_result(result, lambda k, v: Row(key=k + 1))
+
+        # use a different but compatible schema
+        schema = StructType().add("value", StringType())
+        result = ds2.applySchema(schema).collect()
+        check_result(result, lambda k, v: Row(value=v))
+
+        # use a flat schema
+        ds2 = ds.map(lambda row: row.key * 3)
+        result = ds2.applySchema(IntegerType()).collect()
+        check_result(result, lambda k, v: Row(value=k * 3))
+
+        # schema can be inferred automatically
+        result = ds.map(lambda row: row.key + 10).applySchema().collect()
+        check_result(result, lambda k, v: Row(value=k + 10))
+
+        # If no schema is given, by default it's a single binary field struct type.
+        from pyspark.sql.functions import length
+        result = ds2.select(length("value")).collect()
+        self.assertEqual(len(result), 100)
+
+        # If no schema is given, collect will return custom objects instead of rows.
+        result = ds.map(lambda row: row.value + "#").collect()
+        check_result(result, lambda k, v: v + "#")
+
+        # cannot appply schema to Dataset not returned by typed operations.
+        msg = "Cannot apply schema to a DataFrame which is not returned by typed operations"
+        self.assertRaisesRegexp(Exception, msg, lambda: ds.applySchema())
+
+        # row count should be corrected even no schema is specified.
+        self.assertEqual(ds.map(lambda row: row.key + 1).count(), 100)
+
+        # call cache() in the middle of 2 typed operations.
+        ds2 = ds.map(lambda row: row.key * 2).cache().map(lambda key: key + 1)
+        self.assertEqual(ds2.count(), 100)
+        result = ds2.collect()
+        check_result(result, lambda k, v: k * 2 + 1)
+
+        # other typed operations
+        ds2 = ds.map(lambda row: row.key * 2)
+
+        result = ds2.flatMap(lambda i: iter([i, i + 1])).collect()
+        expected_result = chain.from_iterable(map(lambda i: [i * 2, i * 2 + 1], range(100)))
+        self.assertEqual(result, list(expected_result))
+
+        result = ds2.mapPartitions(lambda it: map(lambda i: i + 1, it)).collect()
+        expected_result = map(lambda i: i * 2 + 1, range(100))
+        self.assertEqual(result, list(expected_result))
+
+        result = ds2.filter(lambda i: i > 33).collect()
+        expected_result = filter(lambda i: i > 33, map(lambda i: i * 2, range(100)))
+        self.assertEqual(result, list(expected_result))
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
