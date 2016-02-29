@@ -29,6 +29,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution, StreamingRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -49,7 +50,21 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     sqlContext.streams.resetTerminated()
   }
 
-  test("listing") {
+  /**
+   * Disable stdout and stderr when running the test. To not output the logs to the console,
+   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
+   * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
+   * we change System.out and System.err.
+   */
+  private def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
+
+  testQuietly("listing") {
     val (m1, ds1) = makeDataset
     val (m2, ds2) = makeDataset
     val (m3, ds3) = makeDataset
@@ -83,7 +98,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         require(!q2.isActive)
         require(q2.exception.isDefined)
       }
-      val ex2 = withClue("no error while getting non-active query") {
+      withClue("no error while getting non-active query") {
         intercept[IllegalArgumentException] {
           sqlContext.streams.get(q2.name).eq(q2)
         }
@@ -93,7 +108,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     }
   }
 
-  test("awaitAnyTermination without timeout and resetTerminated") {
+  testQuietly("awaitAnyTermination without timeout and resetTerminated") {
     val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
@@ -139,7 +154,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     }
   }
 
-  test("awaitAnyTermination with timeout and resetTerminated") {
+  testQuietly("awaitAnyTermination with timeout and resetTerminated") {
     val datasets = Seq.fill(6)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
