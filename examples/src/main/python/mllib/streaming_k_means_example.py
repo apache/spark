@@ -32,13 +32,19 @@ if __name__ == "__main__":
     # $example on$
     # we make an input stream of vectors for training,
     # as well as a stream of vectors for testing
+    def parse(lp):
+        label = float(lp[lp.find('(') + 1: lp.find(')')])
+        vec = Vectors.dense(lp[lp.find('[') + 1: lp.find(']')].split(','))
+
+        return LabeledPoint(label, vec)
+
     trainingData = sc.textFile("data/mllib/kmeans_data.txt")\
         .map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
-    testingData = sc.textFile("data/mllib/streaming_kmeans_data_test.txt")\
-        .map(lambda line: Vectors.dense([float(x) for x in line.strip().split(' ')]))
 
-    trainingQueue = [trainingData, trainingData]
-    testingQueue = [testingData, testingData]
+    testingData = sc.textFile("data/mllib/streaming_kmeans_data_test.txt").map(parse)
+
+    trainingQueue = [trainingData]
+    testingQueue = [testingData]
 
     trainingStream = ssc.queueStream(trainingQueue)
     testingStream = ssc.queueStream(testingQueue)
@@ -50,7 +56,7 @@ if __name__ == "__main__":
     # printing the predicted cluster assignments on new data points as they arrive.
     model.trainOn(trainingStream)
 
-    result = model.predictOn(testingStream)
+    result = model.predictOnValues(testingStream.map(lambda lp: (lp.label, lp.features)))
     result.pprint()
 
     ssc.start()
