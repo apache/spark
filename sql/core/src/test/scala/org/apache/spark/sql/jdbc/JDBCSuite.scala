@@ -450,5 +450,4 @@ class JDBCSuite extends SparkFunSuite with BeforeAndAfter {
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
   }
-
 }
