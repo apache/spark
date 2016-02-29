@@ -1225,7 +1225,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         # cannot appply schema to Dataset not returned by typed operations.
         msg = "Cannot apply schema to a DataFrame which is not returned by typed operations"
-        self.assertRaisesRegexp(RuntimeError, msg, lambda: ds.applySchema())
+        self.assertRaisesRegexp(Exception, msg, lambda: ds.applySchema())
 
         # row count should be corrected even no schema is specified.
         self.assertEqual(ds.map(lambda row: row.key + 1).count(), 100)

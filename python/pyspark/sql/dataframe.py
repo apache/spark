@@ -71,12 +71,23 @@ class DataFrame(object):
     """
 
     def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
+        if jdf is not None:
+            self._jdf = jdf
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
         self._schema = None  # initialized lazily
         self._lazy_rdd = None
+
+    def _deserializer(self):
+        if self._jdf.isOutputPickled():
+            # If the underlying java DataFrame's output is pickled, which means the query
+            # engine don't know the real schema of the data and just keep the pickled binary
+            # for each custom object(no batch).
+            # So we need to use non-batched deserializer for this DataFrame.
+            return PickleSerializer()
+        else:
+            return BatchedSerializer(PickleSerializer())
 
     @property
     @since(1.3)
@@ -85,14 +96,7 @@ class DataFrame(object):
         """
         if self._lazy_rdd is None:
             jrdd = self._jdf.javaToPython()
-            if self._jdf.isOutputPickled():
-                # If the underlying java DataFrame's output is pickled, which means the query
-                # engine don't know the real schema of the data and just keep the pickled binary
-                # for each custom object(no batch).  So we need to use non-batched serializer here.
-                deserializer = PickleSerializer()
-            else:
-                deserializer = BatchedSerializer(PickleSerializer())
-            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, deserializer)
+            self._lazy_rdd = RDD(jrdd, self.sql_ctx._sc, self._deserializer())
         return self._lazy_rdd
 
     @property
@@ -246,7 +250,9 @@ class DataFrame(object):
         >>> df.collect()
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        return self.rdd.collect()
+        with SCCallSiteSync(self._sc) as css:
+            port = self._jdf.collectToPython()
+        return list(_load_from_socket(port, self._deserializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -269,7 +275,10 @@ class DataFrame(object):
         >>> df.take(2)
         [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
         """
-        return self.limit(num).collect()
+        with SCCallSiteSync(self._sc) as css:
+            port = self._sc._jvm.org.apache.spark.sql.execution.python.EvaluatePython.takeAndServe(
+                self._jdf, num)
+        return list(_load_from_socket(port, self._deserializer()))
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -297,52 +306,58 @@ class DataFrame(object):
         StructType(List(StructField(value,StringType,true)))
         """
         msg = "Cannot apply schema to a DataFrame which is not returned by typed operations"
-        raise RuntimeError(msg)
+        raise Exception(msg)
 
     @ignore_unicode_prefix
-    @since(2.0)
-    def mapPartitions(self, func):
-        """Returns a new :class:`DataFrame` by applying the ``f`` function to each partition.
-
-        The schema of returned :class:`DataFrame` is a single binary field struct type, please
-        call `applySchema` to set the corrected schema before apply structured operations, e.g.
-        select, sort, groupBy, etc.
-
-        >>> def f(iterator):
-        ...     return map(lambda i: 1, iterator)
-        >>> df.mapPartitions(f).collect()
-        [1, 1]
-        """
-        return PipelinedDataFrame(self, func)
-
-    @ignore_unicode_prefix
-    @since(2.0)
-    def map(self, func):
+    @since(1.3)
+    def map(self, f):
         """ Returns a new :class:`DataFrame` by applying a the ``f`` function to each record.
 
-        The schema of returned :class:`DataFrame` is a single binary field struct type, please
-        call `applySchema` to set the corrected schema before apply structured operations, e.g.
-        select, sort, groupBy, etc.
+        .. versionchanged:: 2.0
+           Now it returns a :class:`DataFrame` instead of a :class:`RDD`.
+           The schema of returned :class:`DataFrame` is a single binary field struct type, please
+           call `applySchema` to set the corrected schema before apply structured operations, e.g.
+           select, sort, groupBy, etc.
 
         >>> df.map(lambda p: p.name).collect()
         [u'Alice', u'Bob']
         """
-        return self.mapPartitions(lambda iterator: map(func, iterator))
+        return self.mapPartitions(lambda iterator: map(f, iterator))
 
     @ignore_unicode_prefix
-    @since(2.0)
-    def flatMap(self, func):
+    @since(1.3)
+    def flatMap(self, f):
         """ Returns a new :class:`DataFrame` by first applying the ``f`` function to each record,
         and then flattening the results.
 
-        The schema of returned :class:`DataFrame` is a single binary field struct type, please
-        call `applySchema` to set the corrected schema before apply structured operations, e.g.
-        select, sort, groupBy, etc.
+        .. versionchanged:: 2.0
+           Now it returns a :class:`DataFrame` instead of a :class:`RDD`.
+           The schema of returned :class:`DataFrame` is a single binary field struct type, please
+           call `applySchema` to set the corrected schema before apply structured operations, e.g.
+           select, sort, groupBy, etc.
 
         >>> df.flatMap(lambda p: p.name).collect()
         [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
         """
-        return self.mapPartitions(lambda iterator: chain.from_iterable(map(func, iterator)))
+        return self.mapPartitions(lambda iterator: chain.from_iterable(map(f, iterator)))
+
+    @ignore_unicode_prefix
+    @since(1.3)
+    def mapPartitions(self, f):
+        """Returns a new :class:`DataFrame` by applying the ``f`` function to each partition.
+
+        .. versionchanged:: 2.0
+           Now it returns a :class:`DataFrame` instead of a :class:`RDD`, the
+           `preservesPartitioning` parameter is removed.
+           The schema of returned :class:`DataFrame` is a single binary field struct type, please
+           call `applySchema` to set the corrected schema before apply structured operations, e.g.
+           select, sort, groupBy, etc.
+
+        >>> f = lambda iterator: map(lambda i: 1, iterator)
+        >>> df.mapPartitions(f).collect()
+        [1, 1]
+        """
+        return PipelinedDataFrame(self, f)
 
     @since(1.3)
     def foreach(self, f):
@@ -1471,13 +1486,8 @@ class PipelinedDataFrame(DataFrame):
     """
 
     def __init__(self, prev, func):
+        super(PipelinedDataFrame, self).__init__(None, prev.sql_ctx)
         self._jdf_val = None
-        self._schema = None
-        self.is_cached = False
-        self.sql_ctx = prev.sql_ctx
-        self._sc = self.sql_ctx and self.sql_ctx._sc
-        self._lazy_rdd = None
-
         if not isinstance(prev, PipelinedDataFrame) or prev.is_cached:
             # This is the beginning of this pipeline.
             self._func = func
