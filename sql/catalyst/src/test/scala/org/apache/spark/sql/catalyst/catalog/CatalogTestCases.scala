@@ -212,6 +212,18 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  test("get/set current database") {
+    val catalog = newBasicCatalog()
+    assert(catalog.getCurrentDatabase === "default")
+    catalog.setCurrentDatabase("db1")
+    assert(catalog.getCurrentDatabase === "db1")
+    catalog.setCurrentDatabase("db2")
+    assert(catalog.getCurrentDatabase === "db2")
+    intercept[AnalysisException] {
+      catalog.setCurrentDatabase("does_not_exist")
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Tables
   // --------------------------------------------------------------------------

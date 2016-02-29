@@ -715,6 +715,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
   override def unregisterAllTables(): Unit = {}
 
+  override def getCurrentDatabase: String = {
+    client.currentDatabase
+  }
+
   override def setCurrentDatabase(databaseName: String): Unit = {
     client.setCurrentDatabase(databaseName)
   }

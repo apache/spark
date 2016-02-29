@@ -42,6 +42,9 @@ class InMemoryCatalog extends Catalog {
   // Database name -> description
   private val catalog = new scala.collection.mutable.HashMap[String, DatabaseDesc]
 
+  // Name of current database
+  private var currentDatabase: String = "default"
+
   private def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
     val regex = pattern.replaceAll("\\*", ".*").r
     names.filter { funcName => regex.pattern.matcher(funcName).matches() }
@@ -141,7 +144,14 @@ class InMemoryCatalog extends Catalog {
     filterPattern(listDatabases(), pattern)
   }
 
-  override def setCurrentDatabase(db: String): Unit = { /* no-op */ }
+  override def getCurrentDatabase: String = synchronized {
+    currentDatabase
+  }
+
+  override def setCurrentDatabase(db: String): Unit = synchronized {
+    requireDbExists(db)
+    currentDatabase = db
+  }
 
   // --------------------------------------------------------------------------
   // Tables

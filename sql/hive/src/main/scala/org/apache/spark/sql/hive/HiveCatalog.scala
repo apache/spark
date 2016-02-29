@@ -134,6 +134,10 @@ private[spark] class HiveCatalog(client: HiveClient) extends Catalog with Loggin
     client.listDatabases(pattern)
   }
 
+  override def getCurrentDatabase: String = withClient {
+    client.currentDatabase
+  }
+
   override def setCurrentDatabase(db: String): Unit = withClient {
     client.setCurrentDatabase(db)
   }
