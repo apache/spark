@@ -18,8 +18,11 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.attribute.PosixFilePermissions
 import java.security.NoSuchAlgorithmException
 import javax.net.ssl.SSLContext
+import javax.xml.bind.DatatypeConverter
 
 import org.eclipse.jetty.util.ssl.SslContextFactory
 
@@ -163,6 +166,25 @@ private[spark] object SSLOptions extends Logging {
    */
   def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
     val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
+
+    def temporaryStoreFile(b64: String): File = {
+      val bytes = DatatypeConverter.parseBase64Binary(b64)
+      val storeFile = Files.createTempFile("spark-keystore", "tmp",
+        PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")))
+      storeFile.toFile.deleteOnExit() // just to be sure
+      Files.write(storeFile, bytes)
+      storeFile.toFile
+    }
+
+    conf.getOption(s"$ns.keyStoreBase64").foreach(b64 => {
+      val f = temporaryStoreFile(b64)
+      conf.set(s"$ns.keyStore", f.getAbsolutePath)
+    })
+
+    conf.getOption(s"$ns.trustStoreBase64").foreach(b64 => {
+      val f = temporaryStoreFile(b64)
+      conf.set(s"$ns.trustStore", f.getAbsolutePath)
+    })
 
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
         .orElse(defaults.flatMap(_.keyStore))

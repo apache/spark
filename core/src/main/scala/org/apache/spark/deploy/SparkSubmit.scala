@@ -432,6 +432,11 @@ object SparkSubmit {
       args.files = mergeFileLists(args.files, args.primaryResource)
     }
 
+    // Ignore insecure TLS certificates?
+    if (args.noCertVerification) {
+      System.setProperty("spark.ssl.noCertVerification", "true")
+    }
+
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
 

@@ -20,7 +20,9 @@ package org.apache.spark.deploy.rest
 import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{ConnectException, HttpURLConnection, SocketException, URL}
 import java.nio.charset.StandardCharsets
+import java.security.cert.X509Certificate
 import java.util.concurrent.TimeoutException
+import javax.net.ssl.{HttpsURLConnection, SSLContext, SSLSession, TrustManager, X509TrustManager}
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
@@ -60,7 +62,11 @@ import org.apache.spark.util.Utils
 private[spark] class RestSubmissionClient(master: String) extends Logging {
   import RestSubmissionClient._
 
-  private val supportedMasterPrefixes = Seq("spark://", "mesos://")
+  private val supportedMasterPrefixes = Map(
+    "spark://" -> "http://",
+    "mesos://" -> "http://",
+    "mesos-ssl://" -> "https://"
+  )
 
   private val masters: Array[String] = if (master.startsWith("spark://")) {
     Utils.parseStandaloneMasterUrls(master)
@@ -186,10 +192,35 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     message
   }
 
+  private class AllTrustManager extends X509TrustManager {
+    def getAcceptedIssuers: Array[X509Certificate] = null
+    def checkClientTrusted(certs: Array[X509Certificate], authType: String): Unit = {}
+    def checkServerTrusted(certs: Array[X509Certificate], authType: String): Unit = {}
+  }
+
+  val trustAllCerts = Array[TrustManager](new AllTrustManager)
+  val trustAllContext = SSLContext.getInstance("SSL")
+  trustAllContext.init(null, trustAllCerts, new java.security.SecureRandom())
+
+  private def urlConnection(url: URL): HttpURLConnection = {
+    val con = url.openConnection().asInstanceOf[HttpURLConnection]
+    if (url.getProtocol == "https") {
+      if (System.getProperty("spark.ssl.noCertVerification", "false") == "true") {
+        logInfo(s"Disabling TLS certificate verification for $url")
+        val scon = con.asInstanceOf[HttpsURLConnection]
+        scon.setSSLSocketFactory(trustAllContext.getSocketFactory)
+        scon.setHostnameVerifier(new javax.net.ssl.HostnameVerifier {
+          def verify(hostname: String, sslSession: SSLSession): Boolean = true
+        })
+      }
+    }
+    con
+  }
+
   /** Send a GET request to the specified URL. */
   private def get(url: URL): SubmitRestProtocolResponse = {
     logDebug(s"Sending GET request to server at $url.")
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    val conn = urlConnection(url)
     conn.setRequestMethod("GET")
     readResponse(conn)
   }
@@ -197,7 +228,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   /** Send a POST request to the specified URL. */
   private def post(url: URL): SubmitRestProtocolResponse = {
     logDebug(s"Sending POST request to server at $url.")
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    val conn = urlConnection(url)
     conn.setRequestMethod("POST")
     readResponse(conn)
   }
@@ -205,7 +236,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   /** Send a POST request with the given JSON as the body to the specified URL. */
   private def postJson(url: URL, json: String): SubmitRestProtocolResponse = {
     logDebug(s"Sending POST request to server at $url:\n$json")
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+    val conn = urlConnection(url)
     conn.setRequestMethod("POST")
     conn.setRequestProperty("Content-Type", "application/json")
     conn.setRequestProperty("charset", "utf-8")
@@ -294,18 +325,20 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
   /** Return the base URL for communicating with the server, including the protocol version. */
   private def getBaseUrl(master: String): String = {
     var masterUrl = master
+    var scheme = "http://"
     supportedMasterPrefixes.foreach { prefix =>
-      if (master.startsWith(prefix)) {
-        masterUrl = master.stripPrefix(prefix)
+      if (master.startsWith(prefix._1)) {
+        masterUrl = master.stripPrefix(prefix._1)
+        scheme = prefix._2
       }
     }
     masterUrl = masterUrl.stripSuffix("/")
-    s"http://$masterUrl/$PROTOCOL_VERSION/submissions"
+    s"$scheme$masterUrl/$PROTOCOL_VERSION/submissions"
   }
 
   /** Throw an exception if this is not standalone mode. */
   private def validateMaster(master: String): Unit = {
-    val valid = supportedMasterPrefixes.exists { prefix => master.startsWith(prefix) }
+    val valid = supportedMasterPrefixes.exists { prefix => master.startsWith(prefix._1) }
     if (!valid) {
       throw new IllegalArgumentException(
         "This REST client only supports master URLs that start with " +

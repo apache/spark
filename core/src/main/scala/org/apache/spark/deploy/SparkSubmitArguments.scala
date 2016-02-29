@@ -70,6 +70,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
+  var noCertVerification: Boolean = false
 
   // Standalone cluster mode only
   var supervise: Boolean = false
