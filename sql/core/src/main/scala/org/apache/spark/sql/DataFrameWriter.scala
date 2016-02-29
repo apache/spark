@@ -453,11 +453,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   format("json").save(path)
    * }}}
    *
-   * You can set the following JSON-specific options for writing JSON files:
-   * <li>`compression` or `codec` (default `null`): compression codec to use when saving to file.
-   * This should be the fully qualified name of a class implementing
-   * [[org.apache.hadoop.io.compress.CompressionCodec]] or one of the known case-insensitive
-   * shorten names(`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   * You can set the following JSON-specific option(s) for writing JSON files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
    *
    * @since 1.4.0
    */
@@ -498,11 +496,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   df.write().text("/path/to/output")
    * }}}
    *
-   * You can set the following options for writing text files:
-   * <li>`compression` or `codec` (default `null`): compression codec to use when saving to file.
-   * This should be the fully qualified name of a class implementing
-   * [[org.apache.hadoop.io.compress.CompressionCodec]] or one of the known case-insensitive
-   * shorten names(`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   * You can set the following option(s) for writing text files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
    *
    * @since 1.6.0
    */
@@ -515,11 +511,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   format("csv").save(path)
    * }}}
    *
-   * You can set the following CSV-specific options for writing CSV files:
-   * <li>`compression` or `codec` (default `null`): compression codec to use when saving to file.
-   * This should be the fully qualified name of a class implementing
-   * [[org.apache.hadoop.io.compress.CompressionCodec]] or one of the known case-insensitive
-   * shorten names(`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   * You can set the following CSV-specific option(s) for writing CSV files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
    *
    * @since 2.0.0
    */
