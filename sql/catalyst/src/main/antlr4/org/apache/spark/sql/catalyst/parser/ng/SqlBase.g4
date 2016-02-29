@@ -28,8 +28,8 @@ singleExpression
     : namedExpression EOF
     ;
 
-singleQualifiedName
-    : qualifiedName EOF
+singleTableIdentifier
+    : tableIdentifier EOF
     ;
 
 statement
@@ -43,7 +43,6 @@ statement
         '(' tableElement (',' tableElement)* ')'
         (WITH tableProperties)?                                        #createTable
     | DROP TABLE (IF EXISTS)? qualifiedName                            #dropTable
-    | INSERT INTO qualifiedName columnAliases? query                   #insertInto
     | DELETE FROM qualifiedName (WHERE booleanExpression)?             #delete
     | ALTER TABLE from=qualifiedName RENAME TO to=qualifiedName        #renameTable
     | ALTER TABLE tableName=qualifiedName
@@ -74,9 +73,21 @@ statement
     ;
 
 query
-    :  ctes? queryNoWith
+    :  ctes? insertInto? queryNoWith
     ;
 
+insertInto
+    : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
+    | INSERT INTO TABLE? tableIdentifier partitionSpec?
+    ;
+
+partitionSpec
+    : PARTITION '(' partitionVal (',' partitionVal)* ')'
+    ;
+
+partitionVal
+    : identifier (EQ constant)?
+    ;
 ctes
     : WITH namedQuery (',' namedQuery)*
     ;
@@ -93,10 +104,14 @@ tableProperty
     : identifier EQ expression
     ;
 
-queryNoWith:
-      queryTerm
-      (ORDER BY sortItem (',' sortItem)*)?
-      (LIMIT limit=(INTEGER_VALUE | ALL))?
+queryNoWith
+    : queryTerm
+      (ORDER BY order+=sortItem (',' order+=sortItem)*)?
+      (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
+      (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
+      (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
+      windows?
+      (LIMIT limit=expression)?
     ;
 
 queryTerm
@@ -106,10 +121,10 @@ queryTerm
     ;
 
 queryPrimary
-    : querySpecification                   #queryPrimaryDefault
-    | TABLE qualifiedName                  #table
-    | VALUES expression (',' expression)*  #inlineTable
-    | '(' queryNoWith  ')'                 #subquery
+    : querySpecification                                                    #queryPrimaryDefault
+    | TABLE tableIdentifier                                                 #table
+    | inlineTable                                                           #inlineTableDef1
+    | '(' queryNoWith  ')'                                                  #subquery
     ;
 
 sortItem
@@ -120,25 +135,26 @@ querySpecification
     : SELECT setQuantifier? selectItem (',' selectItem)*
       (FROM relation (',' relation)*)?
       (WHERE where=booleanExpression)?
-      (GROUP BY groupingElement (',' groupingElement)*)?
+      (lateralView)*
+      aggregation?
       (HAVING having=booleanExpression)?
+      windows?
     ;
 
-groupingElement
-    : groupingExpressions                                               #singleGroupingSet
-    | ROLLUP '(' (qualifiedName (',' qualifiedName)*)? ')'              #rollup
-    | CUBE '(' (qualifiedName (',' qualifiedName)*)? ')'                #cube
-    | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'              #multipleGroupingSets
+aggregation
+    : GROUP BY expression (',' expression)* (
+      WITH kind=ROLLUP
+    | WITH kind=CUBE
+    | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
     ;
 
-groupingExpressions
+groupingSet
     : '(' (expression (',' expression)*)? ')'
     | expression
     ;
 
-groupingSet
-    : '(' (qualifiedName (',' qualifiedName)*)? ')'
-    | qualifiedName
+lateralView
+    : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)
     ;
 
 namedQuery
@@ -159,7 +175,7 @@ selectItem
 relation
     : left=relation
       ( CROSS JOIN right=sampledRelation
-      | joinType JOIN rightRelation=relation joinCriteria
+      | joinType JOIN rightRelation=relation booleanExpression
       | NATURAL joinType JOIN right=sampledRelation
       )                                           #joinRelation
     | sampledRelation                             #relationDefault
@@ -168,31 +184,19 @@ relation
 joinType
     : INNER?
     | LEFT OUTER?
+    | LEFT SEMI
     | RIGHT OUTER?
     | FULL OUTER?
     ;
 
-joinCriteria
-    : ON booleanExpression
-    | USING '(' identifier (',' identifier)* ')'
-    ;
-
 sampledRelation
-    : aliasedRelation (
-        TABLESAMPLE sampleType '(' percentage=expression ')'
-        RESCALED?
-        (STRATIFY ON '(' stratify+=expression (',' stratify+=expression)* ')')?
+    : relationPrimary (
+        TABLESAMPLE '('
+         ( (percentage=(INTEGER_VALUE | DECIMAL_VALUE) sampleType=PERCENTLIT)
+         | (expression sampleType=ROWS)
+         | (sampleType=BUCKET numerator=INTEGER_VALUE OUT OF denominator=INTEGER_VALUE (ON identifier)?))
+         ')'
       )?
-    ;
-
-sampleType
-    : BERNOULLI
-    | SYSTEM
-    | POISSONIZED
-    ;
-
-aliasedRelation
-    : relationPrimary (AS? identifier columnAliases?)?
     ;
 
 columnAliases
@@ -200,10 +204,18 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName                                                   #tableName
-    | '(' query ')'                                                   #subqueryRelation
-    | UNNEST '(' expression (',' expression)* ')' (WITH ORDINALITY)?  #unnest
-    | '(' relation ')'                                                #parenthesizedRelation
+    : tableIdentifier (AS? identifier)?                             #tableName
+    | '(' query ')' (AS? identifier)?                               #aliasedQuery
+    | '(' relation ')'  (AS? identifier)?                           #aliasedRelation
+    | inlineTable                                                   #inlineTableDef2
+    ;
+
+inlineTable
+    : VALUES expression (',' expression)*  (AS? identifier columnAliases?)?
+    ;
+
+tableIdentifier
+    : (db=identifier '.')? table=identifier
     ;
 
 namedExpression
@@ -240,7 +252,7 @@ predicate[ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                      #valueExpressionDefault
-    | operator=(MINUS | PLUS| TILDE) valueExpression                                         #arithmeticUnary
+    | operator=(MINUS | PLUS | TILDE) valueExpression                                        #arithmeticUnary
     | left=valueExpression operator=(ASTERISK | SLASH | PERCENT | DIV) right=valueExpression #arithmeticBinary
     | left=valueExpression operator=(PLUS | MINUS) right=valueExpression                     #arithmeticBinary
     | left=valueExpression operator=AMPERSAND right=valueExpression                          #arithmeticBinary
@@ -249,24 +261,28 @@ valueExpression
     ;
 
 primaryExpression
-    : NULL                                                                           #nullLiteral
-    | interval                                                                       #intervalLiteral
-    | identifier STRING                                                              #typeConstructor
-    | number                                                                         #numericLiteral
-    | booleanValue                                                                   #booleanLiteral
-    | STRING+                                                                        #stringLiteral
-    | '(' expression (',' expression)+ ')'                                           #rowConstructor
-    | qualifiedName '(' (setQuantifier? ASTERISK) ')' over?                          #functionCall
-    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' over?     #functionCall
-    | '(' query ')'                                                                  #subqueryExpression
-    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END         #simpleCase
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                         #searchedCase
-    | CAST '(' expression AS dataType ')'                                            #cast
-    | ARRAY '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
-    | value=primaryExpression '[' index=valueExpression ']'                          #subscript
-    | identifier                                                                     #columnReference
-    | base=primaryExpression '.' fieldName=identifier                                #dereference
-    | '(' expression ')'                                                             #parenthesizedExpression
+    : constant                                                                                 #constantDefault
+    | '(' expression (',' expression)+ ')'                                                     #rowConstructor
+    | qualifiedName '(' (setQuantifier? ASTERISK) ')' (OVER windowSpec)?                       #functionCall
+    | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
+    | '(' query ')'                                                                            #subqueryExpression
+    | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
+    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    | CAST '(' expression AS dataType ')'                                                      #cast
+    | ARRAY '[' (expression (',' expression)*)? ']'                                            #arrayConstructor
+    | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
+    | identifier                                                                               #columnReference
+    | base=primaryExpression '.' fieldName=identifier                                          #dereference
+    | '(' expression ')'                                                                       #parenthesizedExpression
+    ;
+
+constant
+    : NULL                                                                                     #nullLiteral
+    | interval                                                                                 #intervalLiteral
+    | identifier STRING                                                                        #typeConstructor
+    | number                                                                                   #numericLiteral
+    | booleanValue                                                                             #booleanLiteral
+    | STRING+                                                                                  #stringLiteral
     ;
 
 comparisonOperator
@@ -311,17 +327,21 @@ whenClause
     : WHEN condition=expression THEN result=expression
     ;
 
-over
-    : OVER name=identifier  #windowRef
-    | OVER windowSpec       #windowDef
+windows
+    : WINDOW namedWindow (',' namedWindow)*
+    ;
+
+namedWindow
+    : identifier AS windowSpec
     ;
 
 windowSpec
-    : '('
+    : name=identifier  #windowRef
+    | '('
       (PARTITION BY partition+=expression (',' partition+=expression)*)?
       (ORDER BY sortItem (',' sortItem)*)?
       windowFrame?
-      ')'
+      ')'              #windowDef
     ;
 
 windowFrame
@@ -386,10 +406,11 @@ nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | SCHEMAS | CATALOGS | SESSION
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY
+    | LATERAL | WINDOW
     | DATE | TIMESTAMP | INTERVAL
     | YEAR | WEEK| MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
     | EXPLAIN | FORMAT | TYPE | TEXT | GRAPHVIZ | LOGICAL | DISTRIBUTED
-    | TABLESAMPLE | SYSTEM | BERNOULLI | POISSONIZED | USE | TO
+    | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
     | RESCALED | APPROXIMATE | CONFIDENCE
     | SET | RESET
     | VIEW | REPLACE
@@ -437,7 +458,6 @@ FALSE: 'FALSE';
 NULLS: 'NULLS';
 FIRST: 'FIRST';
 LAST: 'LAST';
-ESCAPE: 'ESCAPE';
 ASC: 'ASC';
 DESC: 'DESC';
 FOR: 'FOR';
@@ -463,11 +483,13 @@ CROSS: 'CROSS';
 OUTER: 'OUTER';
 INNER: 'INNER';
 LEFT: 'LEFT';
+SEMI: 'SEMI';
 RIGHT: 'RIGHT';
 FULL: 'FULL';
 NATURAL: 'NATURAL';
-USING: 'USING';
 ON: 'ON';
+LATERAL: 'LATERAL';
+WINDOW: 'WINDOW';
 OVER: 'OVER';
 PARTITION: 'PARTITION';
 RANGE: 'RANGE';
@@ -510,16 +532,11 @@ UNION: 'UNION';
 EXCEPT: 'EXCEPT';
 INTERSECT: 'INTERSECT';
 TO: 'TO';
-SYSTEM: 'SYSTEM';
-BERNOULLI: 'BERNOULLI';
-POISSONIZED: 'POISSONIZED';
 TABLESAMPLE: 'TABLESAMPLE';
 RESCALED: 'RESCALED';
 STRATIFY: 'STRATIFY';
 ALTER: 'ALTER';
 RENAME: 'RENAME';
-UNNEST: 'UNNEST';
-ORDINALITY: 'ORDINALITY';
 ARRAY: 'ARRAY';
 MAP: 'MAP';
 STRUCT: 'STRUCT';
@@ -564,6 +581,16 @@ TILDE: '~';
 AMPERSAND: '&';
 PIPE: '|';
 HAT: '^';
+
+PERCENTLIT: 'PERCENT';
+BUCKET: 'BUCKET';
+OUT: 'OUT';
+OF: 'OF';
+
+SORT: 'SORT';
+CLUSTER: 'CLUSTER';
+DISTRIBUTE: 'DISTRIBUTE';
+OVERWRITE: 'OVERWRITE';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

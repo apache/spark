@@ -36,7 +36,7 @@ object ParseDriver extends ParserInterface with Logging {
 
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
-    parser.singleQualifiedName()
+    parser.singleTableIdentifier()
   }
 
   /** Creates LogicalPlan for a given SQL string. */

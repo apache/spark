@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.ng.ParseDriver
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
-  val parser = new CatalystQl()
+  val parser = ParseDriver
 
   test("test case insensitive") {
     val result = Project(UnresolvedAlias(Literal(1)):: Nil, OneRowRelation)
