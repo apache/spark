@@ -19,6 +19,7 @@ _operators = {
         'ShortCircuitOperator',
     ],
     'hive_operator': ['HiveOperator'],
+    'pig_operator': ['PigOperator'],
     'presto_check_operator': [
         'PrestoCheckOperator',
         'PrestoValueCheckOperator',
