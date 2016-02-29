@@ -663,7 +663,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       OuterObject.InnerClass("foo"))
   }
 
+  /////////////////////////////////////////////////////////////////////////////
   // Tests for operations migrated from DataFrame
+  /////////////////////////////////////////////////////////////////////////////
 
   test("column selection") {
     val df = Seq(Tuple1(1)).toDS().as("t")
