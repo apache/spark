@@ -39,14 +39,15 @@ import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.{ManualClock, Utils}
-import WriteAheadLogBasedBlockHandler._
-import WriteAheadLogSuite._
 
 class ReceivedBlockHandlerSuite
   extends SparkFunSuite
   with BeforeAndAfter
   with Matchers
   with Logging {
+
+  import WriteAheadLogBasedBlockHandler._
+  import WriteAheadLogSuite._
 
   val conf = new SparkConf()
     .set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
@@ -254,7 +255,7 @@ class ReceivedBlockHandlerSuite
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem)
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)

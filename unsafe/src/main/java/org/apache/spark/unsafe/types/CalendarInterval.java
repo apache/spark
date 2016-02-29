@@ -188,6 +188,11 @@ public final class CalendarInterval implements Serializable {
             Integer.MIN_VALUE, Integer.MAX_VALUE);
           result = new CalendarInterval(month, 0L);
 
+        } else if (unit.equals("week")) {
+          long week = toLongWithRange("week", m.group(1),
+                  Long.MIN_VALUE / MICROS_PER_WEEK, Long.MAX_VALUE / MICROS_PER_WEEK);
+          result = new CalendarInterval(0, week * MICROS_PER_WEEK);
+
         } else if (unit.equals("day")) {
           long day = toLongWithRange("day", m.group(1),
             Long.MIN_VALUE / MICROS_PER_DAY, Long.MAX_VALUE / MICROS_PER_DAY);
@@ -205,6 +210,15 @@ public final class CalendarInterval implements Serializable {
 
         } else if (unit.equals("second")) {
           long micros = parseSecondNano(m.group(1));
+          result = new CalendarInterval(0, micros);
+
+        } else if (unit.equals("millisecond")) {
+          long millisecond = toLongWithRange("millisecond", m.group(1),
+                  Long.MIN_VALUE / MICROS_PER_MILLI, Long.MAX_VALUE / MICROS_PER_MILLI);
+          result = new CalendarInterval(0, millisecond * MICROS_PER_MILLI);
+
+        } else if (unit.equals("microsecond")) {
+          long micros = Long.valueOf(m.group(1));
           result = new CalendarInterval(0, micros);
         }
       } catch (Exception e) {

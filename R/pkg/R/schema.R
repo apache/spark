@@ -115,20 +115,7 @@ structField.jobj <- function(x) {
 }
 
 checkType <- function(type) {
-  primtiveTypes <- c("byte",
-                     "integer",
-                     "float",
-                     "double",
-                     "numeric",
-                     "character",
-                     "string",
-                     "binary",
-                     "raw",
-                     "logical",
-                     "boolean",
-                     "timestamp",
-                     "date")
-  if (type %in% primtiveTypes) {
+  if (!is.null(PRIMITIVE_TYPES[[type]])) {
     return()
   } else {
     # Check complex types

@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types
 
 import org.apache.commons.lang3.StringUtils
-
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 // scalastyle:off

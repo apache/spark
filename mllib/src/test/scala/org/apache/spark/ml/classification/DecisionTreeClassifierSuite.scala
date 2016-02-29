@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -72,7 +72,8 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setImpurity("gini")
       .setMaxDepth(2)
       .setMaxBins(100)
-    val categoricalFeatures = Map(0 -> 3, 1-> 3)
+      .setSeed(1)
+    val categoricalFeatures = Map(0 -> 3, 1 -> 3)
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
@@ -213,7 +214,7 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
       .setMaxBins(2)
       .setMaxDepth(2)
       .setMinInstancesPerNode(2)
-    val categoricalFeatures = Map(0 -> 2, 1-> 2)
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
     val numClasses = 2
     compareAPIs(rdd, dt, categoricalFeatures, numClasses)
   }
@@ -272,6 +273,44 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
     val model = dt.fit(df)
+  }
+
+  test("Use soft prediction for binary classification with ordered categorical features") {
+    // The following dataset is set up such that the best split is {1} vs. {0, 2}.
+    // If the hard prediction is used to order the categories, then {0} vs. {1, 2} is chosen.
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(0.0)),
+      LabeledPoint(1.0, Vectors.dense(0.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(1.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(0.0, Vectors.dense(2.0)),
+      LabeledPoint(1.0, Vectors.dense(2.0)))
+    val data = sc.parallelize(arr)
+    val df = TreeTests.setMetadata(data, Map(0 -> 3), 2)
+
+    // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("gini")
+      .setMaxDepth(1)
+      .setMaxBins(3)
+    val model = dt.fit(df)
+    model.rootNode match {
+      case n: InternalNode =>
+        n.split match {
+          case s: CategoricalSplit =>
+            assert(s.leftCategories === Array(1.0))
+          case other =>
+            fail(s"All splits should be categorical, but got ${other.getClass.getName}: $other.")
+        }
+      case other =>
+        fail(s"Root node should be an internal node, but got ${other.getClass.getName}: $other.")
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

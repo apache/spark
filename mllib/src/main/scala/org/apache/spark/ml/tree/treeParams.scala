@@ -20,16 +20,19 @@ package org.apache.spark.ml.tree
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * Parameters for Decision Tree-based algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointInterval {
+private[ml] trait DecisionTreeParams extends PredictorParams
+  with HasCheckpointInterval with HasSeed {
 
   /**
    * Maximum depth of the tree (>= 0).
@@ -122,6 +125,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams with HasCheckpointI
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
+
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group expertSetParam */
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
@@ -252,12 +258,28 @@ private[ml] object TreeRegressorParams {
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
 }
 
+private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
+  with TreeRegressorParams with HasVarianceCol {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
+    } else {
+      newSchema
+    }
+  }
+}
+
 /**
  * Parameters for Decision Tree-based ensemble algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].
@@ -275,9 +297,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
 
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
-
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   /**
    * Create a Strategy instance to use with the old API.

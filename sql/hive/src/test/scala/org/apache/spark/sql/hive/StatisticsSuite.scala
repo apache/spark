@@ -19,18 +19,22 @@ package org.apache.spark.sql.hive
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{Row, SQLConf, QueryTest}
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.parser.SimpleParserConf
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class StatisticsSuite extends QueryTest with TestHiveSingleton {
   import hiveContext.sql
 
+  val parser = new HiveQl(SimpleParserConf())
+
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
-      val parsed = HiveQl.parseSql(analyzeCommand)
+      val parsed = parser.parsePlan(analyzeCommand)
       val operators = parsed.collect {
         case a: AnalyzeTable => a
         case o => o
@@ -166,7 +170,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
         val shj = df.queryExecution.sparkPlan.collect { case j: SortMergeJoin => j }
         assert(shj.size === 1,
-          "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
+          "SortMergeJoin should be planned when BroadcastHashJoin is turned off")
 
         sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp""")
       }

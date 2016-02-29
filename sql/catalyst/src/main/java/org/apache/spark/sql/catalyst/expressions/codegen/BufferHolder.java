@@ -17,18 +17,43 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen;
 
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
 
 /**
- * A helper class to manage the row buffer used in `GenerateUnsafeProjection`.
+ * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and
+ * automatically re-point the unsafe row to it.
  *
- * Note that it is only used in `GenerateUnsafeProjection`, so it's safe to mark member variables
- * public for ease of use.
+ * This class can be used to build a one-pass unsafe row writing program, i.e. data will be written
+ * to the data buffer directly and no extra copy is needed.  There should be only one instance of
+ * this class per writing program, so that the memory segment/data buffer can be reused.  Note that
+ * for each incoming record, we should call `reset` of BufferHolder instance before write the record
+ * and reuse the data buffer.
+ *
+ * Generally we should call `UnsafeRow.setTotalSize` and pass in `BufferHolder.totalSize` to update
+ * the size of the result row, after writing a record to the buffer. However, we can skip this step
+ * if the fields of row are all fixed-length, as the size of result row is also fixed.
  */
 public class BufferHolder {
-  public byte[] buffer = new byte[64];
+  public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
+  private final UnsafeRow row;
+  private final int fixedSize;
 
+  public BufferHolder(UnsafeRow row) {
+    this(row, 64);
+  }
+
+  public BufferHolder(UnsafeRow row, int initialSize) {
+    this.fixedSize = UnsafeRow.calculateBitSetWidthInBytes(row.numFields()) + 8 * row.numFields();
+    this.buffer = new byte[fixedSize + initialSize];
+    this.row = row;
+    this.row.pointTo(buffer, buffer.length);
+  }
+
+  /**
+   * Grows the buffer by at least neededSize and points the row to the buffer.
+   */
   public void grow(int neededSize) {
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
@@ -41,11 +66,12 @@ public class BufferHolder {
         Platform.BYTE_ARRAY_OFFSET,
         totalSize());
       buffer = tmp;
+      row.pointTo(buffer, buffer.length);
     }
   }
 
   public void reset() {
-    cursor = Platform.BYTE_ARRAY_OFFSET;
+    cursor = Platform.BYTE_ARRAY_OFFSET + fixedSize;
   }
 
   public int totalSize() {

@@ -77,7 +77,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   final List<String> sparkArgs;
-  private final boolean printHelp;
+  private final boolean printInfo;
 
   /**
    * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
@@ -88,7 +88,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<String>();
-    this.printHelp = false;
+    this.printInfo = false;
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
@@ -108,14 +108,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     OptionParser parser = new OptionParser();
     parser.parse(submitArgs);
-    this.printHelp = parser.helpRequested;
+    this.printInfo = parser.infoRequested;
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env) throws IOException {
-    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printHelp) {
+    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printInfo) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printHelp) {
+    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printInfo) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -231,11 +231,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     // the pyspark command line, then run it using spark-submit.
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
       System.err.println(
-        "WARNING: Running python applications through 'pyspark' is deprecated as of Spark 1.0.\n" +
+        "Running python applications through 'pyspark' is not supported as of Spark 2.0.\n" +
         "Use ./bin/spark-submit <python file>");
-      appResource = appArgs.get(0);
-      appArgs.remove(0);
-      return buildCommand(env);
+      System.exit(-1);
     }
 
     checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
@@ -258,9 +256,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private List<String> buildSparkRCommand(Map<String, String> env) throws IOException {
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".R")) {
-      appResource = appArgs.get(0);
-      appArgs.remove(0);
-      return buildCommand(env);
+      System.err.println(
+        "Running R applications through 'sparkR' is not supported as of Spark 2.0.\n" +
+        "Use ./bin/spark-submit <R file>");
+      System.exit(-1);
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
     // env variable.
@@ -294,10 +293,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private boolean isClientMode(Map<String, String> userProps) {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
-    // Default master is "local[*]", so assume client mode in that case.
+    String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
+    // Default master is "local[*]", so assume client mode in that case
     return userMaster == null ||
-      "client".equals(deployMode) ||
-      (!userMaster.equals("yarn-cluster") && deployMode == null);
+      "client".equals(userDeployMode) ||
+      (!userMaster.equals("yarn-cluster") && userDeployMode == null);
   }
 
   /**
@@ -311,7 +311,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean helpRequested = false;
+    boolean infoRequested = false;
 
     @Override
     protected boolean handle(String opt, String value) {
@@ -344,7 +344,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           appResource = specialClasses.get(value);
         }
       } else if (opt.equals(HELP) || opt.equals(USAGE_ERROR)) {
-        helpRequested = true;
+        infoRequested = true;
+        sparkArgs.add(opt);
+      } else if (opt.equals(VERSION)) {
+        infoRequested = true;
         sparkArgs.add(opt);
       } else {
         sparkArgs.add(opt);

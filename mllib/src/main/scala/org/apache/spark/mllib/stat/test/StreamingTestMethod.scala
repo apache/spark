@@ -152,8 +152,8 @@ private[stat] object StudentTTest extends StreamingTestMethod with Logging {
 private[stat] object StreamingTestMethod {
   // Note: after new `StreamingTestMethod`s are implemented, please update this map.
   private final val TEST_NAME_TO_OBJECT: Map[String, StreamingTestMethod] = Map(
-    "welch"->WelchTTest,
-    "student"->StudentTTest)
+    "welch" -> WelchTTest,
+    "student" -> StudentTTest)
 
   def getTestMethodFromName(method: String): StreamingTestMethod =
     TEST_NAME_TO_OBJECT.get(method) match {

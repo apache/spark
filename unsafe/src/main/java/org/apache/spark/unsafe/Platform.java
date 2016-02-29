@@ -27,9 +27,13 @@ public final class Platform {
 
   public static final int BYTE_ARRAY_OFFSET;
 
+  public static final int SHORT_ARRAY_OFFSET;
+
   public static final int INT_ARRAY_OFFSET;
 
   public static final int LONG_ARRAY_OFFSET;
+
+  public static final int FLOAT_ARRAY_OFFSET;
 
   public static final int DOUBLE_ARRAY_OFFSET;
 
@@ -105,14 +109,40 @@ public final class Platform {
     _UNSAFE.freeMemory(address);
   }
 
+  public static long reallocateMemory(long address, long oldSize, long newSize) {
+    long newMemory = _UNSAFE.allocateMemory(newSize);
+    copyMemory(null, address, null, newMemory, oldSize);
+    freeMemory(address);
+    return newMemory;
+  }
+
+  public static void setMemory(long address, byte value, long size) {
+    _UNSAFE.setMemory(address, size, value);
+  }
+
   public static void copyMemory(
     Object src, long srcOffset, Object dst, long dstOffset, long length) {
-    while (length > 0) {
-      long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
-      _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
-      length -= size;
-      srcOffset += size;
-      dstOffset += size;
+    // Check if dstOffset is before or after srcOffset to determine if we should copy
+    // forward or backwards. This is necessary in case src and dst overlap.
+    if (dstOffset < srcOffset) {
+      while (length > 0) {
+        long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
+        _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
+        length -= size;
+        srcOffset += size;
+        dstOffset += size;
+      }
+    } else {
+      srcOffset += length;
+      dstOffset += length;
+      while (length > 0) {
+        long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
+        srcOffset -= size;
+        dstOffset -= size;
+        _UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
+        length -= size;
+      }
+
     }
   }
 
@@ -142,13 +172,17 @@ public final class Platform {
 
     if (_UNSAFE != null) {
       BYTE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(byte[].class);
+      SHORT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(short[].class);
       INT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(int[].class);
       LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
+      FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
     } else {
       BYTE_ARRAY_OFFSET = 0;
+      SHORT_ARRAY_OFFSET = 0;
       INT_ARRAY_OFFSET = 0;
       LONG_ARRAY_OFFSET = 0;
+      FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
     }
   }

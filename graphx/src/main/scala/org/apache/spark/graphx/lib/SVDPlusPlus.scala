@@ -21,8 +21,8 @@ import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.rdd._
 import org.apache.spark.graphx._
+import org.apache.spark.rdd._
 
 /** Implementation of SVD++ algorithm. */
 object SVDPlusPlus {
@@ -38,17 +38,6 @@ object SVDPlusPlus {
       var gamma6: Double,
       var gamma7: Double)
     extends Serializable
-
-  /**
-   * This method is now replaced by the updated version of `run()` and returns exactly
-   * the same result.
-   */
-  @deprecated("Call run()", "1.4.0")
-  def runSVDPlusPlus(edges: RDD[Edge[Double]], conf: Conf)
-    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
-  {
-    run(edges, conf)
-  }
 
   /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:

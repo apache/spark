@@ -18,16 +18,14 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
 
-class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
+class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("MinMaxScaler fit basic case") {
-    val sqlContext = new SQLContext(sc)
-
     val data = Array(
       Vectors.dense(1, 0, Long.MinValue),
       Vectors.dense(2, 0, 0),
@@ -68,5 +66,26 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext {
         scaler.validateParams()
       }
     }
+  }
+
+  test("MinMaxScaler read/write") {
+    val t = new MinMaxScaler()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMax(1.0)
+      .setMin(-1.0)
+    testDefaultReadWrite(t)
+  }
+
+  test("MinMaxScalerModel read/write") {
+    val instance = new MinMaxScalerModel(
+        "myMinMaxScalerModel", Vectors.dense(-1.0, 0.0), Vectors.dense(1.0, 10.0))
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setMin(-1.0)
+      .setMax(1.0)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.originalMin === instance.originalMin)
+    assert(newInstance.originalMax === instance.originalMax)
   }
 }

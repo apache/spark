@@ -19,8 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.net.URI
 
-import org.scalatest.mock.MockitoSugar
-import org.mockito.Mockito.when
+import scala.collection.mutable.HashMap
+import scala.collection.mutable.Map
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileStatus
@@ -28,15 +28,13 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records.LocalResource
-import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
 import org.apache.hadoop.yarn.api.records.LocalResourceType
-import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
-
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.Map
+import org.apache.hadoop.yarn.api.records.LocalResourceVisibility
+import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.mockito.Mockito.when
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
-
 
 class ClientDistributedCacheManagerSuite extends SparkFunSuite with MockitoSugar {
 

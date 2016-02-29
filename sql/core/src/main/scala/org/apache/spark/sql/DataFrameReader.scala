@@ -24,22 +24,22 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.StringUtils
 
+import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.JSONRelation
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.{Logging, Partition}
-import org.apache.spark.sql.catalyst.{SqlParser, TableIdentifier}
 
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc). Use [[SQLContext.read]] to access this.
+ * key-value stores, etc) or data streams. Use [[SQLContext.read]] to access this.
  *
  * @since 1.4.0
  */
@@ -79,6 +79,27 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Boolean): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Long): DataFrameReader = option(key, value.toString)
+
+  /**
+   * Adds an input option for the underlying data source.
+   *
+   * @since 2.0.0
+   */
+  def option(key: String, value: Double): DataFrameReader = option(key, value.toString)
+
+  /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
    * @since 1.4.0
@@ -99,16 +120,6 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   }
 
   /**
-   * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
-   * a local or distributed file system).
-   *
-   * @since 1.4.0
-   */
-  def load(path: String): DataFrame = {
-    option("path", path).load()
-  }
-
-  /**
    * Loads input in as a [[DataFrame]], for data sources that don't require a path (e.g. external
    * key-value stores).
    *
@@ -119,9 +130,20 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
       partitionColumns = Array.empty[String],
+      bucketSpec = None,
       provider = source,
       options = extraOptions.toMap)
     DataFrame(sqlContext, LogicalRelation(resolved.relation))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data sources that require a path (e.g. data backed by
+   * a local or distributed file system).
+   *
+   * @since 1.4.0
+   */
+  def load(path: String): DataFrame = {
+    option("path", path).load()
   }
 
   /**
@@ -130,8 +152,33 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * @since 1.6.0
    */
-  def load(paths: Array[String]): DataFrame = {
+  @scala.annotation.varargs
+  def load(paths: String*): DataFrame = {
     option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
+  }
+
+  /**
+   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
+   * (e.g. external key-value stores).
+   *
+   * @since 2.0.0
+   */
+  def stream(): DataFrame = {
+    val resolved = ResolvedDataSource.createSource(
+      sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      providerName = source,
+      options = extraOptions.toMap)
+    DataFrame(sqlContext, StreamingRelation(resolved))
+  }
+
+  /**
+   * Loads input in as a [[DataFrame]], for data streams that read from some path.
+   *
+   * @since 2.0.0
+   */
+  def stream(path: String): DataFrame = {
+    option("path", path).stream()
   }
 
   /**
@@ -152,17 +199,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
    * your external database systems.
    *
-   * @param url JDBC database url of the form `jdbc:subprotocol:subname`
+   * @param url JDBC database url of the form `jdbc:subprotocol:subname`.
    * @param table Name of the table in the external database.
    * @param columnName the name of a column of integral type that will be used for partitioning.
-   * @param lowerBound the minimum value of `columnName` used to decide partition stride
-   * @param upperBound the maximum value of `columnName` used to decide partition stride
-   * @param numPartitions the number of partitions.  the range `minValue`-`maxValue` will be split
-   *                      evenly into this many partitions
+   * @param lowerBound the minimum value of `columnName` used to decide partition stride.
+   * @param upperBound the maximum value of `columnName` used to decide partition stride.
+   * @param numPartitions the number of partitions. This, along with `lowerBound` (inclusive),
+   *                      `upperBound` (exclusive), form partition strides for generated WHERE
+   *                      clause expressions used to split the column `columnName` evenly.
    * @param connectionProperties JDBC database connection arguments, a list of arbitrary string
    *                             tag/value. Normally at least a "user" and "password" property
    *                             should be included.
-   *
    * @since 1.4.0
    */
   def jdbc(
@@ -227,10 +274,42 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
-   * @param path input path
+   * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
+   * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
+   * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
+   * </li>
+   * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
+   * (e.g. 00012)</li>
+   *
    * @since 1.4.0
    */
+  // TODO: Remove this one in Spark 2.0.
   def json(path: String): DataFrame = format("json").load(path)
+
+  /**
+   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
+   *
+   * This function goes through the input once to determine the input schema. If you know the
+   * schema in advance, use the version that specifies the schema to avoid the extra scan.
+   *
+   * You can set the following JSON-specific options to deal with non-standard JSON files:
+   * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
+   * <li>`floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal
+   * type</li>
+   * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
+   * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
+   * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
+   * </li>
+   * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
+   * (e.g. 00012)</li>
+   * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
+   * character using backslash quoting mechanism</li>
+   *
+   * @since 1.6.0
+   */
+  def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
    * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
@@ -255,10 +334,26 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    val samplingRatio = extraOptions.getOrElse("samplingRatio", "1.0").toDouble
     sqlContext.baseRelationToDataFrame(
-      new JSONRelation(Some(jsonRDD), samplingRatio, userSpecifiedSchema, None, None)(sqlContext))
+      new JSONRelation(
+        Some(jsonRDD),
+        maybeDataSchema = userSpecifiedSchema,
+        maybePartitionSpec = None,
+        userDefinedPartitionColumns = None,
+        parameters = extraOptions.toMap)(sqlContext)
+    )
   }
+
+  /**
+   * Loads a CSV file and returns the result as a [[DataFrame]].
+   *
+   * This function goes through the input once to determine the input schema. To avoid going
+   * through the entire data once, specify the schema explicitly using [[schema]].
+   *
+   * @since 2.0.0
+   */
+  @scala.annotation.varargs
+  def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
 
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
@@ -299,8 +394,26 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext, sqlContext.catalog.lookupRelation(TableIdentifier(tableName)))
+    DataFrame(sqlContext,
+      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
   }
+
+  /**
+   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * {{{
+   *   // Scala:
+   *   sqlContext.read.text("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   sqlContext.read().text("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param paths input path
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

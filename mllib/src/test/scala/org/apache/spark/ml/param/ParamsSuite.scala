@@ -17,7 +17,11 @@
 
 package org.apache.spark.ml.param
 
+import java.io.{ByteArrayOutputStream, NotSerializableException, ObjectOutputStream}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.MyParams
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 class ParamsSuite extends SparkFunSuite {
 
@@ -80,10 +84,23 @@ class ParamsSuite extends SparkFunSuite {
       }
     }
 
-    { // StringParam
+    { // Param[String]
       val param = new Param[String](dummy, "name", "doc")
       // Currently we do not support null.
       for (value <- Seq("", "1", "abc", "quote\"", "newline\n")) {
+        val json = param.jsonEncode(value)
+        assert(param.jsonDecode(json) === value)
+      }
+    }
+
+    { // Param[Vector]
+      val param = new Param[Vector](dummy, "name", "doc")
+      val values = Seq(
+        Vectors.dense(Array.empty[Double]),
+        Vectors.dense(0.0, 2.0),
+        Vectors.sparse(0, Array.empty, Array.empty),
+        Vectors.sparse(2, Array(1), Array(2.0)))
+      for (value <- values) {
         val json = param.jsonEncode(value)
         assert(param.jsonDecode(json) === value)
       }
@@ -138,7 +155,7 @@ class ParamsSuite extends SparkFunSuite {
   test("param") {
     val solver = new TestParams()
     val uid = solver.uid
-    import solver.{maxIter, inputCol}
+    import solver.{inputCol, maxIter}
 
     assert(maxIter.name === "maxIter")
     assert(maxIter.doc === "maximum number of iterations (>= 0)")
@@ -181,7 +198,7 @@ class ParamsSuite extends SparkFunSuite {
 
   test("param map") {
     val solver = new TestParams()
-    import solver.{maxIter, inputCol}
+    import solver.{inputCol, maxIter}
 
     val map0 = ParamMap.empty
 
@@ -220,7 +237,7 @@ class ParamsSuite extends SparkFunSuite {
 
   test("params") {
     val solver = new TestParams()
-    import solver.{handleInvalid, maxIter, inputCol}
+    import solver.{handleInvalid, inputCol, maxIter}
 
     val params = solver.params
     assert(params.length === 3)
@@ -334,6 +351,31 @@ class ParamsSuite extends SparkFunSuite {
     assert(!t2.isSet(t2.maxIter))
     val t3 = t.copy(ParamMap(t.maxIter -> 20))
     assert(t3.isSet(t3.maxIter))
+  }
+
+  test("Filtering ParamMap") {
+    val params1 = new MyParams("my_params1")
+    val params2 = new MyParams("my_params2")
+    val paramMap = ParamMap(
+      params1.intParam -> 1,
+      params2.intParam -> 1,
+      params1.doubleParam -> 0.2,
+      params2.doubleParam -> 0.2)
+    val filteredParamMap = paramMap.filter(params1)
+
+    assert(filteredParamMap.size === 2)
+    filteredParamMap.toSeq.foreach {
+      case ParamPair(p, _) =>
+        assert(p.parent === params1.uid)
+    }
+
+    // At the previous implementation of ParamMap#filter,
+    // mutable.Map#filterKeys was used internally but
+    // the return type of the method is not serializable (see SI-6654).
+    // Now mutable.Map#filter is used instead of filterKeys and the return type is serializable.
+    // So let's ensure serializability.
+    val objOut = new ObjectOutputStream(new ByteArrayOutputStream())
+    objOut.writeObject(filteredParamMap)
   }
 }
 

@@ -40,7 +40,7 @@ class FlumeUtils(object):
 
     @staticmethod
     def createStream(ssc, hostname, port,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_2,
                      enableDecompression=False,
                      bodyDecoder=utf8_decoder):
         """
@@ -70,7 +70,7 @@ class FlumeUtils(object):
 
     @staticmethod
     def createPollingStream(ssc, addresses,
-                            storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
+                            storageLevel=StorageLevel.MEMORY_AND_DISK_2,
                             maxBatchSize=1000,
                             parallelism=5,
                             bodyDecoder=utf8_decoder):

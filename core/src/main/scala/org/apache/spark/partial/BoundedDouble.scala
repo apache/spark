@@ -17,13 +17,9 @@
 
 package org.apache.spark.partial
 
-import org.apache.spark.annotation.Experimental
-
 /**
- * :: Experimental ::
  * A Double value with error bars and associated confidence.
  */
-@Experimental
 class BoundedDouble(val mean: Double, val confidence: Double, val low: Double, val high: Double) {
   override def toString(): String = "[%.3f, %.3f]".format(low, high)
 }

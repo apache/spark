@@ -36,7 +36,7 @@ np.random.seed(42)
 
 def rmse(R, ms, us):
     diff = R - ms * us.T
-    return np.sqrt(np.sum(np.power(diff, 2)) / M * U)
+    return np.sqrt(np.sum(np.power(diff, 2)) / (M * U))
 
 
 def update(i, vec, mat, ratings):

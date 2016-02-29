@@ -41,7 +41,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   extends Optimizer with Logging {
 
   private var numCorrections = 10
-  private var convergenceTol = 1E-4
+  private var convergenceTol = 1E-6
   private var maxNumIterations = 100
   private var regParam = 0.0
 
@@ -59,7 +59,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   }
 
   /**
-   * Set the convergence tolerance of iterations for L-BFGS. Default 1E-4.
+   * Set the convergence tolerance of iterations for L-BFGS. Default 1E-6.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * This value must be nonnegative. Lower convergence values are less tolerant
    * and therefore generally cause more iterations to be run.
@@ -67,6 +67,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   def setConvergenceTol(tolerance: Double): this.type = {
     this.convergenceTol = tolerance
     this
+  }
+
+  /*
+   * Get the convergence tolerance of iterations.
+   */
+  private[mllib] def getConvergenceTol(): Double = {
+    this.convergenceTol
   }
 
   /**
@@ -87,11 +94,25 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   }
 
   /**
+   * Get the maximum number of iterations for L-BFGS. Defaults to 100.
+   */
+  private[mllib] def getNumIterations(): Int = {
+    this.maxNumIterations
+  }
+
+  /**
    * Set the regularization parameter. Default 0.0.
    */
   def setRegParam(regParam: Double): this.type = {
     this.regParam = regParam
     this
+  }
+
+  /**
+   * Get the regularization parameter.
+   */
+  private[mllib] def getRegParam(): Double = {
+    this.regParam
   }
 
   /**
@@ -111,6 +132,13 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   def setUpdater(updater: Updater): this.type = {
     this.updater = updater
     this
+  }
+
+  /**
+   * Returns the updater, limited to internal use.
+   */
+  private[mllib] def getUpdater(): Updater = {
+    updater
   }
 
   override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {

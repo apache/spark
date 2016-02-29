@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
+
 import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Time}
-
-import scala.reflect.ClassTag
 
 private[streaming]
 class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
@@ -31,7 +31,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
     updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
     partitioner: Partitioner,
     preservePartitioning: Boolean,
-    initialRDD : Option[RDD[(K, S)]]
+    initialRDD: Option[RDD[(K, S)]]
   ) extends DStream[(K, S)](parent.ssc) {
 
   super.persist(StorageLevel.MEMORY_ONLY_SER)
@@ -43,7 +43,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
   override val mustCheckpoint = true
 
   private [this] def computeUsingPreviousRDD (
-    parentRDD : RDD[(K, V)], prevStateRDD : RDD[(K, S)]) = {
+    parentRDD: RDD[(K, V)], prevStateRDD: RDD[(K, S)]) = {
     // Define the function for the mapPartition operation on cogrouped RDD;
     // first map the cogrouped tuple to tuples of required type,
     // and then apply the update function
@@ -98,7 +98,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
                 // first map the grouped tuple to tuples of required type,
                 // and then apply the update function
                 val updateFuncLocal = updateFunc
-                val finalFunc = (iterator : Iterator[(K, Iterable[V])]) => {
+                val finalFunc = (iterator: Iterator[(K, Iterable[V])]) => {
                   updateFuncLocal (iterator.map (tuple => (tuple._1, tuple._2.toSeq, None)))
                 }
 

@@ -623,3 +623,30 @@ convertNamedListToEnv <- function(namedList) {
   }
   env
 }
+
+# Assign a new environment for attach() and with() methods
+assignNewEnv <- function(data) {
+  stopifnot(class(data) == "DataFrame")
+  cols <- columns(data)
+  stopifnot(length(cols) > 0)
+
+  env <- new.env()
+  for (i in 1:length(cols)) {
+    assign(x = cols[i], value = data[, cols[i]], envir = env)
+  }
+  env
+}
+
+# Utility function to split by ',' and whitespace, remove empty tokens
+splitString <- function(input) {
+  Filter(nzchar, unlist(strsplit(input, ",|\\s")))
+}
+
+convertToJSaveMode <- function(mode) {
+ allModes <- c("append", "overwrite", "error", "ignore")
+ if (!(mode %in% allModes)) {
+   stop('mode should be one of "append", "overwrite", "error", "ignore"')  # nolint
+ }
+ jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
+ jmode
+}

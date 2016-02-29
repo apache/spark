@@ -21,10 +21,10 @@ package org.apache.spark.examples.streaming
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
-import org.apache.spark.util.IntParam
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext, Time}
+import org.apache.spark.util.IntParam
 
 /**
  * Use DataFrames and SQL to count words in UTF8 encoded, '\n' delimited text received from the

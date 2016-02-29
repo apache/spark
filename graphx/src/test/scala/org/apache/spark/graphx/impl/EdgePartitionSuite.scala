@@ -21,10 +21,9 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.graphx._
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.serializer.KryoSerializer
-
-import org.apache.spark.graphx._
 
 class EdgePartitionSuite extends SparkFunSuite {
 

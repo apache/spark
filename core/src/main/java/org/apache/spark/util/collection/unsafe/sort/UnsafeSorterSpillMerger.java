@@ -23,6 +23,7 @@ import java.util.PriorityQueue;
 
 final class UnsafeSorterSpillMerger {
 
+  private int numRecords = 0;
   private final PriorityQueue<UnsafeSorterIterator> priorityQueue;
 
   public UnsafeSorterSpillMerger(
@@ -59,6 +60,7 @@ final class UnsafeSorterSpillMerger {
       // priorityQueue, we will have n extra empty records in the result of the UnsafeSorterIterator.
       spillReader.loadNext();
       priorityQueue.add(spillReader);
+      numRecords += spillReader.getNumRecords();
     }
   }
 
@@ -66,6 +68,11 @@ final class UnsafeSorterSpillMerger {
     return new UnsafeSorterIterator() {
 
       private UnsafeSorterIterator spillReader;
+
+      @Override
+      public int getNumRecords() {
+        return numRecords;
+      }
 
       @Override
       public boolean hasNext() {

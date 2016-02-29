@@ -27,6 +27,7 @@ import scala.language.postfixOps
 
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
+import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
@@ -59,10 +60,13 @@ abstract class BaseYarnClusterSuite
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
 
+  var oldSystemProperties: Properties = null
+
   def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
+    oldSystemProperties = SerializationUtils.clone(System.getProperties)
 
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
@@ -115,9 +119,12 @@ abstract class BaseYarnClusterSuite
   }
 
   override def afterAll() {
-    yarnCluster.stop()
-    System.clearProperty("SPARK_YARN_MODE")
-    super.afterAll()
+    try {
+      yarnCluster.stop()
+    } finally {
+      System.setProperties(oldSystemProperties)
+      super.afterAll()
+    }
   }
 
   protected def runSpark(
@@ -129,7 +136,7 @@ abstract class BaseYarnClusterSuite
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
       extraEnv: Map[String, String] = Map()): SparkAppHandle.State = {
-    val master = if (clientMode) "yarn-client" else "yarn-cluster"
+    val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
 
@@ -141,7 +148,8 @@ abstract class BaseYarnClusterSuite
       launcher.setAppResource(fakeSparkJar.getAbsolutePath())
     }
     launcher.setSparkHome(sys.props("spark.test.home"))
-      .setMaster(master)
+      .setMaster("yarn")
+      .setDeployMode(deployMode)
       .setConf("spark.executor.instances", "1")
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)

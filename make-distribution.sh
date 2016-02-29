@@ -32,11 +32,6 @@ set -x
 SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
-SPARK_TACHYON=false
-TACHYON_VERSION="0.7.1"
-TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
-TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
-
 MAKE_TGZ=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
@@ -45,7 +40,7 @@ function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  cl_options="[--name] [--tgz] [--mvn <mvn-command>] [--with-tachyon]"
+  cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
   echo "./make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
@@ -58,7 +53,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-1, hadoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3 and hadoop-2.4."
       exit_with_usage
       ;;
     --with-yarn)
@@ -68,12 +63,6 @@ while (( "$#" )); do
     --with-hive)
       echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
-      ;;
-    --skip-java-test)
-      SKIP_JAVA_TEST=true
-      ;;
-    --with-tachyon)
-      SPARK_TACHYON=true
       ;;
     --tgz)
       MAKE_TGZ=true
@@ -153,16 +142,10 @@ else
   echo "Making distribution for Spark $VERSION in $DISTDIR..."
 fi
 
-if [ "$SPARK_TACHYON" == "true" ]; then
-  echo "Tachyon Enabled"
-else
-  echo "Tachyon Disabled"
-fi
-
 # Build uber fat JAR
 cd "$SPARK_HOME"
 
-export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m}"
 
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
@@ -186,7 +169,7 @@ cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp "$SPARK_HOME"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 # This will fail if the -Pyarn profile is not provided
 # In this case, silence the error and ignore the return code of this command
-cp "$SPARK_HOME"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
+cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
@@ -215,45 +198,11 @@ cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
-cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 # Copy SparkR if it exists
 if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
   mkdir -p "$DISTDIR"/R/lib
   cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
-fi
-
-# Download and copy in tachyon, if requested
-if [ "$SPARK_TACHYON" == "true" ]; then
-  TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
-
-  pushd "$TMPD" > /dev/null
-  echo "Fetching tachyon tgz"
-
-  TACHYON_DL="${TACHYON_TGZ}.part"
-  if [ $(command -v curl) ]; then
-    curl --silent -k -L "${TACHYON_URL}" > "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
-  elif [ $(command -v wget) ]; then
-    wget --quiet "${TACHYON_URL}" -O "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
-  else
-    printf "You do not have curl or wget installed. please install Tachyon manually.\n"
-    exit -1
-  fi
-
-  tar xzf "${TACHYON_TGZ}"
-  cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
-  mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
-  cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
-  cp -r "tachyon-${TACHYON_VERSION}"/core/src/main/java/tachyon/web "$DISTDIR/tachyon/src/main/java/tachyon/web"
-
-  if [[ `uname -a` == Darwin* ]]; then
-    # need to run sed differently on osx
-    nl=$'\n'; sed -i "" -e "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\\$nl  export TACHYON_JAR=\$TACHYON_HOME/../lib/\1|" "$DISTDIR/tachyon/libexec/tachyon-config.sh"
-  else
-    sed -i "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\n  export TACHYON_JAR=\$TACHYON_HOME/../lib/\1|" "$DISTDIR/tachyon/libexec/tachyon-config.sh"
-  fi
-
-  popd > /dev/null
-  rm -rf "$TMPD"
+  cp "$SPARK_HOME/R/lib/sparkr.zip" "$DISTDIR"/R/lib
 fi
 
 if [ "$MAKE_TGZ" == "true" ]; then

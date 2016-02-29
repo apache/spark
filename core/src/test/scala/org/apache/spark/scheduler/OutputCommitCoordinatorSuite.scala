@@ -20,21 +20,20 @@ package org.apache.spark.scheduler
 import java.io.File
 import java.util.concurrent.TimeoutException
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
+import org.apache.hadoop.mapred.{JobConf, OutputCommitter, TaskAttemptContext, TaskAttemptID}
 import org.mockito.Matchers
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 
-import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
-
 import org.apache.spark._
-import org.apache.spark.rdd.{RDD, FakeOutputCommitter}
+import org.apache.spark.rdd.{FakeOutputCommitter, RDD}
 import org.apache.spark.util.Utils
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.language.postfixOps
 
 /**
  * Unit tests for the output commit coordination functionality.
@@ -87,7 +86,8 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
         outputCommitCoordinator = spy(new OutputCommitCoordinator(conf, isDriver = true))
         // Use Mockito.spy() to maintain the default infrastructure everywhere else.
         // This mocking allows us to control the coordinator responses in test cases.
-        SparkEnv.createDriverEnv(conf, isLocal, listenerBus, Some(outputCommitCoordinator))
+        SparkEnv.createDriverEnv(conf, isLocal, listenerBus,
+          SparkContext.numDriverCores(master), Some(outputCommitCoordinator))
       }
     }
     // Use Mockito.spy() to maintain the default infrastructure everywhere else
@@ -170,7 +170,7 @@ class OutputCommitCoordinatorSuite extends SparkFunSuite with BeforeAndAfter {
     val partition: Int = 2
     val authorizedCommitter: Int = 3
     val nonAuthorizedCommitter: Int = 100
-    outputCommitCoordinator.stageStart(stage)
+    outputCommitCoordinator.stageStart(stage, maxPartitionId = 2)
 
     assert(outputCommitCoordinator.canCommit(stage, partition, authorizedCommitter))
     assert(!outputCommitCoordinator.canCommit(stage, partition, nonAuthorizedCommitter))

@@ -24,8 +24,14 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
 
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.KryoSerializable;
+import com.esotericsoftware.kryo.io.Input;
+import com.esotericsoftware.kryo.io.Output;
+
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.*;
 
@@ -38,9 +44,9 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Externalizable {
+public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable {
 
-  // These are only updated by readExternal()
+  // These are only updated by readExternal() or read()
   @Nonnull
   private Object base;
   private long offset;
@@ -895,9 +901,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
       m = swap;
     }
 
-    int p[] = new int[n + 1];
-    int d[] = new int[n + 1];
-    int swap[];
+    int[] p = new int[n + 1];
+    int[] d = new int[n + 1];
+    int[] swap;
 
     int i, i_bytes, j, j_bytes, num_bytes_j, cost;
 
@@ -930,11 +936,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
 
   @Override
   public int hashCode() {
-    int result = 1;
-    for (int i = 0; i < numBytes; i ++) {
-      result = 31 * result + getByte(i);
-    }
-    return result;
+    return Murmur3_x86_32.hashUnsafeBytes(base, offset, numBytes, 42);
   }
 
   /**
@@ -960,7 +962,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
       // first character must be a letter
       return this;
     }
-    byte sx[] = {'0', '0', '0', '0'};
+    byte[] sx = {'0', '0', '0', '0'};
     sx[0] = b;
     int sxi = 1;
     int idx = b - 'A';
@@ -1001,6 +1003,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable 
     numBytes = in.readInt();
     base = new byte[numBytes];
     in.readFully((byte[]) base);
+  }
+
+  @Override
+  public void write(Kryo kryo, Output out) {
+    byte[] bytes = getBytes();
+    out.writeInt(bytes.length);
+    out.write(bytes);
+  }
+
+  @Override
+  public void read(Kryo kryo, Input in) {
+    this.offset = BYTE_ARRAY_OFFSET;
+    this.numBytes = in.readInt();
+    this.base = new byte[numBytes];
+    in.read((byte[]) base);
   }
 
 }

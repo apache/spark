@@ -24,6 +24,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
@@ -48,7 +49,7 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private val functionBuilders =
+  private[sql] val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
   override def registerFunction(
@@ -112,6 +113,7 @@ object FunctionRegistry {
 
   type FunctionBuilder = Seq[Expression] => Expression
 
+  // Note: Whenever we add a new entry here, make sure we also update ExpressionToSQLSuite
   val expressions: Map[String, (ExpressionInfo, FunctionBuilder)] = Map(
     // misc non-aggregate functions
     expression[Abs]("abs"),
@@ -124,13 +126,12 @@ object FunctionRegistry {
     expression[IsNull]("isnull"),
     expression[IsNotNull]("isnotnull"),
     expression[Least]("least"),
+    expression[CreateNamedStruct]("named_struct"),
+    expression[NaNvl]("nanvl"),
     expression[Coalesce]("nvl"),
     expression[Rand]("rand"),
     expression[Randn]("randn"),
     expression[CreateStruct]("struct"),
-    expression[CreateNamedStruct]("named_struct"),
-    expression[Sqrt]("sqrt"),
-    expression[NaNvl]("nanvl"),
 
     // math functions
     expression[Acos]("acos"),
@@ -142,25 +143,28 @@ object FunctionRegistry {
     expression[Ceil]("ceil"),
     expression[Ceil]("ceiling"),
     expression[Cos]("cos"),
+    expression[Cosh]("cosh"),
     expression[Conv]("conv"),
+    expression[ToDegrees]("degrees"),
     expression[EulerNumber]("e"),
     expression[Exp]("exp"),
     expression[Expm1]("expm1"),
     expression[Floor]("floor"),
     expression[Factorial]("factorial"),
-    expression[Hypot]("hypot"),
     expression[Hex]("hex"),
+    expression[Hypot]("hypot"),
     expression[Logarithm]("log"),
-    expression[Log]("ln"),
     expression[Log10]("log10"),
     expression[Log1p]("log1p"),
     expression[Log2]("log2"),
+    expression[Log]("ln"),
     expression[UnaryMinus]("negative"),
     expression[Pi]("pi"),
-    expression[Pow]("pow"),
-    expression[Pow]("power"),
     expression[Pmod]("pmod"),
     expression[UnaryPositive]("positive"),
+    expression[Pow]("pow"),
+    expression[Pow]("power"),
+    expression[ToRadians]("radians"),
     expression[Rint]("rint"),
     expression[Round]("round"),
     expression[ShiftLeft]("shiftleft"),
@@ -170,50 +174,61 @@ object FunctionRegistry {
     expression[Signum]("signum"),
     expression[Sin]("sin"),
     expression[Sinh]("sinh"),
+    expression[Sqrt]("sqrt"),
     expression[Tan]("tan"),
     expression[Tanh]("tanh"),
-    expression[ToDegrees]("degrees"),
-    expression[ToRadians]("radians"),
 
     // aggregate functions
+    expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
+    expression[Corr]("corr"),
     expression[Count]("count"),
+    expression[CovPopulation]("covar_pop"),
+    expression[CovSample]("covar_samp"),
     expression[First]("first"),
+    expression[First]("first_value"),
+    expression[Kurtosis]("kurtosis"),
     expression[Last]("last"),
+    expression[Last]("last_value"),
     expression[Max]("max"),
+    expression[Average]("mean"),
     expression[Min]("min"),
-    expression[Stddev]("stddev"),
+    expression[Skewness]("skewness"),
+    expression[StddevSamp]("stddev"),
     expression[StddevPop]("stddev_pop"),
     expression[StddevSamp]("stddev_samp"),
     expression[Sum]("sum"),
+    expression[VarianceSamp]("variance"),
+    expression[VariancePop]("var_pop"),
+    expression[VarianceSamp]("var_samp"),
 
     // string functions
     expression[Ascii]("ascii"),
     expression[Base64]("base64"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
-    expression[Encode]("encode"),
     expression[Decode]("decode"),
+    expression[Encode]("encode"),
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
+    expression[FormatString]("format_string"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
-    expression[JsonTuple]("json_tuple"),
+    expression[StringInstr]("instr"),
     expression[Lower]("lcase"),
-    expression[Lower]("lower"),
     expression[Length]("length"),
     expression[Levenshtein]("levenshtein"),
-    expression[RegExpExtract]("regexp_extract"),
-    expression[RegExpReplace]("regexp_replace"),
-    expression[StringInstr]("instr"),
+    expression[Lower]("lower"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
-    expression[FormatString]("format_string"),
+    expression[JsonTuple]("json_tuple"),
     expression[FormatString]("printf"),
-    expression[StringRPad]("rpad"),
+    expression[RegExpExtract]("regexp_extract"),
+    expression[RegExpReplace]("regexp_replace"),
     expression[StringRepeat]("repeat"),
     expression[StringReverse]("reverse"),
+    expression[StringRPad]("rpad"),
     expression[StringTrimRight]("rtrim"),
     expression[SoundEx]("soundex"),
     expression[StringSpace]("space"),
@@ -223,8 +238,8 @@ object FunctionRegistry {
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
-    expression[UnBase64]("unbase64"),
     expression[Upper]("ucase"),
+    expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
     expression[Upper]("upper"),
 
@@ -247,9 +262,11 @@ object FunctionRegistry {
     expression[Month]("month"),
     expression[MonthsBetween]("months_between"),
     expression[NextDay]("next_day"),
+    expression[CurrentTimestamp]("now"),
     expression[Quarter]("quarter"),
     expression[Second]("second"),
     expression[ToDate]("to_date"),
+    expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
@@ -257,18 +274,36 @@ object FunctionRegistry {
     expression[Year]("year"),
 
     // collection functions
+    expression[ArrayContains]("array_contains"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
-    expression[ArrayContains]("array_contains"),
 
     // misc functions
     expression[Crc32]("crc32"),
     expression[Md5]("md5"),
+    expression[Murmur3Hash]("hash"),
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
     expression[SparkPartitionID]("spark_partition_id"),
-    expression[InputFileName]("input_file_name")
+    expression[InputFileName]("input_file_name"),
+    expression[MonotonicallyIncreasingID]("monotonically_increasing_id"),
+
+    // grouping sets
+    expression[Cube]("cube"),
+    expression[Rollup]("rollup"),
+    expression[Grouping]("grouping"),
+    expression[GroupingID]("grouping_id"),
+
+    // window functions
+    expression[Lead]("lead"),
+    expression[Lag]("lag"),
+    expression[RowNumber]("row_number"),
+    expression[CumeDist]("cume_dist"),
+    expression[NTile]("ntile"),
+    expression[Rank]("rank"),
+    expression[DenseRank]("dense_rank"),
+    expression[PercentRank]("percent_rank")
   )
 
   val builtin: SimpleFunctionRegistry = {

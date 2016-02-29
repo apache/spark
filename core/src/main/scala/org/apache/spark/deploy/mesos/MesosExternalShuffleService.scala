@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.mesos
 
 import java.net.SocketAddress
+import java.nio.ByteBuffer
 
 import scala.collection.mutable
 
@@ -56,7 +57,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
           }
         }
         connectedApps(address) = appId
-        callback.onSuccess(new Array[Byte](0))
+        callback.onSuccess(ByteBuffer.allocate(0))
       case _ => super.handleMessage(message, client, callback)
     }
   }
@@ -64,7 +65,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
   /**
    * On connection termination, clean up shuffle files written by the associated application.
    */
-  override def connectionTerminated(client: TransportClient): Unit = {
+  override def channelInactive(client: TransportClient): Unit = {
     val address = client.getSocketAddress
     if (connectedApps.contains(address)) {
       val appId = connectedApps(address)

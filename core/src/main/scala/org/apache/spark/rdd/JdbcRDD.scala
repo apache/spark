@@ -17,15 +17,15 @@
 
 package org.apache.spark.rdd
 
-import java.sql.{PreparedStatement, Connection, ResultSet}
+import java.sql.{Connection, PreparedStatement, ResultSet}
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.util.NextIterator
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 
 private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
   override def index: Int = idx

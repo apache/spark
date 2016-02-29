@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
-import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.util.logging.FileAppender
 
@@ -60,6 +60,9 @@ private[deploy] class ExecutorRunner(
   private var stdoutAppender: FileAppender = null
   private var stderrAppender: FileAppender = null
 
+  // Timeout to wait for when trying to terminate an executor.
+  private val EXECUTOR_TERMINATE_TIMEOUT_MS = 10 * 1000
+
   // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
   // make sense to remove this in the future.
   private var shutdownHook: AnyRef = null
@@ -71,6 +74,11 @@ private[deploy] class ExecutorRunner(
     workerThread.start()
     // Shutdown hook that kills actors on shutdown.
     shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+      // It's possible that we arrive here before calling `fetchAndRunExecutor`, then `state` will
+      // be `ExecutorState.RUNNING`. In this case, we should set `state` to `FAILED`.
+      if (state == ExecutorState.RUNNING) {
+        state = ExecutorState.FAILED
+      }
       killProcess(Some("Worker shutting down")) }
   }
 
@@ -89,10 +97,17 @@ private[deploy] class ExecutorRunner(
       if (stderrAppender != null) {
         stderrAppender.stop()
       }
-      process.destroy()
-      exitCode = Some(process.waitFor())
+      exitCode = Utils.terminateProcess(process, EXECUTOR_TERMINATE_TIMEOUT_MS)
+      if (exitCode.isEmpty) {
+        logWarning("Failed to terminate process: " + process +
+          ". This process will likely be orphaned.")
+      }
     }
-    worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    try {
+      worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
+    } catch {
+      case e: IllegalStateException => logWarning(e.getMessage(), e)
+    }
   }
 
   /** Stop this executor runner, including killing the process it launched */

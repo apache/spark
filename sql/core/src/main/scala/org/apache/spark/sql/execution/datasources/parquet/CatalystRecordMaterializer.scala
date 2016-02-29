@@ -35,7 +35,7 @@ private[parquet] class CatalystRecordMaterializer(
 
   private val rootConverter = new CatalystRowConverter(parquetSchema, catalystSchema, NoopUpdater)
 
-  override def getCurrentRecord: InternalRow = rootConverter.currentRow
+  override def getCurrentRecord: InternalRow = rootConverter.currentRecord
 
   override def getRootConverter: GroupConverter = rootConverter
 }

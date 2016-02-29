@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -115,8 +115,6 @@ private[mllib] object GridPartitioner {
 }
 
 /**
- * :: Experimental ::
- *
  * Represents a distributed matrix in blocks of local matrices.
  *
  * @param blocks The RDD of sub-matrix blocks ((blockRowIndex, blockColIndex), sub-matrix) that
@@ -132,7 +130,6 @@ private[mllib] object GridPartitioner {
  *              zero, the number of columns will be calculated when `numCols` is invoked.
  */
 @Since("1.3.0")
-@Experimental
 class BlockMatrix @Since("1.3.0") (
     @Since("1.3.0") val blocks: RDD[((Int, Int), Matrix)],
     @Since("1.3.0") val rowsPerBlock: Int,

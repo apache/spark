@@ -17,13 +17,13 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.collection.mutable
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.util.collection.OpenHashSet
-
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
 
 private[spark] object UIData {
 

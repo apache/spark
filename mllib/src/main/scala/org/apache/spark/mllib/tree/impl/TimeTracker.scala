@@ -19,12 +19,9 @@ package org.apache.spark.mllib.tree.impl
 
 import scala.collection.mutable.{HashMap => MutableHashMap}
 
-import org.apache.spark.annotation.Experimental
-
 /**
  * Time tracker implementation which holds labeled timers.
  */
-@Experimental
 private[spark] class TimeTracker extends Serializable {
 
   private val starts: MutableHashMap[String, Long] = new MutableHashMap[String, Long]()

@@ -69,6 +69,10 @@ case class ComplexData(
 case class GenericData[A](
     genericField: A)
 
+object GenericData {
+  type IntData = GenericData[Int]
+}
+
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
@@ -186,72 +190,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
       nullable = true))
   }
 
-  test("get data type of a value") {
-    // BooleanType
-    assert(BooleanType === typeOfObject(true))
-    assert(BooleanType === typeOfObject(false))
-
-    // BinaryType
-    assert(BinaryType === typeOfObject("string".getBytes))
-
-    // StringType
-    assert(StringType === typeOfObject("string"))
-
-    // ByteType
-    assert(ByteType === typeOfObject(127.toByte))
-
-    // ShortType
-    assert(ShortType === typeOfObject(32767.toShort))
-
-    // IntegerType
-    assert(IntegerType === typeOfObject(2147483647))
-
-    // LongType
-    assert(LongType === typeOfObject(9223372036854775807L))
-
-    // FloatType
-    assert(FloatType === typeOfObject(3.4028235E38.toFloat))
-
-    // DoubleType
-    assert(DoubleType === typeOfObject(1.7976931348623157E308))
-
-    // DecimalType
-    assert(DecimalType.SYSTEM_DEFAULT ===
-      typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
-
-    // DateType
-    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
-
-    // TimestampType
-    assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))
-
-    // NullType
-    assert(NullType === typeOfObject(null))
-
-    def typeOfObject1: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.SYSTEM_DEFAULT
-      case value: java.math.BigDecimal => DecimalType.SYSTEM_DEFAULT
-      case _ => StringType
-    }
-
-    assert(DecimalType.SYSTEM_DEFAULT === typeOfObject1(
-      new BigInteger("92233720368547758070")))
-    assert(DecimalType.SYSTEM_DEFAULT === typeOfObject1(
-      new java.math.BigDecimal("1.7976931348623157E318")))
-    assert(StringType === typeOfObject1(BigInt("92233720368547758070")))
-
-    def typeOfObject2: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case value: java.math.BigInteger => DecimalType.SYSTEM_DEFAULT
-    }
-
-    intercept[MatchError](typeOfObject2(BigInt("92233720368547758070")))
-
-    def typeOfObject3: PartialFunction[Any, DataType] = typeOfObject orElse {
-      case c: Seq[_] => ArrayType(typeOfObject3(c.head))
-    }
-
-    assert(ArrayType(IntegerType) === typeOfObject3(Seq(1, 2, 3)))
-    assert(ArrayType(ArrayType(IntegerType)) === typeOfObject3(Seq(Seq(1, 2, 3))))
+  test("type-aliased data") {
+    assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
   }
 
   test("convert PrimitiveData to catalyst") {
@@ -279,5 +219,22 @@ class ScalaReflectionSuite extends SparkFunSuite {
         assert(s.fieldNames === Seq("a", "b", "c"))
         assert(s.fields.map(_.dataType) === Seq(IntegerType, StringType, DoubleType))
     }
+  }
+
+  test("get parameter type from a function object") {
+    val primitiveFunc = (i: Int, j: Long) => "x"
+    val primitiveTypes = getParameterTypes(primitiveFunc)
+    assert(primitiveTypes.forall(_.isPrimitive))
+    assert(primitiveTypes === Seq(classOf[Int], classOf[Long]))
+
+    val boxedFunc = (i: java.lang.Integer, j: java.lang.Long) => "x"
+    val boxedTypes = getParameterTypes(boxedFunc)
+    assert(boxedTypes.forall(!_.isPrimitive))
+    assert(boxedTypes === Seq(classOf[java.lang.Integer], classOf[java.lang.Long]))
+
+    val anyFunc = (i: Any, j: AnyRef) => "x"
+    val anyTypes = getParameterTypes(anyFunc)
+    assert(anyTypes.forall(!_.isPrimitive))
+    assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
 }

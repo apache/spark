@@ -19,9 +19,9 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
-class SecurityManagerSuite extends SparkFunSuite {
+class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
 
   test("set security with conf") {
     val conf = new SparkConf
@@ -183,7 +183,6 @@ class SecurityManagerSuite extends SparkFunSuite {
     val securityManager = new SecurityManager(conf)
 
     assert(securityManager.fileServerSSLOptions.enabled === true)
-    assert(securityManager.akkaSSLOptions.enabled === true)
 
     assert(securityManager.sslSocketFactory.isDefined === true)
     assert(securityManager.hostnameVerifier.isDefined === true)
@@ -197,16 +196,6 @@ class SecurityManagerSuite extends SparkFunSuite {
     assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
     assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1.2"))
     assert(securityManager.fileServerSSLOptions.enabledAlgorithms === expectedAlgorithms)
-
-    assert(securityManager.akkaSSLOptions.trustStore.isDefined === true)
-    assert(securityManager.akkaSSLOptions.trustStore.get.getName === "truststore")
-    assert(securityManager.akkaSSLOptions.keyStore.isDefined === true)
-    assert(securityManager.akkaSSLOptions.keyStore.get.getName === "keystore")
-    assert(securityManager.akkaSSLOptions.trustStorePassword === Some("password"))
-    assert(securityManager.akkaSSLOptions.keyStorePassword === Some("password"))
-    assert(securityManager.akkaSSLOptions.keyPassword === Some("password"))
-    assert(securityManager.akkaSSLOptions.protocol === Some("TLSv1.2"))
-    assert(securityManager.akkaSSLOptions.enabledAlgorithms === expectedAlgorithms)
   }
 
   test("ssl off setup") {
@@ -218,9 +207,29 @@ class SecurityManagerSuite extends SparkFunSuite {
     val securityManager = new SecurityManager(conf)
 
     assert(securityManager.fileServerSSLOptions.enabled === false)
-    assert(securityManager.akkaSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
+  }
+
+  test("missing secret authentication key") {
+    val conf = new SparkConf().set("spark.authenticate", "true")
+    intercept[IllegalArgumentException] {
+      new SecurityManager(conf)
+    }
+  }
+
+  test("secret authentication key") {
+    val key = "very secret key"
+    val conf = new SparkConf()
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+    assert(key === new SecurityManager(conf).getSecretKey())
+
+    val keyFromEnv = "very secret key from env"
+    val conf2 = new SparkConfWithEnv(Map(SecurityManager.ENV_AUTH_SECRET -> keyFromEnv))
+      .set(SecurityManager.SPARK_AUTH_CONF, "true")
+      .set(SecurityManager.SPARK_AUTH_SECRET_CONF, key)
+    assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
 }

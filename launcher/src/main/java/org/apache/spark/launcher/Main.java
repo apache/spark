@@ -151,7 +151,7 @@ class Main {
 
     @Override
     protected boolean handle(String opt, String value) {
-      if (opt == CLASS) {
+      if (CLASS.equals(opt)) {
         className = value;
       }
       return false;

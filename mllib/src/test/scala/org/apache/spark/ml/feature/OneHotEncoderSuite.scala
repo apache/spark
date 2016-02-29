@@ -20,12 +20,14 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.{AttributeGroup, BinaryAttribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.col
 
-class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
+class OneHotEncoderSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   def stringIndexed(): DataFrame = {
     val data = sc.parallelize(Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")), 2)
@@ -49,7 +51,7 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setDropLast(false)
     val encoded = encoder.transform(transformed)
 
-    val output = encoded.select("id", "labelVec").map { r =>
+    val output = encoded.select("id", "labelVec").rdd.map { r =>
       val vec = r.getAs[Vector](1)
       (r.getInt(0), vec(0), vec(1), vec(2))
     }.collect().toSet
@@ -66,7 +68,7 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setOutputCol("labelVec")
     val encoded = encoder.transform(transformed)
 
-    val output = encoded.select("id", "labelVec").map { r =>
+    val output = encoded.select("id", "labelVec").rdd.map { r =>
       val vec = r.getAs[Vector](1)
       (r.getInt(0), vec(0), vec(1))
     }.collect().toSet
@@ -100,5 +102,13 @@ class OneHotEncoderSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(group.size === 2)
     assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
     assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
+  }
+
+  test("read/write") {
+    val t = new OneHotEncoder()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setDropLast(false)
+    testDefaultReadWrite(t)
   }
 }

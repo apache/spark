@@ -37,14 +37,19 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
    * trigger a Spark job if the parent RDD has more than one partitions and the window size is
    * greater than 1.
    */
-  def sliding(windowSize: Int): RDD[Array[T]] = {
+  def sliding(windowSize: Int, step: Int): RDD[Array[T]] = {
     require(windowSize > 0, s"Sliding window size must be positive, but got $windowSize.")
-    if (windowSize == 1) {
+    if (windowSize == 1 && step == 1) {
       self.map(Array(_))
     } else {
-      new SlidingRDD[T](self, windowSize)
+      new SlidingRDD[T](self, windowSize, step)
     }
   }
+
+  /**
+   * [[sliding(Int, Int)*]] with step = 1.
+   */
+  def sliding(windowSize: Int): RDD[Array[T]] = sliding(windowSize, 1)
 
   /**
    * Reduces the elements of this RDD in a multi-level tree pattern.

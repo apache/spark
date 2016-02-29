@@ -38,6 +38,10 @@ public final class Murmur3_x86_32 {
   }
 
   public int hashInt(int input) {
+    return hashInt(input, seed);
+  }
+
+  public static int hashInt(int input, int seed) {
     int k1 = mixK1(input);
     int h1 = mixH1(seed, k1);
 
@@ -51,16 +55,38 @@ public final class Murmur3_x86_32 {
   public static int hashUnsafeWords(Object base, long offset, int lengthInBytes, int seed) {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
-    int h1 = seed;
-    for (int i = 0; i < lengthInBytes; i += 4) {
-      int halfWord = Platform.getInt(base, offset + i);
+    int h1 = hashBytesByInt(base, offset, lengthInBytes, seed);
+    return fmix(h1, lengthInBytes);
+  }
+
+  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
+    int lengthAligned = lengthInBytes - lengthInBytes % 4;
+    int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
+    for (int i = lengthAligned; i < lengthInBytes; i++) {
+      int halfWord = Platform.getByte(base, offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
     return fmix(h1, lengthInBytes);
   }
 
+  private static int hashBytesByInt(Object base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes % 4 == 0);
+    int h1 = seed;
+    for (int i = 0; i < lengthInBytes; i += 4) {
+      int halfWord = Platform.getInt(base, offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return h1;
+  }
+
   public int hashLong(long input) {
+    return hashLong(input, seed);
+  }
+
+  public static int hashLong(long input, int seed) {
     int low = (int) input;
     int high = (int) (input >>> 32);
 

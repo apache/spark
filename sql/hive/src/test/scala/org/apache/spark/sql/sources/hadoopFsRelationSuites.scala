@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -29,6 +30,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -122,7 +124,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         val dataGenerator = RandomDataGenerator.forType(
           dataType = dataType,
           nullable = true,
-          seed = Some(System.nanoTime())
+          new Random(System.nanoTime())
         ).getOrElse {
           fail(s"Failed to create data generator for schema $dataType")
         }
@@ -485,6 +487,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       val df = sqlContext.read
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
+        .option("basePath", file.getCanonicalPath)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
 
       val expectedPaths = Set(
@@ -499,7 +502,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
 
       val actualPaths = df.queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: HadoopFsRelation, _) =>
+        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
           relation.paths.toSet
       }.getOrElse {
         fail("Expect an FSBasedRelation, but none could be found")
@@ -510,21 +513,39 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  // HadoopFsRelation.discoverPartitions() called by refresh(), which will ignore
-  // the given partition data type.
-  ignore("Partition column type casting") {
+  test("SPARK-9735 Partition column type casting") {
     withTempPath { file =>
-      val input = partitionedTestDF.select('a, 'b, 'p1.cast(StringType).as('ps), 'p2)
+      val df = (for {
+        i <- 1 to 3
+        p2 <- Seq("foo", "bar")
+      } yield (i, s"val_$i", 1.0d, p2, 123, 123.123f)).toDF("a", "b", "p1", "p2", "p3", "f")
 
-      input
-        .write
-        .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .partitionBy("ps", "p2")
-        .saveAsTable("t")
+      val input = df.select(
+        'a,
+        'b,
+        'p1.cast(StringType).as('ps1),
+        'p2,
+        'p3.cast(FloatType).as('pf1),
+        'f)
 
       withTempTable("t") {
-        checkAnswer(sqlContext.table("t"), input.collect())
+        input
+          .write
+          .format(dataSourceName)
+          .mode(SaveMode.Overwrite)
+          .partitionBy("ps1", "p2", "pf1", "f")
+          .saveAsTable("t")
+
+        input
+          .write
+          .format(dataSourceName)
+          .mode(SaveMode.Append)
+          .partitionBy("ps1", "p2", "pf1", "f")
+          .saveAsTable("t")
+
+        val realData = input.collect()
+
+        checkAnswer(sqlContext.table("t"), realData ++ realData)
       }
     }
   }

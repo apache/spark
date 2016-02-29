@@ -113,6 +113,7 @@ private[spark] object RBackend extends Logging {
       val dos = new DataOutputStream(new FileOutputStream(f))
       dos.writeInt(boundPort)
       dos.writeInt(listenPort)
+      SerDe.writeString(dos, RUtils.rPackages.getOrElse(""))
       dos.close()
       f.renameTo(new File(path))
 

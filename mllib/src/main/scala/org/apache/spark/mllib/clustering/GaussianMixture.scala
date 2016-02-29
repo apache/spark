@@ -21,7 +21,7 @@ import scala.collection.mutable.IndexedSeq
 
 import breeze.linalg.{diag, DenseMatrix => BreezeMatrix, DenseVector => BDV, Vector => BV}
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
@@ -30,8 +30,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
- *
  * This class performs expectation maximization for multivariate Gaussian
  * Mixture Models (GMMs).  A GMM represents a composite distribution of
  * independent Gaussian distributions with associated "mixing" weights
@@ -47,12 +45,11 @@ import org.apache.spark.util.Utils
  *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
  *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  *
- * @param k The number of independent Gaussians in the mixture model
- * @param convergenceTol The maximum change in log-likelihood at which convergence
- * is considered to have occurred.
- * @param maxIterations The maximum number of iterations to perform
+ * @param k Number of independent Gaussians in the mixture model.
+ * @param convergenceTol Maximum change in log-likelihood at which convergence
+ *                       is considered to have occurred.
+ * @param maxIterations Maximum number of iterations allowed.
  */
-@Experimental
 @Since("1.3.0")
 class GaussianMixture private (
     private var k: Int,
@@ -111,7 +108,7 @@ class GaussianMixture private (
   def getK: Int = k
 
   /**
-   * Set the maximum number of iterations to run. Default: 100
+   * Set the maximum number of iterations allowed. Default: 100
    */
   @Since("1.3.0")
   def setMaxIterations(maxIterations: Int): this.type = {
@@ -120,7 +117,7 @@ class GaussianMixture private (
   }
 
   /**
-   * Return the maximum number of iterations to run
+   * Return the maximum number of iterations allowed
    */
   @Since("1.3.0")
   def getMaxIterations: Int = maxIterations

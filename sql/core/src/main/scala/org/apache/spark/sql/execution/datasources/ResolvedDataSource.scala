@@ -21,18 +21,18 @@ import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
-import scala.util.{Success, Failure, Try}
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{DataFrame, SaveMode, AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
-
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
@@ -57,25 +57,69 @@ object ResolvedDataSource extends Logging {
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
 
     serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
-      /** the provider format did not match any given registered aliases */
-      case Nil => Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
-        case Success(dataSource) => dataSource
-        case Failure(error) =>
-          if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-            throw new ClassNotFoundException(
-              "The ORC data source must be used with Hive support enabled.", error)
-          } else {
-            throw new ClassNotFoundException(
-              s"Failed to load class for data source: $provider.", error)
-          }
-      }
-      /** there is exactly one registered alias */
-      case head :: Nil => head.getClass
-      /** There are multiple registered aliases for the input */
-      case sources => sys.error(s"Multiple sources found for $provider, " +
-        s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
-        "please specify the fully qualified class name.")
+      // the provider format did not match any given registered aliases
+      case Nil =>
+        Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+          case Success(dataSource) =>
+            // Found the data source using fully qualified path
+            dataSource
+          case Failure(error) =>
+            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+              throw new ClassNotFoundException(
+                "The ORC data source must be used with Hive support enabled.", error)
+            } else {
+              if (provider == "avro" || provider == "com.databricks.spark.avro") {
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please use Spark package " +
+                  "http://spark-packages.org/package/databricks/spark-avro",
+                  error)
+              } else {
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please find packages at " +
+                  "http://spark-packages.org",
+                  error)
+              }
+            }
+        }
+      case head :: Nil =>
+        // there is exactly one registered alias
+        head.getClass
+      case sources =>
+        // There are multiple registered aliases for the input
+        sys.error(s"Multiple sources found for $provider " +
+          s"(${sources.map(_.getClass.getName).mkString(", ")}), " +
+          "please specify the fully qualified class name.")
     }
+  }
+
+  def createSource(
+      sqlContext: SQLContext,
+      userSpecifiedSchema: Option[StructType],
+      providerName: String,
+      options: Map[String, String]): Source = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSourceProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed reading")
+    }
+
+    provider.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+  }
+
+  def createSink(
+      sqlContext: SQLContext,
+      providerName: String,
+      options: Map[String, String],
+      partitionColumns: Seq[String]): Sink = {
+    val provider = lookupDataSource(providerName).newInstance() match {
+      case s: StreamSinkProvider => s
+      case _ =>
+        throw new UnsupportedOperationException(
+          s"Data source $providerName does not support streamed writing")
+    }
+
+    provider.createSink(sqlContext, options, partitionColumns)
   }
 
   /** Create a [[ResolvedDataSource]] for reading data in. */
@@ -83,6 +127,7 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
@@ -99,7 +144,8 @@ object ResolvedDataSource extends Logging {
           val maybePartitionsSchema = if (partitionColumns.isEmpty) {
             None
           } else {
-            Some(partitionColumnsSchema(schema, partitionColumns))
+            Some(partitionColumnsSchema(
+              schema, partitionColumns, sqlContext.conf.caseSensitiveAnalysis))
           }
 
           val caseInsensitiveOptions = new CaseInsensitiveMap(options)
@@ -110,7 +156,9 @@ object ResolvedDataSource extends Logging {
             }
             caseInsensitiveOptions.get("paths")
               .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-              .getOrElse(Array(caseInsensitiveOptions("path")))
+              .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
+                throw new IllegalArgumentException("'path' is not specified")
+              })))
               .flatMap{ pathString =>
                 val hdfsPath = new Path(pathString)
                 val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
@@ -127,6 +175,7 @@ object ResolvedDataSource extends Logging {
             paths,
             Some(dataSchema),
             maybePartitionsSchema,
+            bucketSpec,
             caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.RelationProvider =>
           throw new AnalysisException(s"$className does not allow user-specified schemas.")
@@ -150,7 +199,9 @@ object ResolvedDataSource extends Logging {
             }
             caseInsensitiveOptions.get("paths")
               .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-              .getOrElse(Array(caseInsensitiveOptions("path")))
+              .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
+                throw new IllegalArgumentException("'path' is not specified")
+              })))
               .flatMap{ pathString =>
                 val hdfsPath = new Path(pathString)
                 val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
@@ -158,7 +209,7 @@ object ResolvedDataSource extends Logging {
                 SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
               }
           }
-          dataSource.createRelation(sqlContext, paths, None, None, caseInsensitiveOptions)
+          dataSource.createRelation(sqlContext, paths, None, None, None, caseInsensitiveOptions)
         case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
           throw new AnalysisException(
             s"A schema needs to be specified when using $className.")
@@ -172,12 +223,22 @@ object ResolvedDataSource extends Logging {
 
   def partitionColumnsSchema(
       schema: StructType,
-      partitionColumns: Array[String]): StructType = {
+      partitionColumns: Array[String],
+      caseSensitive: Boolean): StructType = {
+    val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
-      schema.find(_.name == col).getOrElse {
+      schema.find(f => equality(f.name, col)).getOrElse {
         throw new RuntimeException(s"Partition column $col not found in schema $schema")
       }
     }).asNullable
+  }
+
+  private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
+    if (caseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
   }
 
   /** Create a [[ResolvedDataSource]] for saving the content of the given DataFrame. */
@@ -185,6 +246,7 @@ object ResolvedDataSource extends Logging {
       sqlContext: SQLContext,
       provider: String,
       partitionColumns: Array[String],
+      bucketSpec: Option[BucketSpec],
       mode: SaveMode,
       options: Map[String, String],
       data: DataFrame): ResolvedDataSource = {
@@ -202,19 +264,26 @@ object ResolvedDataSource extends Logging {
         //  3. It's OK that the output path doesn't exist yet;
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val outputPath = {
-          val path = new Path(caseInsensitiveOptions("path"))
+          val path = new Path(caseInsensitiveOptions.getOrElse("path", {
+            throw new IllegalArgumentException("'path' is not specified")
+          }))
           val fs = path.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(data.schema, partitionColumns)
+        val caseSensitive = sqlContext.conf.caseSensitiveAnalysis
+        PartitioningUtils.validatePartitionColumnDataTypes(
+          data.schema, partitionColumns, caseSensitive)
 
-        val dataSchema = StructType(data.schema.filterNot(f => partitionColumns.contains(f.name)))
+        val equality = columnNameEquality(caseSensitive)
+        val dataSchema = StructType(
+          data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
         val r = dataSource.createRelation(
           sqlContext,
           Array(outputPath.toString),
           Some(dataSchema.asNullable),
-          Some(partitionColumnsSchema(data.schema, partitionColumns)),
+          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
+          bucketSpec,
           caseInsensitiveOptions)
 
         // For partitioned relation r, r.schema's column ordering can be different from the column

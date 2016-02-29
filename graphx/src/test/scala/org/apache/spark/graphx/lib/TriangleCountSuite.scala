@@ -26,7 +26,7 @@ class TriangleCountSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Count a single triangle") {
     withSpark { sc =>
-      val rawEdges = sc.parallelize(Array( 0L->1L, 1L->2L, 2L->0L ), 2)
+      val rawEdges = sc.parallelize(Array( 0L -> 1L, 1L -> 2L, 2L -> 0L ), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices
@@ -64,9 +64,9 @@ class TriangleCountSuite extends SparkFunSuite with LocalSparkContext {
       val verts = triangleCount.vertices
       verts.collect().foreach { case (vid, count) =>
         if (vid == 0) {
-          assert(count === 4)
-        } else {
           assert(count === 2)
+        } else {
+          assert(count === 1)
         }
       }
     }
@@ -75,7 +75,8 @@ class TriangleCountSuite extends SparkFunSuite with LocalSparkContext {
   test("Count a single triangle with duplicate edges") {
     withSpark { sc =>
       val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
-        Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
+        Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
+        Array(1L -> 0L, 1L -> 1L), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true, uniqueEdges = Some(RandomVertexCut)).cache()
       val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices

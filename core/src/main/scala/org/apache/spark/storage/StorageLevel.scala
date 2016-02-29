@@ -150,7 +150,9 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
-  val OFF_HEAP = new StorageLevel(false, false, true, false)
+
+  // Redirect to MEMORY_ONLY_SER for now.
+  val OFF_HEAP = MEMORY_ONLY_SER
 
   /**
    * :: DeveloperApi ::

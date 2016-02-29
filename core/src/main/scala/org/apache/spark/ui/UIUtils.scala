@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui
 
+import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
@@ -143,14 +144,10 @@ private[spark] object UIUtils extends Logging {
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
   def uiRoot: String = {
-    if (System.getenv("APPLICATION_WEB_PROXY_BASE") != null) {
-      System.getenv("APPLICATION_WEB_PROXY_BASE")
-    } else if (System.getProperty("spark.ui.proxyBase") != null) {
-      System.getProperty("spark.ui.proxyBase")
-    }
-    else {
-      ""
-    }
+    // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
+    sys.props.get("spark.ui.proxyBase")
+      .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
+      .getOrElse("")
   }
 
   def prependBaseUri(basePath: String = "", resource: String = ""): String = {
@@ -179,6 +176,20 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
     <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
     <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
+  }
+
+  def dataTablesHeaderNodes: Seq[Node] = {
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+    <link rel="stylesheet"
+          href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
+    <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
+    <script src={prependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
+    <script src={prependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
+    <script src={prependBaseUri("/static/jsonFormatter.min.js")}></script>
+    <script src={prependBaseUri("/static/jquery.mustache.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -214,10 +225,10 @@ private[spark] object UIUtils extends Logging {
                 <span class="version">{org.apache.spark.SPARK_VERSION}</span>
               </a>
             </div>
-            <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
             </p>
+            <ul class="nav">{header}</ul>
           </div>
         </div>
         <div class="container-fluid">
@@ -236,10 +247,14 @@ private[spark] object UIUtils extends Logging {
   }
 
   /** Returns a page with the spark css/js and a simple format. Used for scheduler UI. */
-  def basicSparkPage(content: => Seq[Node], title: String): Seq[Node] = {
+  def basicSparkPage(
+      content: => Seq[Node],
+      title: String,
+      useDataTables: Boolean = false): Seq[Node] = {
     <html>
       <head>
         {commonHeaderNodes}
+        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
         <title>{title}</title>
       </head>
       <body>
@@ -323,7 +338,9 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+    // started + completed can be > total when there are speculative tasks
+    val boundedStarted = math.min(started, total - completed)
+    val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
 
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
@@ -391,13 +408,6 @@ private[spark] object UIUtils extends Logging {
     </sup>
   }
 
-  /** Return a script element that automatically expands the DAG visualization on page load. */
-  def expandDagVizOnLoad(forJob: Boolean): Seq[Node] = {
-    <script type="text/javascript">
-      {Unparsed("$(document).ready(function() { toggleDagViz(" + forJob + ") });")}
-    </script>
-  }
-
   /**
    * Returns HTML rendering of a job or stage description. It will try to parse the string as HTML
    * and make sure that it only contains anchors with root-relative links. Otherwise,
@@ -450,8 +460,22 @@ private[spark] object UIUtils extends Logging {
       new RuleTransformer(rule).transform(xml)
     } catch {
       case NonFatal(e) =>
-        logWarning(s"Invalid job description: $desc ", e)
         <span class="description-input">{desc}</span>
     }
+  }
+
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   * Due to YARN-2844: WebAppProxyServlet cannot handle urls which contain encoded characters
+   * Therefore we need to decode it until we get the real URLParameter.
+   */
+  def decodeURLParameter(urlParam: String): String = {
+    var param = urlParam
+    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    while (param != decodedParam) {
+      param = decodedParam
+      decodedParam = URLDecoder.decode(param, "UTF-8")
+    }
+    param
   }
 }

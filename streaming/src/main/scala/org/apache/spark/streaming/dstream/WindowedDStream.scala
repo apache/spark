@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.dstream
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.rdd.{PartitionerAwareUnionRDD, RDD, UnionRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.Duration
-
-import scala.reflect.ClassTag
 
 private[streaming]
 class WindowedDStream[T: ClassTag](

@@ -17,9 +17,8 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{TimeUnit, Semaphore}
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import org.apache.spark.scheduler._
 

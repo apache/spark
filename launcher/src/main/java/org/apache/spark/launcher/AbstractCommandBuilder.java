@@ -146,9 +146,10 @@ abstract class AbstractCommandBuilder {
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
-      List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
+      List<String> projects = Arrays.asList("core", "repl", "mllib", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
-        "yarn", "launcher");
+        "yarn", "launcher",
+        "common/network-common", "common/network-shuffle", "common/network-yarn");
       if (prependClasses) {
         if (!isTesting) {
           System.err.println(

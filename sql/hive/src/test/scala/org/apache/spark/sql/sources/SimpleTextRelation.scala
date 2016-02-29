@@ -18,20 +18,18 @@
 package org.apache.spark.sql.sources
 
 import java.text.NumberFormat
-import java.util.UUID
 
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
+import org.apache.spark.sql.{sources, Row, SQLContext}
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * A simple example [[HadoopFsRelationProvider]].
@@ -54,9 +52,9 @@ class AppendingTextOutputFormat(outputFile: Path) extends TextOutputFormat[NullW
   numberFormat.setGroupingUsed(false)
 
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(context)
+    val configuration = context.getConfiguration
     val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
-    val taskAttemptId = SparkHadoopUtil.get.getTaskAttemptIDFromTaskAttemptContext(context)
+    val taskAttemptId = context.getTaskAttemptID
     val split = taskAttemptId.getTaskID.getId
     val name = FileOutputFormat.getOutputName(context)
     new Path(outputFile, s"$name-${numberFormat.format(split)}-$uniqueWriteJobId")
@@ -90,7 +88,7 @@ class SimpleTextRelation(
     override val userDefinedPartitionColumns: Option[StructType],
     parameters: Map[String, String])(
     @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation {
+  extends HadoopFsRelation(parameters) {
 
   import sqlContext.sparkContext
 
@@ -124,6 +122,56 @@ class SimpleTextRelation(
     }
   }
 
+  override def buildScan(
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      inputFiles: Array[FileStatus]): RDD[Row] = {
+
+    SimpleTextRelation.requiredColumns = requiredColumns
+    SimpleTextRelation.pushedFilters = filters.toSet
+
+    val fields = this.dataSchema.map(_.dataType)
+    val inputAttributes = this.dataSchema.toAttributes
+    val outputAttributes = requiredColumns.flatMap(name => inputAttributes.find(_.name == name))
+    val dataSchema = this.dataSchema
+
+    val inputPaths = inputFiles.map(_.getPath).mkString(",")
+    sparkContext.textFile(inputPaths).mapPartitions { iterator =>
+      // Constructs a filter predicate to simulate filter push-down
+      val predicate = {
+        val filterCondition: Expression = filters.collect {
+          // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` filter
+          case sources.GreaterThan(column, value) =>
+            val dataType = dataSchema(column).dataType
+            val literal = Literal.create(value, dataType)
+            val attribute = inputAttributes.find(_.name == column).get
+            expressions.GreaterThan(attribute, literal)
+        }.reduceOption(expressions.And).getOrElse(Literal(true))
+        InterpretedPredicate.create(filterCondition, inputAttributes)
+      }
+
+      // Uses a simple projection to simulate column pruning
+      val projection = new InterpretedMutableProjection(outputAttributes, inputAttributes)
+      val toScala = {
+        val requiredSchema = StructType.fromAttributes(outputAttributes)
+        CatalystTypeConverters.createToScalaConverter(requiredSchema)
+      }
+
+      iterator.map { record =>
+        new GenericInternalRow(record.split(",", -1).zip(fields).map {
+          case (v, dataType) =>
+            val value = if (v == "") null else v
+            // `Cast`ed values are always of internal types (e.g. UTF8String instead of String)
+            Cast(Literal(value), dataType).eval()
+        })
+      }.filter { row =>
+        predicate(row)
+      }.map { row =>
+        toScala(projection(row)).asInstanceOf[Row]
+      }
+    }
+  }
+
   override def prepareJobForWrite(job: Job): OutputWriterFactory = new OutputWriterFactory {
     job.setOutputFormatClass(classOf[TextOutputFormat[_, _]])
 
@@ -134,6 +182,23 @@ class SimpleTextRelation(
       new SimpleTextOutputWriter(path, context)
     }
   }
+
+  // `SimpleTextRelation` only handles `GreaterThan` filter.  This is used to test filter push-down
+  // and `BaseRelation.unhandledFilters()`.
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    filters.filter {
+      case _: GreaterThan => false
+      case _ => true
+    }
+  }
+}
+
+object SimpleTextRelation {
+  // Used to test column pruning
+  var requiredColumns: Seq[String] = Nil
+
+  // Used to test filter push-down
+  var pushedFilters: Set[Filter] = Set.empty
 }
 
 /**
