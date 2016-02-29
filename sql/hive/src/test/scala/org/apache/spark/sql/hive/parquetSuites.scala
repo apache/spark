@@ -170,9 +170,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     }
 
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    read.json(rdd1).registerTempTable("jt")
+    //read.json(rdd1).registerTempTable("jt")
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":[$i, null]}"""))
-    read.json(rdd2).registerTempTable("jt_array")
+    //read.json(rdd2).registerTempTable("jt_array")
 
     setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
   }

@@ -496,7 +496,7 @@ case class HadoopFsRelation(
     })
   }
 
-  def partitionSpec: PartitionSpec = location.partitionSpec
+  def partitionSpec: PartitionSpec = location.partitionSpec(Some(partitionSchema))
 
   def refresh(): Unit = location.refresh()
 }
@@ -523,9 +523,9 @@ trait FileFormat {
 }
 
 trait FileCatalog {
-  def paths: Array[Path]
+  def paths: Seq[Path]
 
-  def partitionSpec: PartitionSpec
+  def partitionSpec(schema: Option[StructType]): PartitionSpec
 
   def allFiles(): Seq[FileStatus]
 
@@ -537,21 +537,30 @@ trait FileCatalog {
 case class HDFSFileCatalog(
     sqlContext: SQLContext,
     parameters: Map[String, String],
-    paths: Array[Path])
+    paths: Seq[Path])
   extends FileCatalog with Logging {
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
 
   var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
-  var partitionSpec: PartitionSpec = _
+  var cachedPartitionSpec: PartitionSpec = _
+
+  def partitionSpec(schema: Option[StructType]): PartitionSpec = {
+    if (cachedPartitionSpec == null) {
+      cachedPartitionSpec = inferPartitioning(schema)
+    }
+
+    cachedPartitionSpec
+  }
+
   refresh()
 
   def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
   def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
-  private def listLeafFiles(paths: Array[Path]): mutable.LinkedHashSet[FileStatus] = {
+  private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
     } else {
@@ -582,14 +591,37 @@ case class HDFSFileCatalog(
     }
   }
 
-   def inferPartitioning(): PartitionSpec = {
+   def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.keys.toSeq
-    PartitioningUtils.parsePartitions(
-      leafDirs,
-      PartitioningUtils.DEFAULT_PARTITION_NAME,
-      typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
-      basePaths = basePaths)
+    schema match {
+      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
+        val spec = PartitioningUtils.parsePartitions(
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = false,
+          basePaths = basePaths)
+
+        // Without auto inference, all of value in the `row` should be null or in StringType,
+        // we need to cast into the data type that user specified.
+        def castPartitionValuesToUserSchema(row: InternalRow) = {
+          InternalRow((0 until row.numFields).map { i =>
+            Cast(
+              Literal.create(row.getUTF8String(i), StringType),
+              userProvidedSchema.fields(i).dataType).eval()
+          }: _*)
+        }
+
+        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
+          part.copy(values = castPartitionValuesToUserSchema(part.values))
+        })
+      case None =>
+        PartitioningUtils.parsePartitions(
+          leafDirs,
+          PartitioningUtils.DEFAULT_PARTITION_NAME,
+          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
+          basePaths = basePaths)
+    }
   }
 
   /**
@@ -624,7 +656,7 @@ case class HDFSFileCatalog(
     leafFiles ++= files.map(f => f.getPath -> f)
     leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
 
-    partitionSpec = inferPartitioning()
+    cachedPartitionSpec = null
   }
 }
 
@@ -1054,7 +1086,7 @@ private[sql] object HadoopFsRelation extends Logging {
       accessTime: Long)
 
   def listLeafFilesInParallel(
-      paths: Array[Path],
+      paths: Seq[Path],
       hadoopConf: Configuration,
       sparkContext: SparkContext): mutable.LinkedHashSet[FileStatus] = {
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")

@@ -503,7 +503,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       val actualPaths = df.queryExecution.analyzed.collectFirst {
         case LogicalRelation(relation: HadoopFsRelation, _, _) =>
-          relation.location.paths.toSet
+          relation.location.paths.map(_.toString).toSet
       }.getOrElse {
         fail("Expect an FSBasedRelation, but none could be found")
       }

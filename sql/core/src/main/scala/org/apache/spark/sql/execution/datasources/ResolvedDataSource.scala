@@ -39,7 +39,6 @@ import org.apache.spark.util.Utils
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
-
 object ResolvedDataSource extends Logging {
 
   /** A map to maintain backward compatibility in case we move data sources around. */
@@ -166,11 +165,20 @@ object ResolvedDataSource extends Logging {
             fileCatalog.allFiles())
         }
 
-        val partitionSpec = fileCatalog.partitionSpec
+        // If they gave a schema, then we try and figure out the types of the partition columns
+        // from that schema.
+        val partitionSchema = userSpecifiedSchema.map { schema =>
+          StructType(
+            partitionColumns.map { c =>
+              schema.find(_.name == c).get
+          })
+        }.getOrElse(fileCatalog.partitionSpec(None).partitionColumns)
+
+
         HadoopFsRelation(
           sqlContext,
           fileCatalog,
-          partitionSchema = partitionSpec.partitionColumns,
+          partitionSchema = partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
           format)
@@ -240,6 +248,32 @@ object ResolvedDataSource extends Logging {
         val dataSchema = StructType(
           data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
 
+        // If we are appending to a table that already exists, make sure the partitioning matches
+        // up.  If we fail to load the table for whatever reason, ignore the check.
+        if (mode == SaveMode.Append) {
+          val existingPartitionColumns = try {
+            val resolved = apply(
+              sqlContext,
+              userSpecifiedSchema = Some(data.schema.asNullable),
+              provider = provider,
+              options = options)
+
+            Some(resolved.relation
+              .asInstanceOf[HadoopFsRelation]
+              .location
+              .partitionSpec(None)
+              .partitionColumns
+              .fieldNames
+              .toSet)
+          } catch {
+            case e: Exception =>
+              println(s"cant read existing schema $e")
+              None
+          }
+
+          existingPartitionColumns.foreach(ex => assert(ex == partitionColumns.toSet))
+        }
+
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
@@ -260,7 +294,7 @@ object ResolvedDataSource extends Logging {
 
     apply(
       sqlContext,
-      userSpecifiedSchema = Some(data.schema),
+      userSpecifiedSchema = Some(data.schema.asNullable),
       partitionColumns = partitionColumns,
       bucketSpec = bucketSpec,
       provider = provider,

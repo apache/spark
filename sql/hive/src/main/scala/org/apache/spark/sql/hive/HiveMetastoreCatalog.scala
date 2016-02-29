@@ -180,6 +180,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         // SerDe properties directly...
         val options = table.storage.serdeProperties
 
+        println(s"resolving $partitionColumns")
+
         val resolvedRelation =
           ResolvedDataSource(
             hive,
@@ -422,6 +424,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   override def lookupRelation(
       tableIdent: TableIdentifier,
       alias: Option[String]): LogicalPlan = {
+    println(s"looking $tableIdent")
+
     val qualifiedTableName = getQualifiedTableName(tableIdent)
     val table = client.getTable(qualifiedTableName.database, qualifiedTableName.name)
 
@@ -449,6 +453,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
     val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
 
+    println(s"loading: $metastoreRelation")
+
     // NOTE: Instead of passing Metastore schema directly to `ParquetRelation`, we have to
     // serialize the Metastore schema to JSON and pass it as a data source option because of the
     // evil case insensitivity issue, which is reconciled within `ParquetRelation`.
@@ -474,7 +480,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           // If we have the same paths, same schema, and same partition spec,
           // we will use the cached Parquet Relation.
           val useCached =
-            parquetRelation.location.paths.toSet == pathsInMetastore.toSet &&
+            parquetRelation.location.paths.map(_.toString).toSet == pathsInMetastore.toSet &&
             logical.schema.sameType(metastoreSchema) &&
             parquetRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
               PartitionSpec(StructType(Nil), Array.empty[datasources.Partition])
@@ -509,14 +515,13 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         })
         ParquetPartition(values, location)
       }
+      println(s"part: $partitions")
+
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
       val paths = partitions.map(_.path.toString)
 
       val cached = getCached(tableIdentifier, paths, metastoreSchema, Some(partitionSpec))
       val parquetRelation = cached.getOrElse {
-//        val created = LogicalRelation(
-//          new ParquetRelation(
-//            paths.toArray, None, Some(partitionSpec), parquetOptions)(hive))
         val fileCatalog = HiveFileCatalog(partitionSpec)
         val relation = HadoopFsRelation(
           sqlContext = hive,
@@ -536,13 +541,17 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
 
       val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
+      println(s"cache: $cached")
       val parquetRelation = cached.getOrElse {
+        println("loading from metastore")
         val created =
-          ResolvedDataSource(
-            sqlContext = hive,
-            paths = paths,
-            options = parquetOptions,
-            provider = "parquet").relation.asInstanceOf[LogicalRelation]
+          LogicalRelation(
+            ResolvedDataSource(
+              sqlContext = hive,
+              paths = paths,
+              userSpecifiedSchema = Some(metastoreRelation.schema),
+              options = parquetOptions,
+              provider = "parquet").relation)
 
         cachedDataSourceTables.put(tableIdentifier, created)
         created
@@ -743,14 +752,17 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 }
 
 case class HiveFileCatalog(
-    partitionSpec: PartitionSpec) extends FileCatalog {
+    partitionSpecFromHive: PartitionSpec) extends FileCatalog {
+
   override def getStatus(path: Path): Array[FileStatus] = ???
 
   override def refresh(): Unit = {}
 
   override def allFiles(): Seq[FileStatus] = ???
 
-  override def paths: Array[Path] = ???
+  override def paths: Seq[Path] = ???
+
+  override def partitionSpec(schema: Option[StructType]): PartitionSpec = partitionSpecFromHive
 }
 
 /**

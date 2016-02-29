@@ -366,13 +366,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
-      case (true, SaveMode.Append) =>
-        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
-        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
-        // the table. But, insertInto with Overwrite requires the schema of data be the same
-        // the schema of the table.
-        insertInto(tableIdent)
-
       case _ =>
         val cmd =
           CreateTableUsingAsSelect(
