@@ -255,6 +255,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
     }
+
+    if (proxyUser != null && principal != null) {
+      SparkSubmit.printErrorAndExit("Only one of --proxy-user or --principal can be provided.")
+    }
   }
 
   private def validateKillArguments(): Unit = {
@@ -517,6 +521,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
         |
         |  --proxy-user NAME           User to impersonate when submitting the application.
+        |                              This argument does not work with --principal / --keytab.
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
