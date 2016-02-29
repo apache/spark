@@ -27,7 +27,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.collection.CompactBuffer
 
-
 class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   // Key is simply the record itself
@@ -37,8 +36,7 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("GeneralHashedRelation") {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
-    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
-    val hashed = HashedRelation(data.iterator, numDataRows, keyProjection)
+    val hashed = HashedRelation(data.iterator, keyProjection)
     assert(hashed.isInstanceOf[GeneralHashedRelation])
 
     assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
@@ -48,13 +46,11 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val data2 = CompactBuffer[InternalRow](data(2))
     data2 += data(2)
     assert(hashed.get(data(2)) === data2)
-    assert(numDataRows.value.value === data.length)
   }
 
   test("UniqueKeyHashedRelation") {
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2))
-    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
-    val hashed = HashedRelation(data.iterator, numDataRows, keyProjection)
+    val hashed = HashedRelation(data.iterator, keyProjection)
     assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
 
     assert(hashed.get(data(0)) === CompactBuffer[InternalRow](data(0)))
@@ -67,19 +63,17 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     assert(uniqHashed.getValue(data(1)) === data(1))
     assert(uniqHashed.getValue(data(2)) === data(2))
     assert(uniqHashed.getValue(InternalRow(10)) === null)
-    assert(numDataRows.value.value === data.length)
   }
 
   test("UnsafeHashedRelation") {
     val schema = StructType(StructField("a", IntegerType, true) :: Nil)
     val data = Array(InternalRow(0), InternalRow(1), InternalRow(2), InternalRow(2))
-    val numDataRows = SQLMetrics.createLongMetric(sparkContext, "data")
     val toUnsafe = UnsafeProjection.create(schema)
     val unsafeData = data.map(toUnsafe(_).copy()).toArray
 
     val buildKey = Seq(BoundReference(0, IntegerType, false))
     val keyGenerator = UnsafeProjection.create(buildKey)
-    val hashed = UnsafeHashedRelation(unsafeData.iterator, numDataRows, keyGenerator, 1)
+    val hashed = UnsafeHashedRelation(unsafeData.iterator, keyGenerator, 1)
     assert(hashed.isInstanceOf[UnsafeHashedRelation])
 
     assert(hashed.get(unsafeData(0)) === CompactBuffer[InternalRow](unsafeData(0)))
@@ -101,7 +95,6 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     assert(hashed2.get(unsafeData(1)) === CompactBuffer[InternalRow](unsafeData(1)))
     assert(hashed2.get(toUnsafe(InternalRow(10))) === null)
     assert(hashed2.get(unsafeData(2)) === data2)
-    assert(numDataRows.value.value === data.length)
 
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
@@ -133,5 +126,33 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     hashed2.writeExternal(out2)
     out2.flush()
     assert(java.util.Arrays.equals(os2.toByteArray, os.toByteArray))
+  }
+
+  test("LongArrayRelation") {
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
+    val keyProj = UnsafeProjection.create(Seq(BoundReference(0, IntegerType, false)))
+    val longRelation = LongHashedRelation(rows.iterator, keyProj, 100)
+    assert(longRelation.isInstanceOf[LongArrayRelation])
+    val longArrayRelation = longRelation.asInstanceOf[LongArrayRelation]
+    (0 until 100).foreach { i =>
+      val row = longArrayRelation.getValue(i)
+      assert(row.getInt(0) === i)
+      assert(row.getInt(1) === i + 1)
+    }
+
+    val os = new ByteArrayOutputStream()
+    val out = new ObjectOutputStream(os)
+    longArrayRelation.writeExternal(out)
+    out.flush()
+    val in = new ObjectInputStream(new ByteArrayInputStream(os.toByteArray))
+    val relation = new LongArrayRelation()
+    relation.readExternal(in)
+    (0 until 100).foreach { i =>
+      val row = longArrayRelation.getValue(i)
+      assert(row.getInt(0) === i)
+      assert(row.getInt(1) === i + 1)
+    }
   }
 }

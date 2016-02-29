@@ -35,7 +35,7 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def dataType: DataType = StringType
 
-  override val prettyName = "INPUT_FILE_NAME"
+  override def prettyName: String = "input_file_name"
 
   override protected def initInternal(): Unit = {}
 
@@ -48,6 +48,4 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
     s"final ${ctx.javaType(dataType)} ${ev.value} = " +
       "org.apache.spark.rdd.SqlNewHadoopRDDState.getInputFileName();"
   }
-
-  override def sql: String = prettyName
 }

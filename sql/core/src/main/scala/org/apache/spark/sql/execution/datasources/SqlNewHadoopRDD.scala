@@ -32,7 +32,8 @@ import org.apache.spark.{Partition => SparkPartition, _}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.sql.{SQLConf, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.datasources.parquet.UnsafeRowParquetRecordReader
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
@@ -99,6 +100,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
   // a subset of the types (no complex types).
   protected val enableUnsafeRowParquetReader: Boolean =
     sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
+  protected val enableVectorizedParquetReader: Boolean =
+    sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -176,6 +179,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           parquetReader.close()
         } else {
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
+          if (enableVectorizedParquetReader) parquetReader.resultBatch()
         }
       }
 
@@ -214,7 +218,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
         }
         havePair = false
         if (!finished) {
-          inputMetrics.incRecordsRead(1)
+          inputMetrics.incRecordsReadInternal(1)
         }
         if (inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0) {
           updateBytesRead()
@@ -246,7 +250,7 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.incBytesRead(split.serializableHadoopSplit.value.getLength)
+              inputMetrics.incBytesReadInternal(split.serializableHadoopSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)

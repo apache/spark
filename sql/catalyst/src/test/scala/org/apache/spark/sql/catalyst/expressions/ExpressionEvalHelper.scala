@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.Utils
 
 /**
  * A few helper functions for expression evaluation testing. Mixin this trait to use them.
@@ -82,7 +83,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           s"""
             |Code generation of $expression failed:
             |$e
-            |${e.getStackTraceString}
+            |${Utils.exceptionString(e)}
           """.stripMargin)
     }
   }

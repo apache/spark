@@ -71,7 +71,8 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     validateParams()
-    SchemaUtils.checkColumnType(schema, $(inputCol), new ArrayType(StringType, true))
+    val typeCandidates = List(new ArrayType(StringType, true), new ArrayType(StringType, false))
+    SchemaUtils.checkColumnTypes(schema, $(inputCol), typeCandidates)
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 
@@ -210,6 +211,7 @@ class CountVectorizerModel(override val uid: String, val vocabulary: Array[Strin
   private var broadcastDict: Option[Broadcast[Map[String, Int]]] = None
 
   override def transform(dataset: DataFrame): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     if (broadcastDict.isEmpty) {
       val dict = vocabulary.zipWithIndex.toMap
       broadcastDict = Some(dataset.sqlContext.sparkContext.broadcast(dict))

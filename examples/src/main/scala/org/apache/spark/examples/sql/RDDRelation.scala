@@ -19,8 +19,7 @@
 package org.apache.spark.examples.sql
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.{SaveMode, SQLContext}
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
 // names and types.
@@ -58,8 +57,8 @@ object RDDRelation {
     // Queries can also be written using a LINQ-like Scala DSL.
     df.where($"key" === 1).orderBy($"value".asc).select($"key").collect().foreach(println)
 
-    // Write out an RDD as a parquet file.
-    df.write.parquet("pair.parquet")
+    // Write out an RDD as a parquet file with overwrite mode.
+    df.write.mode(SaveMode.Overwrite).parquet("pair.parquet")
 
     // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
     val parquetFile = sqlContext.read.parquet("pair.parquet")

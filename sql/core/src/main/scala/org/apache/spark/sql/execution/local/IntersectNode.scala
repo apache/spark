@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.local
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.internal.SQLConf
 
 case class IntersectNode(conf: SQLConf, left: LocalNode, right: LocalNode)
   extends BinaryLocalNode(conf) {

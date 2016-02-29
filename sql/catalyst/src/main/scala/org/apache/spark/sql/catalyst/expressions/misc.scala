@@ -143,11 +143,11 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
+    UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
     )
   }
 }
@@ -234,8 +234,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
 
   override def prettyName: String = "hash"
 
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")}, $seed)"
-
   override def eval(input: InternalRow): Any = {
     var hash = seed
     var i = 0
@@ -321,7 +319,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
         result
     }
   }
-
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
@@ -422,5 +419,23 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
 
       case udt: UserDefinedType[_] => computeHash(input, udt.sqlType, result, ctx)
     }
+  }
+}
+
+/**
+  * Print the result of an expression to stderr (used for debugging codegen).
+  */
+case class PrintToStderr(child: Expression) extends UnaryExpression {
+
+  override def dataType: DataType = child.dataType
+
+  protected override def nullSafeEval(input: Any): Any = input
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+         | System.err.println("Result of ${child.simpleString} is " + $c);
+         | ${ev.value} = $c;
+       """.stripMargin)
   }
 }

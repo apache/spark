@@ -200,7 +200,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     batchUIData.get.totalDelay should be (batchInfoSubmitted.totalDelay)
     batchUIData.get.streamIdToInputInfo should be (Map.empty)
     batchUIData.get.numRecords should be (0)
-    batchUIData.get.outputOpIdSparkJobIdPairs should be (Seq(OutputOpIdAndSparkJobId(0, 0)))
+    batchUIData.get.outputOpIdSparkJobIdPairs.toSeq should be (Seq(OutputOpIdAndSparkJobId(0, 0)))
 
     // A lot of "onBatchCompleted"s happen before "onJobStart"
     for(i <- limit + 1 to limit * 2) {
