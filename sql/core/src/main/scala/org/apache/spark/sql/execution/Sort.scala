@@ -134,11 +134,10 @@ case class Sort(
     val dataSize = metricTerm(ctx, "dataSize")
     val spillSize = metricTerm(ctx, "spillSize")
     val spillSizeBefore = ctx.freshName("spillSizeBefore")
-    ctx.addMutableState(classOf[Long].getName, spillSizeBefore, "")
     s"""
        | if ($needToSort) {
        |   $addToSorter();
-       |   $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |   Long $spillSizeBefore = $metrics.memoryBytesSpilled();
        |   $sortedIterator = $sorterVariable.sort();
        |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
        |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
@@ -160,7 +159,7 @@ case class Sort(
     }
 
     ctx.currentVars = input
-    val code = GenerateUnsafeProjection.createCode(ctx, colExprs, useSubexprElimination = false)
+    val code = GenerateUnsafeProjection.createCode(ctx, colExprs)
 
     s"""
        | // Convert the input attributes to an UnsafeRow and add it to the sorter
