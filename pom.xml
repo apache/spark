@@ -87,13 +87,13 @@
 
   <modules>
     <module>common/sketch</module>
+    <module>common/network-common</module>
+    <module>common/network-shuffle</module>
     <module>tags</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
-    <module>network/common</module>
-    <module>network/shuffle</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
@@ -2442,7 +2442,7 @@
       <id>yarn</id>
       <modules>
         <module>yarn</module>
-        <module>network/yarn</module>
+        <module>common/network-yarn</module>
       </modules>
     </profile>
 
