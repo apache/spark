@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -67,6 +68,8 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def withName(newName: String): UnresolvedAttribute = UnresolvedAttribute.quoted(newName)
 
   override def toString: String = s"'$name"
+
+  override def sql: String = quoteIdentifier(name)
 }
 
 object UnresolvedAttribute {
@@ -141,11 +144,8 @@ case class UnresolvedFunction(
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 
-  override def prettyString: String = {
-    s"${name}(${children.map(_.prettyString).mkString(",")})"
-  }
-
-  override def toString: String = s"'$name(${children.mkString(",")})"
+  override def prettyName: String = name
+  override def toString: String = s"'$name(${children.mkString(", ")})"
 }
 
 /**
@@ -208,10 +208,9 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
             Alias(extract, f.name)()
         }
 
-        case _ => {
+        case _ =>
           throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
             target.get + "`")
-        }
       }
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
@@ -228,6 +227,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
  * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
  * as follows:
  *  MultiAlias(stack_function, Seq(a, b))
+ *
 
  * @param child the computation being performed
  * @param names the names to be associated with each output of computing [[child]].
@@ -284,13 +284,14 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override lazy val resolved = false
 
   override def toString: String = s"$child[$extraction]"
+  override def sql: String = s"${child.sql}[${extraction.sql}]"
 }
 
 /**
  * Holds the expression that has yet to be aliased.
  *
  * @param child The computation that is needs to be resolved during analysis.
- * @param aliasName The name if specified to be asoosicated with the result of computing [[child]]
+ * @param aliasName The name if specified to be associated with the result of computing [[child]]
  *
  */
 case class UnresolvedAlias(child: Expression, aliasName: Option[String] = None)

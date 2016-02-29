@@ -26,7 +26,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{LeafNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -63,7 +64,7 @@ private[sql] case class InMemoryRelation(
     @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null,
     @transient private[sql] var _statistics: Statistics = null,
     private[sql] var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
-  extends LogicalPlan with MultiInstanceRelation {
+  extends logical.LeafNode with MultiInstanceRelation {
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -183,8 +184,6 @@ private[sql] case class InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
       _cachedColumnBuffers, statisticsToBePropagated, batchStats)
   }
-
-  override def children: Seq[LogicalPlan] = Seq.empty
 
   override def newInstance(): this.type = {
     new InMemoryRelation(

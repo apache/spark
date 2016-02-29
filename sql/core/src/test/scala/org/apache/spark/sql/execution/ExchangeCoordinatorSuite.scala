@@ -21,7 +21,9 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchange}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.TestSQLContext
 
 class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -297,13 +299,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = agg.queryExecution.executedPlan.collect {
-          case e: Exchange => e
+          case e: ShuffleExchange => e
         }
         assert(exchanges.length === 1)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: Exchange =>
+              case e: ShuffleExchange =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 3)
               case o =>
@@ -311,7 +313,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
           case None =>
             exchanges.foreach {
-              case e: Exchange =>
+              case e: ShuffleExchange =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 2)
               case o =>
@@ -348,13 +350,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = join.queryExecution.executedPlan.collect {
-          case e: Exchange => e
+          case e: ShuffleExchange => e
         }
         assert(exchanges.length === 2)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: Exchange =>
+              case e: ShuffleExchange =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 3)
               case o =>
@@ -362,7 +364,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
           case None =>
             exchanges.foreach {
-              case e: Exchange =>
+              case e: ShuffleExchange =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 2)
               case o =>
@@ -404,13 +406,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = join.queryExecution.executedPlan.collect {
-          case e: Exchange => e
+          case e: ShuffleExchange => e
         }
         assert(exchanges.length === 4)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: Exchange =>
+              case e: ShuffleExchange =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 3)
               case o =>
@@ -456,13 +458,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = join.queryExecution.executedPlan.collect {
-          case e: Exchange => e
+          case e: ShuffleExchange => e
         }
         assert(exchanges.length === 3)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: Exchange =>
+              case e: ShuffleExchange =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 3)
               case o =>

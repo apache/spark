@@ -83,7 +83,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], () => Mu
         }
     }
 
-    // Evaluate all the the subexpressions.
+    // Evaluate all the subexpressions.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val updates = validExpr.zip(index).map {

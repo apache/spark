@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.internal
 
-import java.util.Properties
+import java.util.{NoSuchElementException, Properties}
 
-import scala.collection.immutable
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 
 import org.apache.parquet.hadoop.ParquetOutputCommitter
 
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-private[spark] object SQLConf {
+object SQLConf {
 
   private val sqlConfEntries = java.util.Collections.synchronizedMap(
     new java.util.HashMap[String, SQLConfEntry[_]]())
@@ -55,7 +55,7 @@ private[spark] object SQLConf {
    *                 configuration is only used internally and we should not expose it to the user.
    * @tparam T the value type
    */
-  private[sql] class SQLConfEntry[T] private(
+  class SQLConfEntry[T] private(
       val key: String,
       val defaultValue: Option[T],
       val valueConverter: String => T,
@@ -70,7 +70,7 @@ private[spark] object SQLConf {
     }
   }
 
-  private[sql] object SQLConfEntry {
+  object SQLConfEntry {
 
     private def apply[T](
           key: String,
@@ -345,12 +345,9 @@ private[spark] object SQLConf {
     defaultValue = Some(true),
     doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
-  // Note: this can not be enabled all the time because the reader will not be returning UnsafeRows.
-  // Doing so is very expensive and we should remove this requirement instead of fixing it here.
-  // Initial testing seems to indicate only sort requires this.
   val PARQUET_VECTORIZED_READER_ENABLED = booleanConf(
     key = "spark.sql.parquet.enableVectorizedReader",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "Enables vectorized parquet decoding.")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
@@ -430,7 +427,7 @@ private[spark] object SQLConf {
 
   val PARTITION_MAX_FILES =
     intConf("spark.sql.sources.maxConcurrentWrites",
-      defaultValue = Some(5),
+      defaultValue = Some(1),
       doc = "The maximum number of concurrent files to open before falling back on sorting when " +
             "writing out files using dynamic partitioning.")
 
@@ -528,7 +525,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
+class SQLConf extends Serializable with CatalystConf with ParserConf with Logging {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -537,85 +534,85 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
 
   /** ************************ Spark SQL Params/Hints ******************* */
 
-  private[spark] def useCompression: Boolean = getConf(COMPRESS_CACHED)
+  def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
-  private[spark] def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
+  def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
-  private[spark] def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
+  def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
-  private[spark] def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
+  def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
-  private[spark] def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
+  def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
-  private[spark] def targetPostShuffleInputSize: Long =
+  def targetPostShuffleInputSize: Long =
     getConf(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE)
 
-  private[spark] def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
+  def adaptiveExecutionEnabled: Boolean = getConf(ADAPTIVE_EXECUTION_ENABLED)
 
-  private[spark] def minNumPostShufflePartitions: Int =
+  def minNumPostShufflePartitions: Int =
     getConf(SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS)
 
-  private[spark] def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
+  def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
 
-  private[spark] def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
+  def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
-  private[spark] def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
+  def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
-  private[spark] def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+  def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
 
-  private[spark] def nativeView: Boolean = getConf(NATIVE_VIEW)
+  def nativeView: Boolean = getConf(NATIVE_VIEW)
 
-  private[spark] def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+  def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
-  private[spark] def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
+  def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
-  private[spark] def subexpressionEliminationEnabled: Boolean =
+  def subexpressionEliminationEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_ENABLED)
 
-  private[spark] def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+  def autoBroadcastJoinThreshold: Int = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
-  private[spark] def defaultSizeInBytes: Long =
+  def defaultSizeInBytes: Long =
     getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
 
-  private[spark] def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
+  def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
-  private[spark] def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
+  def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
-  private[spark] def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
+  def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
-  private[spark] def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+  def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
-  private[spark] def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
+  def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  private[spark] def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
+  def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
 
-  private[spark] def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+  def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
-  private[spark] def partitionDiscoveryEnabled(): Boolean =
+  def partitionDiscoveryEnabled(): Boolean =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED)
 
-  private[spark] def partitionColumnTypeInferenceEnabled(): Boolean =
+  def partitionColumnTypeInferenceEnabled(): Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
 
-  private[spark] def parallelPartitionDiscoveryThreshold: Int =
+  def parallelPartitionDiscoveryThreshold: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
-  private[spark] def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+  def bucketingEnabled(): Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
-  private[spark] def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
+  def schemaStringLengthThreshold: Int = getConf(SCHEMA_STRING_LENGTH_THRESHOLD)
 
-  private[spark] def dataFrameEagerAnalysis: Boolean = getConf(DATAFRAME_EAGER_ANALYSIS)
+  def dataFrameEagerAnalysis: Boolean = getConf(DATAFRAME_EAGER_ANALYSIS)
 
-  private[spark] def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
+  def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)
 
-  private[spark] def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
+  def dataFrameRetainGroupColumns: Boolean = getConf(DATAFRAME_RETAIN_GROUP_COLUMNS)
 
-  private[spark] def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
+  def runSQLOnFile: Boolean = getConf(RUN_SQL_ON_FILES)
 
   def supportQuotedId: Boolean = getConf(PARSER_SUPPORT_QUOTEDID)
 
@@ -649,6 +646,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
+  @throws[NoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {
     Option(settings.get(key)).
       orElse {
@@ -715,15 +713,15 @@ private[sql] class SQLConf extends Serializable with CatalystConf with ParserCon
     settings.put(key, value)
   }
 
-  private[spark] def unsetConf(key: String): Unit = {
+  def unsetConf(key: String): Unit = {
     settings.remove(key)
   }
 
-  private[spark] def unsetConf(entry: SQLConfEntry[_]): Unit = {
+  def unsetConf(entry: SQLConfEntry[_]): Unit = {
     settings.remove(entry.key)
   }
 
-  private[spark] def clear(): Unit = {
+  def clear(): Unit = {
     settings.clear()
   }
 }

@@ -56,7 +56,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SimrSchedulerBackend,
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
@@ -237,6 +237,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
   def master: String = _conf.get("spark.master")
+  def deployMode: String = _conf.getOption("spark.submit.deployMode").getOrElse("client")
   def appName: String = _conf.get("spark.app.name")
 
   private[spark] def isEventLogEnabled: Boolean = _conf.getBoolean("spark.eventLog.enabled", false)
@@ -297,9 +298,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   val sparkUser = Utils.getCurrentUserName()
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
-  private[spark] def schedulerBackend_=(sb: SchedulerBackend): Unit = {
-    _schedulerBackend = sb
-  }
 
   private[spark] def taskScheduler: TaskScheduler = _taskScheduler
   private[spark] def taskScheduler_=(ts: TaskScheduler): Unit = {
@@ -321,8 +319,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def applicationId: String = _applicationId
   def applicationAttemptId: Option[String] = _applicationAttemptId
-
-  def metricsSystem: MetricsSystem = if (_env != null) _env.metricsSystem else null
 
   private[spark] def eventLogger: Option[EventLoggingListener] = _eventLogger
 
@@ -380,10 +376,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
 
     // System property spark.yarn.app.id must be set if user code ran by AM on a YARN cluster
-    // yarn-standalone is deprecated, but still supported
-    if ((master == "yarn-cluster" || master == "yarn-standalone") &&
-        !_conf.contains("spark.yarn.app.id")) {
-      throw new SparkException("Detected yarn-cluster mode, but isn't running on a cluster. " +
+    if (master == "yarn" && deployMode == "cluster" && !_conf.contains("spark.yarn.app.id")) {
+      throw new SparkException("Detected yarn cluster mode, but isn't running on a cluster. " +
         "Deployment to YARN is not supported directly by SparkContext. Please use spark-submit.")
     }
 
@@ -419,7 +413,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     }
 
-    if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+    if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -496,7 +490,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // Create and start the scheduler
-    val (sched, ts) = SparkContext.createTaskScheduler(this, master)
+    val (sched, ts) = SparkContext.createTaskScheduler(this, master, deployMode)
     _schedulerBackend = sched
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
@@ -514,9 +508,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
-    metricsSystem.start()
+    _env.metricsSystem.start()
     // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
@@ -1595,10 +1589,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            // yarn-standalone is deprecated, but still supported
-            if (SparkHadoopUtil.get.isYarnMode() &&
-                (master == "yarn-standalone" || master == "yarn-cluster")) {
-              // In order for this to work in yarn-cluster mode the user must specify the
+            if (master == "yarn" && deployMode == "cluster") {
+              // In order for this to work in yarn cluster mode the user must specify the
               // --addJars option to the client to upload the file into the distributed cache
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
@@ -2324,7 +2316,8 @@ object SparkContext extends Logging {
    */
   private def createTaskScheduler(
       sc: SparkContext,
-      master: String): (SchedulerBackend, TaskScheduler) = {
+      master: String,
+      deployMode: String): (SchedulerBackend, TaskScheduler) = {
     import SparkMasterRegex._
 
     // When running locally, don't try to re-execute tasks on failure.
@@ -2386,11 +2379,7 @@ object SparkContext extends Logging {
         }
         (backend, scheduler)
 
-      case "yarn-standalone" | "yarn-cluster" =>
-        if (master == "yarn-standalone") {
-          logWarning(
-            "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
-        }
+      case "yarn" if deployMode == "cluster" =>
         val scheduler = try {
           val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
@@ -2415,7 +2404,7 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case "yarn-client" =>
+      case "yarn" if deployMode == "client" =>
         val scheduler = try {
           val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
@@ -2453,16 +2442,10 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
-      case SIMR_REGEX(simrUrl) =>
-        val scheduler = new TaskSchedulerImpl(sc)
-        val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
-        scheduler.initialize(backend)
-        (backend, scheduler)
-
       case zkUrl if zkUrl.startsWith("zk://") =>
         logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
           "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
-        createTaskScheduler(sc, "mesos://" + zkUrl)
+        createTaskScheduler(sc, "mesos://" + zkUrl, deployMode)
 
       case _ =>
         throw new SparkException("Could not parse Master URL: '" + master + "'")
@@ -2484,8 +2467,6 @@ private object SparkMasterRegex {
   val SPARK_REGEX = """spark://(.*)""".r
   // Regular expression for connection to Mesos cluster by mesos:// or mesos://zk:// url
   val MESOS_REGEX = """mesos://(.*)""".r
-  // Regular expression for connection to Simr cluster
-  val SIMR_REGEX = """simr://(.*)""".r
 }
 
 /**

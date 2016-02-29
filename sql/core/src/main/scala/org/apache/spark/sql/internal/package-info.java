@@ -15,25 +15,8 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark;
-
-import org.apache.spark.TaskContext;
-import org.apache.spark.util.TaskCompletionListener;
-
-
 /**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
+ * All classes in this package are considered an internal API to Spark and
+ * are subject to change between minor releases.
  */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
-
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
-  }
-}
+package org.apache.spark.sql.internal;

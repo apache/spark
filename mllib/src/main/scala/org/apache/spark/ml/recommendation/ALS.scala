@@ -392,6 +392,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
       .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
+      .rdd
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
@@ -1301,7 +1302,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
 
   /**
    * Partitioner used by ALS. We requires that getPartition is a projection. That is, for any key k,
-   * we have getPartition(getPartition(k)) = getPartition(k). Since the the default HashPartitioner
+   * we have getPartition(getPartition(k)) = getPartition(k). Since the default HashPartitioner
    * satisfies this requirement, we simply use a type alias here.
    */
   private[recommendation] type ALSPartitioner = org.apache.spark.HashPartitioner
