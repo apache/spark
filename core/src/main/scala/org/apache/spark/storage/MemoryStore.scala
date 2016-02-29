@@ -120,7 +120,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     PutResult(size, data)
   }
 
-  override def putArray(
+  private def putArray(
       blockId: BlockId,
       values: Array[Any],
       level: StorageLevel,

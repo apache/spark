@@ -45,7 +45,6 @@ import org.apache.spark.util._
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
 private[spark] case class IteratorValues(iterator: () => Iterator[Any]) extends BlockValues
-private[spark] case class ArrayValues(buffer: Array[Any]) extends BlockValues
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -705,22 +704,6 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Put a new block of values to the block manager.
-   *
-   * @return true if the block was stored or false if the block was already stored or an
-   *         error occurred.
-   */
-  def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
-    require(values != null, "Values is null")
-    doPut(blockId, ArrayValues(values), level, tellMaster, effectiveStorageLevel)
-  }
-
-  /**
    * Put a new block of serialized bytes to the block manager.
    *
    * @return true if the block was stored or false if the block was already stored or an
@@ -842,8 +825,6 @@ private[spark] class BlockManager(
         val result = data match {
           case IteratorValues(iterator) =>
             blockStore.putIterator(blockId, iterator(), putLevel, returnValues)
-          case ArrayValues(array) =>
-            blockStore.putArray(blockId, array, putLevel, returnValues)
           case ByteBufferValues(bytes) =>
             bytes.rewind()
             blockStore.putBytes(blockId, bytes, putLevel)
@@ -1073,7 +1054,7 @@ private[spark] class BlockManager(
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
-          diskStore.putArray(blockId, elements, level, returnValues = false)
+          diskStore.putIterator(blockId, elements.toIterator, level, returnValues = false)
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes, level)
       }
