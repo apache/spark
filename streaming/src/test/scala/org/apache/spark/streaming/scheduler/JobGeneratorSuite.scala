@@ -126,6 +126,52 @@ class JobGeneratorSuite extends TestSuiteBase {
       waitLatch.countDown()
     }
   }
+
+  test("do no generate down time batch when recovering from checkpoint") {
+
+    val checkpointDir = Utils.createTempDir()
+    val testConf = conf
+
+    testConf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    testConf.set("spark.streaming.skipDownTimeBatch", "true")
+    val testTimeout = timeout(10 seconds)
+    withStreamingContext(new StreamingContext(testConf, batchDuration)) { ssc =>
+      val testDir = Utils.createTempDir()
+      ssc.checkpoint(checkpointDir.toString)
+      var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      val inputStream = ssc.textFileStream(testDir.getAbsolutePath)
+
+      inputStream.foreachRDD {
+        rdd =>
+          Thread.sleep(Int.MaxValue)
+      }
+      ssc.start()
+      clock.advance(batchDuration.milliseconds*3)
+      eventually(testTimeout) {
+        assert(ssc.scheduler.getPendingTimes().length == 3)
+      }
+      ssc.stop()
+    }
+
+
+    logInfo("*********** RESTARTING ***********")
+
+    withStreamingContext(new StreamingContext(checkpointDir.toString)) { ssc =>
+      // restarted after a delay
+      ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration.milliseconds * 10).toString)
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      ssc.start()
+      eventually(testTimeout) {
+        assert(ssc.scheduler.getPendingTimes().length == 3, "generate down time batch")
+      }
+      clock.advance(batchDuration.milliseconds * 3)
+      // should generate three batch more
+      eventually(testTimeout) {
+        assert(ssc.scheduler.getPendingTimes().length == 6)
+      }
+    }
+
+  }
 }
 
 object JobGeneratorSuite {
