@@ -37,9 +37,9 @@ trait Catalog {
 
   def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
 
-  def setCurrentDatabase(databaseName: String): Unit = {
-    throw new UnsupportedOperationException
-  }
+  def getCurrentDatabase: String
+
+  def setCurrentDatabase(databaseName: String): Unit
 
   /**
    * Returns tuples of (tableName, isTemporary) for all tables in the given database.
@@ -76,6 +76,15 @@ trait Catalog {
 
 class SimpleCatalog(val conf: CatalystConf) extends Catalog {
   private[this] val tables = new ConcurrentHashMap[String, LogicalPlan]
+
+  // TODO: just call catalog.InMemoryCatalog instead of keeping track of this ourselves
+  private[this] var currentDatabase = "default"
+
+  override def getCurrentDatabase: String = currentDatabase
+
+  override def setCurrentDatabase(databaseName: String): Unit = {
+    currentDatabase = databaseName
+  }
 
   override def registerTable(tableIdent: TableIdentifier, plan: LogicalPlan): Unit = {
     tables.put(getTableName(tableIdent), plan)
@@ -193,6 +202,14 @@ object EmptyCatalog extends Catalog {
   override def lookupRelation(
       tableIdent: TableIdentifier,
       alias: Option[String] = None): LogicalPlan = {
+    throw new UnsupportedOperationException
+  }
+
+  override def getCurrentDatabase: String = {
+    throw new UnsupportedOperationException
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = {
     throw new UnsupportedOperationException
   }
 

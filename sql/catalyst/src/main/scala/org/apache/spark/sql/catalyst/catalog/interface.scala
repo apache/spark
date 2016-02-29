@@ -64,6 +64,8 @@ abstract class Catalog {
 
   def listDatabases(pattern: String): Seq[String]
 
+  def getCurrentDatabase: String
+
   def setCurrentDatabase(db: String): Unit
 
   // --------------------------------------------------------------------------
