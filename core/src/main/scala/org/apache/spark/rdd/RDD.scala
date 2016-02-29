@@ -324,14 +324,10 @@ abstract class RDD[T: ClassTag](
       readCachedBlock = true
       computeOrReadCheckpoint(partition, context)
     })
-
     if (readCachedBlock) {
       val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
       existingMetrics.incBytesReadInternal(blockResult.bytes)
-
-      val iter = blockResult.data.asInstanceOf[Iterator[T]]
-
-      new InterruptibleIterator[T](context, iter) {
+      new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
         override def next(): T = {
           existingMetrics.incRecordsReadInternal(1)
           delegate.next()
