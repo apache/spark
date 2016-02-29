@@ -242,10 +242,12 @@ class DataFrameReader(object):
 
         :param paths: string, or list of strings, for input path(s).
 
-        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
+        >>> df = sqlContext.read.option("inferSchema", "true").csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
-        [('C0', 'string'), ('C1', 'bigint')]
+        [('C0', 'string'), ('C1', 'int')]
         """
+        if isinstance(paths, basestring):
+            paths = [paths]
         return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
