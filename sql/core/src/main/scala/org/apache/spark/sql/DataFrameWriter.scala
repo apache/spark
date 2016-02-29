@@ -453,6 +453,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   format("json").save(path)
    * }}}
    *
+   * You can set the following JSON-specific option(s) for writing JSON files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   *
    * @since 1.4.0
    */
   def json(path: String): Unit = format("json").save(path)
@@ -492,9 +496,28 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   df.write().text("/path/to/output")
    * }}}
    *
+   * You can set the following option(s) for writing text files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   *
    * @since 1.6.0
    */
   def text(path: String): Unit = format("text").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in CSV format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("csv").save(path)
+   * }}}
+   *
+   * You can set the following CSV-specific option(s) for writing CSV files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   *
+   * @since 2.0.0
+   */
+  def csv(path: String): Unit = format("csv").save(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
