@@ -25,11 +25,11 @@ import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.rdd.{RDD, UnionPartition, UnionRDD}
 import org.apache.spark.util.ThreadUtils
 
-object ParallelUnionRDD {
+private[hive] object ParallelUnionRDD {
   lazy val executorService = ThreadUtils.newDaemonFixedThreadPool(16, "ParallelUnionRDD")
 }
 
-class ParallelUnionRDD[T: ClassTag](
+private[hive] class ParallelUnionRDD[T: ClassTag](
   sc: SparkContext,
   rdds: Seq[RDD[T]]) extends UnionRDD[T](sc, rdds){
 
@@ -39,7 +39,7 @@ class ParallelUnionRDD[T: ClassTag](
       (rdd, ParallelUnionRDD.executorService.submit(new Callable[Array[Partition]] {
         override def call(): Array[Partition] = rdd.partitions
       }))
-    }.map {case(r, f) => (r, f.get())}
+    }.map { case(r, f) => (r, f.get()) }
 
     val array = new Array[Partition](rddPartitions.map(_._2.length).sum)
     var pos = 0

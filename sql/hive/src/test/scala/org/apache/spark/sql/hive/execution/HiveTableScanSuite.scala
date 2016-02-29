@@ -90,7 +90,6 @@ class HiveTableScanSuite extends HiveComparisonTest {
     assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
   }
 
-
   test("Spark-11517: calc partitions in parallel") {
     val partitionNum = 500
     val partitionTable = "combine"
