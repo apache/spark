@@ -40,6 +40,8 @@ class Imputer private[ml](
     override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with MLWritable {
 
+  def this() = this(Identifiable.randomUID("tokenizer"))
+
   import Imputer._
 
   /** @group setParam */
@@ -56,25 +58,33 @@ class Imputer private[ml](
   /** @group setParam */
   def setStrategy(value: String): this.type = set(strategy, value)
 
+  setDefault(strategy -> "mean")
 
   override def transform(dataset: DataFrame): DataFrame = {
-
     val reScale = udf { (vector: Vector) =>
       if (vector == null) {
         val replacement = $(strategy) match {
           case "mean" =>
-            val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
+            val input = dataset.select($(inputCol)).rdd.filter(r => !r.anyNull)
+              .map { case Row(v: Vector) => v }
             val summary = Statistics.colStats(input)
             summary.mean
           case "median" =>
-            val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
-            Imputer.getMedian(input)
+            val df = dataset.select($(inputCol))
+            df.registerTempTable("medianTable")
+            val median = df.sqlContext
+              .sql(s"select percentile(${$(inputCol)}, 0.5) from medianTable")
+              .head().getAs[Vector](0)
+            median
           case "most" =>
-            val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
+            val input = dataset.select($(inputCol)).rdd.filter(r => !r.anyNull)
+              .map { case Row(v: Vector) => v }
             val most = input.map(v => (v, 1)).reduceByKey(_ + _).sortBy(-_._2).take(1)(0)._1
             most
         }
+        replacement
       }
+      else vector
     }
 
     dataset.withColumn($(outputCol), reScale(col($(inputCol))))
@@ -103,12 +113,7 @@ class Imputer private[ml](
 @Since("1.6.0")
 object Imputer extends MLReadable[Imputer] {
 
-  private def getMedian(input: RDD[Vector]): Vector = {
-    val summary = Statistics.colStats(input)
-    summary.mean
-  }
-
-  private[MinMaxScalerModel]
+  private[Imputer]
   class ImputerWriter(instance: Imputer) extends MLWriter {
 
     private case class Data(strategy: String)
