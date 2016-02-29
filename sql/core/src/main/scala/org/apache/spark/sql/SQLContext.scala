@@ -28,7 +28,6 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
@@ -42,6 +41,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -144,7 +144,7 @@ class SQLContext private[sql](
   def setConf(props: Properties): Unit = conf.setConf(props)
 
   /** Set the given Spark SQL configuration property. */
-  private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = conf.setConf(entry, value)
+  private[sql] def setConf[T](entry: SQLConfEntry[T], value: T): Unit = conf.setConf(entry, value)
 
   /**
    * Set the given Spark SQL configuration property.
@@ -164,16 +164,16 @@ class SQLContext private[sql](
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue` in [[ConfigEntry]].
+   * yet, return `defaultValue` in [[SQLConfEntry]].
    */
-  private[sql] def getConf[T](entry: ConfigEntry[T]): T = conf.getConf(entry)
+  private[sql] def getConf[T](entry: SQLConfEntry[T]): T = conf.getConf(entry)
 
   /**
    * Return the value of Spark SQL configuration property for the given key. If the key is not set
-   * yet, return `defaultValue`. This is useful when `defaultValue` in ConfigEntry is not the
+   * yet, return `defaultValue`. This is useful when `defaultValue` in SQLConfEntry is not the
    * desired one.
    */
-  private[sql] def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
+  private[sql] def getConf[T](entry: SQLConfEntry[T], defaultValue: T): T = {
     conf.getConf(entry, defaultValue)
   }
 
