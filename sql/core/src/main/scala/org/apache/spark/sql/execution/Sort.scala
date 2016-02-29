@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{InternalAccumulator, SparkEnv, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -37,7 +39,7 @@ case class Sort(
     global: Boolean,
     child: SparkPlan,
     testSpillFrequency: Int = 0)
-  extends UnaryNode {
+  extends UnaryNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
 
@@ -50,34 +52,36 @@ case class Sort(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    val schema = child.schema
-    val childOutput = child.output
+  def createSorter(): UnsafeExternalRowSorter = {
+    val ordering = newOrdering(sortOrder, output)
 
+    // The comparator for comparing prefix
+    val boundSortExpression = BindReferences.bindReference(sortOrder.head, output)
+    val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
+
+    // The generator for prefix
+    val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
+    val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
+      override def computePrefix(row: InternalRow): Long = {
+        prefixProjection.apply(row).getLong(0)
+      }
+    }
+
+    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+    val sorter = new UnsafeExternalRowSorter(
+      schema, ordering, prefixComparator, prefixComputer, pageSize)
+    if (testSpillFrequency > 0) {
+      sorter.setTestSpillFrequency(testSpillFrequency)
+    }
+    sorter
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
     val dataSize = longMetric("dataSize")
     val spillSize = longMetric("spillSize")
 
     child.execute().mapPartitionsInternal { iter =>
-      val ordering = newOrdering(sortOrder, childOutput)
-
-      // The comparator for comparing prefix
-      val boundSortExpression = BindReferences.bindReference(sortOrder.head, childOutput)
-      val prefixComparator = SortPrefixUtils.getPrefixComparator(boundSortExpression)
-
-      // The generator for prefix
-      val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
-      val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
-        override def computePrefix(row: InternalRow): Long = {
-          prefixProjection.apply(row).getLong(0)
-        }
-      }
-
-      val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-      val sorter = new UnsafeExternalRowSorter(
-        schema, ordering, prefixComparator, prefixComputer, pageSize)
-      if (testSpillFrequency > 0) {
-        sorter.setTestSpillFrequency(testSpillFrequency)
-      }
+      val sorter = createSorter()
 
       val metrics = TaskContext.get().taskMetrics()
       // Remember spill data size of this task before execute this operator so that we can
@@ -92,5 +96,75 @@ case class Sort(
 
       sortedIterator
     }
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  // Name of sorter variable used in codegen.
+  private var sorterVariable: String = _
+
+  override protected def doProduce(ctx: CodegenContext): String = {
+    val needToSort = ctx.freshName("needToSort")
+    ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
+
+
+    // Initialize the class member variables. This includes the instance of the Sorter and
+    // the iterator to return sorted rows.
+    val thisPlan = ctx.addReferenceObj("plan", this)
+    sorterVariable = ctx.freshName("sorter")
+    ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
+      s"$sorterVariable = $thisPlan.createSorter();")
+    val metrics = ctx.freshName("metrics")
+    ctx.addMutableState(classOf[TaskMetrics].getName, metrics,
+      s"$metrics = org.apache.spark.TaskContext.get().taskMetrics();")
+    val sortedIterator = ctx.freshName("sortedIter")
+    ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
+
+    val addToSorter = ctx.freshName("addToSorter")
+    ctx.addNewFunction(addToSorter,
+      s"""
+        | private void $addToSorter() throws java.io.IOException {
+        |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+        | }
+      """.stripMargin.trim)
+
+    val outputRow = ctx.freshName("outputRow")
+    val dataSize = metricTerm(ctx, "dataSize")
+    val spillSize = metricTerm(ctx, "spillSize")
+    val spillSizeBefore = ctx.freshName("spillSizeBefore")
+    s"""
+       | if ($needToSort) {
+       |   $addToSorter();
+       |   Long $spillSizeBefore = $metrics.memoryBytesSpilled();
+       |   $sortedIterator = $sorterVariable.sort();
+       |   $dataSize.add($sorterVariable.getPeakMemoryUsage());
+       |   $spillSize.add($metrics.memoryBytesSpilled() - $spillSizeBefore);
+       |   $metrics.incPeakExecutionMemory($sorterVariable.getPeakMemoryUsage());
+       |   $needToSort = false;
+       | }
+       |
+       | while ($sortedIterator.hasNext()) {
+       |   UnsafeRow $outputRow = (UnsafeRow)$sortedIterator.next();
+       |   ${consume(ctx, null, outputRow)}
+       |   if (shouldStop()) return;
+       | }
+     """.stripMargin.trim
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val colExprs = child.output.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, attr.nullable)
+    }
+
+    ctx.currentVars = input
+    val code = GenerateUnsafeProjection.createCode(ctx, colExprs)
+
+    s"""
+       | // Convert the input attributes to an UnsafeRow and add it to the sorter
+       | ${code.code}
+       | $sorterVariable.insertRow(${code.value});
+     """.stripMargin.trim
   }
 }

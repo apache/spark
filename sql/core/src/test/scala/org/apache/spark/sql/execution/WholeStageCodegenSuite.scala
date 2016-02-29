@@ -69,4 +69,13 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
         p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[BroadcastHashJoin]).isDefined)
     assert(df.collect() === Array(Row(1, 1, "1"), Row(1, 1, "1"), Row(2, 2, "2")))
   }
+
+  test("Sort should be included in WholeStageCodegen") {
+    val df = sqlContext.range(3, 0, -1).sort(col("id"))
+    val plan = df.queryExecution.executedPlan
+    assert(plan.find(p =>
+      p.isInstanceOf[WholeStageCodegen] &&
+        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[Sort]).isDefined)
+    assert(df.collect() === Array(Row(1), Row(2), Row(3)))
+  }
 }

@@ -154,6 +154,13 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
+  test("Sort metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
+    val df = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(df, 2, Map.empty)
+  }
+
   test("SortMergeJoin metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.

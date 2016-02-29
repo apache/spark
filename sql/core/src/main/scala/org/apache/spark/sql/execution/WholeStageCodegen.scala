@@ -287,7 +287,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
           ${code.trim}
         }
       }
-      """
+      """.trim
 
     // try to compile, helpful for debug
     val cleanedSource = CodeFormatter.stripExtraNewLines(source)
@@ -338,7 +338,7 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
       // There is an UnsafeRow already
       s"""
          |append($row.copy());
-       """.stripMargin
+       """.stripMargin.trim
     } else {
       assert(input != null)
       if (input.nonEmpty) {
@@ -351,12 +351,12 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
         s"""
            |${code.code.trim}
            |append(${code.value}.copy());
-         """.stripMargin
+         """.stripMargin.trim
       } else {
         // There is no columns
         s"""
            |append(unsafeRow);
-         """.stripMargin
+         """.stripMargin.trim
       }
     }
   }
