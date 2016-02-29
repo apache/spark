@@ -242,9 +242,9 @@ class DataFrameReader(object):
 
         :param paths: string, or list of strings, for input path(s).
 
-        >>> df = sqlContext.read.option("inferSchema", "true").csv('python/test_support/sql/ages.csv')
+        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
-        [('C0', 'string'), ('C1', 'int')]
+        [('C0', 'string'), ('C1', 'string')]
         """
         if isinstance(paths, basestring):
             paths = [paths]
