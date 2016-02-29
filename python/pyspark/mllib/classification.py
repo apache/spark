@@ -294,7 +294,7 @@ class LogisticRegressionWithSGD(object):
           (default: 0.01)
         :param regType:
           The type of regularizer used for training our model.
-          Allowed values:
+          Supported values:
 
             - "l1" for using L1 regularization
             - "l2" for using L2 regularization (default)
@@ -344,7 +344,7 @@ class LogisticRegressionWithLBFGS(object):
           (default: 0.0)
         :param regType:
           The type of regularizer used for training our model.
-          Allowed values:
+          Supported values:
 
             - "l1" for using L1 regularization
             - "l2" for using L2 regularization (default)
