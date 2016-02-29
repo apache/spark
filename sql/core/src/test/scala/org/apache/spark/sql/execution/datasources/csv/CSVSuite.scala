@@ -268,9 +268,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(testFile(carsFile))
 
       cars.coalesce(1).write
-        .format("csv")
         .option("header", "true")
-        .save(csvDir)
+        .csv(csvDir)
 
       val carsCopy = sqlContext.read
         .format("csv")

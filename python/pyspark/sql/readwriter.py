@@ -233,6 +233,23 @@ class DataFrameReader(object):
             paths = [paths]
         return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
+    @since(2.0)
+    def csv(self, paths):
+        """Loads a CSV file and returns the result as a [[DataFrame]].
+
+        This function goes through the input once to determine the input schema. To avoid going
+        through the entire data once, specify the schema explicitly using [[schema]].
+
+        :param paths: string, or list of strings, for input path(s).
+
+        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
+        >>> df.dtypes
+        [('C0', 'string'), ('C1', 'string')]
+        """
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+
     @since(1.5)
     def orc(self, path):
         """Loads an ORC file, returning the result as a :class:`DataFrame`.
@@ -448,6 +465,11 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
+        You can set the following JSON-specific option(s) for writing JSON files:
+            * ``compression`` (default ``None``): compression codec to use when saving to file.
+            This can be one of the known case-insensitive shorten names
+            (``bzip2``, ``gzip``, ``lz4``, and ``snappy``).
+
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)._jwrite.json(path)
@@ -476,10 +498,38 @@ class DataFrameWriter(object):
     def text(self, path):
         """Saves the content of the DataFrame in a text file at the specified path.
 
+        :param path: the path in any Hadoop supported file system
+
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
+
+        You can set the following option(s) for writing text files:
+            * ``compression`` (default ``None``): compression codec to use when saving to file.
+            This can be one of the known case-insensitive shorten names
+            (``bzip2``, ``gzip``, ``lz4``, and ``snappy``).
         """
         self._jwrite.text(path)
+
+    @since(2.0)
+    def csv(self, path, mode=None):
+        """Saves the content of the [[DataFrame]] in CSV format at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+
+        You can set the following CSV-specific option(s) for writing CSV files:
+            * ``compression`` (default ``None``): compression codec to use when saving to file.
+            This can be one of the known case-insensitive shorten names
+            (``bzip2``, ``gzip``, ``lz4``, and ``snappy``).
+
+        >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)._jwrite.csv(path)
 
     @since(1.5)
     def orc(self, path, mode=None, partitionBy=None):

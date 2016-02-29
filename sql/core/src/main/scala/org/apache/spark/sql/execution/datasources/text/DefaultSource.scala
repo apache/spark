@@ -115,10 +115,7 @@ private[sql] class TextRelation(
   /** Write path. */
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val compressionCodec = {
-      val name = parameters.get("compression").orElse(parameters.get("codec"))
-      name.map(CompressionCodecs.getCodecClassName)
-    }
+    val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
     compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
