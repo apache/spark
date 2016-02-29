@@ -520,7 +520,7 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
 
-         You can set the following CSV-specific option(s) for writing CSV files:
+        You can set the following CSV-specific option(s) for writing CSV files:
             * ``compression`` (default ``None``): compression codec to use when saving to file.
             This can be one of the known case-insensitive shorten names
             (``bzip2``, ``gzip``, ``lz4``, and ``snappy``).
