@@ -562,10 +562,12 @@ class Analyzer(
 
       resolveExpression(unbound, LocalRelation(attributes), throws = true) transform {
         case n: NewInstance
+          // If this is an inner class of another class, register the outer object in `OuterScopes`.
+          // Note that static inner classes (e.g., inner classes within Scala objects) don't need
+          // outer pointer registration.
           if n.outerPointer.isEmpty &&
-             n.cls.isMemberClass &&
-             !Modifier.isStatic(n.cls.getModifiers) =>
-          n.cls.getEnclosingClass
+            n.cls.isMemberClass &&
+            !Modifier.isStatic(n.cls.getModifiers) =>
           val outer = OuterScopes.outerScopes.get(n.cls.getDeclaringClass.getName)
           if (outer == null) {
             throw new AnalysisException(

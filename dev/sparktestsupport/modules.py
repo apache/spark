@@ -473,11 +473,11 @@ yarn = Module(
     dependencies=[],
     source_file_regexes=[
         "yarn/",
-        "network/yarn/",
+        "common/network-yarn/",
     ],
     sbt_test_goals=[
         "yarn/test",
-        "network-yarn/test",
+        "common/network-yarn/test",
     ],
     test_tags=[
         "org.apache.spark.tags.ExtendedYarnTest"

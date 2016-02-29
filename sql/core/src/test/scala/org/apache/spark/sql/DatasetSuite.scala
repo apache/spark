@@ -657,6 +657,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Some(1), Some(2), Some(3))
   }
 
+  test("SPARK-13540 Dataset of nested class defined in Scala object") {
+    checkAnswer(
+      Seq(OuterObject.InnerClass("foo")).toDS(),
+      OuterObject.InnerClass("foo"))
+  }
+
   // Tests for operations migrated from DataFrame
 
   test("column selection") {
@@ -832,6 +838,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 }
 
 class OuterClass extends Serializable {
+  case class InnerClass(a: String)
+}
+
+object OuterObject {
   case class InnerClass(a: String)
 }
 
