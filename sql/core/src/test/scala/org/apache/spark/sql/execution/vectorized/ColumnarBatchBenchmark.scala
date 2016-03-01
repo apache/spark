@@ -370,7 +370,7 @@ object ColumnarBatchBenchmark {
         }
         i = 0
         while (i < count) {
-          sum += column.getByteArray(i).length
+          sum += column.getUTF8String(i).numBytes()
           i += 1
         }
         column.reset()

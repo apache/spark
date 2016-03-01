@@ -22,13 +22,13 @@ import java.sql.Date;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.commons.lang.NotImplementedException;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * Utilities to help manipulate data associate with ColumnVectors. These should be used mostly
@@ -36,10 +36,6 @@ import org.apache.commons.lang.NotImplementedException;
  * These utilities are mostly used to convert ColumnVectors into other formats.
  */
 public class ColumnVectorUtils {
-  public static String toString(ColumnVector.Array a) {
-    return new String(a.byteArray, a.byteArrayOffset, a.length);
-  }
-
   /**
    * Returns the array data as the java primitive array.
    * For example, an array of IntegerType will return an int[].

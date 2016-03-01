@@ -16,12 +16,11 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.util.Arrays;
+
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.execution.vectorized.ColumnVector.Array;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
-
-import java.util.Arrays;
 
 /**
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
@@ -67,7 +66,6 @@ public final class OnHeapColumnVector extends ColumnVector {
     intData = null;
     doubleData = null;
   }
-
 
   //
   // APIs dealing with nulls
@@ -154,7 +152,11 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final byte getByte(int rowId) {
-    return byteData[rowId];
+    if (dictionary == null) {
+      return byteData[rowId];
+    } else {
+      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -180,7 +182,11 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final short getShort(int rowId) {
-    return shortData[rowId];
+    if (dictionary == null) {
+      return shortData[rowId];
+    } else {
+      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+    }
   }
 
 
@@ -217,7 +223,11 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final int getInt(int rowId) {
-    return intData[rowId];
+    if (dictionary == null) {
+      return intData[rowId];
+    } else {
+      return dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -253,7 +263,11 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final long getLong(int rowId) {
-    return longData[rowId];
+    if (dictionary == null) {
+      return longData[rowId];
+    } else {
+      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -280,7 +294,13 @@ public final class OnHeapColumnVector extends ColumnVector {
   }
 
   @Override
-  public final float getFloat(int rowId) { return floatData[rowId]; }
+  public final float getFloat(int rowId) {
+    if (dictionary == null) {
+      return floatData[rowId];
+    } else {
+      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
+    }
+  }
 
   //
   // APIs dealing with doubles
@@ -309,7 +329,11 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public final double getDouble(int rowId) {
-    return doubleData[rowId];
+    if (dictionary == null) {
+      return doubleData[rowId];
+    } else {
+      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -377,7 +401,8 @@ public final class OnHeapColumnVector extends ColumnVector {
       short[] newData = new short[newCapacity];
       if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
       shortData = newData;
-    } else if (type instanceof IntegerType || type instanceof DateType) {
+    } else if (type instanceof IntegerType || type instanceof DateType ||
+      DecimalType.is32BitDecimalType(type)) {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;
