@@ -267,44 +267,6 @@ class DataFrame(object):
                 self._jdf, num)
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
-    @ignore_unicode_prefix
-    @since(1.3)
-    def map(self, f):
-        """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
-
-        This is a shorthand for ``df.rdd.map()``.
-
-        >>> df.map(lambda p: p.name).collect()
-        [u'Alice', u'Bob']
-        """
-        return self.rdd.map(f)
-
-    @ignore_unicode_prefix
-    @since(1.3)
-    def flatMap(self, f):
-        """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
-        and then flattening the results.
-
-        This is a shorthand for ``df.rdd.flatMap()``.
-
-        >>> df.flatMap(lambda p: p.name).collect()
-        [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
-        """
-        return self.rdd.flatMap(f)
-
-    @since(1.3)
-    def mapPartitions(self, f, preservesPartitioning=False):
-        """Returns a new :class:`RDD` by applying the ``f`` function to each partition.
-
-        This is a shorthand for ``df.rdd.mapPartitions()``.
-
-        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
-        >>> def f(iterator): yield 1
-        >>> rdd.mapPartitions(f).sum()
-        4
-        """
-        return self.rdd.mapPartitions(f, preservesPartitioning)
-
     @since(1.3)
     def foreach(self, f):
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
