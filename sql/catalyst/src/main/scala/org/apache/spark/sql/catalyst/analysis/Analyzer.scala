@@ -329,7 +329,8 @@ class Analyzer(
               throw new AnalysisException(
                 s"Aggregate expression required for pivot, found '$aggregate'")
             }
-            val name = if (singleAgg) value.toString else value + "_" + aggregate.sql
+            val name =
+              if (singleAgg) value.toString else value + "_" + usePrettyExpression(aggregate).sql
             Alias(filteredAggregate, name)()
           }
         }
