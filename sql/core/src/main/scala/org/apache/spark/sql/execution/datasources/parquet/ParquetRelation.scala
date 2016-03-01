@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.util.{SerializableConfiguration, ShortCompressionCodecNameMapper, Utils}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
@@ -284,8 +284,10 @@ private[sql] class ParquetRelation(
     conf.set(
       ParquetOutputFormat.COMPRESSION,
       ParquetRelation
-        .parquetShortCodecNameMapper.get(sqlContext.conf.parquetCompressionCodec)
-        .getOrElse(CompressionCodecName.UNCOMPRESSED.name()))
+        .shortParquetCompressionCodecNames
+        .getOrElse(
+          sqlContext.conf.parquetCompressionCodec.toUpperCase,
+          CompressionCodecName.UNCOMPRESSED).name())
 
     new BucketedOutputWriterFactory {
       override def newInstance(
@@ -901,12 +903,11 @@ private[sql] object ParquetRelation extends Logging {
     }
   }
 
-  /** Maps the short versions of compression codec names to qualified compression names. */
-  val parquetShortCodecNameMapper = new ShortCompressionCodecNameMapper {
-    override def none: Option[String] = Some(CompressionCodecName.UNCOMPRESSED.name())
-    override def uncompressed: Option[String] = Some(CompressionCodecName.UNCOMPRESSED.name())
-    override def gzip: Option[String] = Some(CompressionCodecName.GZIP.name())
-    override def lzo: Option[String] = Some(CompressionCodecName.LZO.name())
-    override def snappy: Option[String] = Some(CompressionCodecName.SNAPPY.name())
-  }
+  // The parquet compression short names
+  val shortParquetCompressionCodecNames = Map(
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
 }

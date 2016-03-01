@@ -21,25 +21,22 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.{BZip2Codec, DeflateCodec, GzipCodec, Lz4Codec, SnappyCodec}
 
-import org.apache.spark.util.{ShortCompressionCodecNameMapper, Utils}
+import org.apache.spark.util.Utils
 
 private[datasources] object CompressionCodecs {
-
-  /** Maps the short versions of compression codec names to fully-qualified class names. */
-  private val hadoopShortCodecNameMapper = new ShortCompressionCodecNameMapper {
-    override def bzip2: Option[String] = Some(classOf[BZip2Codec].getCanonicalName)
-    override def deflate: Option[String] = Some(classOf[DeflateCodec].getCanonicalName)
-    override def gzip: Option[String] = Some(classOf[GzipCodec].getCanonicalName)
-    override def lz4: Option[String] = Some(classOf[Lz4Codec].getCanonicalName)
-    override def snappy: Option[String] = Some(classOf[SnappyCodec].getCanonicalName)
-  }
+  private val shortCompressionCodecNames = Map(
+    "bzip2" -> classOf[BZip2Codec].getName,
+    "deflate" -> classOf[DeflateCodec].getName,
+    "gzip" -> classOf[GzipCodec].getName,
+    "lz4" -> classOf[Lz4Codec].getName,
+    "snappy" -> classOf[SnappyCodec].getName)
 
   /**
    * Return the full version of the given codec class.
    * If it is already a class name, just return it.
    */
   def getCodecClassName(name: String): String = {
-    val codecName = hadoopShortCodecNameMapper.get(name).getOrElse(name)
+    val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
     try {
       // Validate the codec name
       Utils.classForName(codecName)
@@ -47,8 +44,7 @@ private[datasources] object CompressionCodecs {
     } catch {
       case e: ClassNotFoundException =>
         throw new IllegalArgumentException(s"Codec [$codecName] " +
-          s"is not available. Known codecs are " +
-          s"${hadoopShortCodecNameMapper.getAsMap.keys.mkString(", ")}.")
+          s"is not available. Known codecs are ${shortCompressionCodecNames.keys.mkString(", ")}.")
     }
   }
 
