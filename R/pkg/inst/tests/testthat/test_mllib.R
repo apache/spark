@@ -148,11 +148,6 @@ test_that("naiveBayes", {
 
   model <- naiveBayes(Class ~ ., data = training, lambda = 1, modelType = "multinomial")
   sample <- take(select(predict(model, training), "prediction"), 1)
-  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(typeof(sample$prediction), "double")
   expect_equal(sample$prediction, 0)
-
-  # Test e1071::naiveBayes is working
-  library(e1071)
-  model <- naiveBayes(Class ~ ., data = HouseVotes84)
-  expect_equal(predict(model, HouseVotes84[1:3,]), c("republican", "republican", "republican"))
 })

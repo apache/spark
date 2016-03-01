@@ -1171,4 +1171,4 @@ setGeneric("fitted")
 
 #' @rdname naiveBayes
 #' @export
-setGeneric("naiveBayes", function(formula, ...) { standardGeneric("naiveBayes") })
+setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBayes") })

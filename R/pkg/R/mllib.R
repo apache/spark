@@ -78,6 +78,11 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
 #'}
 setMethod("predict", signature(object = "PipelineModel"),
           function(object, newData) {
+            modelName <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                     "getModelName", object@model)
+            if (modelName == "NaiveBayesModel") {
+              newData <- na.omit(newData)
+            }
             return(dataFrame(callJMethod(object@model, "transform", newData@sdf)))
           })
 
@@ -198,7 +203,7 @@ setMethod("fitted", signature(object = "PipelineModel"),
 #' Fit a naive Bayes model, similarly to R's naiveBayes() except for omitting two arguments 'subset'
 #' and 'na.action'. Users can use 'subset' function and 'fillna' or 'na.omit' function of DataFrame,
 #' respectviely, to preprocess their DataFrame. We use na.omit in this interface to avoid potential
-#  errors.
+#' errors.
 #'
 #' @param object A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
@@ -211,15 +216,16 @@ setMethod("fitted", signature(object = "PipelineModel"),
 #' @export
 #' @examples
 #'\dontrun{
+#' data(HouseVotes84, package = "mlbench")
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- createDataFrame(sqlContext, iris)
-#' model <- glm(Sepal_Length ~ Sepal_Width, df, lambda = 1, modelType = "multinomial")
+#' df <- createDataFrame(sqlContext, HouseVotes84)
+#' model <- glm(Class ~ ., df, lambda = 1, modelType = "multinomial")
 #'}
-setMethod("naiveBayes", signature(formula = "formula"),
+setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
           function(formula, data, lambda = 1, modelType = c("multinomial", "bernoulli"), ...) {
             data <- na.omit(data)
-            formula <- paste(deparse(object), collapse = "")
+            formula <- paste(deparse(formula), collapse = "")
             modelType <- match.arg(modelType)
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitNaiveBayes",
                                  formula, data@sdf, lambda, modelType)
