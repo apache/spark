@@ -878,18 +878,20 @@ private[spark] class BlockManager(
             Await.ready(replicationFuture, Duration.Inf)
           }
         case _ =>
-          val remoteStartTime = System.currentTimeMillis
-          // Serialize the block if not already done
-          if (bytesAfterPut == null) {
-            if (valuesAfterPut == null) {
-              throw new SparkException(
-                "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+          if (blockWasSuccessfullyStored) {
+            val remoteStartTime = System.currentTimeMillis
+            // Serialize the block if not already done
+            if (bytesAfterPut == null) {
+              if (valuesAfterPut == null) {
+                throw new SparkException(
+                  "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
+              }
+              bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
             }
-            bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
+            replicate(blockId, bytesAfterPut, putLevel)
+            logDebug("Put block %s remotely took %s"
+              .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
           }
-          replicate(blockId, bytesAfterPut, putLevel)
-          logDebug("Put block %s remotely took %s"
-            .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
       }
     }
 
