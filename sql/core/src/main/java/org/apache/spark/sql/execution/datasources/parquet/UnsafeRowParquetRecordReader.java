@@ -480,11 +480,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     private boolean useDictionary;
 
     /**
-     * If useDictionary is true, the staging vector used to decode the ids.
-     */
-    private ColumnVector dictionaryIds;
-
-    /**
      * Maximum definition level for this column.
      */
     private final int maxDefLevel;
@@ -610,11 +605,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
      */
     private void readBatch(int total, ColumnVector column) throws IOException {
       int rowId = 0;
-      if (useDictionary) {
-        dictionaryIds = column.reserveDictionaryIds(total);
-      } else {
-        column.setDictionary(null);
-      }
       while (total > 0) {
         // Compute the number of values we want to read in this page.
         int leftInPage = (int)(endOfPageValueCount - valuesRead);
@@ -625,10 +615,12 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         int num = Math.min(total, leftInPage);
         if (useDictionary) {
           // Read and decode dictionary ids.
+          ColumnVector dictionaryIds = column.reserveDictionaryIds(total);;
           defColumn.readIntegers(
               num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-          decodeDictionaryIds(rowId, num, column);
+          decodeDictionaryIds(rowId, num, column, dictionaryIds);
         } else {
+          column.setDictionary(null);
           switch (descriptor.getType()) {
             case BOOLEAN:
               readBooleanBatch(rowId, num, column);
@@ -665,36 +657,14 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     /**
      * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
      */
-    private void decodeDictionaryIds(int rowId, int num, ColumnVector column) {
+    private void decodeDictionaryIds(int rowId, int num, ColumnVector column,
+                                     ColumnVector dictionaryIds) {
       switch (descriptor.getType()) {
         case INT32:
-          if (column.dataType() == DataTypes.IntegerType) {
-            column.setDictionary(dictionary);
-          } else if (column.dataType() == DataTypes.ByteType) {
-            column.setDictionary(dictionary);
-          } else if (column.dataType() == DataTypes.ShortType) {
-            column.setDictionary(dictionary);
-          } else if (DecimalType.is32BitDecimalType(column.dataType())) {
-            column.setDictionary(dictionary);
-          } else {
-            throw new NotImplementedException("Unimplemented type: " + column.dataType());
-          }
-          break;
-
         case INT64:
-          if (column.dataType() == DataTypes.LongType ||
-              DecimalType.is64BitDecimalType(column.dataType())) {
-            column.setDictionary(dictionary);
-          } else {
-            throw new NotImplementedException("Unimplemented type: " + column.dataType());
-          }
-          break;
-
         case FLOAT:
-          column.setDictionary(dictionary);
-          break;
-
         case DOUBLE:
+        case BINARY:
           column.setDictionary(dictionary);
           break;
 
@@ -703,7 +673,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
           if (DecimalType.is32BitDecimalType(column.dataType())) {
             for (int i = rowId; i < rowId + num; ++i) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-              column.putInt(i,(int) CatalystRowConverter.binaryToUnscaledLong(v));
+              column.putInt(i, (int) CatalystRowConverter.binaryToUnscaledLong(v));
             }
           } else if (DecimalType.is64BitDecimalType(column.dataType())) {
             for (int i = rowId; i < rowId + num; ++i) {
@@ -713,10 +683,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
           } else {
             throw new NotImplementedException();
           }
-          break;
-
-        case BINARY:
-          column.setDictionary(dictionary);
           break;
 
         default:
