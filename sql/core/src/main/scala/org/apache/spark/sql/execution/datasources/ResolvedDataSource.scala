@@ -158,11 +158,13 @@ object ResolvedDataSource extends Logging {
         }.toArray
 
         val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
-        val dataSchema = userSpecifiedSchema.getOrElse {
+        val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sqlContext,
             caseInsensitiveOptions,
             fileCatalog.allFiles())
+        }.getOrElse {
+          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
         }
 
         // If they gave a schema, then we try and figure out the types of the partition columns

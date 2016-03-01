@@ -142,7 +142,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
   def inferSchema(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      files: Seq[FileStatus]): StructType = {
+      files: Seq[FileStatus]): Option[StructType] = {
     // Should we merge schemas from all Parquet part-files?
     val shouldMergeSchemas =
       parameters
@@ -223,7 +223,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
             .orElse(filesByType.data.headOption)
             .toSeq
       }
-    ParquetRelation.mergeSchemasInParallel(filesToTouch, sqlContext).get
+    ParquetRelation.mergeSchemasInParallel(filesToTouch, sqlContext)
   }
 
   case class FileTypes(
@@ -697,7 +697,7 @@ private[sql] object ParquetRelation extends Logging {
    * distinguish binary and string).  This method generates a correct schema by merging Metastore
    * schema data types and Parquet schema field names.
    */
-  private[parquet] def mergeMetastoreParquetSchema(
+  private[sql] def mergeMetastoreParquetSchema(
       metastoreSchema: StructType,
       parquetSchema: StructType): StructType = {
     def schemaConflictMessage: String =

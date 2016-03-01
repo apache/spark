@@ -56,6 +56,7 @@ case class ParquetDataWithKeyAndComplexTypes(
  */
 class ParquetMetastoreSuite extends ParquetPartitioningTest {
   import hiveContext._
+  import hiveContext.implicits._
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -169,10 +170,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (p=$p)")
     }
 
-    val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    //read.json(rdd1).registerTempTable("jt")
-    val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":[$i, null]}"""))
-    //read.json(rdd2).registerTempTable("jt_array")
+    (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").registerTempTable("jt")
+    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").registerTempTable("jt_array")
 
     setConf(HiveContext.CONVERT_METASTORE_PARQUET, true)
   }
@@ -376,7 +375,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     }
   }
 
-  def collectHadoopFsRelation (df: DataFrame): HadoopFsRelation = {
+  def collectHadoopFsRelation (df: DataFrame): HadoopFsRelation  = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
       case LogicalRelation(r:  HadoopFsRelation, _, _) => r
@@ -429,7 +428,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) => // OK
+        case logical @ LogicalRelation(parquetRelation:  HadoopFsRelation, _, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +
@@ -591,7 +590,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     sql("drop table if exists spark_6016_fix")
 
     // Create a DataFrame with two partitions. So, the created table will have two parquet files.
-    val df1 = read.json(sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i}"""), 2))
+    val df1 = (1 to 10).map(Tuple1(_)).toDF("a").coalesce(2)
     df1.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
     checkAnswer(
       sql("select * from spark_6016_fix"),
@@ -599,7 +598,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
     )
 
     // Create a DataFrame with four partitions. So, the created table will have four parquet files.
-    val df2 = read.json(sparkContext.parallelize((1 to 10).map(i => s"""{"b":$i}"""), 4))
+    val df2 = (1 to 10).map(Tuple1(_)).toDF("b").coalesce(4)
     df2.write.mode(SaveMode.Overwrite).format("parquet").saveAsTable("spark_6016_fix")
     // For the bug of SPARK-6016, we are caching two outdated footers for df1. Then,
     // since the new table has four parquet files, we are trying to read new footers from two files
@@ -875,6 +874,7 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     }
 
     test(s"SPARK-5775 read array from $table") {
+      sql(s"SELECT arrayField, p FROM $table WHERE p = 1").explain()
       checkAnswer(
         sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))

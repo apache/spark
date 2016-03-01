@@ -496,16 +496,21 @@ case class HadoopFsRelation(
     })
   }
 
-  def partitionSpec: PartitionSpec = location.partitionSpec(Some(partitionSchema))
+  def partitionSchemaOption: Option[StructType] =
+    if (partitionSchema.isEmpty) None else Some(partitionSchema)
+  def partitionSpec: PartitionSpec = location.partitionSpec(partitionSchemaOption)
 
   def refresh(): Unit = location.refresh()
+
+  override def toString: String =
+    s"$fileFormat part: ${partitionSchema.simpleString}, data: ${dataSchema.simpleString}"
 }
 
 trait FileFormat {
   def inferSchema(
       sqlContext: SQLContext,
       options: Map[String, String],
-      files: Seq[FileStatus]): StructType
+      files: Seq[FileStatus]): Option[StructType]
 
   def prepareWrite(
       sqlContext: SQLContext,
@@ -534,10 +539,10 @@ trait FileCatalog {
   def refresh(): Unit
 }
 
-case class HDFSFileCatalog(
-    sqlContext: SQLContext,
-    parameters: Map[String, String],
-    paths: Seq[Path])
+class HDFSFileCatalog(
+    val sqlContext: SQLContext,
+    val parameters: Map[String, String],
+    val paths: Seq[Path])
   extends FileCatalog with Logging {
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
