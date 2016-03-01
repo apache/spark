@@ -171,6 +171,27 @@ class JDBCSuite extends SparkFunSuite
          |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement(
+      "create table test.emp(name TEXT(32) NOT NULL," +
+        " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('fred', 1, 10)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('mary', 2, null)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('joe ''foo'' \"bar\"', 3, 30)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('kathy', null, null)").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE nullparts
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
+         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '4')
+      """.stripMargin.replaceAll("\n", " "))
+
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
@@ -336,6 +357,23 @@ class JDBCSuite extends SparkFunSuite
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     assert(sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
       .collect().length === 3)
+  }
+
+  test("Partioning on column that might have null values.") {
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties)
+        .collect().length === 4)
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties)
+        .collect().length === 4)
+    // partitioning on a nullable quoted column
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties)
+        .collect().length === 4)
+  }
+
+  test("SELECT * on partitioned table with a nullable partioncolumn") {
+    assert(sql("SELECT * FROM nullparts").collect().size == 4)
   }
 
   test("H2 integral types") {
