@@ -16,6 +16,7 @@ from builtins import str
 from collections import OrderedDict
 from configparser import ConfigParser
 
+
 class AirflowConfigException(Exception):
     pass
 
@@ -612,6 +613,7 @@ conf.read(AIRFLOW_CONFIG)
 def get(section, key, **kwargs):
     return conf.get(section, key, **kwargs)
 
+
 def getboolean(section, key):
     return conf.getboolean(section, key)
 
@@ -643,6 +645,7 @@ def set(section, option, value):  # noqa
 
 ########################
 # convenience method to access config entries
+
 
 def get_dags_folder():
     return os.path.expanduser(get('core', 'DAGS_FOLDER'))
