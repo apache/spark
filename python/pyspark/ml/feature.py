@@ -480,8 +480,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, MLRe
     >>> hashingTFPath = temp_path + "/hashing-tf"
     >>> hashingTF.save(hashingTFPath)
     >>> loadedHashingTF = HashingTF.load(hashingTFPath)
-    >>> param = loadedHashingTF.getParam("numFeatures")
-    >>> loadedHashingTF.getOrDefault(param) == hashingTF.getOrDefault(param)
+    >>> loadedHashingTF.getNumFeatures() == hashingTF.getNumFeatures()
     True
 
     .. versionadded:: 1.3.0
@@ -1450,8 +1449,8 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     [(0, 'a'), (1, 'b'), (2, 'c'), (3, 'a'), (4, 'a'), (5, 'c')]
     >>> stringIndexerPath = temp_path + "/string-indexer"
     >>> stringIndexer.save(stringIndexerPath)
-    >>> loadedIndexerModel = StringIndexer.load(stringIndexerPath).fit(stringIndDf)
-    >>> loadedIndexerModel.labels == model.labels
+    >>> loadedIndexer = StringIndexer.load(stringIndexerPath)
+    >>> loadedIndexer.getHandleInvalid() == stringIndexer.getHandleInvalid()
     True
     >>> modelPath = temp_path + "/string-indexer-model"
     >>> model.save(modelPath)
@@ -1579,7 +1578,9 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
     >>> stopWordsRemoverPath = temp_path + "/stopwords-remover"
     >>> remover.save(stopWordsRemoverPath)
     >>> loadedRemover = StopWordsRemover.load(stopWordsRemoverPath)
-    >>> loadedRemover.transform(df).head().words == remover.transform(df).head().words
+    >>> loadedRemover.getStopWords() == remover.getStopWords()
+    True
+    >>> loadedRemover.getCaseSensitive() == remover.getCaseSensitive()
     True
 
     .. versionadded:: 1.6.0
@@ -1601,7 +1602,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, MLReadable, M
                                             self.uid)
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
         defaultStopWords = stopWordsObj.English()
-        self._setDefault(stopWords=defaultStopWords)
+        self._setDefault(stopWords=defaultStopWords, caseSensitive=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -2034,7 +2035,9 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     >>> modelPath = temp_path + "/word2vec-model"
     >>> model.save(modelPath)
     >>> loadedModel = Word2VecModel.load(modelPath)
-    >>> loadedModel.transform(doc).head().model == model.transform(doc).head().model
+    >>> loadedModel.getVectors().first().word == model.getVectors().first().word
+    True
+    >>> loadedModel.getVectors().first().vector == model.getVectors().first().vector
     True
 
     .. versionadded:: 1.4.0
