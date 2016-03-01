@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.config.ConfigBuilder
+import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.network.util.ByteUnit
 
 package object config {

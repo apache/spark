@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.internal
 
 import org.apache.spark.launcher.SparkLauncher
 

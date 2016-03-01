@@ -24,7 +24,7 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils

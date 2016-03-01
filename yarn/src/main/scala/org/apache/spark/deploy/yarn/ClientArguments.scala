@@ -20,9 +20,9 @@ package org.apache.spark.deploy.yarn
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.config._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.config
+package org.apache.spark.internal.config
 
 import org.apache.spark.SparkConf
 
