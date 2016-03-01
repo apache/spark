@@ -23,27 +23,31 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.GraphGenerators
 import org.apache.spark.rdd._
 
-/**
-  * Created by zrf on 16/2/19.
-  */
+
 class ConnectedComponentsWithDegreeSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Grid Connected Components") {
     withSpark { sc =>
-      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
-      val ccGraph = gridGraph.connectedComponents()
-      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum()
-      assert(maxCCid === 0)
+      val n = 5
+      val gridGraph = GraphGenerators.gridGraph(sc, n, n)
+      val dccGraph = gridGraph.connectedComponentsWithDegree()
+      val dccIds = dccGraph.vertices.map { case (vid, dccId) => dccId }.distinct().collect()
+      assert(dccIds.length === 1)
+      assert(dccIds.head._1 === n + 1)
+      assert(dccIds.head._2 === 4)
     }
   } // end of Grid connected components
 
 
   test("Reverse Grid Connected Components") {
     withSpark { sc =>
-      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse
-      val ccGraph = gridGraph.connectedComponents()
-      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum()
-      assert(maxCCid === 0)
+      val n = 5
+      val gridGraph = GraphGenerators.gridGraph(sc, n, n).reverse
+      val dccGraph = gridGraph.connectedComponentsWithDegree()
+      val dccIds = dccGraph.vertices.map { case (vid, dccId) => dccId }.distinct().collect()
+      assert(dccIds.length === 1)
+      assert(dccIds.head._1 === n + 1)
+      assert(dccIds.head._2 === 4)
     }
   } // end of Grid connected components
 
@@ -54,21 +58,15 @@ class ConnectedComponentsWithDegreeSuite extends SparkFunSuite with LocalSparkCo
       val chain2 = (10 until 20).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s, d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0)
-      val ccGraph = twoChains.connectedComponents()
-      val vertices = ccGraph.vertices.collect()
-      for ( (id, cc) <- vertices ) {
+      val dccGraph = twoChains.connectedComponentsWithDegree()
+      val vertices = dccGraph.vertices.collect()
+      for ( (id, dcc) <- vertices ) {
         if (id < 10) {
-          assert(cc === 0)
+          assert(dcc._1 === 1)
+          assert(dcc._2 === 2)
         } else {
-          assert(cc === 10)
-        }
-      }
-      val ccMap = vertices.toMap
-      for (id <- 0 until 20) {
-        if (id < 10) {
-          assert(ccMap(id) === 0)
-        } else {
-          assert(ccMap(id) === 10)
+          assert(dcc._1 === 11)
+          assert(dcc._2 === 2)
         }
       }
     }
@@ -80,21 +78,15 @@ class ConnectedComponentsWithDegreeSuite extends SparkFunSuite with LocalSparkCo
       val chain2 = (10 until 20).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s, d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse
-      val ccGraph = twoChains.connectedComponents()
-      val vertices = ccGraph.vertices.collect()
-      for ( (id, cc) <- vertices ) {
+      val dccGraph = twoChains.connectedComponentsWithDegree()
+      val vertices = dccGraph.vertices.collect()
+      for ( (id, dcc) <- vertices ) {
         if (id < 10) {
-          assert(cc === 0)
+          assert(dcc._1 === 1)
+          assert(dcc._2 === 2)
         } else {
-          assert(cc === 10)
-        }
-      }
-      val ccMap = vertices.toMap
-      for ( id <- 0 until 20 ) {
-        if (id < 10) {
-          assert(ccMap(id) === 0)
-        } else {
-          assert(ccMap(id) === 10)
+          assert(dcc._1 === 11)
+          assert(dcc._2 === 2)
         }
       }
     }
@@ -122,10 +114,12 @@ class ConnectedComponentsWithDegreeSuite extends SparkFunSuite with LocalSparkCo
       val defaultUser = ("John Doe", "Missing")
       // Build the initial Graph
       val graph = Graph(users, relationships, defaultUser)
-      val ccGraph = graph.connectedComponents()
-      val vertices = ccGraph.vertices.collect()
-      for ( (id, cc) <- vertices ) {
-        assert(cc === 0)
+      val dccGraph = graph.connectedComponentsWithDegree()
+      val vertices = dccGraph.vertices.collect()
+      for ( (id, dcc) <- vertices ) {
+        // vertex 5 has the max degree, which equals to 4
+        assert(dcc._1 === 5)
+        assert(dcc._2 === 4)
       }
     }
   } // end of toy connected components
