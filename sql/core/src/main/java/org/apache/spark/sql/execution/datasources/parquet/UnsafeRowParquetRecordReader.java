@@ -699,7 +699,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
           break;
 
         case FIXED_LEN_BYTE_ARRAY:
-          // This is the legacy mode to write DecimalType
+          // DecimalType written in the legacy mode
           if (DecimalType.is32BitDecimalType(column.dataType())) {
             for (int i = rowId; i < rowId + num; ++i) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));

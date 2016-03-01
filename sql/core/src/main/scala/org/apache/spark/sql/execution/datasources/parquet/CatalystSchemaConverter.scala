@@ -24,6 +24,7 @@ import org.apache.parquet.schema._
 import org.apache.parquet.schema.OriginalType._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.maxPrecisionForBytes
 import org.apache.spark.sql.internal.SQLConf

@@ -159,7 +159,7 @@ public abstract class ColumnVector {
       } else if (dt instanceof StringType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
-            list[i] = ColumnVectorUtils.toString(data.getByteArray(offset + i));
+            list[i] = getUTF8String(i).toString();
           }
         }
       } else if (dt instanceof CalendarIntervalType) {
@@ -525,12 +525,15 @@ public abstract class ColumnVector {
   /**
    * Returns the value for rowId.
    */
-  public final Array getByteArray(int rowId) {
+  private Array getByteArray(int rowId) {
     Array array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
   }
 
+  /**
+   * Returns the decimal for rowId.
+   */
   public final Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.apply(getInt(rowId), precision, scale);
@@ -545,6 +548,9 @@ public abstract class ColumnVector {
     }
   }
 
+  /**
+   * Returns the UTF8String for rowId.
+   */
   public final UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array a = getByteArray(rowId);
@@ -555,6 +561,9 @@ public abstract class ColumnVector {
     }
   }
 
+  /**
+   * Returns the byte array for rowId.
+   */
   public final byte[] getBinary(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array array = getByteArray(rowId);

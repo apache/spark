@@ -156,7 +156,7 @@ object DecimalType extends AbstractDataType {
   def is32BitDecimalType(dt: DataType): Boolean = {
     dt match {
       case t: DecimalType =>
-        t.precision <= Decimal.MAX_LONG_DIGITS
+        t.precision <= Decimal.MAX_INT_DIGITS
       case _ => false
     }
   }
