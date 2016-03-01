@@ -232,8 +232,12 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val coefficients = Vectors.dense(parameters.slice(2, parameters.length))
     val intercept = parameters(1)
     val scale = math.exp(parameters(0))
-    val model = new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
-    copyValues(model.setParent(this))
+    val model = copyValues(
+      new AFTSurvivalRegressionModel(uid, coefficients, intercept, scale)
+        .setParent(this))
+    val summary = new AFTSurvivalRegressionSummary(model.transform(dataset),
+      $(predictionCol), $(labelCol), $(featuresCol))
+    model.setSummary(summary)
   }
 
   @Since("1.6.0")
@@ -280,6 +284,26 @@ class AFTSurvivalRegressionModel private[ml] (
   /** @group setParam */
   @Since("1.6.0")
   def setQuantilesCol(value: String): this.type = set(quantilesCol, value)
+
+  private var trainingSummary: Option[AFTSurvivalRegressionSummary] = None
+
+  private[regression] def setSummary(summary: AFTSurvivalRegressionSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * Gets summary of model on training set. An exception is
+   * thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: AFTSurvivalRegressionSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        "No training summary available for this AFTSurvivalRegressionModel",
+        new NullPointerException())
+  }
 
   @Since("1.6.0")
   def predictQuantiles(features: Vector): Vector = {
@@ -374,6 +398,23 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
     }
   }
 }
+
+/**
+ * :: Experimental ::
+ * AFT survival regression results evaluated on a dataset.
+ *
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param predictionCol field in "predictions" which gives the prediction of each instance.
+ * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ */
+@Experimental
+@Since("2.0.0")
+class AFTSurvivalRegressionSummary private[regression] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val labelCol: String,
+    @Since("2.0.0") val featuresCol: String) extends Serializable
 
 /**
  * AFTAggregator computes the gradient and loss for a AFT loss function,

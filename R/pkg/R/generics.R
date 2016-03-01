@@ -1175,3 +1175,7 @@ setGeneric("kmeans")
 #' @rdname fitted
 #' @export
 setGeneric("fitted")
+
+#' @rdname survreg
+#' @export
+setGeneric("survreg", function(formula, data) { standardGeneric("survreg") })
