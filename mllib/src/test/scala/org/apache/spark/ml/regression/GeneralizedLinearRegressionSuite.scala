@@ -52,19 +52,19 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     datasetGaussianIdentity = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gaussian", link = "identity"), 2))
 
     datasetGaussianLog = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gaussian", link = "log"), 2))
 
     datasetGaussianInverse = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gaussian", link = "inverse"), 2))
 
     datasetBinomial = {
@@ -74,45 +74,46 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
 
       val testData =
-        generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, seed)
+        generateMultinomialLogisticInput(coefficients, xMean, xVariance,
+          addIntercept = true, nPoints, seed)
 
-      sqlContext.createDataFrame(sc.parallelize(testData, 4))
+      sqlContext.createDataFrame(sc.parallelize(testData, 2))
     }
 
     datasetPoissonLog = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "poisson", link = "log"), 2))
 
     datasetPoissonIdentity = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "poisson", link = "identity"), 2))
 
     datasetPoissonSqrt = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "poisson", link = "sqrt"), 2))
 
     datasetGammaInverse = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "inverse"), 2))
 
     datasetGammaIdentity = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "identity"), 2))
 
     datasetGammaLog = sqlContext.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.01,
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "log"), 2))
   }
 
@@ -132,14 +133,12 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
     assert(glr.getWeightCol === "")
     assert(glr.getRegParam === 0.0)
     assert(glr.getSolver == "irls")
+    // TODO: Construct model directly instead of via fitting.
     val model = glr.setFamily("gaussian").setLink("identity")
       .fit(datasetGaussianIdentity)
 
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
-    model.transform(datasetGaussianIdentity)
-      .select("label", "prediction")
-      .collect()
 
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
@@ -467,7 +466,7 @@ object GeneralizedLinearRegressionSuite {
       xVariance: Array[Double],
       nPoints: Int,
       seed: Int,
-      eps: Double,
+      noiseLevel: Double,
       family: String,
       link: String): Seq[LabeledPoint] = {
 
@@ -491,7 +490,7 @@ object GeneralizedLinearRegressionSuite {
         case "sqrt" => math.pow(eta, 2.0)
         case "inverse" => 1.0 / eta
       }
-      val label = mu + eps * (generator.nextValue() - mean)
+      val label = mu + noiseLevel * (generator.nextValue() - mean)
       // Return LabeledPoints with DenseVector
       LabeledPoint(label, features)
     }
