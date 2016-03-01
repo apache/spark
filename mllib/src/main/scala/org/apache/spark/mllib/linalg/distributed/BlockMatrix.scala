@@ -326,6 +326,7 @@ class BlockMatrix @Since("1.3.0") (
    *         of `this` and `other`.
    * Note: `blockMap` ONLY works for `add` and `subtract` methods and it does not support
    * operators such as (a, b) => -a + b
+   * TODO: Make the use of zero matrices more storage efficient.
    */
   private[mllib] def blockMap(
       other: BlockMatrix,
