@@ -78,21 +78,4 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
         p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[Sort]).isDefined)
     assert(df.collect() === Array(Row(1), Row(2), Row(3)))
   }
-
-  test("Limit should be included in WholeStageCodegen") {
-    val df = sqlContext.range(10000).limit(100).sort(col("id"))
-    val plan = df.queryExecution.executedPlan
-
-    assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[Sort] &&
-          p.asInstanceOf[WholeStageCodegen].plan.asInstanceOf[Sort]
-            .child.isInstanceOf[GlobalLimit]).isDefined)
-
-    assert(plan.find(p =>
-      p.isInstanceOf[WholeStageCodegen] &&
-        p.asInstanceOf[WholeStageCodegen].plan.isInstanceOf[LocalLimit]).isDefined)
-
-    assert(df.collect().size === 100)
-  }
 }
