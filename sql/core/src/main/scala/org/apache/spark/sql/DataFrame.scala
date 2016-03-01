@@ -196,7 +196,7 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = toDF()
+  def toDF(): DataFrame = this.asInstanceOf[DataFrame]
 
   /**
    * :: Experimental ::

@@ -151,7 +151,7 @@ class DS[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = DataFrame(sqlContext, logicalPlan)
+  def toDF(): DataFrame = this.asInstanceOf[DataFrame]
 
   /**
    * Returns this [[DS]].
