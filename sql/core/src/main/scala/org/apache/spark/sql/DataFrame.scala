@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    new DataFrame(sqlContext, logicalPlan)
+    new Dataset[Row](sqlContext, logicalPlan)
   }
 }
 
@@ -112,7 +112,7 @@ private[sql] object DataFrame {
  * @since 1.3.0
  */
 @Experimental
-class DataFrame private[sql](
+class Dataset[T] private[sql](
     @transient override val sqlContext: SQLContext,
     @DeveloperApi @transient override val queryExecution: QueryExecution)
   extends Queryable with Serializable {
@@ -196,7 +196,7 @@ class DataFrame private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = this
+  def toDF(): DataFrame = toDF()
 
   /**
    * :: Experimental ::
@@ -360,7 +360,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.3.1
    */
-  def na: DataFrameNaFunctions = new DataFrameNaFunctions(this)
+  def na: DataFrameNaFunctions = new DataFrameNaFunctions(toDF())
 
   /**
    * Returns a [[DataFrameStatFunctions]] for working statistic functions support.
@@ -372,7 +372,7 @@ class DataFrame private[sql](
    * @group dfops
    * @since 1.4.0
    */
-  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(this)
+  def stat: DataFrameStatFunctions = new DataFrameStatFunctions(toDF())
 
   /**
    * Cartesian join with another [[DataFrame]].
@@ -813,7 +813,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def groupBy(cols: Column*): GroupedData = {
-    GroupedData(this, cols.map(_.expr), GroupedData.GroupByType)
+    GroupedData(toDF(), cols.map(_.expr), GroupedData.GroupByType)
   }
 
   /**
@@ -836,7 +836,7 @@ class DataFrame private[sql](
    */
   @scala.annotation.varargs
   def rollup(cols: Column*): GroupedData = {
-    GroupedData(this, cols.map(_.expr), GroupedData.RollupType)
+    GroupedData(toDF(), cols.map(_.expr), GroupedData.RollupType)
   }
 
   /**
@@ -858,7 +858,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def cube(cols: Column*): GroupedData = GroupedData(this, cols.map(_.expr), GroupedData.CubeType)
+  def cube(cols: Column*): GroupedData = GroupedData(toDF(), cols.map(_.expr), GroupedData.CubeType)
 
   /**
    * Groups the [[DataFrame]] using the specified columns, so we can run aggregation on them.
@@ -883,7 +883,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def groupBy(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.GroupByType)
+    GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.GroupByType)
   }
 
   /**
@@ -910,7 +910,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def rollup(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.RollupType)
+    GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.RollupType)
   }
 
   /**
@@ -937,7 +937,7 @@ class DataFrame private[sql](
   @scala.annotation.varargs
   def cube(col1: String, cols: String*): GroupedData = {
     val colNames: Seq[String] = col1 +: cols
-    GroupedData(this, colNames.map(colName => resolve(colName)), GroupedData.CubeType)
+    GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.CubeType)
   }
 
   /**
@@ -1238,7 +1238,7 @@ class DataFrame private[sql](
       }
       select(columns : _*)
     } else {
-      this
+      toDF()
     }
   }
 
@@ -1264,7 +1264,7 @@ class DataFrame private[sql](
     val remainingCols =
       schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
     if (remainingCols.size == this.schema.size) {
-      this
+      toDF()
     } else {
       this.select(remainingCols: _*)
     }
@@ -1425,7 +1425,7 @@ class DataFrame private[sql](
    * }}}
    * @since 1.6.0
    */
-  def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
+  def transform[U](t: DataFrame => DataFrame): DataFrame = t(toDF())
 
   /**
    * Applies a function `f` to all rows.
@@ -1489,7 +1489,7 @@ class DataFrame private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", this) { _ =>
+  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", toDF()) { _ =>
     withNewExecutionId {
       java.util.Arrays.asList(rdd.collect() : _*)
     }
@@ -1501,7 +1501,7 @@ class DataFrame private[sql](
     }
 
     if (needCallback) {
-      withCallback("collect", this)(_ => execute())
+      withCallback("collect", toDF())(_ => execute())
     } else {
       execute()
     }
@@ -1663,7 +1663,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerDataFrameAsTable(this, tableName)
+    sqlContext.registerDataFrameAsTable(toDF(), tableName)
   }
 
   /**
@@ -1674,7 +1674,7 @@ class DataFrame private[sql](
    * @since 1.4.0
    */
   @Experimental
-  def write: DataFrameWriter = new DataFrameWriter(this)
+  def write: DataFrameWriter = new DataFrameWriter(toDF())
 
   /**
    * Returns the content of the [[DataFrame]] as a RDD of JSON strings.
