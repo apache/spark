@@ -360,7 +360,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1.length == column.getArrayLength(v._2), "MemoryMode=" + memMode)
-        assert(v._1 == ColumnVectorUtils.toString(column.getByteArray(v._2)),
+        assert(v._1 == column.getUTF8String(v._2).toString,
           "MemoryMode" + memMode)
       }
 
@@ -488,7 +488,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(batch.column(1).getDouble(0) == 1.1)
       assert(batch.column(1).getIsNull(0) == false)
       assert(batch.column(2).getIsNull(0) == true)
-      assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(0)) == "Hello")
+      assert(batch.column(3).getUTF8String(0).toString == "Hello")
 
       // Verify the iterator works correctly.
       val it = batch.rowIterator()
@@ -499,7 +499,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(row.getDouble(1) == 1.1)
       assert(row.isNullAt(1) == false)
       assert(row.isNullAt(2) == true)
-      assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(0)) == "Hello")
+      assert(batch.column(3).getUTF8String(0).toString == "Hello")
       assert(it.hasNext == false)
       assert(it.hasNext == false)
 

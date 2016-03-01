@@ -87,13 +87,13 @@
 
   <modules>
     <module>common/sketch</module>
+    <module>common/network-common</module>
+    <module>common/network-shuffle</module>
     <module>tags</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
-    <module>network/common</module>
-    <module>network/shuffle</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
@@ -147,7 +147,7 @@
     <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
-    <chill.version>0.5.0</chill.version>
+    <chill.version>0.7.4</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
@@ -2442,7 +2442,7 @@
       <id>yarn</id>
       <modules>
         <module>yarn</module>
-        <module>network/yarn</module>
+        <module>common/network-yarn</module>
       </modules>
     </profile>
 
