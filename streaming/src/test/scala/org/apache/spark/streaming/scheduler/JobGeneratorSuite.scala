@@ -127,7 +127,7 @@ class JobGeneratorSuite extends TestSuiteBase {
     }
   }
 
-  test("do no generate down time batch when recovering from checkpoint") {
+  test("SPARK-13586: do no generate down time batch when recovering from checkpoint") {
 
     val checkpointDir = Utils.createTempDir()
     val testConf = conf
