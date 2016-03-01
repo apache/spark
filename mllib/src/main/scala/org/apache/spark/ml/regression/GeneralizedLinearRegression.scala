@@ -192,7 +192,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
     val familyAndLink = new FamilyAndLink(familyObj, linkObj)
 
-    val numFeatures = dataset.select(col($(featuresCol))).limit(1)
+    val numFeatures = dataset.select(col($(featuresCol))).limit(1).rdd
       .map { case Row(features: Vector) =>
         features.size
       }.first()
@@ -203,7 +203,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
     }
 
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
-    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol)))
+    val instances: RDD[Instance] = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
       .map { case Row(label: Double, weight: Double, features: Vector) =>
         Instance(label, weight, features)
       }
