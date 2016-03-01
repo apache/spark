@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, DS, Encoder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, RowEncoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.StructType
@@ -46,7 +46,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected val encoder = encoderFor[A]
   protected val logicalPlan = StreamingRelation(this)
   protected val output = logicalPlan.output
-  protected val batches = new ArrayBuffer[Dataset[A]]
+  protected val batches = new ArrayBuffer[DS[A]]
 
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
@@ -54,8 +54,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def schema: StructType = encoder.schema
 
-  def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
-    new Dataset(sqlContext, logicalPlan)
+  def toDS()(implicit sqlContext: SQLContext): DS[A] = {
+    new DS(sqlContext, logicalPlan)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {

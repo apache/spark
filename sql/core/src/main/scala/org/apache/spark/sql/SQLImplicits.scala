@@ -125,7 +125,8 @@ abstract class SQLImplicits {
     ExpressionEncoder()
 
   /**
-   * Creates a [[Dataset]] from an RDD.
+   * Creates a [[DS]] from an RDD.
+   *
    * @since 1.6.0
    */
   implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {
@@ -133,7 +134,7 @@ abstract class SQLImplicits {
   }
 
   /**
-   * Creates a [[Dataset]] from a local Seq.
+   * Creates a [[DS]] from a local Seq.
    * @since 1.6.0
    */
   implicit def localSeqToDatasetHolder[T : Encoder](s: Seq[T]): DatasetHolder[T] = {

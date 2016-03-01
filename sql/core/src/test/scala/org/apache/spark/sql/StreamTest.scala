@@ -67,7 +67,7 @@ trait StreamTest extends QueryTest with Timeouts {
   implicit class RichSource(s: Source) {
     def toDF(): DataFrame = new DataFrame(sqlContext, StreamingRelation(s))
 
-    def toDS[A: Encoder](): Dataset[A] = new Dataset(sqlContext, StreamingRelation(s))
+    def toDS[A: Encoder](): DS[A] = new DS(sqlContext, StreamingRelation(s))
   }
 
   /** How long to wait for an active stream to catch up when checking a result. */
@@ -169,7 +169,7 @@ trait StreamTest extends QueryTest with Timeouts {
   }
 
   /** A helper for running actions on a Streaming Dataset. See `checkAnswer(DataFrame)`. */
-  def testStream(stream: Dataset[_])(actions: StreamAction*): Unit =
+  def testStream(stream: DS[_])(actions: StreamAction*): Unit =
     testStream(stream.toDF())(actions: _*)
 
   /**
@@ -399,9 +399,9 @@ trait StreamTest extends QueryTest with Timeouts {
    *                as needed
    */
   def runStressTest(
-      ds: Dataset[Int],
-      addData: Seq[Int] => StreamAction,
-      iterations: Int = 100): Unit = {
+                     ds: DS[Int],
+                     addData: Seq[Int] => StreamAction,
+                     iterations: Int = 100): Unit = {
     implicit val intEncoder = ExpressionEncoder[Int]()
     var dataPos = 0
     var running = true

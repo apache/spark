@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 /**
- * A container for a [[Dataset]], used for implicit conversions.
+ * A container for a [[DS]], used for implicit conversions.
  *
  * To use this, import implicit conversions in SQL:
  * {{{
@@ -27,9 +27,9 @@ package org.apache.spark.sql
  *
  * @since 1.6.0
  */
-case class DatasetHolder[T] private[sql](private val ds: Dataset[T]) {
+case class DatasetHolder[T] private[sql](private val ds: DS[T]) {
 
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDS("1")` as invoking this toDS and then apply on the returned Dataset.
-  def toDS(): Dataset[T] = ds
+  def toDS(): DS[T] = ds
 }

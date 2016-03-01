@@ -158,7 +158,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   /**
    * Provides a type hint about the expected return value of this column.  This information can
-   * be used by operations such as `select` on a [[Dataset]] to automatically convert the
+   * be used by operations such as `select` on a [[DS]] to automatically convert the
    * results into the correct JVM types.
    * @since 1.6.0
    */

@@ -28,7 +28,7 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.{ContinuousQuery, DS, StreamTest}
 import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution, StreamingRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -228,7 +228,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
 
   /** Run a body of code by defining a query each on multiple datasets */
-  private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
+  private def withQueriesOn(datasets: DS[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
         datasets.map { ds =>
@@ -298,7 +298,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     queryToStop
   }
 
-  private def makeDataset: (MemoryStream[Int], Dataset[Int]) = {
+  private def makeDataset: (MemoryStream[Int], DS[Int]) = {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS.map(6 / _)
     (inputData, mapped)

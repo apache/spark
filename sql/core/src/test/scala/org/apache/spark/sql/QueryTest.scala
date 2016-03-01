@@ -73,7 +73,7 @@ abstract class QueryTest extends PlanTest {
    *    which performs a subset of the checks done by this function.
    */
   protected def checkAnswer[T](
-      ds: Dataset[T],
+      ds: DS[T],
       expectedAnswer: T*): Unit = {
     checkAnswer(
       ds.toDF(),
@@ -83,7 +83,7 @@ abstract class QueryTest extends PlanTest {
   }
 
   protected def checkDecoding[T](
-      ds: => Dataset[T],
+      ds: => DS[T],
       expectedAnswer: T*): Unit = {
     val decoded = try ds.collect().toSet catch {
       case e: Exception =>

@@ -200,13 +200,13 @@ class DataFrame private[sql](
 
   /**
    * :: Experimental ::
-   * Converts this [[DataFrame]] to a strongly-typed [[Dataset]] containing objects of the
+   * Converts this [[DataFrame]] to a strongly-typed [[DS]] containing objects of the
    * specified type, `U`.
    * @group basic
    * @since 1.6.0
    */
   @Experimental
-  def as[U : Encoder]: Dataset[U] = new Dataset[U](sqlContext, logicalPlan)
+  def as[U : Encoder]: DS[U] = new DS[U](sqlContext, logicalPlan)
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion

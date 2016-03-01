@@ -28,9 +28,9 @@ import org.apache.spark.sql.execution.QueryExecution
 
 /**
  * :: Experimental ::
- * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
+ * A [[DS]] has been logically grouped by a user specified grouping key.  Users should not
  * construct a [[GroupedDataset]] directly, but should instead call `groupBy` on an existing
- * [[Dataset]].
+ * [[DS]].
  *
  * COMPATIBILITY NOTE: Long term we plan to make [[GroupedDataset)]] extend `GroupedData`.  However,
  * making this change to the class hierarchy would break some function signatures. As such, this
@@ -68,7 +68,7 @@ class GroupedDataset[K, V] private[sql](
 
   /**
    * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
-   * type. The mapping of key columns to the type follows the same rules as `as` on [[Dataset]].
+   * type. The mapping of key columns to the type follows the same rules as `as` on [[DS]].
    *
    * @since 1.6.0
    */
@@ -81,12 +81,12 @@ class GroupedDataset[K, V] private[sql](
       groupingAttributes)
 
   /**
-   * Returns a [[Dataset]] that contains each unique key.
+   * Returns a [[DS]] that contains each unique key.
    *
    * @since 1.6.0
    */
-  def keys: Dataset[K] = {
-    new Dataset[K](
+  def keys: DS[K] = {
+    new DS[K](
       sqlContext,
       Distinct(
         Project(groupingAttributes, logicalPlan)))
@@ -96,10 +96,10 @@ class GroupedDataset[K, V] private[sql](
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
-   * as a new [[Dataset]].
+   * as a new [[DS]].
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * the data in the [[DS]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
    * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
@@ -110,8 +110,8 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    new Dataset[U](
+  def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): DS[U] = {
+    new DS[U](
       sqlContext,
       MapGroups(
         f,
@@ -124,10 +124,10 @@ class GroupedDataset[K, V] private[sql](
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
    * function can return an iterator containing elements of an arbitrary type which will be returned
-   * as a new [[Dataset]].
+   * as a new [[DS]].
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * the data in the [[DS]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
    * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
@@ -138,17 +138,17 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
+  def flatMapGroups[U](f: FlatMapGroupsFunction[K, V, U], encoder: Encoder[U]): DS[U] = {
     flatMapGroups((key, data) => f.call(key, data.asJava).asScala)(encoder)
   }
 
   /**
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
-   * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
+   * function can return an element of arbitrary type which will be returned as a new [[DS]].
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * the data in the [[DS]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
    * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
@@ -159,7 +159,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroups[U : Encoder](f: (K, Iterator[V]) => U): Dataset[U] = {
+  def mapGroups[U : Encoder](f: (K, Iterator[V]) => U): DS[U] = {
     val func = (key: K, it: Iterator[V]) => Iterator(f(key, it))
     flatMapGroups(func)
   }
@@ -167,10 +167,10 @@ class GroupedDataset[K, V] private[sql](
   /**
    * Applies the given function to each group of data.  For each unique group, the function will
    * be passed the group key and an iterator that contains all of the elements in the group. The
-   * function can return an element of arbitrary type which will be returned as a new [[Dataset]].
+   * function can return an element of arbitrary type which will be returned as a new [[DS]].
    *
    * This function does not support partial aggregation, and as a result requires shuffling all
-   * the data in the [[Dataset]]. If an application intends to perform an aggregation over each
+   * the data in the [[DS]]. If an application intends to perform an aggregation over each
    * key, it is best to use the reduce function or an
    * [[org.apache.spark.sql.expressions#Aggregator Aggregator]].
    *
@@ -181,7 +181,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): Dataset[U] = {
+  def mapGroups[U](f: MapGroupsFunction[K, V, U], encoder: Encoder[U]): DS[U] = {
     mapGroups((key, data) => f.call(key, data.asJava))(encoder)
   }
 
@@ -191,7 +191,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def reduce(f: (V, V) => V): Dataset[(K, V)] = {
+  def reduce(f: (V, V) => V): DS[(K, V)] = {
     val func = (key: K, it: Iterator[V]) => Iterator((key, it.reduce(f)))
 
     implicit val resultEncoder = ExpressionEncoder.tuple(unresolvedKEncoder, unresolvedVEncoder)
@@ -204,7 +204,7 @@ class GroupedDataset[K, V] private[sql](
    *
    * @since 1.6.0
    */
-  def reduce(f: ReduceFunction[V]): Dataset[(K, V)] = {
+  def reduce(f: ReduceFunction[V]): DS[(K, V)] = {
     reduce(f.call _)
   }
 
@@ -225,7 +225,7 @@ class GroupedDataset[K, V] private[sql](
    * that cast appropriately for the user facing interface.
    * TODO: does not handle aggrecations that return nonflat results,
    */
-  protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+  protected def aggUntyped(columns: TypedColumn[_, _]*): DS[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(
@@ -239,32 +239,32 @@ class GroupedDataset[K, V] private[sql](
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sqlContext, aggregate)
 
-    new Dataset(
+    new DS(
       sqlContext,
       execution,
       ExpressionEncoder.tuple(unresolvedKEncoder +: encoders))
   }
 
   /**
-   * Computes the given aggregation, returning a [[Dataset]] of tuples for each unique key
+   * Computes the given aggregation, returning a [[DS]] of tuples for each unique key
    * and the result of computing this aggregation over all elements in the group.
    *
    * @since 1.6.0
    */
-  def agg[U1](col1: TypedColumn[V, U1]): Dataset[(K, U1)] =
-    aggUntyped(col1).asInstanceOf[Dataset[(K, U1)]]
+  def agg[U1](col1: TypedColumn[V, U1]): DS[(K, U1)] =
+    aggUntyped(col1).asInstanceOf[DS[(K, U1)]]
 
   /**
-   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * Computes the given aggregations, returning a [[DS]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
    * @since 1.6.0
    */
-  def agg[U1, U2](col1: TypedColumn[V, U1], col2: TypedColumn[V, U2]): Dataset[(K, U1, U2)] =
-    aggUntyped(col1, col2).asInstanceOf[Dataset[(K, U1, U2)]]
+  def agg[U1, U2](col1: TypedColumn[V, U1], col2: TypedColumn[V, U2]): DS[(K, U1, U2)] =
+    aggUntyped(col1, col2).asInstanceOf[DS[(K, U1, U2)]]
 
   /**
-   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * Computes the given aggregations, returning a [[DS]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
    * @since 1.6.0
@@ -272,11 +272,11 @@ class GroupedDataset[K, V] private[sql](
   def agg[U1, U2, U3](
       col1: TypedColumn[V, U1],
       col2: TypedColumn[V, U2],
-      col3: TypedColumn[V, U3]): Dataset[(K, U1, U2, U3)] =
-    aggUntyped(col1, col2, col3).asInstanceOf[Dataset[(K, U1, U2, U3)]]
+      col3: TypedColumn[V, U3]): DS[(K, U1, U2, U3)] =
+    aggUntyped(col1, col2, col3).asInstanceOf[DS[(K, U1, U2, U3)]]
 
   /**
-   * Computes the given aggregations, returning a [[Dataset]] of tuples for each unique key
+   * Computes the given aggregations, returning a [[DS]] of tuples for each unique key
    * and the result of computing these aggregations over all elements in the group.
    *
    * @since 1.6.0
@@ -285,30 +285,30 @@ class GroupedDataset[K, V] private[sql](
       col1: TypedColumn[V, U1],
       col2: TypedColumn[V, U2],
       col3: TypedColumn[V, U3],
-      col4: TypedColumn[V, U4]): Dataset[(K, U1, U2, U3, U4)] =
-    aggUntyped(col1, col2, col3, col4).asInstanceOf[Dataset[(K, U1, U2, U3, U4)]]
+      col4: TypedColumn[V, U4]): DS[(K, U1, U2, U3, U4)] =
+    aggUntyped(col1, col2, col3, col4).asInstanceOf[DS[(K, U1, U2, U3, U4)]]
 
   /**
-   * Returns a [[Dataset]] that contains a tuple with each key and the number of items present
+   * Returns a [[DS]] that contains a tuple with each key and the number of items present
    * for that key.
    *
    * @since 1.6.0
    */
-  def count(): Dataset[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]))
+  def count(): DS[(K, Long)] = agg(functions.count("*").as(ExpressionEncoder[Long]))
 
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
-   * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
-   * arbitrary type which will be returned as a new [[Dataset]].
+   * [[DS]] `this` and `other`.  The function can return an iterator containing elements of an
+   * arbitrary type which will be returned as a new [[DS]].
    *
    * @since 1.6.0
    */
   def cogroup[U, R : Encoder](
       other: GroupedDataset[K, U])(
-      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
+      f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): DS[R] = {
     implicit val uEncoder = other.unresolvedVEncoder
-    new Dataset[R](
+    new DS[R](
       sqlContext,
       CoGroup(
         f,
@@ -323,15 +323,15 @@ class GroupedDataset[K, V] private[sql](
   /**
    * Applies the given function to each cogrouped data.  For each unique group, the function will
    * be passed the grouping key and 2 iterators containing all elements in the group from
-   * [[Dataset]] `this` and `other`.  The function can return an iterator containing elements of an
-   * arbitrary type which will be returned as a new [[Dataset]].
+   * [[DS]] `this` and `other`.  The function can return an iterator containing elements of an
+   * arbitrary type which will be returned as a new [[DS]].
    *
    * @since 1.6.0
    */
   def cogroup[U, R](
       other: GroupedDataset[K, U],
       f: CoGroupFunction[K, V, U, R],
-      encoder: Encoder[R]): Dataset[R] = {
+      encoder: Encoder[R]): DS[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
   }
 }

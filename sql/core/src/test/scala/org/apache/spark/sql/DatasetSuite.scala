@@ -135,7 +135,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("map and group by with class data") {
     // We inject a group by here to make sure this test case is future proof
     // when we implement better pipelining and local execution mode.
-    val ds: Dataset[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
+    val ds: DS[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
         .map(c => ClassData(c.a, c.b + 1))
         .groupBy(p => p).count()
 
@@ -156,7 +156,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ds.select(
         expr("_1").as[String],
-        expr("_2").as[Int]) : Dataset[(String, Int)],
+        expr("_2").as[Int]) : DS[(String, Int)],
       ("a", 1), ("b", 2), ("c", 3))
   }
 
@@ -545,7 +545,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       )), nullable = true)
     ))
 
-    def buildDataset(rows: Row*): Dataset[NestedStruct] = {
+    def buildDataset(rows: Row*): DS[NestedStruct] = {
       val rowRDD = sqlContext.sparkContext.parallelize(rows)
       sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
     }
