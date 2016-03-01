@@ -404,7 +404,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else if (type instanceof ShortType) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 2, newCapacity * 2);
     } else if (type instanceof IntegerType || type instanceof FloatType ||
-        type instanceof DateType) {
+        type instanceof DateType || DecimalType.is32BitDecimalType(type)) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 4, newCapacity * 4);
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type)) {

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util
 import java.nio.{ByteBuffer, ByteOrder}
+import java.util
 
 import scala.collection.JavaConverters.mapAsJavaMapConverter
 

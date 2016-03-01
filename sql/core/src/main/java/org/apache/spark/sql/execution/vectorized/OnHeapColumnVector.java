@@ -401,7 +401,8 @@ public final class OnHeapColumnVector extends ColumnVector {
       short[] newData = new short[newCapacity];
       if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
       shortData = newData;
-    } else if (type instanceof IntegerType || type instanceof DateType) {
+    } else if (type instanceof IntegerType || type instanceof DateType ||
+      DecimalType.is32BitDecimalType(type)) {
       int[] newData = new int[newCapacity];
       if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
       intData = newData;

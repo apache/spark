@@ -206,17 +206,17 @@ public abstract class ColumnVector {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      return getDecimal(offset + ordinal, precision, scale);
+      return data.getDecimal(offset + ordinal, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
-      return getUTF8String(offset + ordinal);
+      return data.getUTF8String(offset + ordinal);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
-      return getBinary(offset + ordinal);
+      return data.getBinary(offset + ordinal);
     }
 
     @Override
