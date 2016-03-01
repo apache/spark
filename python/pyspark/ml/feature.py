@@ -596,7 +596,7 @@ class IDFModel(JavaModel, MLReadable, MLWritable):
 
 
 @inherit_doc
-class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
+class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -616,6 +616,18 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
     |[2.0]| [1.0]|
     +-----+------+
     ...
+    >>> scalerPath = temp_path + "/max-abs-scaler"
+    >>> maScaler.save(scalerPath)
+    >>> loadedMAScaler = MaxAbsScaler.load(scalerPath)
+    >>> loadedMAScaler.getInputCol() == maScaler.getInputCol()
+    True
+    >>> loadedMAScaler.getOutputCol() == maScaler.getOutputCol()
+    True
+    >>> modelPath = temp_path + "/max-abs-scaler-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = MaxAbsScalerModel.load(modelPath)
+    >>> loadedModel.transform(df).first().scaled == model.transform(df).first().scaled
+    True
 
     .. versionadded:: 2.0.0
     """
@@ -645,7 +657,7 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
         return MaxAbsScalerModel(java_model)
 
 
-class MaxAbsScalerModel(JavaModel):
+class MaxAbsScalerModel(JavaModel, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
