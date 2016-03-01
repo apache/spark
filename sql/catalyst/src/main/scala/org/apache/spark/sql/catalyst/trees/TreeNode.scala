@@ -450,11 +450,23 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * All the nodes that will be used to generate tree string.
+   *
+   * For example:
+   *
+   *   node
+   *   :  +-  innerChildren
+   *   +-  treeChildren
    */
   protected def treeChildren: Seq[BaseType] = children
 
   /**
-   * All the nodes those are parts of this node.
+   * All the nodes that are parts of this node.
+   *
+   * innerChildren will be printed with one more level of indent, for example:
+   *
+   *   node
+   *   :  +-  innerChildren
+   *   +-  treeChildren
    */
   protected def innerChildren: Seq[BaseType] = Nil
 

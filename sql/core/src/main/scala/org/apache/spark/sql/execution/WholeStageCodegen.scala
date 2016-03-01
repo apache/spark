@@ -348,21 +348,17 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
     }
   }
 
-  private[sql] override def resetMetrics(): Unit = {
-    child.foreach(_.resetMetrics())
-  }
-
   override def innerChildren: Seq[SparkPlan] = {
     child :: Nil
   }
 
-  private def collectDirectInputs(plan: SparkPlan): Seq[SparkPlan] = plan match {
+  private def collectInputs(plan: SparkPlan): Seq[SparkPlan] = plan match {
     case InputAdapter(c) => c :: Nil
-    case other => other.children.flatMap(collectDirectInputs)
+    case other => other.children.flatMap(collectInputs)
   }
 
   override def treeChildren: Seq[SparkPlan] = {
-    collectDirectInputs(child)
+    collectInputs(child)
   }
 
   override def simpleString: String = "WholeStageCodegen"
