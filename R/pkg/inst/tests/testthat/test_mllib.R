@@ -159,13 +159,4 @@ test_that("naiveBayes", {
   library(e1071)
   model <- naiveBayes(Class ~ ., data = HouseVotes84)
   expect_equal(predict(model, HouseVotes84[1:3,]), c("republican", "republican", "republican"))
-
-  # # Test fitted works on KMeans
-  # fitted.model <- fitted(model)
-  # expect_equal(sort(collect(distinct(select(fitted.model, "prediction")))$prediction), c(0, 1))
-
-  # # Test summary works on KMeans
-  # summary.model <- summary(model)
-  # cluster <- summary.model$cluster
-  # expect_equal(sort(collect(distinct(select(cluster, "prediction")))$prediction), c(0, 1))
 })

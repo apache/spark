@@ -53,6 +53,9 @@ private[r] object SparkRWrappers {
     pipeline.fit(df)
   }
 
+  /**
+   * Fit a Naive Bayes model with a formula value and a DataFrame.
+   */
   def fitNaiveBayes(
       value: String,
       df: DataFrame,
@@ -65,6 +68,11 @@ private[r] object SparkRWrappers {
     pipeline.fit(df)
   }
 
+  /**
+   * Fit a Naive Bayes model with DataFrame x as features and DataFrame y as labels. DataFrame x and
+   * y should have the same number of rows for binding together. Note that the DataFrame y should
+   * contains only one column, otherwise its first column will be used as the default label column.
+   */
   def fitNaiveBayes(
       x: DataFrame,
       y: DataFrame,
@@ -185,13 +193,6 @@ private[r] object SparkRWrappers {
   }
 
   def getModelName(model: PipelineModel): String = {
-    model.stages.last match {
-      case m: LinearRegressionModel =>
-        "LinearRegressionModel"
-      case m: LogisticRegressionModel =>
-        "LogisticRegressionModel"
-      case m: KMeansModel =>
-        "KMeansModel"
-    }
+    model.stages.last.getClass.getSimpleName
   }
 }
