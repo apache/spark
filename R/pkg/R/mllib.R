@@ -192,3 +192,68 @@ setMethod("fitted", signature(object = "PipelineModel"),
               stop(paste("Unsupported model", modelName, sep = " "))
             }
           })
+
+#' Fit a naive Bayes model
+#'
+#' Fit a naive Bayes model, similarly to R's naiveBayes() except for omitting two arguments 'subset'
+#' and 'na.action'. Users can use 'subset' function and 'fillna' or 'na.omit' function of DataFrame,
+#' respectviely, to preprocess their DataFrame.
+#'
+#' @param object A symbolic description of the model to be fitted. Currently only a few formula
+#'                operators are supported, including '~', '.', ':', '+', and '-'.
+#' @param data DataFrame for training
+#' @param laplace Smoothing parameter
+#' @param modelType Either 'multinomial' or 'bernoulli'. Default "multinomial".
+#' @param ... Undefined parameters
+#' @return A fitted naive Bayes model.
+#' @rdname naiveBayes
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df <- createDataFrame(sqlContext, iris)
+#' model <- glm(Sepal_Length ~ Sepal_Width, df, laplace = 1, modelType = "multinomial")
+#'}
+setMethod("naiveBayes", signature(object = "formula"),
+          function(object, data, laplace = 0, modelType = c("multinomial", "bernoulli"), ...) {
+
+            formula <- paste(deparse(object), collapse = "")
+            modelType <- if (missing(modelType)) "multinomial" else match.arg(modelType)
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitNaiveBayes",
+                                 formula, data@sdf, laplace, modelType)
+            return(new("PipelineModel", model = model))
+          })
+
+#' Fit a naive Bayes model
+#'
+#' Fit a naive Bayes model, similarly to R's naiveBayes().
+#'
+#' @param object DataFrame as features for training.
+#' @param y DataFrame as label for training.
+#' @param laplace Smoothing parameter
+#' @param modelType Either 'multinomial' or 'bernoulli'. Default "multinomial".
+#' @param ... Undefined parameters
+#' @return A fitted naive Bayes model.
+#' @rdname naiveBayes
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' df <- createDataFrame(sqlContext, iris)
+#' cache(df)
+#' take(df, 1)
+#' model <- glm(df[, -2], df[, 2], laplace = 1, modelType = "multinomial")
+#'}
+setMethod("naiveBayes", signature(object = "DataFrame"),
+          function(object, y, laplace = 0, modelType = c("multinomial", "bernoulli"), ...) {
+            yNames <- as.array(colnames(y))
+            if (length(yNames) != 1) {
+              stop(paste("Only one-dimensional y is supported, we get", length(yNames), sep = " "))
+            }
+            modelType <- if (missing(modelType)) "multinomial" else match.arg(modelType)
+            model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers", "fitNaiveBayes",
+                                 object@sdf, y@sdf, laplace, modelType)
+            return(new("PipelineModel", model = model))
+          })

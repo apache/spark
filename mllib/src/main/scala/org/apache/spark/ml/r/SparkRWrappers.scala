@@ -19,11 +19,12 @@ package org.apache.spark.ml.api.r
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, NaiveBayes}
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.types.StructType
 
 private[r] object SparkRWrappers {
   def fitRModelFormula(
@@ -50,6 +51,35 @@ private[r] object SparkRWrappers {
     }
     val pipeline = new Pipeline().setStages(Array(formula, estimator))
     pipeline.fit(df)
+  }
+
+  def fitNaiveBayes(
+      value: String,
+      df: DataFrame,
+      laplace: Double,
+      modelType: String): PipelineModel = {
+
+    val formula = new RFormula().setFormula(value)
+    val naiveBayes = new NaiveBayes().setSmoothing(laplace).setModelType(modelType)
+    val pipeline = new Pipeline().setStages(Array(formula, naiveBayes))
+    pipeline.fit(df)
+  }
+
+  def fitNaiveBayes(
+      x: DataFrame,
+      y: DataFrame,
+      laplace: Double,
+      modelType: String): PipelineModel = {
+
+    val (formulaValue, data) = {
+      val cBindData = x.rdd.zip(y.rdd).map(r => Row.merge(r._1, r._2))
+      val schema = StructType(x.schema.fields ++ y.schema.fields)
+      val cBindDF = x.sqlContext.createDataFrame(cBindData, schema)
+      val autoFormula = s"${y.schema.fieldNames.head} ~ ."
+      (autoFormula, cBindDF)
+    }
+
+    fitNaiveBayes(formulaValue, data, laplace, modelType)
   }
 
   def fitKMeans(
