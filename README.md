@@ -50,7 +50,7 @@ if you may.
 
 Currently **officially** using Airflow:
 
-* Airbnb [@mistercrunch]
+* [Airbnb](http://airbnb.io/) [[@mistercrunch](https://github.com/mistercrunch), [@artwr](https://github.com/artwr)]
 * [Agari] (https://github.com/agaridata) [[@r39132](https://github.com/r39132)]
 * [Bellhops](https://github.com/bellhops)
 * BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
