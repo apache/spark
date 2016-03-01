@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.Properties
+import java.util.{NoSuchElementException, Properties}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -345,12 +345,9 @@ object SQLConf {
     defaultValue = Some(true),
     doc = "Enables using the custom ParquetUnsafeRowRecordReader.")
 
-  // Note: this can not be enabled all the time because the reader will not be returning UnsafeRows.
-  // Doing so is very expensive and we should remove this requirement instead of fixing it here.
-  // Initial testing seems to indicate only sort requires this.
   val PARQUET_VECTORIZED_READER_ENABLED = booleanConf(
     key = "spark.sql.parquet.enableVectorizedReader",
-    defaultValue = Some(false),
+    defaultValue = Some(true),
     doc = "Enables vectorized parquet decoding.")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = booleanConf("spark.sql.orc.filterPushdown",
@@ -649,6 +646,7 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   }
 
   /** Return the value of Spark SQL configuration property for the given key. */
+  @throws[NoSuchElementException]("if key is not set")
   def getConfString(key: String): String = {
     Option(settings.get(key)).
       orElse {

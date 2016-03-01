@@ -39,21 +39,6 @@ fi
 
 ORIGINAL_ARGS="$@"
 
-START_TACHYON=false
-
-while (( "$#" )); do
-case $1 in
-    --with-tachyon)
-      if [ ! -e "${SPARK_HOME}"/tachyon/bin/tachyon ]; then
-        echo "Error: --with-tachyon specified, but tachyon not found."
-        exit -1
-      fi
-      START_TACHYON=true
-      ;;
-  esac
-shift
-done
-
 . "${SPARK_HOME}/sbin/spark-config.sh"
 
 . "${SPARK_HOME}/bin/load-spark-env.sh"
@@ -73,9 +58,3 @@ fi
 "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS 1 \
   --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT \
   $ORIGINAL_ARGS
-
-if [ "$START_TACHYON" == "true" ]; then
-  "${SPARK_HOME}"/tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
-  "${SPARK_HOME}"/tachyon/bin/tachyon format -s
-  "${SPARK_HOME}"/tachyon/bin/tachyon-start.sh master
-fi

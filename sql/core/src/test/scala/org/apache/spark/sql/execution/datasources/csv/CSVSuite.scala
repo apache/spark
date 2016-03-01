@@ -37,6 +37,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
+  private val simpleSparseFile = "simple_sparse.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -233,7 +234,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(result.schema.fieldNames.size === 1)
   }
 
-
   test("DDL test with empty file") {
     sqlContext.sql(s"""
            |CREATE TEMPORARY TABLE carsTable
@@ -268,9 +268,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(testFile(carsFile))
 
       cars.coalesce(1).write
-        .format("csv")
         .option("header", "true")
-        .save(csvDir)
+        .csv(csvDir)
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -395,5 +394,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       verifyCars(carsCopy, withHeader = true)
     }
+  }
+
+  test("Schema inference correctly identifies the datatype when data is sparse.") {
+    val df = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(simpleSparseFile))
+
+    assert(
+      df.schema.fields.map(field => field.dataType).deep ==
+      Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
 }
