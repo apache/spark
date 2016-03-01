@@ -67,10 +67,13 @@ trait BaseLimit extends UnaryNode with CodegenSupport {
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    ctx.addNewFunction("shouldStop", """
+    val stopEarly = ctx.freshName("stopEarly")
+    ctx.addMutableState("boolean", stopEarly, s"$stopEarly = false;")
+
+    ctx.addNewFunction("shouldStop", s"""
       @Override
       protected boolean shouldStop() {
-        return !currentRows.isEmpty() || stopEarly;
+        return !currentRows.isEmpty() || $stopEarly;
       }
     """)
     val countTerm = ctx.freshName("count")
@@ -80,7 +83,7 @@ trait BaseLimit extends UnaryNode with CodegenSupport {
        |   $countTerm += 1;
        |   ${consume(ctx, input)}
        | } else {
-       |   setStopEarly(true);
+       |   $stopEarly = true;
        | }
      """.stripMargin
   }

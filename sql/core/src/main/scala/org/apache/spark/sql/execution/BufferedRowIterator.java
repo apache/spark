@@ -35,8 +35,6 @@ public abstract class BufferedRowIterator {
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
-  protected boolean stopEarly = false;
-
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
       processNext();
@@ -67,15 +65,6 @@ public abstract class BufferedRowIterator {
    */
   protected boolean shouldStop() {
     return !currentRows.isEmpty();
-  }
-
-  /**
-   * Set the value of stopEarly which indicates whether `processNext()` should stop processing
-   * next row from `input` or not.
-   *
-   */
-  protected void setStopEarly(boolean value) {
-    stopEarly = value;
   }
 
   /**
