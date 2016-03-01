@@ -681,6 +681,139 @@ _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
 
+_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
+
+
+def _parse_basic_datatype_string(s):
+    if s == "null":
+        return NullType()
+    elif s == "boolean":
+        return BooleanType()
+    elif s == "byte":
+        return ByteType()
+    elif s == "short":
+        return ShortType()
+    elif s == "int":
+        return IntegerType()
+    elif s == "long":
+        return LongType()
+    elif s == "float":
+        return FloatType()
+    elif s == "double":
+        return DoubleType()
+    elif s == "decimal":
+        return DecimalType()
+    elif _FIXED_DECIMAL.match(s):
+        m = _FIXED_DECIMAL.match(json_value)
+        return DecimalType(int(m.group(1)), int(m.group(2)))
+    elif s == "string":
+        return StringType()
+    elif s == "date":
+        return DateType()
+    elif s == "timestamp":
+        return TimestampType()
+    elif s == "binary":
+        return BinaryType()
+    else:
+        raise ValueError("Cannot parse datatype string: %s" % s)
+
+
+def _ignore_brackets_split(s, separator):
+    parts = []
+    buf = ""
+    level = 0
+    for c in s:
+        if c == "<":
+            level += 1
+            buf += c
+        elif c == ">":
+            if level == 0:
+                raise ValueError("Cannot parse datatype string: %s" % s)
+            level -= 1
+            buf += c
+        elif c == separator and level > 0:
+            buf += c
+        elif c == separator:
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += c
+
+    if len(buf) == 0:
+        raise ValueError("Cannot parse datatype string: %s" % s)
+    parts.append(buf)
+    return parts
+
+
+def _parse_struct_type_string(s):
+    parts = _ignore_brackets_split(s, ",")
+    fields = []
+    for part in parts:
+        name_and_type = _ignore_brackets_split(part, ":")
+        if len(name_and_type) != 2:
+            raise ValueError("Cannot parse datatype string: %s" % s)
+        field_name = name_and_type[0].strip()
+        field_type = _parse_datatype_string(name_and_type[1])
+        fields.append(StructField(field_name, field_type))
+    return StructType(fields)
+
+
+def _parse_datatype_string(s):
+    """
+    Parses the given data type string to a :class:`DataType`, the data type string format equals
+    to `DataType.simpleString`, except that top level struct type can omit the `struct<>`.
+
+    >>> _parse_datatype_string("int")
+    IntegerType
+    >>> _parse_datatype_string("a: int, b: string ")
+    StructType(List(StructField(a,IntegerType,true),StructField(b,StringType,true)))
+    >>> _parse_datatype_string("a: array<int>")
+    StructType(List(StructField(a,ArrayType(IntegerType,true),true)))
+    >>> _parse_datatype_string(" map<string , string > ")
+    MapType(StringType,StringType,true)
+
+    >>> # Error cases
+    >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _parse_datatype_string("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    """
+    s = s.strip()
+    if s.startswith("array<"):
+        if s[-1] != ">":
+            raise ValueError("Cannot parse datatype string: %s" % s)
+        return ArrayType(_parse_datatype_string(s[6:-1]))
+    elif s.startswith("map<"):
+        if s[-1] != ">":
+            raise ValueError("Cannot parse datatype string: %s" % s)
+        parts = _ignore_brackets_split(s[4:-1], ",")
+        if len(parts) != 2:
+            raise ValueError("Cannot parse datatype string: %s" % s)
+        kt = _parse_datatype_string(parts[0])
+        vt = _parse_datatype_string(parts[1])
+        return MapType(kt, vt)
+    elif s.startswith("struct<"):
+        if s[-1] != ">":
+            raise ValueError("Cannot parse datatype string: %s" % s)
+        return _parse_struct_type_string(s[7:-1])
+    elif ":" in s:
+        return _parse_struct_type_string(s)
+    else:
+        return _parse_basic_datatype_string(s)
+
+
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
     >>> import pickle
@@ -728,9 +861,6 @@ def _parse_datatype_json_string(json_string):
     >>> check_datatype(complex_maptype)
     """
     return _parse_datatype_json_value(json.loads(json_string))
-
-
-_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
 
 
 def _parse_datatype_json_value(json_value):

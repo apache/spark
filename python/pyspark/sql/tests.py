@@ -1178,6 +1178,42 @@ class SQLTests(ReusedPySparkTestCase):
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
 
+    def test_apply_schema(self):
+        data = [Row(key=i, value=str(i)) for i in range(100)]
+        rdd = self.sc.parallelize(data, 5)
+
+        df = rdd.schema("key: int, value: string")
+        self.assertEqual(df.schema.simpleString(), "struct<key:int,value:string>")
+        self.assertEqual(df.collect(), data)
+
+        # different but compatible field types can be used.
+        df = rdd.schema("key: string, value: string")
+        self.assertEqual(df.schema.simpleString(), "struct<key:string,value:string>")
+        self.assertEqual(df.collect(), [Row(key=str(i), value=str(i)) for i in range(100)])
+
+        # field names can differ.
+        df = rdd.schema(" a: int, b: string ")
+        self.assertEqual(df.schema.simpleString(), "struct<a:int,b:string>")
+        self.assertEqual(df.collect(), data)
+
+        # number of fields must match.
+        self.assertRaisesRegexp(Exception, "Length of object",
+                                lambda: rdd.schema("key: int").collect())
+
+        # field types mismatch will cause exception at runtime.
+        self.assertRaisesRegexp(Exception, "FloatType can not accept",
+                                lambda: rdd.schema("key: float, value: string").collect())
+
+        # flat schema values will be wrapped into row.
+        df = rdd.map(lambda row: row.key).schema("int")
+        self.assertEqual(df.schema.simpleString(), "struct<value:int>")
+        self.assertEqual(df.collect(), map(lambda row: Row(value=row.key), data))
+
+        # users can use DataType directly instead of data type string.
+        df = rdd.map(lambda row: row.key).schema(IntegerType())
+        self.assertEqual(df.schema.simpleString(), "struct<value:int>")
+        self.assertEqual(df.collect(), map(lambda row: Row(value=row.key), data))
+
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
 

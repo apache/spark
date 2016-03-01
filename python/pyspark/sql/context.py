@@ -31,8 +31,8 @@ from py4j.protocol import Py4JError
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
-from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
-    _infer_schema, _has_nulltype, _merge_type, _create_converter
+from pyspark.sql.types import Row, DataType, StringType, StructType, _verify_type, \
+    _infer_schema, _has_nulltype, _merge_type, _create_converter, _parse_datatype_string
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.utils import install_exception_handler
@@ -63,7 +63,33 @@ def _monkey_patch_RDD(sqlContext):
         """
         return sqlContext.createDataFrame(self, schema, sampleRatio)
 
+    def schema(self, datatype):
+        """
+        Converts current :class:`RDD` into a :class:`DataFrame` according to the given data type.
+
+        :param datatype:
+            a :class:`DataType` or a data type string.
+        """
+        if isinstance(datatype, StructType):
+            schema = datatype
+            def to_row(obj):
+                _verify_type(obj, datatype)
+                return obj
+        elif isinstance(datatype, DataType):
+            schema = StructType().add("value", datatype)
+            def to_row(obj):
+                _verify_type(obj, datatype)
+                return (obj, )
+        elif isinstance(datatype, basestring):
+            return self.schema(_parse_datatype_string(datatype))
+        else:
+            raise TypeError("datatype should be DataType or string, but got: %s" % datatype)
+
+        rdd = self.map(to_row)
+        return sqlContext.createDataFrame(rdd, schema)
+
     RDD.toDF = toDF
+    RDD.schema = schema
 
 
 class SQLContext(object):
