@@ -63,6 +63,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
   override def prepareWrite(
       sqlContext: SQLContext,
       job: Job,
+      options: Map[String, String],
       dataSchema: StructType): BucketedOutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
@@ -258,7 +259,8 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
       filters: Array[Filter],
       bucketSet: Option[BitSet],
       allFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      options: Map[String, String]): RDD[InternalRow] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
@@ -375,169 +377,6 @@ private[sql] class ParquetOutputWriter(
 
   override def close(): Unit = recordWriter.close(context)
 }
-/*
-private[sql] class ParquetRelation(
-    override val paths: Array[String],
-    private val maybeDataSchema: Option[StructType],
-    // This is for metastore conversion.
-    private val maybePartitionSpec: Option[PartitionSpec],
-    val userDefinedPartitionColumns: Option[StructType],
-    val maybeBucketSpec: Option[BucketSpec],
-    parameters: Map[String, String])(
-    override val sqlContext: SQLContext)
-  extends HadoopFsRelation
-  with Logging {
-
-  private[sql] def this(
-      paths: Array[String],
-      maybeDataSchema: Option[StructType],
-      maybePartitionSpec: Option[PartitionSpec],
-      parameters: Map[String, String])(
-      sqlContext: SQLContext) = {
-    this(
-      paths,
-      maybeDataSchema,
-      maybePartitionSpec,
-      maybePartitionSpec.map(_.partitionColumns),
-      None,
-      parameters)(sqlContext)
-  }
-
-  private val maybeMetastoreSchema = parameters
-    .get(ParquetRelation.METASTORE_SCHEMA)
-    .map(DataType.fromJson(_).asInstanceOf[StructType])
-
-  private lazy val metadataCache: MetadataCache = {
-    val meta = new MetadataCache
-    meta.refresh()
-    meta
-  }
-
-  override def toString: String = {
-    parameters.get(ParquetRelation.METASTORE_TABLE_NAME).map { tableName =>
-      s"${getClass.getSimpleName}: $tableName"
-    }.getOrElse(super.toString)
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case that: ParquetRelation =>
-      val schemaEquality = if (shouldMergeSchemas) {
-        this.shouldMergeSchemas == that.shouldMergeSchemas
-      } else {
-        this.dataSchema == that.dataSchema &&
-          this.schema == that.schema
-      }
-
-      this.paths.toSet == that.paths.toSet &&
-        schemaEquality &&
-        this.maybeDataSchema == that.maybeDataSchema &&
-        this.partitionColumns == that.partitionColumns
-
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    if (shouldMergeSchemas) {
-      Objects.hashCode(
-        Boolean.box(shouldMergeSchemas),
-        paths.toSet,
-        maybeDataSchema,
-        partitionColumns)
-    } else {
-      Objects.hashCode(
-        Boolean.box(shouldMergeSchemas),
-        paths.toSet,
-        dataSchema,
-        schema,
-        maybeDataSchema,
-        partitionColumns)
-    }
-  }
-
-  /** Constraints on schema of dataframe to be stored. */
-  private def checkConstraints(schema: StructType): Unit = {
-
-  }
-
-  override def dataSchema: StructType = {
-    val schema = maybeDataSchema.getOrElse(metadataCache.dataSchema)
-    // check if schema satisfies the constraints
-    // before moving forward
-    checkConstraints(schema)
-    schema
-  }
-
-  override def refresh(): Unit = {
-    super.refresh()
-    metadataCache.refresh()
-  }
-
-  // Parquet data source always uses Catalyst internal representations.
-  override val needConversion: Boolean = false
-
-  override def sizeInBytes: Long = metadataCache.dataStatuses.map(_.getLen).sum
-
-  def buildInternalScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-
-  }
-
-  private class MetadataCache {
-    // `FileStatus` objects of all "_metadata" files.
-    private var metadataStatuses: Array[FileStatus] = _
-
-    // `FileStatus` objects of all "_common_metadata" files.
-    private var commonMetadataStatuses: Array[FileStatus] = _
-
-    // `FileStatus` objects of all data files (Parquet part-files).
-    var dataStatuses: Array[FileStatus] = _
-
-    // Schema of the actual Parquet files, without partition columns discovered from partition
-    // directory paths.
-    var dataSchema: StructType = null
-
-    // Schema of the whole table, including partition columns.
-    var schema: StructType = _
-
-    // Cached leaves
-    var cachedLeaves: mutable.LinkedHashSet[FileStatus] = null
-
-    /**
-     * Refreshes `FileStatus`es, footers, partition spec, and table schema.
-     */
-    def refresh(): Unit = {
-      val currentLeafStatuses = cachedLeafStatuses()
-
-      // Check if cachedLeafStatuses is changed or not
-      val leafStatusesChanged = (cachedLeaves == null) ||
-        !cachedLeaves.equals(currentLeafStatuses)
-
-      if (leafStatusesChanged) {
-
-
-        dataSchema = {
-          val dataSchema0 = maybeDataSchema
-            .orElse(readSchema())
-            .orElse(maybeMetastoreSchema)
-            .getOrElse(throw new AnalysisException(
-              s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
-                paths.mkString("\n\t")))
-
-          // If this Parquet relation is converted from a Hive Metastore table, must reconcile case
-          // case insensitivity issue and possible schema mismatch (probably caused by schema
-          // evolution).
-          maybeMetastoreSchema
-            .map(ParquetRelation.mergeMetastoreParquetSchema(_, dataSchema0))
-            .getOrElse(dataSchema0)
-        }
-      }
-    }
-  }
-}
-*/
 
 private[sql] object ParquetRelation extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.

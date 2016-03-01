@@ -62,6 +62,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     refreshFunction: () => Unit,
+    options: Map[String, String],
     @transient query: LogicalPlan,
     mode: SaveMode)
   extends RunnableCommand {
@@ -121,7 +122,7 @@ private[sql] case class InsertIntoHadoopFsRelation(
             sqlContext,
             dataColumns.toStructType,
             qualifiedOutputPath.toString,
-            fileFormat.prepareWrite(sqlContext, _, dataColumns.toStructType),
+            fileFormat.prepareWrite(sqlContext, _, options, dataColumns.toStructType),
             bucketSpec)
 
         val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {

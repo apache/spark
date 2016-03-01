@@ -45,8 +45,8 @@ object ResolvedDataSource extends Logging {
   private val backwardCompatibilityMap = Map(
     "org.apache.spark.sql.jdbc" -> classOf[jdbc.DefaultSource].getCanonicalName,
     "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[jdbc.DefaultSource].getCanonicalName,
-//    "org.apache.spark.sql.json" -> classOf[json.DefaultSource].getCanonicalName,
-//    "org.apache.spark.sql.json.DefaultSource" -> classOf[json.DefaultSource].getCanonicalName,
+    "org.apache.spark.sql.json" -> classOf[json.DefaultSource].getCanonicalName,
+    "org.apache.spark.sql.json.DefaultSource" -> classOf[json.DefaultSource].getCanonicalName,
     "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getCanonicalName,
     "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getCanonicalName
   )
@@ -183,7 +183,8 @@ object ResolvedDataSource extends Logging {
           partitionSchema = partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
-          format)
+          format,
+          options)
 
       case _ =>
         throw new AnalysisException(
@@ -269,7 +270,6 @@ object ResolvedDataSource extends Logging {
               .toSet)
           } catch {
             case e: Exception =>
-              println(s"cant read existing schema $e")
               None
           }
 
@@ -286,6 +286,7 @@ object ResolvedDataSource extends Logging {
             bucketSpec,
             format,
             () => Unit, // No existing table needs to be refreshed.
+            options,
             data.logicalPlan,
             mode)
         sqlContext.executePlan(plan).toRdd

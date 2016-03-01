@@ -55,6 +55,7 @@ private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
         t.bucketSpec,
         t.fileFormat,
         () => t.refresh(),
+        t.options,
         query,
         mode)
   }
@@ -131,7 +132,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         pushedFilters,
         bucketSet,
         t.partitionSpec.partitionColumns,
-        selectedPartitions)
+        selectedPartitions,
+        t.options)
 
       // Add a Projection to guarantee the original projection:
       // this is because "partitionAndNormalColumnAttrs" may be different
@@ -167,7 +169,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             f,
             bucketSet,
             t.location.allFiles().toArray,
-            confBroadcast)) :: Nil
+            confBroadcast,
+            t.options)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -186,7 +189,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       filters: Seq[Expression],
       buckets: Option[BitSet],
       partitionColumns: StructType,
-      partitions: Array[Partition]): SparkPlan = {
+      partitions: Array[Partition],
+      options: Map[String, String]): SparkPlan = {
     val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
 
     // Because we are creating one RDD per partition, we need to have a shared HadoopConf.
@@ -215,7 +219,8 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             filters,
             buckets,
             relation.location.getStatus(dir),
-            confBroadcast)
+            confBroadcast,
+            options)
 
           // Merges data values with partition values.
           mergeWithPartitionValues(

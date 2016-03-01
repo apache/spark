@@ -19,6 +19,9 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.datasources.json.{JacksonParser, JSONOptions, InferSchema}
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
@@ -330,15 +333,20 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-//    sqlContext.baseRelationToDataFrame(
-//      new JSONRelation(
-//        Some(jsonRDD),
-//        maybeDataSchema = userSpecifiedSchema,
-//        maybePartitionSpec = None,
-//        userDefinedPartitionColumns = None,
-//        parameters = extraOptions.toMap)(sqlContext)
-//    )
-    ???
+    val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
+    val schema = userSpecifiedSchema.getOrElse {
+      InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
+    }
+
+    new DataFrame(
+      sqlContext,
+      LogicalRDD(
+        schema.toAttributes,
+        JacksonParser.parse(
+          jsonRDD,
+          schema,
+          sqlContext.conf.columnNameOfCorruptRecord,
+          parsedOptions))(sqlContext))
   }
 
   /**
@@ -367,9 +375,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         ResolvedDataSource.apply(
           sqlContext,
           paths = paths,
-          userSpecifiedSchema,
-          partitionColumns = Array.empty,
-          bucketSpec = None,
+          userSpecifiedSchema = userSpecifiedSchema,
           provider = "parquet",
           options = extraOptions.toMap).relation)
     }

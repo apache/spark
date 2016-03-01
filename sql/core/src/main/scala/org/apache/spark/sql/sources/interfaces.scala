@@ -473,7 +473,8 @@ case class HadoopFsRelation(
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
-    fileFormat: FileFormat) extends BaseRelation {
+    fileFormat: FileFormat,
+    options: Map[String, String]) extends BaseRelation {
 
   case class WriteRelation(
       sqlContext: SQLContext,
@@ -515,6 +516,7 @@ trait FileFormat {
   def prepareWrite(
       sqlContext: SQLContext,
       job: Job,
+      options: Map[String, String],
       dataSchema: StructType): BucketedOutputWriterFactory
 
   def buildInternalScan(
@@ -524,7 +526,8 @@ trait FileFormat {
       filters: Array[Filter],
       bucketSet: Option[BitSet],
       inputFiles: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow]
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      options: Map[String, String]): RDD[InternalRow]
 }
 
 trait FileCatalog {
