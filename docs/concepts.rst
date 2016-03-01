@@ -228,6 +228,105 @@ Not like this, where the join task is skipped
 
 .. image:: img/branch_bad.png
 
+SubDAGs
+'''''''
+
+SubDAGs are perfect for repeating patterns. Defining a function that returns a
+DAG object is a nice design pattern when using Airflow.
+
+Airbnb uses the *stage-check-exchange* pattern when loading data. Data is staged
+in a temporary table, after which data quality checks are performed against
+that table. Once the checks all pass the partition is moved into the production
+table.
+
+As another example, consider the following DAG:
+
+.. image:: img/subdag_before.png
+
+We can combine all of the parallel ``task-*`` operators into a single SubDAG,
+so that the resulting DAG resembles the following:
+
+.. image:: img/subdag_after.png
+
+Note that SubDAG operators should contain a factory method that returns a DAG
+object. This will prevent the SubDAG from being treated like a separate DAG in
+the main UI. For example:
+
+.. code:: python
+
+  #dags/subdag.py
+  from airflow.models import DAG
+  from airflow.operators import DummyOperator
+
+
+  # Dag is returned by a factory method
+  def sub_dag(parent_dag_name, child_dag_name, start_date, schedule_interval):
+    dag = DAG(
+      '%s.%s' % (parent_dag_name, child_dag_name),
+      schedule_interval=schedule_interval,
+      start_date=start_date,
+    )
+
+    dummy_operator = DummyOperator(
+      task_id='dummy_task',
+      dag=dag,
+    )
+
+    return dag
+
+This SubDAG can then be referenced in your main DAG file:
+
+.. code:: python
+
+  # main_dag.py
+  from datetime import datetime, timedelta
+  from airflow.models import DAG
+  from airflow.operators import SubDagOperator
+  from dags.subdag import sub_dag
+
+
+  PARENT_DAG_NAME = 'parent_dag'
+  CHILD_DAG_NAME = 'child_dag'
+
+  main_dag = DAG(
+    dag_id=PARENT_DAG_NAME,
+    schedule_interval=timedelta(hours=1),
+    start_date=datetime(2016, 1, 1)
+  )
+
+  sub_dag = SubDagOperator(
+    subdag=sub_dag(PARENT_DAG_NAME, CHILD_DAG_NAME, main_dag.start_date,
+                   main_dag.schedule_interval),
+    task_id=CHILD_DAG_NAME,
+    dag=main_dag,
+  )
+
+You can zoom into a SubDagOperator from the graph view of the main DAG to show
+the tasks contained within the SubDAG:
+
+.. image:: img/subdag_zoom.png
+
+Some other tips when using SubDAGs:
+
+-  by convention, a SubDAG's ``dag_id`` should be prefixed by its parent and
+   a dot. As in ``parent.child``
+-  share arguments between the main DAG and the SubDAG by passing arguments to
+   the SubDAG operator (as demonstrated above)
+-  SubDAGs must have a schedule and be enabled. If the SubDAG's schedule is
+   set to ``None`` or ``@once``, the SubDAG will succeed without having done
+   anything
+-  clearing a SubDagOperator also clears the state of the tasks within
+-  marking success on a SubDagOperator does not affect the state of the tasks
+   within
+-  refrain from using ``depends_on_past=True`` in tasks within the SubDAG as
+   this can be confusing
+-  it is possible to specify an executor for the SubDAG. It is common to use
+   the SequentialExecutor if you want to run the SubDAG in-process and
+   effectively limit its parallelism to one. Using LocalExecutor can be
+   problematic as it may over-subscribe your worker, running multiple tasks in
+   a single slot
+
+See ``airflow/example_dags`` for a demonstration.
 
 SLAs
 ''''
