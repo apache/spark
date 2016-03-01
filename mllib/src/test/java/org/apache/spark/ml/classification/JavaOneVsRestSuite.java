@@ -20,6 +20,7 @@ package org.apache.spark.ml.classification;
 import java.io.Serializable;
 import java.util.List;
 
+import org.apache.spark.sql.Row;
 import scala.collection.JavaConverters;
 
 import org.junit.After;
@@ -31,14 +32,14 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 
 public class JavaOneVsRestSuite implements Serializable {
 
     private transient JavaSparkContext jsc;
     private transient SQLContext jsql;
-    private transient DataFrame dataset;
+    private transient Dataset<Row> dataset;
     private transient JavaRDD<LabeledPoint> datasetRDD;
 
     @Before
@@ -75,7 +76,7 @@ public class JavaOneVsRestSuite implements Serializable {
         Assert.assertEquals(ova.getLabelCol() , "label");
         Assert.assertEquals(ova.getPredictionCol() , "prediction");
         OneVsRestModel ovaModel = ova.fit(dataset);
-        DataFrame predictions = ovaModel.transform(dataset).select("label", "prediction");
+        Dataset<Row> predictions = ovaModel.transform(dataset).select("label", "prediction");
         predictions.collectAsList();
         Assert.assertEquals(ovaModel.getLabelCol(), "label");
         Assert.assertEquals(ovaModel.getPredictionCol() , "prediction");

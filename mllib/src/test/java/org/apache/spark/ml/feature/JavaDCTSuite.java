@@ -29,7 +29,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -56,7 +56,7 @@ public class JavaDCTSuite {
   @Test
   public void javaCompatibilityTest() {
     double[] input = new double[] {1D, 2D, 3D, 4D};
-    DataFrame dataset = jsql.createDataFrame(
+    Dataset<Row> dataset = jsql.createDataFrame(
       Arrays.asList(RowFactory.create(Vectors.dense(input))),
       new StructType(new StructField[]{
         new StructField("vec", (new VectorUDT()), false, Metadata.empty())

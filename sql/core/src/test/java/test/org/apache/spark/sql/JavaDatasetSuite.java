@@ -828,7 +828,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       DS<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       SmallBean smallBean = new SmallBean();
@@ -845,7 +845,7 @@ public class JavaDatasetSuite implements Serializable {
     {
       Row row = new GenericRow(new Object[] { null });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       DS<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
@@ -862,7 +862,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       DS<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       ds.collect();

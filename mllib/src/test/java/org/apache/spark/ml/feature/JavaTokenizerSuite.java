@@ -26,7 +26,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
@@ -61,7 +61,7 @@ public class JavaTokenizerSuite {
       new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
       new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
     ));
-    DataFrame dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
+    Dataset<Row> dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
 
     Row[] pairs = myRegExTokenizer.transform(dataset)
       .select("tokens", "wantedTokens")

@@ -28,7 +28,7 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
@@ -52,7 +52,7 @@ public class JavaMultilayerPerceptronClassifierSuite implements Serializable {
 
   @Test
   public void testMLPC() {
-    DataFrame dataFrame = sqlContext.createDataFrame(
+    Dataset<Row> dataFrame = sqlContext.createDataFrame(
       jsc.parallelize(Arrays.asList(
         new LabeledPoint(0.0, Vectors.dense(0.0, 0.0)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.0)),
@@ -65,7 +65,7 @@ public class JavaMultilayerPerceptronClassifierSuite implements Serializable {
       .setSeed(11L)
       .setMaxIter(100);
     MultilayerPerceptronClassificationModel model = mlpc.fit(dataFrame);
-    DataFrame result = model.transform(dataFrame);
+    Dataset<Row> result = model.transform(dataFrame);
     Row[] predictionAndLabels = result.select("prediction", "label").collect();
     for (Row r: predictionAndLabels) {
       Assert.assertEquals((int) r.getDouble(0), (int) r.getDouble(1));
