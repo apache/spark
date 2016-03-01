@@ -114,6 +114,19 @@ private[spark] class Executor(
   private val heartbeatReceiverRef =
     RpcUtils.makeDriverRef(HeartbeatReceiver.ENDPOINT_NAME, conf, env.rpcEnv)
 
+  /**
+   * When an executor is unable to send heartbeats to the driver more than `HEARTBEAT_MAX_FAILURES`
+   * times, it should kill itself. The default value is 60. It means we will retry to send
+   * heartbeats about 10 minutes because the heartbeat interval is 10s.
+   */
+  private val HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60)
+
+  /**
+   * Count the failure times of heartbeat. It should only be acessed in the heartbeat thread. Each
+   * successful heartbeat will reset it to 0.
+   */
+  private var heartbeatFailures = 0
+
   startDriverHeartbeater()
 
   def launchTask(
@@ -461,8 +474,16 @@ private[spark] class Executor(
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
+      heartbeatFailures = 0
     } catch {
-      case NonFatal(e) => logWarning("Issue communicating with driver in heartbeater", e)
+      case NonFatal(e) =>
+        logWarning("Issue communicating with driver in heartbeater", e)
+        heartbeatFailures += 1
+        if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
+          logError(s"Exit as unable to send heartbeats to driver " +
+            s"more than $HEARTBEAT_MAX_FAILURES times")
+          System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
+        }
     }
   }
 
