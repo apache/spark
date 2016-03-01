@@ -143,20 +143,22 @@ test_that("kmeans", {
 })
 
 test_that("naiveBayes", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  data(HouseVotes84, package = "mlbench")
+  training <- createDataFrame(sqlContext, HouseVotes84)
 
   # Cache the DataFrame here to work around the bug SPARK-13178.
   cache(training)
   take(training, 1)
 
-  model <- naiveBayes(Sepal_Width ~ ., data = training, laplace = 1, modelType = "multinomial")
-  # sample <- take(select(predict(model, training), "prediction"), 1)
-  # expect_equal(typeof(sample$prediction), "integer")
-  # expect_equal(sample$prediction, 1)
+  model <- naiveBayes(Class ~ ., data = training, laplace = 1, modelType = "multinomial")
+  sample <- take(select(predict(model, training), "prediction"), 1)
+  expect_equal(typeof(sample$prediction), "integer")
+  expect_equal(sample$prediction, 0)
 
-  # # Test stats::kmeans is working
-  # statsModel <- kmeans(x = newIris, centers = 2)
-  # expect_equal(sort(unique(statsModel$cluster)), c(1, 2))
+  # Test e1071::naiveBayes is working
+  library(e1071)
+  model <- naiveBayes(Class ~ ., data = HouseVotes84)
+  expect_equal(predict(model, HouseVotes84[1:3,]), c("republican", "republican", "republican"))
 
   # # Test fitted works on KMeans
   # fitted.model <- fitted(model)
