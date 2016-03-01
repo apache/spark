@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.types._
 
 /**
@@ -557,7 +558,7 @@ abstract class RankLike extends AggregateWindowFunction {
 
   /** Store the values of the window 'order' expressions. */
   protected val orderAttrs = children.map { expr =>
-    AttributeReference(expr.sql, expr.dataType)()
+    AttributeReference(usePrettyExpression(expr).sql, expr.dataType)()
   }
 
   /** Predicate that detects if the order attributes have changed. */
