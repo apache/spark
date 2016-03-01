@@ -175,4 +175,37 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+
+  test(s"SPARK-13537: Fix readBytes in VectorizedPlainValuesReader") {
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+
+      val schema = new StructType()
+        .add("index", IntegerType, nullable = false)
+        .add("col", ByteType, nullable = true)
+
+      val data = Seq(Row(1, -33.toByte), Row(2, 0.toByte), Row(3, -55.toByte), Row(4, 56.toByte),
+        Row(5, 127.toByte), Row(6, -44.toByte), Row(7, 23.toByte), Row(8, -95.toByte),
+        Row(9, 127.toByte), Row(10, 13.toByte))
+
+      val rdd = sqlContext.sparkContext.parallelize(data)
+      val df = sqlContext.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+      df.write
+        .mode("overwrite")
+        .format(dataSourceName)
+        .option("dataSchema", df.schema.json)
+        .save(path)
+
+      val loadedDF = sqlContext
+        .read
+        .format(dataSourceName)
+        .option("dataSchema", df.schema.json)
+        .schema(df.schema)
+        .load(path)
+        .orderBy("index")
+
+      checkAnswer(loadedDF, df)
+    }
+  }
 }
