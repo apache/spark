@@ -649,32 +649,36 @@ private[spark] class BlockManager(
   /**
    * Retrieve the given block if it exists, otherwise call the provided `makeIterator` method
    * to compute the block, persist it, and return its values.
+   *
+   * @return either a BlockResult if the block was successfully cached, or an iterator if the block
+   *         could not be cached.
    */
   def getOrElseUpdate(
       blockId: BlockId,
       level: StorageLevel,
-      makeIterator: () => Iterator[Any]): BlockResult = {
+      makeIterator: () => Iterator[Any]): Either[BlockResult, Iterator[Any]] = {
     // Initially we hold no locks on this block.
-    doPut(blockId, IteratorValues(makeIterator), level, downgradeToReadLock = true)
-    // If the block is already stored, then doPut() will return the block's read lock (per the
-    // semantics of `downgradeToReadLock == true`). Otherwise, it will store a new block and
-    // downgrade the write lock to a read lock. Therefore, we now hold a read lock on the block.
-    val blockResult = get(blockId).getOrElse {
-      // Since we held a read lock between the doPut() and get() calls, the block should not have
-      // been evicted, so get() not returning the block indicates some internal error.
-      releaseLock(blockId)
-      throw new SparkException(s"get() failed for block $blockId even though we held a lock")
+    doPut(blockId, IteratorValues(makeIterator), level, downgradeToReadLock = true) match {
+      case None =>
+        // doPut() didn't hand work back to us, so the block already existed or was successfully
+        // stored. Therefore, we now hold a read lock on the block.
+        val blockResult = get(blockId).getOrElse {
+          // Since we held a read lock between the doPut() and get() calls, the block should not
+          // have been evicted, so get() not returning the block indicates some internal error.
+          releaseLock(blockId)
+          throw new SparkException(s"get() failed for block $blockId even though we held a lock")
+        }
+        Left(blockResult)
+      case Some(failedPutResult) =>
+        // The put failed, likely because the data was too large to fit in memory and could not be
+        // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
+        // that they can decide what to do with the values (e.g. process them without caching).
+       Right(failedPutResult.data.left.get)
     }
-    // At this point, we have now acquired the read lock twice, once from doPut() and once from
-    // get(), so we need to release the lock once so that the net effect is a single acquisition
-    // (since the caller will only expect to have to call releaseLock once).
-    releaseLock(blockId)
-    blockResult
   }
 
   /**
-   * @return true if the block was stored or false if the block was already stored or an
-   *         error occurred.
+   * @return true if the block was stored or false if an error occurred.
    */
   def putIterator(
       blockId: BlockId,
@@ -683,7 +687,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(values != null, "Values is null")
-    doPut(blockId, IteratorValues(() => values), level, tellMaster, effectiveStorageLevel)
+    doPut(blockId, IteratorValues(() => values), level, tellMaster, effectiveStorageLevel).isEmpty
   }
 
   /**
@@ -706,8 +710,7 @@ private[spark] class BlockManager(
   /**
    * Put a new block of serialized bytes to the block manager.
    *
-   * @return true if the block was stored or false if the block was already stored or an
-   *         error occurred.
+   * @return true if the block was stored or false if an error occurred.
    */
   def putBytes(
       blockId: BlockId,
@@ -716,7 +719,7 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(bytes != null, "Bytes is null")
-    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
+    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel).isEmpty
   }
 
   /**
@@ -732,8 +735,9 @@ private[spark] class BlockManager(
    *                            a read lock on the block after this method returns without throwing
    *                            an exception. If false (default), this method will release the write
    *                            lock before returning.
-   * @return true if the block was stored or false if the block was already stored or an
-   *         error occurred.
+   * @return `Some(PutResult)` if the block did not exist and could not be successfully cached,
+   *         or None if the block already existed or was successfully stored (fully consuming
+   *         the input data / input iterator).
    */
   private def doPut(
       blockId: BlockId,
@@ -741,7 +745,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None,
-      downgradeToReadLock: Boolean = false): Boolean = {
+      downgradeToReadLock: Boolean = false): Option[PutResult] = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -762,7 +766,7 @@ private[spark] class BlockManager(
           // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
           releaseLock(blockId)
         }
-        return false
+        return None
       }
     }
 
@@ -798,6 +802,7 @@ private[spark] class BlockManager(
     }
 
     var blockWasSuccessfullyStored = false
+    var result: PutResult = null
 
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
@@ -822,7 +827,7 @@ private[spark] class BlockManager(
         }
 
         // Actually put the values
-        val result = data match {
+        result = data match {
           case IteratorValues(iterator) =>
             blockStore.putIterator(blockId, iterator(), putLevel, returnValues)
           case ByteBufferValues(bytes) =>
@@ -898,7 +903,11 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
-    blockWasSuccessfullyStored
+    if (blockWasSuccessfullyStored) {
+      None
+    } else {
+      Some(result)
+    }
   }
 
   /**

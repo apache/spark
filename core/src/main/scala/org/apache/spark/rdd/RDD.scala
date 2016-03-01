@@ -320,21 +320,25 @@ abstract class RDD[T: ClassTag](
   private[spark] def getOrCompute(partition: Partition, context: TaskContext): Iterator[T] = {
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
-    val blockResult = SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, () => {
+    SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, () => {
       readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
-    })
-    if (readCachedBlock) {
-      val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
-      existingMetrics.incBytesReadInternal(blockResult.bytes)
-      new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
-        override def next(): T = {
-          existingMetrics.incRecordsReadInternal(1)
-          delegate.next()
+    }) match {
+      case Left(blockResult) =>
+        if (readCachedBlock) {
+          val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
+          existingMetrics.incBytesReadInternal(blockResult.bytes)
+          new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
+            override def next(): T = {
+              existingMetrics.incRecordsReadInternal(1)
+              delegate.next()
+            }
+          }
+        } else {
+          new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
         }
-      }
-    } else {
-      new InterruptibleIterator(context, blockResult.data.asInstanceOf[Iterator[T]])
+      case Right(iter) =>
+        new InterruptibleIterator(context, iter.asInstanceOf[Iterator[T]])
     }
   }
 
