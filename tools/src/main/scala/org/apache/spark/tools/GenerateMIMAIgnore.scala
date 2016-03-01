@@ -41,11 +41,11 @@ object GenerateMIMAIgnore {
   private val mirror = runtimeMirror(classLoader)
 
   private def isDeveloperApi(sym: unv.Symbol) = sym.annotations.exists {
-    _.tpe =:= mirror.staticClass("org.apache.spark.annotation.DeveloperApi").toType
+    _.tree.tpe =:= mirror.staticClass("org.apache.spark.annotation.DeveloperApi").toType
   }
 
   private def isExperimental(sym: unv.Symbol) = sym.annotations.exists {
-    _.tpe =:= mirror.staticClass("org.apache.spark.annotation.Experimental").toType
+    _.tree.tpe =:= mirror.staticClass("org.apache.spark.annotation.Experimental").toType
   }
 
 
@@ -66,7 +66,7 @@ object GenerateMIMAIgnore {
     val ignoredClasses = mutable.HashSet[String]()
     val ignoredMembers = mutable.HashSet[String]()
 
-    for (className <- classes) {
+    for (className <- classes.toSeq.sorted) {
       try {
         val classSymbol = mirror.classSymbol(Class.forName(className, false, classLoader))
         val moduleSymbol = mirror.staticModule(className)
@@ -90,9 +90,8 @@ object GenerateMIMAIgnore {
         if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi || experimental) {
           ignoredClasses += className
         }
-        // check if this class has package-private/annotated members.
         ignoredMembers ++= getAnnotatedOrPackagePrivateMembers(classSymbol)
-
+        ignoredMembers ++= getInnerFunctions(className)
       } catch {
         // scalastyle:off println
         case _: Throwable => println("Error instrumenting class:" + className)
@@ -104,16 +103,19 @@ object GenerateMIMAIgnore {
 
   /** Scala reflection does not let us see inner function even if they are upgraded
     * to public for some reason. So had to resort to java reflection to get all inner
-    * functions with $$ in there name.
+    * functions with $$ in their name.
     */
-  def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
+  def getInnerFunctions(className: String): Seq[String] = {
     try {
-      Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)
-        .filter(_.contains("$$")).map(classSymbol.fullName + "." + _)
+      Class.forName(className, false, classLoader)
+        .getMethods
+        .map(_.getName)
+        .filter(_.contains("$$"))
+        .map(className + "." + _)
     } catch {
       case t: Throwable =>
         // scalastyle:off println
-        println("[WARN] Unable to detect inner functions for class:" + classSymbol.fullName)
+        println("[WARN] Unable to detect inner functions for class:" + className)
         // scalastyle:on println
         Seq.empty[String]
     }
@@ -124,7 +126,7 @@ object GenerateMIMAIgnore {
       x.fullName.startsWith("java") || x.fullName.startsWith("scala")
     ).filter(x =>
       isPackagePrivate(x) || isDeveloperApi(x) || isExperimental(x)
-    ).map(_.fullName) ++ getInnerFunctions(classSymbol)
+    ).map(_.fullName)
   }
 
   def main(args: Array[String]) {

@@ -24,11 +24,46 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-echo -e "q\n" | build/sbt oldDeps/update
-rm -f .generated-mima*
-
+# All default projects except for assemblies:
+SPARK_PROJECTS=(
+  "common/network-common"
+  "common/network-shuffle"
+  "common/network-yarn"
+  "common/sketch"
+  "core"
+  "docker-integration-tests"
+  "examples"
+  "external/akka"
+  "external/flume"
+  "external/flume-sink"
+  "external/kafka"
+  "external/mqtt"
+  "external/twitter"
+  "external/zeromq"
+  "extras/kinesis-asl"
+  "extras/spark-ganglia-lgpl"
+  "graphx"
+  "launcher"
+  "mllib"
+  "repl"
+  "sql/catalyst"
+  "sql/core"
+  "sql/hive"
+  "sql/hive-thriftserver"
+  "streaming"
+  "tags"
+  "tools"
+  "unsafe"
+  "yarn"
+)
+SPARK_CLASSES=""
+for project in "${SPARK_PROJECTS[@]}"; do
+  SPARK_CLASSES="$FWDIR/$project/target/scala-2.11/classes/:$SPARK_CLASSES"
+done
 
 TOOLS_CLASSPATH="$(build/sbt "export tools/fullClasspath" | tail -n1)"
+
+rm -f .generated-mima*
 
 # Generate Mima Ignore is called twice, first with latest built jars
 # on the classpath and then again with previous version jars on the classpath.
@@ -36,6 +71,7 @@ TOOLS_CLASSPATH="$(build/sbt "export tools/fullClasspath" | tail -n1)"
 # it did not process the new classes (which are in assembly jar).
 
 generate_mima_ignore() {
+    echo "$TOOLS_CLASSPATH:$1"
     java \
       -XX:MaxPermSize=1g \
       -Xmx2g \
@@ -43,8 +79,9 @@ generate_mima_ignore() {
       org.apache.spark.tools.GenerateMIMAIgnore
 }
 
-generate_mima_ignore "$(build/sbt "export assembly/managedClasspath" | tail -n1)"
-generate_mima_ignore "$(build/sbt "export oldDeps/managedClasspath" | tail -n1)"
+SPARK_PROFILES="-Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"
+generate_mima_ignore "$SPARK_CLASSES:$(build/sbt $SPARK_PROFILES "export assembly/managedClasspath" | tail -n1)"
+generate_mima_ignore "$(build/sbt $SPARK_PROFILES "export oldDeps/managedClasspath" | tail -n1)"
 
 echo -e "q\n" | build/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?
