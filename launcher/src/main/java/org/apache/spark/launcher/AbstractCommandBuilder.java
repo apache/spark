@@ -148,6 +148,9 @@ abstract class AbstractCommandBuilder {
       String scala = getScalaVersion();
       // All projects _except_ assembly and the external/ projects
       List<String> projects = Arrays.asList(
+        "common/network-common",
+        "common/network-shuffle",
+        "common/network-yarn",
         "common/sketch",
         "core",
         "docker-integration-tests",
@@ -155,8 +158,6 @@ abstract class AbstractCommandBuilder {
         "graphx",
         "launcher",
         "mllib",
-        "network/common",
-        "network/shuffle",
         "repl",
         "sql/catalyst",
         "sql/core",

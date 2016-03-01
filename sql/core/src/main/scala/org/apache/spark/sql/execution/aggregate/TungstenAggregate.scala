@@ -121,8 +121,8 @@ case class TungstenAggregate(
     !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
   }
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -202,6 +202,7 @@ case class TungstenAggregate(
          | }
        """.stripMargin)
 
+    val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        | if (!$initAgg) {
        |   $initAgg = true;
@@ -210,6 +211,7 @@ case class TungstenAggregate(
        |   // output the result
        |   ${genResult.trim}
        |
+       |   $numOutput.add(1);
        |   ${consume(ctx, resultVars).trim}
        | }
      """.stripMargin
@@ -297,6 +299,7 @@ case class TungstenAggregate(
     val peakMemory = Math.max(mapMemory, sorterMemory)
     val metrics = TaskContext.get().taskMetrics()
     metrics.incPeakExecutionMemory(peakMemory)
+    // TODO: update data size and spill size
 
     if (sorter == null) {
       // not spilled
@@ -456,6 +459,7 @@ case class TungstenAggregate(
     val keyTerm = ctx.freshName("aggKey")
     val bufferTerm = ctx.freshName("aggBuffer")
     val outputCode = generateResultCode(ctx, keyTerm, bufferTerm, thisPlan)
+    val numOutput = metricTerm(ctx, "numOutputRows")
 
     s"""
      if (!$initAgg) {
@@ -465,6 +469,7 @@ case class TungstenAggregate(
 
      // output the result
      while ($iterTerm.next()) {
+       $numOutput.add(1);
        UnsafeRow $keyTerm = (UnsafeRow) $iterTerm.getKey();
        UnsafeRow $bufferTerm = (UnsafeRow) $iterTerm.getValue();
        $outputCode
