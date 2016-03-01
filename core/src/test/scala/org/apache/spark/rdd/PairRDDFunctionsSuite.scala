@@ -31,8 +31,8 @@ import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
   RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
 
-import org.apache.spark.Partitioner
 import org.apache.spark._
+import org.apache.spark.Partitioner
 import org.apache.spark.util.Utils
 
 class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
