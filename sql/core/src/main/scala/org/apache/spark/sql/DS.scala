@@ -528,9 +528,9 @@ class DS[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3](
-                          c1: TypedColumn[T, U1],
-                          c2: TypedColumn[T, U2],
-                          c3: TypedColumn[T, U3]): DS[(U1, U2, U3)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3]): DS[(U1, U2, U3)] =
     selectUntyped(c1, c2, c3).asInstanceOf[DS[(U1, U2, U3)]]
 
   /**
@@ -538,10 +538,10 @@ class DS[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3, U4](
-                              c1: TypedColumn[T, U1],
-                              c2: TypedColumn[T, U2],
-                              c3: TypedColumn[T, U3],
-                              c4: TypedColumn[T, U4]): DS[(U1, U2, U3, U4)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4]): DS[(U1, U2, U3, U4)] =
     selectUntyped(c1, c2, c3, c4).asInstanceOf[DS[(U1, U2, U3, U4)]]
 
   /**
@@ -549,11 +549,11 @@ class DS[T] private[sql](
    * @since 1.6.0
    */
   def select[U1, U2, U3, U4, U5](
-                                  c1: TypedColumn[T, U1],
-                                  c2: TypedColumn[T, U2],
-                                  c3: TypedColumn[T, U3],
-                                  c4: TypedColumn[T, U4],
-                                  c5: TypedColumn[T, U5]): DS[(U1, U2, U3, U4, U5)] =
+      c1: TypedColumn[T, U1],
+      c2: TypedColumn[T, U2],
+      c3: TypedColumn[T, U3],
+      c4: TypedColumn[T, U4],
+      c5: TypedColumn[T, U5]): DS[(U1, U2, U3, U4, U5)] =
     selectUntyped(c1, c2, c3, c4, c5).asInstanceOf[DS[(U1, U2, U3, U4, U5)]]
 
   /**
@@ -617,9 +617,9 @@ class DS[T] private[sql](
    */
   def subtract(other: DS[T]): DS[T] = withPlan[T](other)(Except)
 
-  /* ****** *
-   *  Joins *
-   * ****** */
+  /* ******* *
+   *  Joins  *
+   * ******* */
 
   /**
    * Joins this [[DS]] returning a [[Tuple2]] for each pair where `condition` evaluates to
