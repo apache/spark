@@ -319,9 +319,9 @@ abstract class RDD[T: ClassTag](
    */
   private[spark] def getOrCompute(partition: Partition, context: TaskContext): Iterator[T] = {
     val blockId = RDDBlockId(id, partition.index)
-    var readCachedBlock = false
+    var readCachedBlock = true
     val blockResult = SparkEnv.get.blockManager.getOrElseUpdate(blockId, storageLevel, () => {
-      readCachedBlock = true
+      readCachedBlock = false
       computeOrReadCheckpoint(partition, context)
     })
     if (readCachedBlock) {
