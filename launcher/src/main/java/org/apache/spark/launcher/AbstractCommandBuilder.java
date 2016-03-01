@@ -152,6 +152,8 @@ abstract class AbstractCommandBuilder {
         "common/network-shuffle",
         "common/network-yarn",
         "common/sketch",
+        "common/tags",
+        "common/unsafe",
         "core",
         "docker-integration-tests",
         "examples",
@@ -173,9 +175,7 @@ abstract class AbstractCommandBuilder {
         "sql/hive",
         "sql/hive-thriftserver",
         "streaming",
-        "tags",
         "tools",
-        "unsafe",
         "yarn"
       );
       if (prependClasses) {

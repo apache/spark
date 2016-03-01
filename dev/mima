@@ -30,6 +30,8 @@ SPARK_PROJECTS=(
   "common/network-shuffle"
   "common/network-yarn"
   "common/sketch"
+  "common/tags"
+  "common/unsafe"
   "core"
   "docker-integration-tests"
   "examples"
@@ -51,9 +53,7 @@ SPARK_PROJECTS=(
   "sql/hive"
   "sql/hive-thriftserver"
   "streaming"
-  "tags"
   "tools"
-  "unsafe"
   "yarn"
 )
 SPARK_CLASSES=""
