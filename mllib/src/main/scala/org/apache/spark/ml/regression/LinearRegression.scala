@@ -163,8 +163,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }.first()
     val w = if ($(weightCol).isEmpty) lit(1.0) else col($(weightCol))
 
-    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 && numFeatures <= 4096) ||
-      $(solver) == "normal") {
+    if (($(solver) == "auto" && $(elasticNetParam) == 0.0 &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
       require($(elasticNetParam) == 0.0, "Only L2 regularization can be used when normal " +
         "solver is used.'")
       // For low dimensional data, WeightedLeastSquares is more efficiently since the
