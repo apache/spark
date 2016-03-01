@@ -23,8 +23,7 @@ import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressio
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
 import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.DataFrame
 
 private[r] object SparkRWrappers {
   def fitRModelFormula(
@@ -53,9 +52,6 @@ private[r] object SparkRWrappers {
     pipeline.fit(df)
   }
 
-  /**
-   * Fit a Naive Bayes model with a formula value and a DataFrame.
-   */
   def fitNaiveBayes(
       value: String,
       df: DataFrame,
@@ -66,28 +62,6 @@ private[r] object SparkRWrappers {
     val naiveBayes = new NaiveBayes().setSmoothing(laplace).setModelType(modelType)
     val pipeline = new Pipeline().setStages(Array(formula, naiveBayes))
     pipeline.fit(df)
-  }
-
-  /**
-   * Fit a Naive Bayes model with DataFrame x as features and DataFrame y as labels. DataFrame x and
-   * y should have the same number of rows for binding together. Note that the DataFrame y should
-   * contains only one column, otherwise its first column will be used as the default label column.
-   */
-  def fitNaiveBayes(
-      x: DataFrame,
-      y: DataFrame,
-      laplace: Double,
-      modelType: String): PipelineModel = {
-
-    val (formulaValue, data) = {
-      val cBindData = x.rdd.zip(y.rdd).map(r => Row.merge(r._1, r._2))
-      val schema = StructType(x.schema.fields ++ y.schema.fields)
-      val cBindDF = x.sqlContext.createDataFrame(cBindData, schema)
-      val autoFormula = s"${y.schema.fieldNames.head} ~ ."
-      (autoFormula, cBindDF)
-    }
-
-    fitNaiveBayes(formulaValue, data, laplace, modelType)
   }
 
   def fitKMeans(

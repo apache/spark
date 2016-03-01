@@ -146,11 +146,7 @@ test_that("naiveBayes", {
   data(HouseVotes84, package = "mlbench")
   training <- createDataFrame(sqlContext, HouseVotes84)
 
-  # Cache the DataFrame here to work around the bug SPARK-13178.
-  cache(training)
-  take(training, 1)
-
-  model <- naiveBayes(Class ~ ., data = training, laplace = 1, modelType = "multinomial")
+  model <- naiveBayes(Class ~ ., data = training, lambda = 1, modelType = "multinomial")
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "integer")
   expect_equal(sample$prediction, 0)
