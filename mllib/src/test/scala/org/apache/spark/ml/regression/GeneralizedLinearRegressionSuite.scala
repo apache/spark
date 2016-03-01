@@ -200,14 +200,16 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
           .setFitIntercept(fitIntercept)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-        assert(actual ~== expected(idx) absTol 1e-4)
+        assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
+          s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Gaussian, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
             val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"gaussian family, $link link and fitIntercept = $fitIntercept.")
         }
 
         idx += 1
@@ -253,7 +255,8 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
         .setFitIntercept(fitIntercept).setRegParam(regParam)
       val model = trainer.fit(datasetGaussianIdentity)
       val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-      assert(actual ~== expected(idx) absTol 1e-4)
+      assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gaussian family, " +
+        s"fitIntercept = $fitIntercept and regParam = $regParam.")
 
       idx += 1
     }
@@ -309,14 +312,16 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1),
           model.coefficients(2), model.coefficients(3))
-        assert(actual ~== expected(idx) absTol 1e-4)
+        assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with binomial family, " +
+          s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Binomial, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
             val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"binomial family, $link link and fitIntercept = $fitIntercept.")
         }
 
         idx += 1
@@ -375,14 +380,16 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
           .setFitIntercept(fitIntercept)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-        assert(actual ~== expected(idx) absTol 1e-4)
+        assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
+          s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Poisson, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
             val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"poisson family, $link link and fitIntercept = $fitIntercept.")
         }
 
         idx += 1
@@ -441,14 +448,16 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
           .setFitIntercept(fitIntercept)
         val model = trainer.fit(dataset)
         val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
-        assert(actual ~== expected(idx) absTol 1e-4)
+        assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with gamma family, " +
+          s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = new FamilyAndLink(Gamma, Link.fromName(link))
         model.transform(dataset).select("features", "prediction").collect().foreach {
           case Row(features: DenseVector, prediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
             val prediction2 = familyLink.fitted(eta)
-            assert(prediction1 ~== prediction2 relTol 1E-5)
+            assert(prediction1 ~= prediction2 relTol 1E-5, "Prediction mismatch: GLM with " +
+              s"gamma family, $link link and fitIntercept = $fitIntercept.")
         }
 
         idx += 1
