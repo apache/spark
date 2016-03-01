@@ -40,12 +40,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-<<<<<<< f5da592fc63b8d3bc09d49c196d6c5d98cd2a013
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
-import org.apache.spark.util.ThreadUtils
-=======
-import org.apache.spark.util.{SystemClock, ThreadUtils}
->>>>>>> Add window based executor failure tracking mechanism
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -109,7 +105,7 @@ private[yarn] class YarnAllocator(
   // Queue to store the timestamp of failed executors
   private val failedExecutorsTimeStamps = new Queue[Long]()
 
-  private val clock = new SystemClock
+  private var clock: Clock = new SystemClock
 
   private val executorFailuresValidityInterval = {
     if (sparkConf.contains("spark.yarn.executor.failuresValidityInterval")) {
@@ -180,6 +176,13 @@ private[yarn] class YarnAllocator(
   // A container placement strategy based on pending tasks' locality preference
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource)
+
+  /**
+   * Use a different clock for YarnAllocator. This is mainly used for testing.
+   */
+  def setClock(newClock: Clock): Unit = {
+    clock = newClock
+  }
 
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
