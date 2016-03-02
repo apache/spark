@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.types.{NullType, DataType}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,9 +30,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.types.{DataType, NullType}
 
 /**
- * A place hold for subquery expression.
+ * A place holder for generated SQL for subquery expression.
  */
 case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable {
   override def dataType: DataType = NullType
