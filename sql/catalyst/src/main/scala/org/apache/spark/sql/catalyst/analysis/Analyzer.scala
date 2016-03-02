@@ -1473,7 +1473,7 @@ class Analyzer(
         q.transform {
           case f @ Filter(filterCondition, j @ Join(_, _, _, _)) =>
             val joinOutput = new ArrayBuffer[(Attribute, Attribute)]
-            j.output.map {
+            j.output.foreach {
               case a: AttributeReference => joinOutput += ((a, a))
             }
             val joinOutputMap = AttributeMap(joinOutput)
