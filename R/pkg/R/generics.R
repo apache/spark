@@ -593,6 +593,10 @@ setGeneric("saveAsParquetFile", function(x, path) { standardGeneric("saveAsParqu
 #' @export
 setGeneric("write.text", function(x, path) { standardGeneric("write.text") })
 
+#' @rdname write.csv
+#' @export
+setGeneric("write.csv", function(x, path) { standardGeneric("write.csv") })
+
 #' @rdname schema
 #' @export
 setGeneric("schema", function(x) { standardGeneric("schema") })

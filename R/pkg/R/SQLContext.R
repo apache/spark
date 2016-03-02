@@ -220,7 +220,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' df <- jsonFile(sqlContext, path)
 #' }
 read.json <- function(sqlContext, path) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definiton of the JSON file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
   sdf <- callJMethod(read, "json", paths)
@@ -279,7 +279,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' @name read.parquet
 #' @export
 read.parquet <- function(sqlContext, path) {
-  # Allow the user to have a more flexible definiton of the text file path
+  # Allow the user to have a more flexible definiton of the Parquet file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
   sdf <- callJMethod(read, "parquet", paths)
@@ -318,6 +318,32 @@ read.text <- function(sqlContext, path) {
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
   sdf <- callJMethod(read, "text", paths)
+  dataFrame(sdf)
+}
+
+#' Create a DataFrame from a CSV file.
+#'
+#' Loads a CSV file, returning the result as a DataFrame
+#' It goes through the entire dataset once to determine the schema.
+#'
+#' @param sqlContext SQLContext to use
+#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @return DataFrame
+#' @rdname read.csv
+#' @name read.csv
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.csv"
+#' df <- read.csv(sqlContext, path)
+#' }
+read.csv <- function(sqlContext, path) {
+  # Allow the user to have a more flexible definiton of the CSV file path
+  paths <- as.list(suppressWarnings(normalizePath(path)))
+  read <- callJMethod(sqlContext, "read")
+  sdf <- callJMethod(read, "csv", paths)
   dataFrame(sdf)
 }
 
