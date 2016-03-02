@@ -1241,7 +1241,6 @@ private[spark] object Utils extends Logging {
    * exception from the original `out.write` call.
    */
   def tryWithSafeFinally[T](block: => T)(finallyBlock: => Unit): T = {
-    // It would be nice to find a method on Try that did this
     var originalThrowable: Throwable = null
     try {
       block
@@ -1279,7 +1278,6 @@ private[spark] object Utils extends Logging {
    * exception from the original `out.write` call.
    */
   def tryWithSafeFinallyAndFailureCallbacks[T](block: => T)(finallyBlock: => Unit): T = {
-    // It would be nice to find a method on Try that did this
     var originalThrowable: Throwable = null
     try {
       block
