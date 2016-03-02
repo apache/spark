@@ -491,7 +491,7 @@ class DataFrameWriter(object):
             * ``compression`` (default ``None``): compression codec to use when saving to file.
             This can be one of the known case-insensitive shorten names
             (``uncompressed``, ``snappy``,``gzip``, and ``lzo``).
-            This will overwrite ``orc.compress``.
+            This will overwrite ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
