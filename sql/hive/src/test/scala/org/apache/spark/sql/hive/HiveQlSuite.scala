@@ -200,4 +200,12 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     assert(plan.children.head.asInstanceOf[Generate].generator.isInstanceOf[JsonTuple])
   }
+
+  test("use backticks in output of Script Transform") {
+    val plan = parser.parsePlan(
+      """SELECT `t`.`thing1`
+        |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
+        |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
+      """.stripMargin)
+  }
 }
