@@ -60,7 +60,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
     val testDf = sqlContext.read.text(testFile)
 
-    Seq("bzip2", "deflate", "gzip").map { codecName =>
+    Seq("bzip2", "deflate", "gzip").foreach { codecName =>
       val tempDir = Utils.createTempDir()
       val tempDirPath = tempDir.getAbsolutePath()
       testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
