@@ -488,7 +488,7 @@ def main():
     if which("R"):
         run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
     else:
-        print("Can't install SparkR as R is was not found in PATH")
+        print("Cannot install SparkR as R was not found in PATH")
 
     if os.environ.get("AMPLAB_JENKINS"):
         # if we're on the Amplab Jenkins build servers setup variables
