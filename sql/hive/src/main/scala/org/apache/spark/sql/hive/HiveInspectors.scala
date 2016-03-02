@@ -320,9 +320,11 @@ private[hive] trait HiveInspectors {
       case hvoi: HiveCharObjectInspector =>
         UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
-        // Text is in UTF-8 already. No need to convert again via fromString
+        // Text is in UTF-8 already. No need to convert again via fromString. Copy bytes
         val wObj = x.getPrimitiveWritableObject(data)
-        UTF8String.fromBytes(wObj.getBytes, 0, wObj.getLength)
+        val result = new Array[Byte](wObj.getLength())
+        System.arraycopy(wObj.getBytes(), 0, result, 0, wObj.getLength())
+        UTF8String.fromBytes(result, 0, result.length)
       case x: StringObjectInspector =>
         UTF8String.fromString(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
