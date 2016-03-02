@@ -43,8 +43,7 @@ private[spark] class DiskBlockObjectWriter(
     // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics,
     val blockId: BlockId = null)
-  extends OutputStream
-  with Logging {
+  extends Logging {
 
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
@@ -94,7 +93,7 @@ private[spark] class DiskBlockObjectWriter(
     this
   }
 
-  override def close() {
+  def close() {
     if (initialized) {
       Utils.tryWithSafeFinally {
         if (syncWrites) {
@@ -117,8 +116,6 @@ private[spark] class DiskBlockObjectWriter(
       hasBeenClosed = true
     }
   }
-
-  def isOpen: Boolean = objOut != null
 
   /**
    * Flush the partial writes and commit them as a single atomic block.
@@ -186,20 +183,10 @@ private[spark] class DiskBlockObjectWriter(
     recordWritten()
   }
 
-  override def write(b: Int): Unit = throw new UnsupportedOperationException()
-
-  override def write(kvBytes: Array[Byte], offs: Int, len: Int): Unit = {
-    if (!initialized) {
-      open()
-    }
-
-    bs.write(kvBytes, offs, len)
-  }
-
   /**
    * Notify the writer that a record worth of bytes has been written with OutputStream#write.
    */
-  def recordWritten(): Unit = {
+  private def recordWritten(): Unit = {
     numRecordsWritten += 1
     writeMetrics.incRecordsWritten(1)
 
@@ -232,7 +219,7 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   // For testing
-  private[spark] override def flush() {
+  private[spark] def flush() {
     objOut.flush()
     bs.flush()
   }

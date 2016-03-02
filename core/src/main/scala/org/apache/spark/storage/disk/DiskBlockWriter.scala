@@ -116,8 +116,6 @@ private[spark] class DiskBlockWriter(
     }
   }
 
-  def isOpen: Boolean = bs != null
-
   /**
    * Flush the partial writes and commit them as a single atomic block.
    */
