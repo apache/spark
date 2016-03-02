@@ -957,6 +957,29 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
   }
 
+  /**
+    * Get an RDD for a Hadoop-readable dataset from the Hadoop JobConf.
+    *
+    * @param broadcastedConf A general Hadoop Configuration, or a subclass of it.
+    * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf
+    *                                that HadoopRDD creates.
+    * @param inputFormatClass Class of the InputFormat
+    * @param keyClass Class of the keys
+    * @param valueClass Class of the values
+    * @param minPartitions Minimum number of Hadoop Splits to generate.
+    */
+  def hadoopRDD[K, V](
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      initLocalJobConfFuncOpt: Option[JobConf => Unit],
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minPartitions: Int = defaultMinPartitions): RDD[(K, V)] = withScope {
+    assertNotStopped()
+    new HadoopRDD(this, broadcastedConf, initLocalJobConfFuncOpt,
+      inputFormatClass, keyClass, valueClass, minPartitions)
+  }
+
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
    *
    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each

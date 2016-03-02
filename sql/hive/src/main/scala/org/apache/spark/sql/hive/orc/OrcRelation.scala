@@ -27,9 +27,8 @@ import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSer
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
-import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
@@ -42,6 +41,7 @@ import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreType
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.Utils
 
 private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
 
@@ -207,7 +207,9 @@ private[sql] class OrcRelation(
       inputPaths: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(output, this, filters, inputPaths).execute()
+    Utils.withDummyCallSite(sqlContext.sparkContext) {
+      OrcTableScan(output, this, filters, inputPaths, broadcastedConf).execute()
+    }
   }
 
   override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
@@ -237,20 +239,12 @@ private[orc] case class OrcTableScan(
     attributes: Seq[Attribute],
     @transient relation: OrcRelation,
     filters: Array[Filter],
-    @transient inputPaths: Array[FileStatus])
+    @transient inputPaths: Array[FileStatus],
+    broadcastedConf: Broadcast[SerializableConfiguration])
   extends Logging
   with HiveInspectors {
 
   @transient private val sqlContext = relation.sqlContext
-
-  private def addColumnIds(
-      output: Seq[Attribute],
-      relation: OrcRelation,
-      conf: Configuration): Unit = {
-    val ids = output.map(a => relation.dataSchema.fieldIndex(a.name): Integer)
-    val (sortedIds, sortedNames) = ids.zip(attributes.map(_.name)).sorted.unzip
-    HiveShim.appendReadColumns(conf, sortedIds, sortedNames)
-  }
 
   // Transform all given raw `Writable`s into `InternalRow`s.
   private def fillObject(
@@ -293,42 +287,37 @@ private[orc] case class OrcTableScan(
   }
 
   def execute(): RDD[InternalRow] = {
-    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
-    val conf = job.getConfiguration
-
-    // Tries to push down filters if ORC filter push-down is enabled
-    if (sqlContext.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(filters).foreach { f =>
-        conf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
-        conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
-      }
-    }
-
-    // Sets requested columns
-    addColumnIds(attributes, relation, conf)
 
     if (inputPaths.isEmpty) {
       // the input path probably be pruned, return an empty RDD.
       return sqlContext.sparkContext.emptyRDD[InternalRow]
     }
-    FileInputFormat.setInputPaths(job, inputPaths.map(_.getPath): _*)
+
+    val ids = attributes.map(a => relation.dataSchema.fieldIndex(a.name): Integer)
+    val (sortedIds, sortedNames) = ids.zip(attributes.map(_.name)).sorted.unzip
+
+    // Get the paths as fileStatus is not serializable
+    val setInputPaths =
+      OrcTableScan.setupConfigs(inputPaths.map(_.getPath.toString),
+        sortedIds, sortedNames, sqlContext.conf.orcFilterPushDown, filters) _
+
 
     val inputFormatClass =
       classOf[OrcInputFormat]
         .asInstanceOf[Class[_ <: MapRedInputFormat[NullWritable, Writable]]]
 
     val rdd = sqlContext.sparkContext.hadoopRDD(
-      conf.asInstanceOf[JobConf],
+      broadcastedConf,
+      Some(setInputPaths),
       inputFormatClass,
       classOf[NullWritable],
       classOf[Writable]
     ).asInstanceOf[HadoopRDD[NullWritable, Writable]]
 
-    val wrappedConf = new SerializableConfiguration(conf)
-
     rdd.mapPartitionsWithInputSplit { case (split: OrcSplit, iterator) =>
       val writableIterator = iterator.map(_._2)
-      fillObject(split.getPath.toString, wrappedConf.value, writableIterator, attributes)
+      fillObject(split.getPath.toString, broadcastedConf.value.value,
+        writableIterator, attributes)
     }
   }
 }
@@ -336,4 +325,27 @@ private[orc] case class OrcTableScan(
 private[orc] object OrcTableScan {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
+
+  private[orc] def setupConfigs(
+    inputFiles: Array[String],
+    ids: Seq[Integer],
+    names: Seq[String],
+    filterPushDown: Boolean,
+    orcFilters: Array[Filter])(job: JobConf): Unit = {
+
+    HiveShim.appendReadColumns(job, ids, names)
+
+    if (filterPushDown) {
+      OrcFilters.createFilter(orcFilters).foreach { f =>
+        job.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
+        job.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+      }
+    }
+
+    if (inputFiles.nonEmpty) {
+      // Set up the input paths
+      val inputPaths = inputFiles.map(i => new Path(i))
+      FileInputFormat.setInputPaths(job, inputPaths: _*)
+    }
+  }
 }
