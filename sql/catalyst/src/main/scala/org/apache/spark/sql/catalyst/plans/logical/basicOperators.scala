@@ -51,25 +51,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  /**
-   * Generates an additional set of aliased constraints by replacing the original constraint
-   * expressions with the corresponding alias
-   */
-  private def getAliasedConstraints: Set[Expression] = {
-    projectList.flatMap {
-      case a @ Alias(e, _) =>
-        child.constraints.map(_ transform {
-          case expr: Expression if expr.semanticEquals(e) =>
-            a.toAttribute
-        }).union(Set(EqualNullSafe(e, a.toAttribute)))
-      case _ =>
-        Set.empty[Expression]
-    }.toSet
-  }
-
-  override def validConstraints: Set[Expression] = {
-    child.constraints.union(getAliasedConstraints)
-  }
+  override def validConstraints: Set[Expression] =
+    child.constraints.union(getAliasedConstraints(projectList))
 }
 
 /**
@@ -126,9 +109,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] =
     child.constraints.union(splitConjunctivePredicates(condition).toSet)
-  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -157,9 +139,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
-  }
 
   // Intersect are only resolved if they don't introduce ambiguous expression ids,
   // since the Optimizer will convert Intersect to Join.
@@ -176,6 +157,13 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       Some(children.flatMap(_.maxRows).min)
     }
   }
+
+  override def statistics: Statistics = {
+    val leftSize = left.statistics.sizeInBytes
+    val rightSize = right.statistics.sizeInBytes
+    val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
@@ -188,6 +176,10 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
     childrenResolved &&
       left.output.length == right.output.length &&
       left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+
+  override def statistics: Statistics = {
+    Statistics(sizeInBytes = left.statistics.sizeInBytes)
+  }
 }
 
 /** Factory for constructing new `Union` nodes. */
@@ -321,6 +313,10 @@ case class Join(
  */
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
+
+  // We manually set statistics of BroadcastHint to smallest value to make sure
+  // the plan wrapped by BroadcastHint will be considered to broadcast later.
+  override def statistics: Statistics = Statistics(sizeInBytes = 1)
 }
 
 case class InsertIntoTable(
@@ -426,6 +422,17 @@ case class Aggregate(
 
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
+
+  override def validConstraints: Set[Expression] =
+    child.constraints.union(getAliasedConstraints(aggregateExpressions))
+
+  override def statistics: Statistics = {
+    if (groupingExpressions.isEmpty) {
+      Statistics(sizeInBytes = 1)
+    } else {
+      super.statistics
+    }
+  }
 }
 
 case class Window(
@@ -521,9 +528,7 @@ case class Expand(
     AttributeSet(projections.flatten.flatMap(_.references))
 
   override def statistics: Statistics = {
-    // TODO shouldn't we factor in the size of the projection versus the size of the backing child
-    //      row?
-    val sizeInBytes = child.statistics.sizeInBytes * projections.length
+    val sizeInBytes = super.statistics.sizeInBytes * projections.length
     Statistics(sizeInBytes = sizeInBytes)
   }
 }
@@ -648,6 +653,17 @@ case class Sample(
     val isTableSample: java.lang.Boolean = false) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
+
+  override def statistics: Statistics = {
+    val ratio = upperBound - lowerBound
+    // BigInt can't multiply with Double
+    var sizeInBytes = child.statistics.sizeInBytes * (ratio * 100).toInt / 100
+    if (sizeInBytes == 0) {
+      sizeInBytes = 1
+    }
+    Statistics(sizeInBytes = sizeInBytes)
+  }
+
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
 }
 

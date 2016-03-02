@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
-import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.RecordWriter
@@ -34,6 +33,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
@@ -50,16 +50,16 @@ private[sql] class CSVRelation(
     case None => inferSchema(paths)
   }
 
-  private val params = new CSVOptions(parameters)
+  private val options = new CSVOptions(parameters)
 
   @transient
   private var cachedRDD: Option[RDD[String]] = None
 
   private def readText(location: String): RDD[String] = {
-    if (Charset.forName(params.charset) == Charset.forName("UTF-8")) {
+    if (Charset.forName(options.charset) == Charset.forName("UTF-8")) {
       sqlContext.sparkContext.textFile(location)
     } else {
-      val charset = params.charset
+      val charset = options.charset
       sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions { _.map { pair =>
             new String(pair._2.getBytes, 0, pair._2.getLength, charset)
@@ -81,8 +81,8 @@ private[sql] class CSVRelation(
   private def tokenRdd(header: Array[String], inputPaths: Array[String]): RDD[Array[String]] = {
     val rdd = baseRdd(inputPaths)
     // Make sure firstLine is materialized before sending to executors
-    val firstLine = if (params.headerFlag) findFirstLine(rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, params)
+    val firstLine = if (options.headerFlag) findFirstLine(rdd) else null
+    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
   }
 
   /**
@@ -96,20 +96,16 @@ private[sql] class CSVRelation(
     val pathsString = inputs.map(_.getPath.toUri.toString)
     val header = schema.fields.map(_.name)
     val tokenizedRdd = tokenRdd(header, pathsString)
-    CSVRelation.parseCsv(tokenizedRdd, schema, requiredColumns, inputs, sqlContext, params)
+    CSVRelation.parseCsv(tokenizedRdd, schema, requiredColumns, inputs, sqlContext, options)
   }
 
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
     val conf = job.getConfiguration
-    params.compressionCodec.foreach { codec =>
-      conf.set("mapreduce.output.fileoutputformat.compress", "true")
-      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
-      conf.set("mapreduce.map.output.compress", "true")
-      conf.set("mapreduce.map.output.compress.codec", codec)
+    options.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
-    new CSVOutputWriterFactory(params)
+    new CSVOutputWriterFactory(options)
   }
 
   override def hashCode(): Int = Objects.hashCode(paths.toSet, dataSchema, schema, partitionColumns)
@@ -129,17 +125,17 @@ private[sql] class CSVRelation(
   private def inferSchema(paths: Array[String]): StructType = {
     val rdd = baseRdd(paths)
     val firstLine = findFirstLine(rdd)
-    val firstRow = new LineCsvReader(params).parseLine(firstLine)
+    val firstRow = new LineCsvReader(options).parseLine(firstLine)
 
-    val header = if (params.headerFlag) {
+    val header = if (options.headerFlag) {
       firstRow
     } else {
       firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
     }
 
     val parsedRdd = tokenRdd(header, paths)
-    if (params.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, params.nullValue)
+    if (options.inferSchemaFlag) {
+      CSVInferSchema.infer(parsedRdd, header, options.nullValue)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -153,8 +149,8 @@ private[sql] class CSVRelation(
     * Returns the first line of the first non-empty file in path
     */
   private def findFirstLine(rdd: RDD[String]): String = {
-    if (params.isCommentSet) {
-      val comment = params.comment.toString
+    if (options.isCommentSet) {
+      val comment = options.comment.toString
       rdd.filter { line =>
         line.trim.nonEmpty && !line.startsWith(comment)
       }.first()
