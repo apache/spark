@@ -61,7 +61,7 @@ private[r] object SparkRWrappers {
       var rewrited: String = null
       var censorCol: String = null
 
-      val regex = "^Surv\\(([^,]*),([^,]*)\\)\\s*\\~\\s*(.*)".r
+      val regex = "^Surv\\(([^,]+),([^,]+)\\)\\s*\\~\\s*(.+)".r
       try {
         val regex(label, censor, features) = value
         // TODO: Support dot operator.
