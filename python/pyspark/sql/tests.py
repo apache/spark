@@ -1207,12 +1207,12 @@ class SQLTests(ReusedPySparkTestCase):
         # flat schema values will be wrapped into row.
         df = rdd.map(lambda row: row.key).schema("int")
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
-        self.assertEqual(df.collect(), map(lambda row: Row(value=row.key), data))
+        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
         # users can use DataType directly instead of data type string.
         df = rdd.map(lambda row: row.key).schema(IntegerType())
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
-        self.assertEqual(df.collect(), map(lambda row: Row(value=row.key), data))
+        self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
