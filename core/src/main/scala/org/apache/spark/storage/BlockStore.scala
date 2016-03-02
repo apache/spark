@@ -19,8 +19,6 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 
 /**
@@ -40,12 +38,6 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
   def putIterator(
     blockId: BlockId,
     values: Iterator[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult
-
-  def putArray(
-    blockId: BlockId,
-    values: Array[Any],
     level: StorageLevel,
     returnValues: Boolean): PutResult
 

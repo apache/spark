@@ -80,16 +80,85 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     withTaskId(1) {
       assert(blockInfoManager.lockNewBlockForWriting("block", blockInfo))
       assert(blockInfoManager.get("block").get eq blockInfo)
-      assert(!blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
-      assert(blockInfoManager.get("block").get eq blockInfo)
       assert(blockInfo.readerCount === 0)
       assert(blockInfo.writerTask === 1)
+      // Downgrade lock so that second call doesn't block:
+      blockInfoManager.downgradeLock("block")
+      assert(blockInfo.readerCount === 1)
+      assert(blockInfo.writerTask === BlockInfo.NO_WRITER)
+      assert(!blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+      assert(blockInfo.readerCount === 2)
+      assert(blockInfoManager.get("block").get eq blockInfo)
+      assert(blockInfo.readerCount === 2)
+      assert(blockInfo.writerTask === BlockInfo.NO_WRITER)
+      blockInfoManager.unlock("block")
       blockInfoManager.unlock("block")
       assert(blockInfo.readerCount === 0)
       assert(blockInfo.writerTask === BlockInfo.NO_WRITER)
     }
     assert(blockInfoManager.size === 1)
     assert(blockInfoManager.getNumberOfMapEntries === initialNumMapEntries + 1)
+  }
+
+  test("lockNewBlockForWriting blocks while write lock is held, then returns false after release") {
+    withTaskId(0) {
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+    }
+    val lock1Future = Future {
+      withTaskId(1) {
+        blockInfoManager.lockNewBlockForWriting("block", newBlockInfo())
+      }
+    }
+    val lock2Future = Future {
+      withTaskId(2) {
+        blockInfoManager.lockNewBlockForWriting("block", newBlockInfo())
+      }
+    }
+    Thread.sleep(300)  // Hack to try to ensure that both future tasks are waiting
+    withTaskId(0) {
+      blockInfoManager.downgradeLock("block")
+    }
+    // After downgrading to a read lock, both threads should wake up and acquire the shared
+    // read lock.
+    assert(!Await.result(lock1Future, 1.seconds))
+    assert(!Await.result(lock2Future, 1.seconds))
+    assert(blockInfoManager.get("block").get.readerCount === 3)
+  }
+
+  test("lockNewBlockForWriting blocks while write lock is held, then returns true after removal") {
+    withTaskId(0) {
+      assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
+    }
+    val lock1Future = Future {
+      withTaskId(1) {
+        blockInfoManager.lockNewBlockForWriting("block", newBlockInfo())
+      }
+    }
+    val lock2Future = Future {
+      withTaskId(2) {
+        blockInfoManager.lockNewBlockForWriting("block", newBlockInfo())
+      }
+    }
+    Thread.sleep(300)  // Hack to try to ensure that both future tasks are waiting
+    withTaskId(0) {
+      blockInfoManager.removeBlock("block")
+    }
+    // After removing the block, the write lock is released. Both threads should wake up but only
+    // one should acquire the write lock. The second thread should block until the winner of the
+    // write race releases its lock.
+    val winningFuture: Future[Boolean] =
+      Await.ready(Future.firstCompletedOf(Seq(lock1Future, lock2Future)), 1.seconds)
+    assert(winningFuture.value.get.get)
+    val winningTID = blockInfoManager.get("block").get.writerTask
+    assert(winningTID === 1 || winningTID === 2)
+    val losingFuture: Future[Boolean] = if (winningTID == 1) lock2Future else lock1Future
+    assert(!losingFuture.isCompleted)
+    // Once the writer releases its lock, the blocked future should wake up again and complete.
+    withTaskId(winningTID) {
+      blockInfoManager.unlock("block")
+    }
+    assert(!Await.result(losingFuture, 1.seconds))
+    assert(blockInfoManager.get("block").get.readerCount === 1)
   }
 
   test("read locks are reentrant") {
