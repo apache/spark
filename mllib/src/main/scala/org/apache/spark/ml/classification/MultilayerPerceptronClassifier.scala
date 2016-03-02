@@ -31,8 +31,6 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.DataFrame
 
-import breeze.linalg.{DenseVector => BDV}
-
 /** Params for Multilayer Perceptron. */
 private[ml] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol {
@@ -144,17 +142,22 @@ private object LabelConverter {
  * Number of outputs has to be equal to the total number of labels.
  *
  */
+@Since("1.5.0")
 @Experimental
-class MultilayerPerceptronClassifier(override val uid: String)
+class MultilayerPerceptronClassifier @Since("1.5.0") (
+    @Since("1.5.0") override val uid: String)
   extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mlpc"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLayers(value: Array[Int]): this.type = set(layers, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   /**
@@ -162,6 +165,7 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * Default is 100.
    * @group setParam
    */
+  @Since("1.5.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
@@ -170,20 +174,24 @@ class MultilayerPerceptronClassifier(override val uid: String)
    * Default is 1E-4.
    * @group setParam
    */
+  @Since("1.5.0")
   def setTol(value: Double): this.type = set(tol, value)
 
   /**
    * Set the seed for weights initialization if weights are not set
    * @group setParam
    */
+  @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
    * Set the model weights.
    * @group setParam
    */
+  @Since("2.0.0")
   def setWeights(value: Vector): this.type = set(weights, value)
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
 
   /**
@@ -232,14 +240,16 @@ object MultilayerPerceptronClassifier
  * @param weights vector of initial weights for the model that consists of the weights of layers
  * @return prediction model
  */
+@Since("1.5.0")
 @Experimental
 class MultilayerPerceptronClassificationModel private[ml] (
-    override val uid: String,
-    val layers: Array[Int],
-    val weights: Vector)
+    @Since("1.5.0") override val uid: String,
+    @Since("1.5.0") val layers: Array[Int],
+    @Since("1.5.0") val weights: Vector)
   extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable with MLWritable {
 
+  @Since("1.6.0")
   override val numFeatures: Int = layers.head
 
   private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).model(weights)
@@ -259,6 +269,7 @@ class MultilayerPerceptronClassificationModel private[ml] (
     LabelConverter.decodeLabel(mlpModel.predict(features))
   }
 
+  @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassificationModel = {
     copyValues(new MultilayerPerceptronClassificationModel(uid, layers, weights), extra)
   }

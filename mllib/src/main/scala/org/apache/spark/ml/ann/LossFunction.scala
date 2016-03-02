@@ -19,9 +19,8 @@ package org.apache.spark.ml.ann
 
 import java.util.Random
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, sum => Bsum}
+import breeze.linalg.{sum => Bsum, DenseMatrix => BDM, DenseVector => BDV}
 import breeze.numerics.{log => Blog}
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 /**
  * Trait for loss function
