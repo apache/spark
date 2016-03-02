@@ -79,4 +79,9 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(TimestampType, "\\N", "\\N") == TimestampType)
     assert(CSVInferSchema.inferField(BooleanType, "\\N", "\\N") == BooleanType)
   }
+
+  test("Merging Nulltypes should yeild Nulltype.") {
+    val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
+    assert(mergedNullTypes.deep == Array(NullType).deep)
+  }
 }

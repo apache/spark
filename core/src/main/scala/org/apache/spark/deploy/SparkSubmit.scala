@@ -226,11 +226,17 @@ object SparkSubmit {
 
     // Set the cluster manager
     val clusterManager: Int = args.master match {
-      case m if m.startsWith("yarn") => YARN
+      case "yarn" => YARN
+      case "yarn-client" | "yarn-cluster" =>
+        printWarning(s"Master ${args.master} is deprecated since 2.0." +
+          " Please use master \"yarn\" with specified deploy mode instead.")
+        YARN
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
-      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, or local"); -1
+      case _ =>
+        printErrorAndExit("Master must either be yarn or start with spark, mesos, local")
+        -1
     }
 
     // Set the deploy mode; default is client mode
@@ -240,23 +246,20 @@ object SparkSubmit {
       case _ => printErrorAndExit("Deploy mode must be either client or cluster"); -1
     }
 
-    // Because "yarn-cluster" and "yarn-client" encapsulate both the master
-    // and deploy mode, we have some logic to infer the master and deploy mode
+    // Because the deprecated way of specifying "yarn-cluster" and "yarn-client" encapsulate both
+    // the master and deploy mode, we have some logic to infer the master and deploy mode
     // from each other if only one is specified, or exit early if they are at odds.
     if (clusterManager == YARN) {
-      if (args.master == "yarn-standalone") {
-        printWarning("\"yarn-standalone\" is deprecated. Use \"yarn-cluster\" instead.")
-        args.master = "yarn-cluster"
-      }
       (args.master, args.deployMode) match {
         case ("yarn-cluster", null) =>
           deployMode = CLUSTER
+          args.master = "yarn"
         case ("yarn-cluster", "client") =>
           printErrorAndExit("Client deploy mode is not compatible with master \"yarn-cluster\"")
         case ("yarn-client", "cluster") =>
           printErrorAndExit("Cluster deploy mode is not compatible with master \"yarn-client\"")
         case (_, mode) =>
-          args.master = "yarn-" + Option(mode).getOrElse("client")
+          args.master = "yarn"
       }
 
       // Make sure YARN is included in our build if we're trying to use it

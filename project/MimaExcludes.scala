@@ -262,12 +262,32 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.Graph.mapReduceTriplets$default$3"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.impl.GraphImpl.mapReduceTriplets")
       ) ++ Seq(
-          // SPARK-13426 Remove the support of SIMR
-          ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkMasterRegex.SIMR_REGEX")
+        // SPARK-13426 Remove the support of SIMR
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkMasterRegex.SIMR_REGEX")
       ) ++ Seq(
         // SPARK-13413 Remove SparkContext.metricsSystem/schedulerBackend_ setter
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.metricsSystem"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.SparkContext.schedulerBackend_=")
+      ) ++ Seq(
+        // SPARK-13220 Deprecate yarn-client and yarn-cluster mode
+        ProblemFilters.exclude[MissingMethodProblem](
+          "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
+      ) ++ Seq(
+        // SPARK-13465 TaskContext.
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.TaskContext.addTaskFailureListener")
+      ) ++ Seq (
+        // SPARK-7729 Executor which has been killed should also be displayed on Executor Tab
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.ExecutorSummary.this")
+      ) ++ Seq(
+        // SPARK-13526 Move SQLContext per-session states to new class
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "org.apache.spark.sql.UDFRegistration.this")
+      ) ++ Seq(
+        // [SPARK-13486][SQL] Move SQLConf into an internal package
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry$")
       )
     case v if v.startsWith("1.6") =>
       Seq(

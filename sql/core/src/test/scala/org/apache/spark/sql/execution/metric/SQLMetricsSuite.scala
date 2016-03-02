@@ -29,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -151,6 +152,13 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       0L -> ("TungstenAggregate", Map(
         "number of output rows" -> 3L)))
     )
+  }
+
+  test("Sort metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
+    val df = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(df, 2, Map.empty)
   }
 
   test("SortMergeJoin metrics") {
