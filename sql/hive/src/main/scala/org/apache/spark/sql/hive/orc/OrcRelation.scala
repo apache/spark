@@ -23,15 +23,14 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 import org.apache.hadoop.hive.ql.io.orc._
+import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{InputFormat => MapRedInputFormat, JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 import org.apache.spark.Logging
 import org.apache.spark.broadcast.Broadcast
@@ -234,7 +233,7 @@ private[sql] class OrcRelation(
           .shortOrcCompressionCodecNames
           .getOrElse(codecName, CompressionKind.NONE).name())
     }
-    
+
     job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
@@ -366,6 +365,7 @@ private[orc] object OrcRelation {
   // The ORC compression short names
   val shortOrcCompressionCodecNames = Map(
     "NONE" -> CompressionKind.NONE,
+    "UNCOMPRESSED" -> CompressionKind.NONE,
     "SNAPPY" -> CompressionKind.SNAPPY,
     "ZLIB" -> CompressionKind.ZLIB,
     "LZO" -> CompressionKind.LZO)

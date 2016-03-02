@@ -487,6 +487,12 @@ class DataFrameWriter(object):
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
 
+        You can set the following Parquet-specific option(s) for writing Parquet files:
+            * ``compression`` (default ``None``): compression codec to use when saving to file.
+            This can be one of the known case-insensitive shorten names
+            (``uncompressed``, ``snappy``,``gzip``, and ``lzo``).
+            This will overwrite ``orc.compress``.
+
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -546,6 +552,12 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+
+        You can set the following ORC-specific option(s) for writing ORC files:
+            * ``compression`` (default ``None``): compression codec to use when saving to file.
+            This can be one of the known case-insensitive shorten names
+            (``uncompressed``, ``snappy``,``zlib``, and ``lzo``).
+            This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))

@@ -224,7 +224,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .read
         .parquet(path)
 
-      checkAnswer(df,copyDf)
+      checkAnswer(df, copyDf)
     }
   }
 }

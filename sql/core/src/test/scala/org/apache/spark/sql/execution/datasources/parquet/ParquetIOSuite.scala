@@ -746,20 +746,22 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-13543: Support for specifying compression codec for Parquet via option()") {
-    withTempPath { dir =>
-      val path = s"${dir.getCanonicalPath}/table1"
-      val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
-      df.write
-        .option("compression", "gZiP")
-        .parquet(path)
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "UNCOMPRESSED") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+        df.write
+          .option("compression", "GzIP")
+          .parquet(path)
 
-      val compressedFiles = new File(path).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz.parquet")))
+        val compressedFiles = new File(path).listFiles()
+        assert(compressedFiles.exists(_.getName.endsWith(".gz.parquet")))
 
-      val copyDf = sqlContext
-        .read
-        .parquet(path)
-      checkAnswer(df, copyDf)
+        val copyDf = sqlContext
+          .read
+          .parquet(path)
+        checkAnswer(df, copyDf)
+      }
     }
   }
 }
