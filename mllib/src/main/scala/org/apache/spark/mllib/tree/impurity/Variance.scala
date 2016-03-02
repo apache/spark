@@ -106,7 +106,7 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
 
   require(stats.length == 3,
     s"VarianceCalculator requires sufficient statistics array stats to be of length 3," +
-    s" but was given array of length $stats.length.")
+    s" but was given array of length ${stats.length}.")
 
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
