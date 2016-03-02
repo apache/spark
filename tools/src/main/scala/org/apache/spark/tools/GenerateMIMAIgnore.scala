@@ -79,12 +79,18 @@ object GenerateMIMAIgnore {
         /* Inner classes defined within a private[spark] class or object are effectively
          invisible, so we account for them as package private. */
         lazy val indirectlyPrivateSpark = {
-          val maybeOuter = className.toString.takeWhile(_ != '$')
-          if (maybeOuter != className) {
-            isPackagePrivate(mirror.classSymbol(Class.forName(maybeOuter, false, classLoader))) ||
-              isPackagePrivateModule(mirror.staticModule(maybeOuter))
-          } else {
+          if (!className.contains("$")) {
             false
+          } else if (className.endsWith("$") && className.count(_ == '$') == 1) {
+            false
+          } else {
+            val maybeOuter = className.split('$').dropRight(1).mkString("$")
+            if (maybeOuter != className) {
+              isPackagePrivate(mirror.classSymbol(Class.forName(maybeOuter, false, classLoader))) ||
+                isPackagePrivateModule(mirror.staticModule(maybeOuter))
+            } else {
+              false
+            }
           }
         }
         if (directlyPrivateSpark || indirectlyPrivateSpark || developerApi || experimental) {
@@ -134,14 +140,14 @@ object GenerateMIMAIgnore {
     val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
     val previousContents = Try(File(".generated-mima-class-excludes").lines()).
       getOrElse(Iterator.empty).mkString("\n")
-    File(".generated-mima-class-excludes")
-      .writeAll(previousContents + privateClasses.mkString("\n"))
+    File(".generated-mima-class-excludes").writeAll(
+      previousContents + privateClasses.toSeq.sorted.mkString("\n"))
     // scalastyle:off println
     println("Created : .generated-mima-class-excludes in current directory.")
     val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
       .getOrElse(Iterator.empty).mkString("\n")
-    File(".generated-mima-member-excludes").writeAll(previousMembersContents +
-      privateMembers.mkString("\n"))
+    File(".generated-mima-member-excludes").writeAll(
+      previousMembersContents + privateMembers.toSeq.sorted.mkString("\n"))
     println("Created : .generated-mima-member-excludes in current directory.")
     // scalastyle:on println
   }
