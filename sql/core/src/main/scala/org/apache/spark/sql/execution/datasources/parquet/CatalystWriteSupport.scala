@@ -33,7 +33,7 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.{minBytesForPrecision, MAX_PRECISION_FOR_INT32, MAX_PRECISION_FOR_INT64}
+import org.apache.spark.sql.execution.datasources.parquet.CatalystSchemaConverter.minBytesForPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -253,13 +253,13 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
     writeLegacyParquetFormat match {
       // Standard mode, 1 <= precision <= 9, writes as INT32
-      case false if precision <= MAX_PRECISION_FOR_INT32 => int32Writer
+      case false if precision <= Decimal.MAX_INT_DIGITS => int32Writer
 
       // Standard mode, 10 <= precision <= 18, writes as INT64
-      case false if precision <= MAX_PRECISION_FOR_INT64 => int64Writer
+      case false if precision <= Decimal.MAX_LONG_DIGITS => int64Writer
 
       // Legacy mode, 1 <= precision <= 18, writes as FIXED_LEN_BYTE_ARRAY
-      case true if precision <= MAX_PRECISION_FOR_INT64 => binaryWriterUsingUnscaledLong
+      case true if precision <= Decimal.MAX_LONG_DIGITS => binaryWriterUsingUnscaledLong
 
       // Either standard or legacy mode, 19 <= precision <= 38, writes as FIXED_LEN_BYTE_ARRAY
       case _ => binaryWriterUsingUnscaledBytes
