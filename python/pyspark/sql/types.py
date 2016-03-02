@@ -681,52 +681,38 @@ _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
 
 
-_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
+_FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
+
+
+_BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
 def _parse_basic_datatype_string(s):
-    if s == "null":
-        return NullType()
-    elif s == "boolean":
-        return BooleanType()
-    elif s == "byte":
-        return ByteType()
-    elif s == "short":
-        return ShortType()
+    if s in _all_atomic_types.keys():
+        return _all_atomic_types[s]()
     elif s == "int":
         return IntegerType()
-    elif s == "long":
-        return LongType()
-    elif s == "float":
-        return FloatType()
-    elif s == "double":
-        return DoubleType()
-    elif s == "decimal":
-        return DecimalType()
     elif _FIXED_DECIMAL.match(s):
-        m = _FIXED_DECIMAL.match(json_value)
+        m = _FIXED_DECIMAL.match(s)
         return DecimalType(int(m.group(1)), int(m.group(2)))
-    elif s == "string":
-        return StringType()
-    elif s == "date":
-        return DateType()
-    elif s == "timestamp":
-        return TimestampType()
-    elif s == "binary":
-        return BinaryType()
     else:
-        raise ValueError("Cannot parse datatype string: %s" % s)
+        raise ValueError("Could not parse datatype: %s" % s)
 
 
 def _ignore_brackets_split(s, separator):
+    """
+    Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
+    given "a,b" and separator ",", it will return ["a", "b"], but given "a<b,c>, d", it will return
+    ["a<b,c>", "d"].
+    """
     parts = []
     buf = ""
     level = 0
     for c in s:
-        if c == "<":
+        if c in _BRACKETS.keys():
             level += 1
             buf += c
-        elif c == ">":
+        elif c in _BRACKETS.values():
             if level == 0:
                 raise ValueError("Cannot parse datatype string: %s" % s)
             level -= 1
@@ -760,15 +746,17 @@ def _parse_struct_type_string(s):
 
 def _parse_datatype_string(s):
     """
-    Parses the given data type string to a :class:`DataType`, the data type string format equals
-    to `DataType.simpleString`, except that top level struct type can omit the `struct<>`.
+    Parses the given data type string to a :class:`DataType`. The data type string format equals
+    to `DataType.simpleString`, except that top level struct type can omit the `struct<>` and
+    numeric types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
+    ByteType. We can also use `int` as a short name for IntegerType.
 
-    >>> _parse_datatype_string("int")
+    >>> _parse_datatype_string("int ")
     IntegerType
-    >>> _parse_datatype_string("a: int, b: string ")
-    StructType(List(StructField(a,IntegerType,true),StructField(b,StringType,true)))
-    >>> _parse_datatype_string("a: array<int>")
-    StructType(List(StructField(a,ArrayType(IntegerType,true),true)))
+    >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
+    StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    >>> _parse_datatype_string("a: array< short>")
+    StructType(List(StructField(a,ArrayType(ShortType,true),true)))
     >>> _parse_datatype_string(" map<string , string > ")
     MapType(StringType,StringType,true)
 
@@ -1068,9 +1056,6 @@ def _create_converter(dataType):
             return tuple([d.get(name) for name in names])
 
     return convert_struct
-
-
-_BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
 def _split_schema_abstract(s):
