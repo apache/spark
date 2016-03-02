@@ -64,6 +64,11 @@ private[deploy] object DeployMessages {
   case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
      driverIds: Seq[String])
 
+  case class WorkerLatestState(
+      id: String,
+      executors: Seq[ExecutorDescription],
+      driverIds: Seq[String]) extends DeployMessage
+
   case class Heartbeat(workerId: String, worker: RpcEndpointRef) extends DeployMessage
 
   // Master to Worker
