@@ -156,9 +156,9 @@ object ParquetReadBenchmark {
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
         SQL Single Int Column Scan:         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         -------------------------------------------------------------------------------------------
-        SQL Parquet Reader                       1042 / 1208         15.1          66.2       1.0X
-        SQL Parquet MR                           1544 / 1607         10.2          98.2       0.7X
-        SQL Parquet Vectorized                    674 /  739         23.3          42.9       1.5X
+        SQL Parquet Vectorized                    657 /  778         23.9          41.8       1.0X
+        SQL Parquet MR                           1606 / 1731          9.8         102.1       0.4X
+        SQL Parquet Non-Vectorized               1133 / 1216         13.9          72.1       0.6X
         */
         sqlBenchmark.run()
 
