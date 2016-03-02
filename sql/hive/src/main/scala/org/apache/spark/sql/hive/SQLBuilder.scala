@@ -219,6 +219,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       plan: Aggregate,
       expand: Expand,
       project: Project): String = {
+    // The last column of Expand is always grouping ID
+    val gid = expand.output.last
+
     // In cube/rollup/groupingsets, Analyzer creates new aliases for all group by expressions.
     // Since conversion from attribute back SQL ignore expression IDs, the alias of attribute
     // references are ignored in aliasMap
@@ -228,7 +231,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     val groupingExprs = plan.groupingExpressions.filterNot {
       // VirtualColumn.groupingIdName is added by Analyzer, and thus remove it.
-      case a: NamedExpression => a.name == VirtualColumn.groupingIdName
+      case a: AttributeReference => a == gid
       case o => false
     }.map {
       case a: AttributeReference if aliasMap.contains(a) => aliasMap(a).child
@@ -237,8 +240,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
 
-    val groupingSet = expand.projections.map(_.filter {
-      case _: Literal => false
+    val groupingSet = expand.projections.map(_.dropRight(1).filter {
       case e: Expression if plan.groupingExpressions.exists(_.semanticEquals(e)) => true
       case _ => false
     }.map {
@@ -246,27 +248,31 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case o => o
     })
 
-    val aggExprs = plan.aggregateExpressions.map {
-      case a @ Alias(child: AttributeReference, name)
-          if child.name == VirtualColumn.groupingIdName =>
-        // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
-        Alias(GroupingID(Nil), name)()
-      case a @ Alias(_ @ Cast(BitwiseAnd(
-        ShiftRight(ar: AttributeReference, _ @ Literal(value: Any, IntegerType)),
-        Literal(1, IntegerType)), ByteType), name)
-          if ar.name == VirtualColumn.groupingIdName =>
-        // for converting an expression to its original SQL format grouping(col)
-        val idx = groupingExprs.length - 1 - value.asInstanceOf[Int]
-        val groupingCol = groupingExprs.lift(idx)
-        if (groupingCol.isDefined) {
-          Grouping(groupingCol.get)
-        } else {
-          throw new UnsupportedOperationException(s"unsupported operator $a")
-        }
-      case a @ Alias(child: AttributeReference, name) if aliasMap.contains(child) =>
-        aliasMap(child).child
-      case o => o
+    val aggExprs = plan.aggregateExpressions.map { case expr =>
+      expr.transformDown {
+        case a @ Alias(child: AttributeReference, name) if child eq gid =>
+          // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
+          Alias(GroupingID(Nil), name)()
+        case a @ Alias(_ @ Cast(BitwiseAnd(
+            ShiftRight(ar: AttributeReference, _ @ Literal(value: Any, IntegerType)),
+            Literal(1, IntegerType)), ByteType), name) if ar == gid =>
+          // for converting an expression to its original SQL format grouping(col)
+          val idx = groupingExprs.length - 1 - value.asInstanceOf[Int]
+          val groupingCol = groupingExprs.lift(idx)
+          if (groupingCol.isDefined) {
+            Grouping(groupingCol.get)
+          } else {
+            throw new UnsupportedOperationException(s"unsupported operator $a")
+          }
+        case a @ Alias(child: AttributeReference, name) if aliasMap.contains(child) =>
+          aliasMap(child).child
+        case o => o
+      }
     }
+
+    val groupingSetSQL =
+      "GROUPING SETS(" +
+        groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
 
     build(
       "SELECT",
@@ -275,8 +281,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       toSQL(project.child),
       if (groupingSQL.isEmpty) "" else "GROUP BY",
       groupingSQL,
-      "GROUPING SETS",
-      "(" + groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
+      groupingSetSQL
     )
   }
 
