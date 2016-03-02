@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.joins
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{And, Expression, LessThan}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.Inner
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
@@ -95,10 +95,19 @@ class SemiJoinSuite extends SparkPlanTest with SharedSQLContext {
       }
     }
 
-    test(s"$testName using LeftSemiJoinBNL") {
+    test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          LeftSemiJoinBNL(left, right, Some(condition)),
+          BroadcastNestedLoopJoin(left, right, BuildLeft, LeftSemi, Some(condition)),
+          expectedAnswer.map(Row.fromTuple),
+          sortAnswers = true)
+      }
+    }
+
+    test(s"$testName using BroadcastNestedLoopJoin build right") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+        checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+          BroadcastNestedLoopJoin(left, right, BuildRight, LeftSemi, Some(condition)),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
