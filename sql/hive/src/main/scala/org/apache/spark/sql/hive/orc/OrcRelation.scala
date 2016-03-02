@@ -168,12 +168,12 @@ private[sql] class OrcRelation(
     .map { codecName =>
       // Validate if given compression codec is supported or not.
       val shortOrcCompressionCodecNames = OrcRelation.shortOrcCompressionCodecNames
-      if (!shortOrcCompressionCodecNames.contains(codecName.toUpperCase)) {
+      if (!shortOrcCompressionCodecNames.contains(codecName.toLowerCase)) {
         val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
         throw new IllegalArgumentException(s"Codec [$codecName] " +
           s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
       }
-      codecName.toUpperCase
+      codecName.toLowerCase
     }
 
   private[sql] def this(
@@ -364,10 +364,10 @@ private[orc] object OrcTableScan {
 private[orc] object OrcRelation {
   // The ORC compression short names
   val shortOrcCompressionCodecNames = Map(
-    "NONE" -> CompressionKind.NONE,
-    "UNCOMPRESSED" -> CompressionKind.NONE,
-    "SNAPPY" -> CompressionKind.SNAPPY,
-    "ZLIB" -> CompressionKind.ZLIB,
-    "LZO" -> CompressionKind.LZO)
+    "none" -> CompressionKind.NONE,
+    "uncompressed" -> CompressionKind.NONE,
+    "snappy" -> CompressionKind.SNAPPY,
+    "zlib" -> CompressionKind.ZLIB,
+    "lzo" -> CompressionKind.LZO)
 }
 
