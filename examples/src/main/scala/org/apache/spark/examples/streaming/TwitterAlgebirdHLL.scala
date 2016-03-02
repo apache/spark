@@ -62,7 +62,7 @@ object TwitterAlgebirdHLL {
     var userSet: Set[Long] = Set()
 
     val approxUsers = users.mapPartitions(ids => {
-      ids.map(id => hll(id))
+      ids.map(id => hll.create(id))
     }).reduce(_ + _)
 
     val exactUsers = users.map(id => Set(id)).reduce(_ ++ _)
