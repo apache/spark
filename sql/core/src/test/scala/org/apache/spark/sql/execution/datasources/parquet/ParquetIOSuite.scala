@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.File
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -740,6 +742,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           reader.close()
         }
       }
+    }
+  }
+
+  test("SPARK-13543: Support for specifying compression codec for Parquet via option()") {
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/table1"
+      val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+      df.write
+        .option("compression", "gZiP")
+        .parquet(path)
+
+      val compressedFiles = new File(path).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz.parquet")))
+
+      val copyDf = sqlContext
+        .read
+        .parquet(path)
+      checkAnswer(df, copyDf)
     }
   }
 }
