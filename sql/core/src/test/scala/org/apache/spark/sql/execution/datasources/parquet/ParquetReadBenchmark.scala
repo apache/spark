@@ -37,6 +37,10 @@ object ParquetReadBenchmark {
   val sc = new SparkContext("local[1]", "test-sql-context", conf)
   val sqlContext = new SQLContext(sc)
 
+  // Set default configs. Individual cases will change them if necessary.
+  sqlContext.conf.setConfString(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+  sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+
   def withTempPath(f: File => Unit): Unit = {
     val path = Utils.createTempDir()
     path.delete()
@@ -198,7 +202,7 @@ object ParquetReadBenchmark {
         }
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
-        benchmark.addCase("ParquetReader") { num =>
+        benchmark.addCase("ParquetReader Non-vectorized") { num =>
           var sum1 = 0L
           var sum2 = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
@@ -220,7 +224,7 @@ object ParquetReadBenchmark {
         SQL Parquet Vectorized                   1025 / 1180         10.2          97.8       1.0X
         SQL Parquet MR                           2157 / 2222          4.9         205.7       0.5X
         SQL Parquet Non-vectorized               1450 / 1466          7.2         138.3       0.7X
-        ParquetReader                            1005 / 1022         10.4          95.9       1.0X
+        ParquetReader Non-vectorized             1005 / 1022         10.4          95.9       1.0X
         */
         benchmark.run()
       }
