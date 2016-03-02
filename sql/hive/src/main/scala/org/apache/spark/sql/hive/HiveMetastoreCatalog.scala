@@ -528,7 +528,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           partitionSchema = partitionSchema,
           dataSchema = mergedSchema,
           bucketSpec = None, // TODO: doesn't seem right
-          fileFormat = new DefaultSource())
+          fileFormat = new DefaultSource(),
+          options = parquetOptions)
 
         val created = LogicalRelation(relation)
         cachedDataSourceTables.put(tableIdentifier, created)

@@ -695,7 +695,8 @@ class SQLContext private[sql](
         options,
         allowExisting = false,
         managedIfNoPath = false)
-    executePlan(cmd).toRdd
+    val plan = executePlan(cmd)
+    plan.toRdd
     table(tableIdent)
   }
 

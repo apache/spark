@@ -147,6 +147,13 @@ case class CreateMetastoreDataSource(
         options
       }
 
+    ResolvedDataSource(
+      sqlContext = sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      provider = provider,
+      bucketSpec = None,
+      options = optionsWithPath)
+
     hiveContext.catalog.createDataSourceTable(
       tableIdent,
       userSpecifiedSchema,

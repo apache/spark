@@ -49,19 +49,23 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    val jsonFiles = files.filterNot { status =>
+    if (files.isEmpty) {
+      None
+    } else {
+      val parsedOptions: JSONOptions = new JSONOptions(options)
+      val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
       }.toArray
 
-    val jsonSchema = InferSchema.infer(
+      val jsonSchema = InferSchema.infer(
         createBaseRdd(sqlContext, jsonFiles),
         sqlContext.conf.columnNameOfCorruptRecord,
         parsedOptions)
-    checkConstraints(jsonSchema)
+      checkConstraints(jsonSchema)
 
-    Some(jsonSchema)
+      Some(jsonSchema)
+    }
   }
 
   override def prepareWrite(
@@ -139,70 +143,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           s"cannot save to JSON format")
     }
   }
+
+  override def toString: String = "JSON"
+  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 }
-
-/*
-private[sql] class JSONRelation(
-    val inputRDD: Option[RDD[String]],
-    val maybeDataSchema: Option[StructType],
-    val maybePartitionSpec: Option[PartitionSpec],
-    override val userDefinedPartitionColumns: Option[StructType],
-    override val maybeBucketSpec: Option[BucketSpec] = None,
-    override val paths: Array[String] = Array.empty[String],
-    parameters: Map[String, String] = Map.empty[String, String])
-    (@transient val sqlContext: SQLContext)
-  extends HadoopFsRelation {
-
-  val options: JSONOptions = new JSONOptions(parameters)
-
-
-
-  override val needConversion: Boolean = false
-
-  override private[sql] def buildInternalScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputPaths: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
-    val rows = JacksonParser.parse(
-      inputRDD.getOrElse(createBaseRdd(inputPaths)),
-      requiredDataSchema,
-      sqlContext.conf.columnNameOfCorruptRecord,
-      options)
-
-    rows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
-      iterator.map(unsafeProjection)
-    }
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case that: JSONRelation =>
-      ((inputRDD, that.inputRDD) match {
-        case (Some(thizRdd), Some(thatRdd)) => thizRdd eq thatRdd
-        case (None, None) => true
-        case _ => false
-      }) && paths.toSet == that.paths.toSet &&
-        dataSchema == that.dataSchema &&
-        schema == that.schema
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(
-      inputRDD,
-      paths.toSet,
-      dataSchema,
-      schema,
-      partitionColumns)
-  }
-
-  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
-
-  }
-}
-*/
 
 private[json] class JsonOutputWriter(
     path: String,

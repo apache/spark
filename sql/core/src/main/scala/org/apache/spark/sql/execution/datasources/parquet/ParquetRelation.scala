@@ -60,6 +60,8 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
 
   override def toString: String = "ParquetFormat"
 
+  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+
   override def prepareWrite(
       sqlContext: SQLContext,
       job: Job,

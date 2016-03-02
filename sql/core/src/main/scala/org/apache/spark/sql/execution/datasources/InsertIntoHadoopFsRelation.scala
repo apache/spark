@@ -116,7 +116,6 @@ private[sql] case class InsertIntoHadoopFsRelation(
 
       val queryExecution = DataFrame(sqlContext, query).queryExecution
       SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
-
         val relation =
           WriteRelation(
             sqlContext,

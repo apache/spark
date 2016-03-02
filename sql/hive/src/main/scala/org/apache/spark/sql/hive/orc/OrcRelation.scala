@@ -42,23 +42,59 @@ import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreType
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.collection.BitSet
 
-private[sql] class DefaultSource extends BucketedHadoopFsRelationProvider with DataSourceRegister {
+private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "orc"
 
-  override def createRelation(
-      sqlContext: SQLContext,
-      paths: Array[String],
-      dataSchema: Option[StructType],
-      partitionColumns: Option[StructType],
-      bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
-    assert(
-      sqlContext.isInstanceOf[HiveContext],
-      "The ORC data source can only be used with HiveContext.")
+  override def toString: String = "ORC"
 
-    ??? //new OrcRelation(paths, dataSchema, None, partitionColumns, bucketSpec, parameters)(sqlContext)
+  override def inferSchema(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Option[StructType] = {
+    OrcFileOperator.readSchema(
+      files.map(_.getPath.toUri.toString), Some(sqlContext.sparkContext.hadoopConfiguration))
+  }
+
+  override def prepareWrite(
+      sqlContext: SQLContext,
+      job: Job,
+      options: Map[String, String],
+      dataSchema: StructType): BucketedOutputWriterFactory = {
+    job.getConfiguration match {
+      case conf: JobConf =>
+        conf.setOutputFormat(classOf[OrcOutputFormat])
+      case conf =>
+        conf.setClass(
+          "mapred.output.format.class",
+          classOf[OrcOutputFormat],
+          classOf[MapRedOutputFormat[_, _]])
+    }
+
+    new BucketedOutputWriterFactory {
+      override def newInstance(
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        new OrcOutputWriter(path, bucketId, dataSchema, context)
+      }
+    }
+  }
+
+  override def buildInternalScan(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      bucketSet: Option[BitSet],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      options: Map[String, String]): RDD[InternalRow] = {
+    val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
+    OrcTableScan(sqlContext, output, filters, inputFiles).execute()
   }
 }
 
@@ -114,7 +150,8 @@ private[orc] class OrcOutputWriter(
     ).asInstanceOf[RecordWriter[NullWritable, Writable]]
   }
 
-  override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
+  override def write(row: Row): Unit =
+    throw new UnsupportedOperationException("call  writeInternal")
 
   private def wrapOrcStruct(
       struct: OrcStruct,
@@ -123,6 +160,7 @@ private[orc] class OrcOutputWriter(
     val fieldRefs = oi.getAllStructFieldRefs
     var i = 0
     while (i < fieldRefs.size) {
+
       oi.setStructFieldData(
         struct,
         fieldRefs.get(i),
@@ -150,104 +188,20 @@ private[orc] class OrcOutputWriter(
     }
   }
 }
-/*
-private[sql] class OrcRelation(
-    override val paths: Array[String],
-    maybeDataSchema: Option[StructType],
-    maybePartitionSpec: Option[PartitionSpec],
-    override val userDefinedPartitionColumns: Option[StructType],
-    override val maybeBucketSpec: Option[BucketSpec],
-    parameters: Map[String, String])(
-    @transient val sqlContext: SQLContext)
-  extends HadoopFsRelation(maybePartitionSpec, parameters)
-  with Logging {
-
-  private[sql] def this(
-      paths: Array[String],
-      maybeDataSchema: Option[StructType],
-      maybePartitionSpec: Option[PartitionSpec],
-      parameters: Map[String, String])(
-      sqlContext: SQLContext) = {
-    this(
-      paths,
-      maybeDataSchema,
-      maybePartitionSpec,
-      maybePartitionSpec.map(_.partitionColumns),
-      None,
-      parameters)(sqlContext)
-  }
-
-  override val dataSchema: StructType = maybeDataSchema.getOrElse {
-    OrcFileOperator.readSchema(
-      paths.head, Some(sqlContext.sparkContext.hadoopConfiguration))
-  }
-
-  override def needConversion: Boolean = false
-
-  override def equals(other: Any): Boolean = other match {
-    case that: OrcRelation =>
-      paths.toSet == that.paths.toSet &&
-        dataSchema == that.dataSchema &&
-        schema == that.schema &&
-        partitionColumns == that.partitionColumns
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(
-      paths.toSet,
-      dataSchema,
-      schema,
-      partitionColumns)
-  }
-
-  override private[sql] def buildInternalScan(
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      inputPaths: Array[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
-    val output = StructType(requiredColumns.map(dataSchema(_))).toAttributes
-    OrcTableScan(output, this, filters, inputPaths).execute()
-  }
-
-  override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
-    job.getConfiguration match {
-      case conf: JobConf =>
-        conf.setOutputFormat(classOf[OrcOutputFormat])
-      case conf =>
-        conf.setClass(
-          "mapred.output.format.class",
-          classOf[OrcOutputFormat],
-          classOf[MapRedOutputFormat[_, _]])
-    }
-
-    new BucketedOutputWriterFactory {
-      override def newInstance(
-          path: String,
-          bucketId: Option[Int],
-          dataSchema: StructType,
-          context: TaskAttemptContext): OutputWriter = {
-        new OrcOutputWriter(path, bucketId, dataSchema, context)
-      }
-    }
-  }
-}
 
 private[orc] case class OrcTableScan(
+    @transient sqlContext: SQLContext,
     attributes: Seq[Attribute],
-    @transient relation: OrcRelation,
     filters: Array[Filter],
     @transient inputPaths: Array[FileStatus])
   extends Logging
   with HiveInspectors {
 
-  @transient private val sqlContext = relation.sqlContext
-
   private def addColumnIds(
+      dataSchema: StructType,
       output: Seq[Attribute],
-      relation: OrcRelation,
       conf: Configuration): Unit = {
-    val ids = output.map(a => relation.dataSchema.fieldIndex(a.name): Integer)
+    val ids = output.map(a => dataSchema.fieldIndex(a.name): Integer)
     val (sortedIds, sortedNames) = ids.zip(attributes.map(_.name)).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIds, sortedNames)
   }
@@ -304,8 +258,15 @@ private[orc] case class OrcTableScan(
       }
     }
 
+    // Figure out the actual schema from the ORC source (without partition columns) so that we
+    // can pick the correct ordinals.  Note that this assumes that all files have the same schema.
+    val orcFormat = new DefaultSource
+    val dataSchema =
+      orcFormat
+          .inferSchema(sqlContext, Map.empty, inputPaths)
+          .getOrElse(sys.error("Failed to read schema from target ORC files."))
     // Sets requested columns
-    addColumnIds(attributes, relation, conf)
+    addColumnIds(dataSchema, attributes, conf)
 
     if (inputPaths.isEmpty) {
       // the input path probably be pruned, return an empty RDD.
@@ -332,7 +293,6 @@ private[orc] case class OrcTableScan(
     }
   }
 }
-*/
 
 private[orc] object OrcTableScan {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.

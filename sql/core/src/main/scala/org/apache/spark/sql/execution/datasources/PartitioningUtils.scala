@@ -107,7 +107,8 @@ private[sql] object PartitioningUtils {
       // It will be recognised as conflicting directory structure:
       //   "hdfs://host:9000/invalidPath"
       //   "hdfs://host:9000/path"
-      val discoveredBasePaths = optDiscoveredBasePaths.flatMap(x => x)
+      // TODO: Selective case sensitivity.
+      val discoveredBasePaths = optDiscoveredBasePaths.flatMap(x => x).map(_.toString.toLowerCase())
       assert(
         discoveredBasePaths.distinct.size == 1,
         "Conflicting directory structures detected. Suspicious paths:\b" +
@@ -247,7 +248,9 @@ private[sql] object PartitioningUtils {
     if (pathsWithPartitionValues.isEmpty) {
       Seq.empty
     } else {
-      val distinctPartColNames = pathsWithPartitionValues.map(_._2.columnNames).distinct
+      // TODO: Selective case sensitivity.
+      val distinctPartColNames =
+        pathsWithPartitionValues.map(_._2.columnNames.map(_.toLowerCase())).distinct
       assert(
         distinctPartColNames.size == 1,
         listConflictingPartitionColumns(pathsWithPartitionValues))

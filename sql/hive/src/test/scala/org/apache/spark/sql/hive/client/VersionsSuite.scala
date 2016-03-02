@@ -29,6 +29,7 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
+import org.scalatest.Ignore
 
 /**
  * A simple set of tests that call the methods of a [[HiveClient]], loading different version
@@ -37,6 +38,7 @@ import org.apache.spark.util.Utils
  * is not fully tested.
  */
 @ExtendedHiveTest
+@Ignore
 class VersionsSuite extends SparkFunSuite with Logging {
 
   // In order to speed up test execution during development or in Jenkins, you can specify the path

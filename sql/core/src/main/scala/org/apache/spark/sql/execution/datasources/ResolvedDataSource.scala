@@ -32,7 +32,7 @@ import org.apache.hadoop.util.StringUtils
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
@@ -94,19 +94,61 @@ object ResolvedDataSource extends Logging {
     }
   }
 
+  // TODO: Combine with apply?
   def createSource(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       providerName: String,
       options: Map[String, String]): Source = {
     val provider = lookupDataSource(providerName).newInstance() match {
-      case s: StreamSourceProvider => s
+      case s: StreamSourceProvider =>
+        s.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+
+      case format: FileFormat =>
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val path = caseInsensitiveOptions.getOrElse("path", {
+          throw new IllegalArgumentException("'path' is not specified")
+        })
+        val metadataPath = caseInsensitiveOptions.getOrElse("metadataPath", s"$path/_metadata")
+
+        val allPaths = caseInsensitiveOptions.get("path")
+        val globbedPaths = allPaths.toSeq.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          SparkHadoopUtil.get.globPathIfNecessary(qualified)
+        }.toArray
+
+        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
+        val dataSchema = userSpecifiedSchema.orElse {
+          format.inferSchema(
+            sqlContext,
+            caseInsensitiveOptions,
+            fileCatalog.allFiles())
+        }.getOrElse {
+          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
+        }
+
+        def dataFrameBuilder(files: Array[String]): DataFrame = {
+          new DataFrame(
+            sqlContext,
+            LogicalRelation(
+              apply(
+              sqlContext,
+              paths = files,
+              userSpecifiedSchema = Some(dataSchema),
+              provider = providerName,
+              options = options.filterKeys(_ != "path")).relation))
+        }
+
+        new FileStreamSource(
+          sqlContext, metadataPath, path, Some(dataSchema), providerName, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $providerName does not support streamed reading")
     }
 
-    provider.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+    provider
   }
 
   def createSink(
@@ -164,7 +206,9 @@ object ResolvedDataSource extends Logging {
             caseInsensitiveOptions,
             fileCatalog.allFiles())
         }.getOrElse {
-          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
+          throw new AnalysisException(
+            s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
+            "It must be specified manually")
         }
 
         // If they gave a schema, then we try and figure out the types of the partition columns
@@ -257,7 +301,7 @@ object ResolvedDataSource extends Logging {
         // If we are appending to a table that already exists, make sure the partitioning matches
         // up.  If we fail to load the table for whatever reason, ignore the check.
         if (mode == SaveMode.Append) {
-          val existingPartitionColumns = try {
+          val existingPartitionColumnSet = try {
             val resolved = apply(
               sqlContext,
               userSpecifiedSchema = Some(data.schema.asNullable),
@@ -276,7 +320,11 @@ object ResolvedDataSource extends Logging {
               None
           }
 
-          existingPartitionColumns.foreach(ex => assert(ex == partitionColumns.toSet))
+          existingPartitionColumnSet.foreach { ex =>
+            if (ex.map(_.toLowerCase) != partitionColumns.map(_.toLowerCase()).toSet) {
+              throw new AnalysisException(s"$ex ${partitionColumns.toSet}")
+            }
+          }
         }
 
         // For partitioned relation r, r.schema's column ordering can be different from the column

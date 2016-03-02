@@ -20,6 +20,8 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.util.UUID
 
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -140,7 +142,13 @@ private[sql] trait SQLTestUtils
    * Drops temporary table `tableName` after calling `f`.
    */
   protected def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally tableNames.foreach(sqlContext.dropTempTable)
+    try f finally {
+      // If the test failed part way, we don't want to mask the failure by failing to remove
+      // temp tables that never got created.
+      try tableNames.foreach(sqlContext.dropTempTable) catch {
+        case _: NoSuchTableException =>
+      }
+    }
   }
 
   /**
