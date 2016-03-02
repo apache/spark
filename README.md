@@ -52,6 +52,7 @@ Currently **officially** using Airflow:
 
 * [Airbnb](http://airbnb.io/) [[@mistercrunch](https://github.com/mistercrunch), [@artwr](https://github.com/artwr)]
 * [Agari] (https://github.com/agaridata) [[@r39132](https://github.com/r39132)]
+* [allegro.pl](http://allegro.tech/) [[@kretes](https://github.com/kretes)]
 * [Bellhops](https://github.com/bellhops)
 * BlueApron [[@jasonjho](https://github.com/jasonjho) & [@matthewdavidhauser](https://github.com/matthewdavidhauser)]
 * [Clover Health] (https://www.cloverhealth.com) [[@gwax](https://github.com/gwax) & [@vansivallab](https://github.com/vansivallab)]
@@ -84,6 +85,7 @@ Currently **officially** using Airflow:
 * [Full documentation on pythonhosted.com](http://pythonhosted.org/airflow/)
 * [Airflow Google Group (mailing list / forum)](https://groups.google.com/forum/#!forum/airbnb_airflow)
 * [Airbnb Blog Post about Airflow](http://nerds.airbnb.com/airflow/)
+* [Airflow Common Pitfalls](https://github.com/airbnb/airflow/wiki/Airflow-Common-Pitfalls)
 * [Hadoop Summit Airflow Video](https://www.youtube.com/watch?v=oYp49mBwH60)
 * [Airflow at Agari Blog Post](http://agari.com/blog/airflow-agari)
 * [Best practices with Airflow (Max) nov 2015](https://youtu.be/dgaoqOZlvEA)
