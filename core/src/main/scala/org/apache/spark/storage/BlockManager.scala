@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
+import org.apache.spark.storage.disk.DiskBlockWriter
+
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -705,6 +707,21 @@ private[spark] class BlockManager(
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(file, serializerInstance, bufferSize, compressStream,
       syncWrites, writeMetrics, blockId)
+  }
+
+  /**
+   * A short circuited method to get a block writer that can write data directly to disk.
+   * The Block will be appended to the File specified by filename. Callers should handle error
+   * cases.
+   */
+  def getDiskWriter(
+      blockId: BlockId,
+      file: File,
+      bufferSize: Int,
+      writeMetrics: ShuffleWriteMetrics): DiskBlockWriter = {
+    val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
+    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
+    new DiskBlockWriter(file, bufferSize, compressStream, syncWrites, writeMetrics)
   }
 
   /**

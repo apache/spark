@@ -43,8 +43,8 @@ import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
-import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
+import org.apache.spark.storage.disk.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
@@ -117,21 +117,18 @@ public class UnsafeExternalSorterSuite {
     when(blockManager.getDiskWriter(
       any(BlockId.class),
       any(File.class),
-      any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockWriter>() {
       @Override
-      public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public DiskBlockWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
         Object[] args = invocationOnMock.getArguments();
 
-        return new DiskBlockObjectWriter(
+        return new DiskBlockWriter(
           (File) args[1],
-          (SerializerInstance) args[2],
-          (Integer) args[3],
+          (Integer) args[2],
           new CompressStream(),
           false,
-          (ShuffleWriteMetrics) args[4],
-          (BlockId) args[0]
+          (ShuffleWriteMetrics) args[3]
         );
       }
     });

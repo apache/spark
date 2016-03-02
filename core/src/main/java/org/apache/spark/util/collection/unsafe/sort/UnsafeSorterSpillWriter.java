@@ -23,10 +23,9 @@ import java.io.IOException;
 import scala.Tuple2;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
-import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.DiskBlockObjectWriter;
+import org.apache.spark.storage.disk.DiskBlockWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.Platform;
 
@@ -47,7 +46,7 @@ public final class UnsafeSorterSpillWriter {
   private final File file;
   private final BlockId blockId;
   private final int numRecordsToWrite;
-  private DiskBlockObjectWriter writer;
+  private DiskBlockWriter writer;
   private int numRecordsSpilled = 0;
 
   public UnsafeSorterSpillWriter(
@@ -60,12 +59,7 @@ public final class UnsafeSorterSpillWriter {
     this.file = spilledFileInfo._2();
     this.blockId = spilledFileInfo._1();
     this.numRecordsToWrite = numRecordsToWrite;
-    // Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
-    // Our write path doesn't actually use this serializer (since we end up calling the `write()`
-    // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
-    // around this, we pass a dummy no-op serializer.
-    writer = blockManager.getDiskWriter(
-      blockId, file, DummySerializerInstance.INSTANCE, fileBufferSize, writeMetrics);
+    writer = blockManager.getDiskWriter(blockId, file, fileBufferSize, writeMetrics);
     // Write the number of records
     writeIntToBuffer(numRecordsToWrite, 0);
     writer.write(writeBuffer, 0, 4);

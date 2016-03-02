@@ -33,10 +33,8 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
-import org.apache.spark.serializer.DummySerializerInstance;
-import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.DiskBlockObjectWriter;
+import org.apache.spark.storage.disk.DiskBlockWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
@@ -145,9 +143,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
       inMemSorter.getSortedIterator();
 
-    // Currently, we need to open a new DiskBlockObjectWriter for each partition; we can avoid this
+    // Currently, we need to open a new DiskBlockWriter for each partition; we can avoid this
     // after SPARK-5581 is fixed.
-    DiskBlockObjectWriter writer;
+    DiskBlockWriter writer;
 
     // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
@@ -164,13 +162,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     final TempShuffleBlockId blockId = spilledFileInfo._1();
     final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
 
-    // Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
-    // Our write path doesn't actually use this serializer (since we end up calling the `write()`
-    // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
-    // around this, we pass a dummy no-op serializer.
-    final SerializerInstance ser = DummySerializerInstance.INSTANCE;
-
-    writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
+    writer = blockManager.getDiskWriter(blockId, file, fileBufferSizeBytes, writeMetricsToUse);
 
     int currentPartition = -1;
     while (sortedRecords.hasNext()) {
@@ -184,8 +176,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
           spillInfo.partitionLengths[currentPartition] = writer.fileSegment().length();
         }
         currentPartition = partition;
-        writer =
-          blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
+        writer = blockManager.getDiskWriter(blockId, file, fileBufferSizeBytes, writeMetricsToUse);
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
