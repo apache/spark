@@ -453,20 +453,46 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    *
    * For example:
    *
-   *   node
-   *   :  +-  innerChildren
-   *   +-  treeChildren
+   *   WholeStageCodegen
+   *   +-- SortMergeJoin
+   *       |-- InputAdapter
+   *       |   +-- Sort
+   *       +-- InputAdapter
+   *           +-- Sort
+   *
+   * the treeChildren of WholeStageCodegen will be Seq(Sort, Sort), it will generate a tree string
+   * like this:
+   *
+   *   WholeStageCodegen
+   *   : +- SortMergeJoin
+   *   :    :- INPUT
+   *   :    :- INPUT
+   *   :-  Sort
+   *   :-  Sort
    */
   protected def treeChildren: Seq[BaseType] = children
 
   /**
    * All the nodes that are parts of this node.
    *
-   * innerChildren will be printed with one more level of indent, for example:
+   * For example:
    *
-   *   node
-   *   :  +-  innerChildren
-   *   +-  treeChildren
+   *   WholeStageCodegen
+   *   +- SortMergeJoin
+   *      |-- InputAdapter
+   *      |   +-- Sort
+   *      +-- InputAdapter
+   *          +-- Sort
+   *
+   * the innerChildren of WholeStageCodegen will be Seq(SortMergeJoin), it will generate a tree
+   * string like this:
+   *
+   *   WholeStageCodegen
+   *   : +- SortMergeJoin
+   *   :    :- INPUT
+   *   :    :- INPUT
+   *   :-  Sort
+   *   :-  Sort
    */
   protected def innerChildren: Seq[BaseType] = Nil
 
