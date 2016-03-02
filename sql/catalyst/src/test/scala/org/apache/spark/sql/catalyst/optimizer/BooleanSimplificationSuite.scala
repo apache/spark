@@ -129,9 +129,4 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
       testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
     comparePlans(actual, expected)
   }
-
-  test("evaluate isNotNull expressions before others") {
-    checkCondition(input = 'a > 0 && IsNotNull('b) && 'c < 3,
-      expected = IsNotNull('b) && 'a > 0 && 'c < 3)
-  }
 }
