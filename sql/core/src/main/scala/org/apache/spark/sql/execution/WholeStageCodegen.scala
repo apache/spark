@@ -67,7 +67,12 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
     */
-  private var parent: CodegenSupport = null
+  protected var parent: CodegenSupport = null
+
+  /**
+    * Whether this SparkPlan accepts UnsafeRow as input in consumeChild.
+    */
+  def consumeUnsafeRow: Boolean = false
 
   /**
     * Returns all the RDDs of InternalRow which generates the input rows.
@@ -109,7 +114,7 @@ trait CodegenSupport extends SparkPlan {
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
   final def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
-    if (input != null) {
+    if (input != null && !parent.consumeUnsafeRow) {
       assert(input.length == output.length)
     }
     parent.consumeChild(ctx, this, input, row)
@@ -125,14 +130,27 @@ trait CodegenSupport extends SparkPlan {
       row: String = null): String = {
     ctx.freshNamePrefix = variablePrefix
     if (row != null) {
-      ctx.currentVars = null
-      ctx.INPUT_ROW = row
-      val evals = child.output.zipWithIndex.map { case (attr, i) =>
-        BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+      val evals: Seq[ExprCode] = if (!consumeUnsafeRow) {
+        // If this SparkPlan can't consume UnsafeRow and there is an UnsafeRow,
+        // we extract the columns from the row and call doConsume.
+        ctx.currentVars = null
+        ctx.INPUT_ROW = row
+        child.output.zipWithIndex.map { case (attr, i) =>
+          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+        }
+      } else {
+        // If this SparkPlan consumes UnsafeRow and there is an UnsafeRow,
+        // we don't need to unpack variables from the row.
+        Seq.empty
+      }
+      val evalCode = if (evals.isEmpty) {
+        ""
+      } else {
+        s"${evals.map(_.code).mkString("\n")}"
       }
       s"""
-         | ${evals.map(_.code).mkString("\n")}
-         | ${doConsume(ctx, evals)}
+         | $evalCode
+         | ${doConsume(ctx, evals, row)}
        """.stripMargin
     } else {
       doConsume(ctx, input)
@@ -151,7 +169,7 @@ trait CodegenSupport extends SparkPlan {
     *     # call consume(), which will call parent.doConsume()
     *   }
     */
-  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
     throw new UnsupportedOperationException
   }
 }
@@ -191,17 +209,26 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     val input = ctx.freshName("input")
     // Right now, InputAdapter is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-
-    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    val columns = exprs.map(_.gen(ctx))
+
+    val columns: Seq[ExprCode] = if (!this.parent.consumeUnsafeRow) {
+      val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+      ctx.INPUT_ROW = row
+      ctx.currentVars = null
+      exprs.map(_.gen(ctx))
+    } else {
+      Seq.empty
+    }
+    val columnsCode = if (columns.isEmpty) {
+      ""
+    } else {
+      s"${columns.map(_.code).mkString("\n").trim}"
+    }
     s"""
        | while ($input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
-       |   ${columns.map(_.code).mkString("\n").trim}
-       |   ${consume(ctx, columns).trim}
+       |   $columnsCode
+       |   ${consume(ctx, columns, row).trim}
        |   if (shouldStop()) {
        |     return;
        |   }
