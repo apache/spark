@@ -27,6 +27,7 @@ from pyspark.mllib.common import inherit_doc
 __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
+           'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel'
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'RandomForestRegressor', 'RandomForestRegressionModel']
@@ -932,6 +933,146 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
         Predicted value
         """
         return self._call_java("predict", features)
+
+
+@inherit_doc
+class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, HasPredictionCol,
+                                  HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
+                                  HasSolver):
+    """
+    Generalized Linear Regression.
+
+    Fit a Generalized Linear Model specified by giving a symbolic description of the linear
+    predictor (link function) and a description of the error distribution (family). It supports
+    "gaussian", "binomial", "poisson" and "gamma" as family. Valid link functions for each family
+    is listed below. The first link function of each family is the default one.
+    - "gaussian" -> "identity", "log", "inverse"
+    - "binomial" -> "logit", "probit", "cloglog"
+    - "poisson"  -> "log", "identity", "sqrt"
+    - "gamma"    -> "inverse", "identity", "log"
+
+    .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([
+    ...     (17.05224, Vectors.dense(3.55954, 11.19528)),
+    ...     (13.46161, Vectors.dense(2.34561, 9.65407)),
+    ...     (17.13384, Vectors.dense(3.37980, 12.03069)),
+    ...     (13.84938, Vectors.dense(2.51969, 9.64902)),], ["label", "features"])
+    >>> glr = GeneralizedLinearRegression()
+    >>> model = glr.setFamily("gaussian").setLink("identity").fit(df)
+    >>> model.transform(df).show()
+    +--------+------------------+------------------+
+    |   label|          features|        prediction|
+    +--------+------------------+------------------+
+    |17.05224|[3.55954,11.19528]|17.052776698886376|
+    |13.46161| [2.34561,9.65407]|13.463078911930246|
+    |17.13384| [3.3798,12.03069]| 17.13348844246882|
+    |13.84938| [2.51969,9.64902]|13.847725946714558|
+    +--------+------------------+------------------+
+    ...
+    >>> model.coefficients
+    DenseVector([2.2263, 0.5756])
+    >>> model.intercept
+    2.6841196897757795
+
+    .. versionadded:: 2.0.0
+    """
+
+    family = Param(Params._dummy(), "family", "The name of family which is a description of " +
+                   "the error distribution to be used in the model. Supported options: " +
+                   "gaussian(default), binomial, poisson and gamma.")
+    link = Param(Params._dummy(), "link", "The name of link function which provides the " +
+                 "relationship between the linear predictor and the mean of the distribution " +
+                 "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
+                 "and sqrt.")
+
+    @keyword_only
+    def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
+                 fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None,
+                 solver="irls"):
+        """
+        __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
+                 fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None, \
+                 solver="irls")
+        """
+        super(GeneralizedLinearRegression, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
+        self._setDefault(family="gaussian", link="identity")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
+                  fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None,
+                  solver="irls"):
+        """
+        setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
+                 fitIntercept=True, maxIter=25, tol=1e-6, regParam=0.0, weightCol=None, \
+                 solver="irls")
+        Sets params for generalized linear regression.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return GeneralizedLinearRegressionModel(java_model)
+
+    @since("2.0.0")
+    def setFamily(self, value):
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        self._paramMap[self.family] = value
+        return self
+
+    @since("2.0.0")
+    def getFamily(self):
+        """
+        Gets the value of family or its default value.
+        """
+        return self.getOrDefault(self.family)
+
+    @since("2.0.0")
+    def setLink(self, value):
+        """
+        Sets the value of :py:attr:`link`.
+        """
+        self._paramMap[self.link] = value
+        return self
+
+    @since("2.0.0")
+    def getLink(self):
+        """
+        Gets the value of link or its default value.
+        """
+        return self.getOrDefault(self.link)
+
+
+class GeneralizedLinearRegressionModel(JavaModel):
+    """
+    Model fitted by GeneralizedLinearRegression.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def coefficients(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("2.0.0")
+    def intercept(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("intercept")
 
 
 if __name__ == "__main__":
