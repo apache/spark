@@ -27,6 +27,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.mllib.stat.test.{ChiSqTestResult}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
@@ -112,6 +113,11 @@ class ChiSqSelectorModel @Since("1.3.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     ChiSqSelectorModel.SaveLoadV1_0.save(sc, this, path)
   }
+   
+  def setStatResult(summary: Array[ChiSqTestResult]): ChiSqSelectorModel = {
+    val StatResult=summary
+    new ChiSqSelectorModel(this.selectedFeatures)
+  }
 
   override protected def formatVersion: String = "1.0"
 }
@@ -121,7 +127,7 @@ object ChiSqSelectorModel extends Loader[ChiSqSelectorModel] {
   override def load(sc: SparkContext, path: String): ChiSqSelectorModel = {
     ChiSqSelectorModel.SaveLoadV1_0.load(sc, path)
   }
-
+  
   private[feature]
   object SaveLoadV1_0 {
 
@@ -190,11 +196,12 @@ class ChiSqSelector @Since("1.3.0") (
    */
   @Since("1.3.0")
   def fit(data: RDD[LabeledPoint]): ChiSqSelectorModel = {
-    val indices = Statistics.chiSqTest(data)
+    var chisqTestResult:Array[ChiSqTestResult] = Statistics.chiSqTest(data)
+    val indices = chisqTestResult
       .zipWithIndex.sortBy { case (res, _) => -res.statistic }
       .take(numTopFeatures)
       .map { case (_, indices) => indices }
       .sorted
-    new ChiSqSelectorModel(indices)
+    new ChiSqSelectorModel(indices).setStatResult(chisqTestResult)
   }
 }

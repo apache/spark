@@ -250,7 +250,7 @@ class LogisticRegression @Since("1.2.0") (
   private var optInitialModel: Option[LogisticRegressionModel] = None
 
   /** @group setParam */
-  private[spark] def setInitialModel(model: LogisticRegressionModel): this.type = {
+  def setInitialModel(model: LogisticRegressionModel): this.type = {
     this.optInitialModel = Some(model)
     this
   }
