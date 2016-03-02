@@ -331,7 +331,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         }.unzip._1
       }
       a.copy(child = Expand(newProjects, newOutput, grandChild))
-    // TODO: support some logical plan for Dataset
+
+    // Prunes the unused columns from child of MapPartitions
+    case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
+      mp.copy(child = prunedChild(child, mp.references))
 
     // Prunes the unused columns from child of Aggregate/Window/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
