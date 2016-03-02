@@ -726,6 +726,8 @@ private[spark] class BlockManager(
    * Put the given block according to the given level in one of the block stores, replicating
    * the values if necessary.
    *
+   * If the block already exists, this method will not overwrite it.
+   *
    * @param effectiveStorageLevel the level according to which the block will actually be handled.
    *                              This allows the caller to specify an alternate behavior of doPut
    *                              while preserving the original level specified by the user.
