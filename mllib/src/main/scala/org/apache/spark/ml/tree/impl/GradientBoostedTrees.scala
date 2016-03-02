@@ -34,7 +34,8 @@ private[ml] object GradientBoostedTrees extends Logging {
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return a gradient boosted trees model that can be used for prediction
+   * @return tuple of ensemble models and weights:
+   *         (array of decision tree models, array of model weights)
    */
   def run(input: RDD[LabeledPoint],
       boostingStrategy: OldBoostingStrategy
@@ -60,7 +61,8 @@ private[ml] object GradientBoostedTrees extends Logging {
    *                        but it should follow the same distribution.
    *                        E.g., these two datasets could be created from an original dataset
    *                        by using [[org.apache.spark.rdd.RDD.randomSplit()]]
-   * @return a gradient boosted trees model that can be used for prediction
+   * @return tuple of ensemble models and weights:
+   *         (array of decision tree models, array of model weights)
    */
   def runWithValidation(
       input: RDD[LabeledPoint],
@@ -140,7 +142,8 @@ private[ml] object GradientBoostedTrees extends Logging {
    * @param validationInput validation dataset, ignored if validate is set to false.
    * @param boostingStrategy boosting parameters
    * @param validate whether or not to use the validation dataset.
-   * @return a gradient boosted trees model that can be used for prediction
+   * @return tuple of ensemble models and weights:
+   *         (array of decision tree models, array of model weights)
    */
   def boost(
       input: RDD[LabeledPoint],
