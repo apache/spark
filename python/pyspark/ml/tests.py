@@ -443,6 +443,33 @@ class PersistenceTest(PySparkTestCase):
             pass
 
 
+class TrainingSummaryTest(PySparkTestCase):
+
+    def test_linear_regression_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.sc.parallelize([
+            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
+            Row(label=0.0, weight=2.0, features=Vectors.dense(0.0))]).toDF()
+        lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.labelCol, "label")
+        self.assertAlmostEqual(s.explainedVariance, 0.25, 2)
+        self.assertAlmostEqual(s.meanAbsoluteError, 0.0)
+        self.assertAlmostEqual(s.meanSquaredError, 0.0)
+        self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
+        self.assertAlmostEqual(s.r2, 1.0, 2)
+        #residuals = s.residuals.rdd.map(lambda r: r.residuals).collect()
+        #self.assertTrue(isinstance(residuals, list) and isinstance(residuals[0], float))
+
+        #self.assertTrue(False)
+
+
 if __name__ == "__main__":
     from pyspark.ml.tests import *
     if xmlrunner:
