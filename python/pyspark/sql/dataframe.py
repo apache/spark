@@ -277,7 +277,7 @@ class DataFrame(object):
         ...     print(person.name)
         >>> df.foreach(f)
         """
-        return self.rdd.foreach(f)
+        self.rdd.foreach(f)
 
     @since(1.3)
     def foreachPartition(self, f):
@@ -290,7 +290,7 @@ class DataFrame(object):
         ...         print(person.name)
         >>> df.foreachPartition(f)
         """
-        return self.rdd.foreachPartition(f)
+        self.rdd.foreachPartition(f)
 
     @since(1.3)
     def cache(self):
