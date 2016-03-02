@@ -113,12 +113,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", 2), ("b", 3), ("c", 4))
   }
 
-  test("map with type change") {
+  test("map with type change with the exact matched number of attributes") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     checkAnswer(
       ds.map(identity[(String, Int)])
         .as[OtherTuple]
+        .map(identity[OtherTuple]),
+      OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
+  }
+
+  test("map with type change with less attributes") {
+    val ds = Seq(("a", 1, 3), ("b", 2, 4), ("c", 3, 5)).toDS()
+
+    checkAnswer(
+      ds.as[OtherTuple]
         .map(identity[OtherTuple]),
       OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
   }
