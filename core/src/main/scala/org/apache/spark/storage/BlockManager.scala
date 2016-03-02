@@ -658,7 +658,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       makeIterator: () => Iterator[Any]): Either[BlockResult, Iterator[Any]] = {
     // Initially we hold no locks on this block.
-    doPut(blockId, IteratorValues(makeIterator), level, downgradeToReadLock = true) match {
+    doPut(blockId, IteratorValues(makeIterator), level, keepReadLock = true) match {
       case None =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
@@ -729,12 +729,9 @@ private[spark] class BlockManager(
    * @param effectiveStorageLevel the level according to which the block will actually be handled.
    *                              This allows the caller to specify an alternate behavior of doPut
    *                              while preserving the original level specified by the user.
-   * @param downgradeToReadLock if true, this method will downgrade its write lock on the block
-   *                            to a read lock before returning; this will happen even if the block
-   *                            already exists, so when this is true the caller will always hold
-   *                            a read lock on the block after this method returns without throwing
-   *                            an exception. If false (default), this method will release the write
-   *                            lock before returning.
+   * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
+   *                     block already exists). If false, this method will hold no locks when it
+   *                     returns.
    * @return `Some(PutResult)` if the block did not exist and could not be successfully cached,
    *         or None if the block already existed or was successfully stored (fully consuming
    *         the input data / input iterator).
@@ -745,7 +742,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None,
-      downgradeToReadLock: Boolean = false): Option[PutResult] = {
+      keepReadLock: Boolean = false): Option[PutResult] = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -762,7 +759,7 @@ private[spark] class BlockManager(
         newInfo
       } else {
         logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-        if (!downgradeToReadLock) {
+        if (!keepReadLock) {
           // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
           releaseLock(blockId)
         }
@@ -856,7 +853,7 @@ private[spark] class BlockManager(
         }
       } finally {
         if (blockWasSuccessfullyStored) {
-          if (downgradeToReadLock) {
+          if (keepReadLock) {
             blockInfoManager.downgradeLock(blockId)
           } else {
             blockInfoManager.unlock(blockId)
