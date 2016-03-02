@@ -21,8 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD, RDD}
+import org.apache.spark.rdd.{CoGroupedRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Interval, Time}
 
