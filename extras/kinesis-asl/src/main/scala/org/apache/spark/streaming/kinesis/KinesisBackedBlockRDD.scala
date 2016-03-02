@@ -21,8 +21,6 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.clientlibrary.types.UserRecord
 import com.amazonaws.services.kinesis.model._
 
@@ -71,14 +69,12 @@ class KinesisBackedBlockRDDPartition(
 private[kinesis]
 class KinesisBackedBlockRDD[T: ClassTag](
     sc: SparkContext,
-    val regionName: String,
-    val endpointUrl: String,
+    val config: KinesisConfig,
     @transient private val _blockIds: Array[BlockId],
     @transient val arrayOfseqNumberRanges: Array[SequenceNumberRanges],
     @transient private val isBlockIdValid: Array[Boolean] = Array.empty,
     val retryTimeoutMs: Int = 10000,
-    val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _,
-    val awsCredentialsOption: Option[SerializableAWSCredentials] = None
+    val messageHandler: Record => T = KinesisUtils.defaultMessageHandler _
   ) extends BlockRDD[T](sc, _blockIds) {
 
   require(_blockIds.length == arrayOfseqNumberRanges.length,
@@ -104,12 +100,8 @@ class KinesisBackedBlockRDD[T: ClassTag](
     }
 
     def getBlockFromKinesis(): Iterator[T] = {
-      val credentials = awsCredentialsOption.getOrElse {
-        new DefaultAWSCredentialsProviderChain().getCredentials()
-      }
       partition.seqNumberRanges.ranges.iterator.flatMap { range =>
-        new KinesisSequenceRangeIterator(credentials, endpointUrl, regionName,
-          range, retryTimeoutMs).map(messageHandler)
+        new KinesisSequenceRangeIterator(config, range, retryTimeoutMs).map(messageHandler)
       }
     }
     if (partition.isBlockIdValid) {
@@ -128,21 +120,17 @@ class KinesisBackedBlockRDD[T: ClassTag](
  */
 private[kinesis]
 class KinesisSequenceRangeIterator(
-    credentials: AWSCredentials,
-    endpointUrl: String,
-    regionId: String,
+    config: KinesisConfig,
     range: SequenceNumberRange,
     retryTimeoutMs: Int) extends NextIterator[Record] with Logging {
 
-  private val client = new AmazonKinesisClient(credentials)
+  private val client = config.buildKinesisClient()
   private val streamName = range.streamName
   private val shardId = range.shardId
 
   private var toSeqNumberReceived = false
   private var lastSeqNumber: String = null
   private var internalIterator: Iterator[Record] = null
-
-  client.setEndpoint(endpointUrl, "kinesis", regionId)
 
   override protected def getNext(): Record = {
     var nextRecord: Record = null
@@ -205,7 +193,7 @@ class KinesisSequenceRangeIterator(
   private def getRecordsAndNextKinesisIterator(
       shardIterator: String): (Iterator[Record], String) = {
     val getRecordsRequest = new GetRecordsRequest
-    getRecordsRequest.setRequestCredentials(credentials)
+    getRecordsRequest.setRequestCredentials(config.awsCredentials)
     getRecordsRequest.setShardIterator(shardIterator)
     val getRecordsResult = retryOrTimeout[GetRecordsResult](
       s"getting records using shard iterator") {
@@ -225,7 +213,7 @@ class KinesisSequenceRangeIterator(
       iteratorType: ShardIteratorType,
       sequenceNumber: String): String = {
     val getShardIteratorRequest = new GetShardIteratorRequest
-    getShardIteratorRequest.setRequestCredentials(credentials)
+    getShardIteratorRequest.setRequestCredentials(config.awsCredentials)
     getShardIteratorRequest.setStreamName(streamName)
     getShardIteratorRequest.setShardId(shardId)
     getShardIteratorRequest.setShardIteratorType(iteratorType.toString)

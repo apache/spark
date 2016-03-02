@@ -23,9 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import com.amazonaws.auth.{AWSCredentials, AWSCredentialsProvider, DefaultAWSCredentialsProviderChain}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer, IRecordProcessorFactory}
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration, Worker}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.v2.{IRecordProcessor, IRecordProcessorFactory}
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -33,13 +33,6 @@ import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
 import org.apache.spark.util.Utils
 import org.apache.spark.Logging
-
-private[kinesis]
-case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
-  extends AWSCredentials {
-  override def getAWSAccessKeyId: String = accessKeyId
-  override def getAWSSecretKey: String = secretKey
-}
 
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
@@ -60,37 +53,17 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  *  - Periodically, each KinesisRecordProcessor checkpoints the latest successfully stored sequence
  *    number for it own shard.
  *
- * @param streamName   Kinesis stream name
- * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
- * @param regionName  Region name used by the Kinesis Client Library for
- *                    DynamoDB (lease coordination and checkpointing) and CloudWatch (metrics)
- * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
- *                                 worker's initial starting position in the stream.
- *                                 The values are either the beginning of the stream
- *                                 per Kinesis' limit of 24 hours
- *                                 (InitialPositionInStream.TRIM_HORIZON) or
- *                                 the tip of the stream (InitialPositionInStream.LATEST).
- * @param checkpointAppName  Kinesis application name. Kinesis Apps are mapped to Kinesis Streams
- *                 by the Kinesis Client Library.  If you change the App name or Stream name,
- *                 the KCL will throw errors.  This usually requires deleting the backing
- *                 DynamoDB table with the same name this Kinesis application.
+ * @param config SparkKinesisConfig object,
  * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
  *                            See the Kinesis Spark Streaming documentation for more
  *                            details on the different types of checkpoints.
  * @param storageLevel Storage level to use for storing the received objects
- * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
- *                             the credentials
  */
 private[kinesis] class KinesisReceiver[T](
-    val streamName: String,
-    endpointUrl: String,
-    regionName: String,
-    initialPositionInStream: InitialPositionInStream,
-    checkpointAppName: String,
+    val config: KinesisConfig,
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
-    messageHandler: Record => T,
-    awsCredentialsOption: Option[SerializableAWSCredentials])
+    messageHandler: Record => T)
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -147,14 +120,6 @@ private[kinesis] class KinesisReceiver[T](
     workerId = Utils.localHostName() + ":" + UUID.randomUUID()
 
     kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
-    // KCL config instance
-    val awsCredProvider = resolveAWSCredentialsProvider()
-    val kinesisClientLibConfiguration =
-      new KinesisClientLibConfiguration(checkpointAppName, streamName, awsCredProvider, workerId)
-      .withKinesisEndpoint(endpointUrl)
-      .withInitialPositionInStream(initialPositionInStream)
-      .withTaskBackoffTimeMillis(500)
-      .withRegionName(regionName)
 
    /*
     *  RecordProcessorFactory creates impls of IRecordProcessor.
@@ -167,7 +132,14 @@ private[kinesis] class KinesisReceiver[T](
         new KinesisRecordProcessor(receiver, workerId)
     }
 
-    worker = new Worker(recordProcessorFactory, kinesisClientLibConfiguration)
+    worker = new Worker.Builder()
+      .recordProcessorFactory(recordProcessorFactory)
+      .config(config.buildKCLConfig(workerId))
+      .kinesisClient(config.buildKinesisClient())
+      .dynamoDBClient(config.buildDynamoClient())
+      .cloudWatchClient(config.buildCloudwatchClient())
+      .build()
+
     workerThread = new Thread() {
       override def run(): Unit = {
         try {
@@ -215,7 +187,7 @@ private[kinesis] class KinesisReceiver[T](
   private[kinesis] def addRecords(shardId: String, records: java.util.List[Record]): Unit = {
     if (records.size > 0) {
       val dataIterator = records.iterator().asScala.map(messageHandler)
-      val metadata = SequenceNumberRange(streamName, shardId,
+      val metadata = SequenceNumberRange(config.streamName, shardId,
         records.get(0).getSequenceNumber(), records.get(records.size() - 1).getSequenceNumber())
       blockGenerator.addMultipleDataWithCallback(dataIterator, metadata)
     }
@@ -296,24 +268,6 @@ private[kinesis] class KinesisReceiver[T](
     // is assumed to be
     rangesToReport.ranges.foreach { range =>
       shardIdToLatestStoredSeqNum.put(range.shardId, range.toSeqNumber)
-    }
-  }
-
-  /**
-   * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
-   * Otherwise, return the DefaultAWSCredentialsProviderChain.
-   */
-  private def resolveAWSCredentialsProvider(): AWSCredentialsProvider = {
-    awsCredentialsOption match {
-      case Some(awsCredentials) =>
-        logInfo("Using provided AWS credentials")
-        new AWSCredentialsProvider {
-          override def getCredentials: AWSCredentials = awsCredentials
-          override def refresh(): Unit = { }
-        }
-      case None =>
-        logInfo("Using DefaultAWSCredentialsProviderChain")
-        new DefaultAWSCredentialsProviderChain()
     }
   }
 

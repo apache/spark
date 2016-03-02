@@ -22,8 +22,8 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.exceptions.{InvalidStateException, KinesisClientLibDependencyException, ShutdownException, ThrottlingException}
-import com.amazonaws.services.kinesis.clientlibrary.interfaces.{IRecordProcessor, IRecordProcessorCheckpointer}
-import com.amazonaws.services.kinesis.clientlibrary.types.ShutdownReason
+import com.amazonaws.services.kinesis.clientlibrary.interfaces.v2.IRecordProcessor
+import com.amazonaws.services.kinesis.clientlibrary.types.{InitializationInput, ProcessRecordsInput, ShutdownInput, ShutdownReason}
 import com.amazonaws.services.kinesis.model.Record
 
 import org.apache.spark.Logging
@@ -50,10 +50,10 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
   /**
    * The Kinesis Client Library calls this method during IRecordProcessor initialization.
    *
-   * @param shardId assigned by the KCL to this particular RecordProcessor.
+   * @param initInput, contains info about the places this processor starts from
    */
-  override def initialize(shardId: String) {
-    this.shardId = shardId
+  override def initialize(initInput: InitializationInput) {
+    this.shardId = initInput.getShardId()
     logInfo(s"Initialized workerId $workerId with shardId $shardId")
   }
 
@@ -66,12 +66,13 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    * @param checkpointer used to update Kinesis when this batch has been processed/stored
    *   in the DStream
    */
-  override def processRecords(batch: List[Record], checkpointer: IRecordProcessorCheckpointer) {
+  override def processRecords(recordInput: ProcessRecordsInput) {
     if (!receiver.isStopped()) {
       try {
+        val batch = recordInput.getRecords()
         receiver.addRecords(shardId, batch)
         logDebug(s"Stored: Worker $workerId stored ${batch.size} records for shardId $shardId")
-        receiver.setCheckpointer(shardId, checkpointer)
+        receiver.setCheckpointer(shardId, recordInput.getCheckpointer())
       } catch {
         case NonFatal(e) => {
           /*
@@ -103,8 +104,9 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
    * @param checkpointer used to perform a Kinesis checkpoint for ShutdownReason.TERMINATE
    * @param reason for shutdown (ShutdownReason.TERMINATE or ShutdownReason.ZOMBIE)
    */
-  override def shutdown(checkpointer: IRecordProcessorCheckpointer, reason: ShutdownReason) {
-    logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason")
+  override def shutdown(shutdownInput: ShutdownInput) {
+    val reason = shutdownInput.getShutdownReason()
+    logInfo(s"Shutdown:  Shutting down workerId $workerId with reason $reason.")
     reason match {
       /*
        * TERMINATE Use Case.  Checkpoint.
@@ -112,7 +114,7 @@ private[kinesis] class KinesisRecordProcessor[T](receiver: KinesisReceiver[T], w
        * It's now OK to read from the new shards that resulted from a resharding event.
        */
       case ShutdownReason.TERMINATE =>
-        receiver.removeCheckpointer(shardId, checkpointer)
+        receiver.removeCheckpointer(shardId, shutdownInput.getCheckpointer())
 
       /*
        * ZOMBIE Use Case or Unknown reason.  NoOp.

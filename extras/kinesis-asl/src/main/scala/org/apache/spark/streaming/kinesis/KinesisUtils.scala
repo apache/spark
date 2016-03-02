@@ -27,8 +27,38 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, StreamingContext}
 import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.util.Utils
 
 object KinesisUtils {
+  /**
+   * Create an input stream that pulls messages from a Kinesis stream.
+   * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
+   *
+   * Note: the
+   *
+   * @param ssc StreamingContext object
+   * @param config SparkKinesisConfig object,
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param storageLevel Storage level to use for storing the received objects.
+   *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   * @param messageHandler A custom message handler that can generate a generic output from a
+   *                       Kinesis `Record`, which contains both message data, and metadata.
+   */
+  def createStream[T: ClassTag](
+      ssc: StreamingContext,
+      config: KinesisConfig,
+      checkpointInterval: Duration,
+      storageLevel: StorageLevel,
+      messageHandler: Record => T): ReceiverInputDStream[T] = {
+    val cleanedHandler = ssc.sc.clean(messageHandler)
+    // Setting scope to override receiver stream's scope of "receiver stream"
+    ssc.withNamedScope("kinesis stream") {
+      new KinesisInputDStream[T](ssc, config, checkpointInterval, storageLevel, cleanedHandler)
+    }
+  }
+
   /**
    * Create an input stream that pulls messages from a Kinesis stream.
    * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
@@ -70,12 +100,14 @@ object KinesisUtils {
       messageHandler: Record => T): ReceiverInputDStream[T] = {
     val cleanedHandler = ssc.sc.clean(messageHandler)
     // Setting scope to override receiver stream's scope of "receiver stream"
+    val kinesisClientConfig = KinesisConfig.buildConfig(kinesisAppName, streamName,
+      endpointUrl, validateRegion(regionName), initialPositionInStream, None)
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, None)
+      new KinesisInputDStream[T](ssc, kinesisClientConfig,
+        checkpointInterval, storageLevel, cleanedHandler)
     }
   }
+
 
   /**
    * Create an input stream that pulls messages from a Kinesis stream.
@@ -123,10 +155,38 @@ object KinesisUtils {
       awsSecretKey: String): ReceiverInputDStream[T] = {
     // scalastyle:on
     val cleanedHandler = ssc.sc.clean(messageHandler)
+    val kinesisClientConfig = KinesisConfig.buildConfig(kinesisAppName, streamName,
+      endpointUrl, validateRegion(regionName), initialPositionInStream,
+      Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+      new KinesisInputDStream[T](ssc, kinesisClientConfig,
+        checkpointInterval, storageLevel, cleanedHandler)
+    }
+  }
+
+  /**
+   * Create an input stream that pulls messages from a Kinesis stream.
+   * This uses the Kinesis Client Library (KCL) to pull messages from Kinesis.
+   *
+   * Note: the
+   *
+   * @param ssc StreamingContext object
+   * @param config SparkKinesisConfig object,
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param storageLevel Storage level to use for storing the received objects.
+   *                     StorageLevel.MEMORY_AND_DISK_2 is recommended.
+   */
+  def createStream(
+      ssc: StreamingContext,
+      config: KinesisConfig,
+      checkpointInterval: Duration,
+      storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
+    // Setting scope to override receiver stream's scope of "receiver stream"
+    ssc.withNamedScope("kinesis stream") {
+      new KinesisInputDStream[Array[Byte]](ssc, config, checkpointInterval,
+          storageLevel, defaultMessageHandler)
     }
   }
 
@@ -167,10 +227,11 @@ object KinesisUtils {
       checkpointInterval: Duration,
       storageLevel: StorageLevel): ReceiverInputDStream[Array[Byte]] = {
     // Setting scope to override receiver stream's scope of "receiver stream"
+    val kinesisClientConfig = KinesisConfig.buildConfig(kinesisAppName, streamName,
+      endpointUrl, validateRegion(regionName), initialPositionInStream, None)
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, None)
+      new KinesisInputDStream[Array[Byte]](ssc, kinesisClientConfig,
+        checkpointInterval, storageLevel, defaultMessageHandler)
     }
   }
 
@@ -214,10 +275,12 @@ object KinesisUtils {
       storageLevel: StorageLevel,
       awsAccessKeyId: String,
       awsSecretKey: String): ReceiverInputDStream[Array[Byte]] = {
+    val kinesisClientConfig = KinesisConfig.buildConfig(kinesisAppName, streamName,
+      endpointUrl, validateRegion(regionName), initialPositionInStream,
+      Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, Some(SerializableAWSCredentials(awsAccessKeyId, awsSecretKey)))
+      new KinesisInputDStream[Array[Byte]](ssc, kinesisClientConfig,
+        checkpointInterval, storageLevel, defaultMessageHandler)
     }
   }
 
@@ -259,10 +322,11 @@ object KinesisUtils {
       initialPositionInStream: InitialPositionInStream,
       storageLevel: StorageLevel
     ): ReceiverInputDStream[Array[Byte]] = {
+    val kinesisClientConfig = KinesisConfig.buildConfig(ssc.sc.appName, streamName,
+      endpointUrl, getRegionByEndpoint(endpointUrl), initialPositionInStream)
     ssc.withNamedScope("kinesis stream") {
-      new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl,
-        getRegionByEndpoint(endpointUrl), initialPositionInStream, ssc.sc.appName,
-        checkpointInterval, storageLevel, defaultMessageHandler, None)
+      new KinesisInputDStream[Array[Byte]](ssc, kinesisClientConfig,
+        checkpointInterval, storageLevel, defaultMessageHandler)
     }
   }
 
@@ -558,3 +622,5 @@ private class KinesisUtilsPythonHelper {
   }
 
 }
+
+

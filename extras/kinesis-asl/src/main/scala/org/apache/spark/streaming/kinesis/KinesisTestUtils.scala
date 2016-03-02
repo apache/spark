@@ -29,6 +29,7 @@ import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model._
 
@@ -66,6 +67,15 @@ private[kinesis] class KinesisTestUtils extends Logging {
     new DynamoDB(dynamoDBClient)
   }
 
+  lazy val sparkKinesisConfig: KinesisConfig = {
+    KinesisConfig.buildConfig(
+        "kinesis-asl-unit-test",
+        _streamName,
+        endpointUrl,
+        regionName,
+        InitialPositionInStream.TRIM_HORIZON)
+  }
+
   protected def getProducer(aggregate: Boolean): KinesisDataGenerator = {
     if (!aggregate) {
       new SimpleDataGenerator(kinesisClient)
@@ -74,10 +84,12 @@ private[kinesis] class KinesisTestUtils extends Logging {
     }
   }
 
+
   def streamName: String = {
     require(streamCreated, "Stream not yet created, call createStream() to create one")
     _streamName
   }
+
 
   def createStream(): Unit = {
     require(!streamCreated, "Stream already created")
@@ -228,6 +240,7 @@ private[kinesis] object KinesisTestUtils {
            """.stripMargin)
     }
   }
+
 }
 
 /** A wrapper interface that will allow us to consolidate the code for synthetic data generation. */

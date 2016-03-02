@@ -139,11 +139,13 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
     nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[_]]
     val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[_]]
-    assert(kinesisRDD.regionName === dummyRegionName)
-    assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
+    assert(kinesisRDD.config.regionName === dummyRegionName)
+    assert(kinesisRDD.config.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
-    assert(kinesisRDD.awsCredentialsOption ===
-      Some(SerializableAWSCredentials(dummyAWSAccessKey, dummyAWSSecretKey)))
+    assert(kinesisRDD.config.awsCredentials.getAWSAccessKeyId() ===
+      dummyAWSAccessKey)
+    assert(kinesisRDD.config.awsCredentials.getAWSSecretKey() ===
+      dummyAWSSecretKey)
     assert(nonEmptyRDD.partitions.size === blockInfos.size)
     nonEmptyRDD.partitions.foreach { _ shouldBe a [KinesisBackedBlockRDDPartition] }
     val partitions = nonEmptyRDD.partitions.map {
@@ -154,7 +156,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Verify that KinesisBackedBlockRDD is generated even when there are no blocks
     val emptyRDD = kinesisStream.createBlockRDD(time, Seq.empty)
-    emptyRDD shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
+    emptyRDD shouldBe a [KinesisBackedBlockRDD[_]]
     emptyRDD.partitions shouldBe empty
 
     // Verify that the KinesisBackedBlockRDD has isBlockValid = false when blocks are invalid
