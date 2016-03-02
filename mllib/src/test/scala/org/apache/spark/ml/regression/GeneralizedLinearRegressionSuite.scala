@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
-import org.apache.spark.mllib.linalg.{BLAS, DenseVector, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.random._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -115,6 +115,43 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "log"), 2))
+  }
+
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's glm and glmnet package.
+   */
+  ignore("export test data into CSV format") {
+    datasetGaussianIdentity.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("gaussian-identity-path")
+    datasetGaussianLog.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("gaussian-log-path")
+    datasetGaussianInverse.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("gaussian-inverse-path")
+    datasetBinomial.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("binomial-path")
+    datasetPoissonLog.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("poisson-log-path")
+    datasetPoissonIdentity.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("poisson-identity-path")
+    datasetPoissonSqrt.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("poisson-sqrt-path")
+    datasetGammaInverse.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("gamma-inverse-path")
+    datasetGammaIdentity.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("gamma-identity-path")
+    datasetGammaLog.rdd.map { case Row(label: Double, features: Vector) =>
+      label + "," + features.toArray.mkString(",")
+    }.repartition(1).saveAsTextFile("gamma-log-path")
   }
 
   test("params") {
