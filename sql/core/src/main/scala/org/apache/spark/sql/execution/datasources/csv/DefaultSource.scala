@@ -49,7 +49,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       files: Seq[FileStatus]): Option[StructType] = {
     val csvOptions = new CSVOptions(options)
 
-    val paths = files.map(_.getPath.toString)
+    // TODO: Move filtering.
+    val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
     val rdd = baseRdd(sqlContext, csvOptions, paths)
     val firstLine = findFirstLine(csvOptions, rdd)
     val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
@@ -102,14 +103,19 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       inputFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
+    // TODO: Filter before calling buildInternalScan.
+    val csvFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
+
     val csvOptions = new CSVOptions(options)
-    val pathsString = inputFiles.map(_.getPath.toUri.toString)
+    val pathsString = csvFiles.map(_.getPath.toUri.toString)
     val header = dataSchema.fields.map(_.name)
     val tokenizedRdd = tokenRdd(sqlContext, csvOptions, header, pathsString)
     val external = CSVRelation.parseCsv(
-      tokenizedRdd, dataSchema, requiredColumns, inputFiles, sqlContext, csvOptions)
+      tokenizedRdd, dataSchema, requiredColumns, csvFiles, sqlContext, csvOptions)
 
-    val encoder = RowEncoder(dataSchema)
+    // TODO: Generate InternalRow in parseCsv
+    val outputSchema = StructType(requiredColumns.map(c => dataSchema.find(_.name == c).get))
+    val encoder = RowEncoder(outputSchema)
     external.map(encoder.toRow)
   }
 

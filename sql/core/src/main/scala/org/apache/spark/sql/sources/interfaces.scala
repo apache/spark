@@ -474,7 +474,7 @@ case class HadoopFsRelation(
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
-    options: Map[String, String]) extends BaseRelation {
+    options: Map[String, String]) extends BaseRelation with FileRelation {
 
   case class WriteRelation(
       sqlContext: SQLContext,
@@ -505,6 +505,10 @@ case class HadoopFsRelation(
 
   override def toString: String =
     s"$fileFormat part: ${partitionSchema.simpleString}, data: ${dataSchema.simpleString}"
+
+  /** Returns the list of files that will be read when scanning this relation. */
+  override def inputFiles: Array[String] =
+    location.allFiles().map(_.getPath.toUri.toString).toArray
 }
 
 trait FileFormat {

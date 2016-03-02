@@ -49,8 +49,19 @@ private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
            l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
         if query.resolved && t.schema.asNullable == query.schema.asNullable =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
+
+      val inputPaths = query.collect {
+        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.paths
+      }.flatten
+
+      val outputPath = t.location.paths.head
+      if (overwrite && inputPaths.contains(outputPath)) {
+        throw new AnalysisException(
+          "Cannot overwrite a path that is also being read from.")
+      }
+
       InsertIntoHadoopFsRelation(
-        t.location.paths.head, // TODO: Check only one...
+        outputPath, // TODO: Check only one...
         t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
         t.bucketSpec,
         t.fileFormat,

@@ -172,7 +172,10 @@ object ResolvedDataSource extends Logging {
         val partitionSchema = userSpecifiedSchema.map { schema =>
           StructType(
             partitionColumns.map { c =>
-              schema.find(_.name == c).get
+              // TODO: Case sensitivity.
+              schema
+                .find(_.name.toLowerCase() == c.toLowerCase())
+                .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
           })
         }.getOrElse(fileCatalog.partitionSpec(None).partitionColumns)
 

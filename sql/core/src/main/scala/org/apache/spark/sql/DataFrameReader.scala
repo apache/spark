@@ -153,7 +153,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
+    if (paths.isEmpty) {
+      sqlContext.emptyDataFrame
+    } else {
+      sqlContext.baseRelationToDataFrame(
+        ResolvedDataSource.apply(
+          sqlContext,
+          paths = paths,
+          userSpecifiedSchema = userSpecifiedSchema,
+          provider = source,
+          options = extraOptions.toMap).relation)
+    }
   }
 
   /**
@@ -368,17 +378,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def parquet(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      sqlContext.emptyDataFrame
-    } else {
-      sqlContext.baseRelationToDataFrame(
-        ResolvedDataSource.apply(
-          sqlContext,
-          paths = paths,
-          userSpecifiedSchema = userSpecifiedSchema,
-          provider = "parquet",
-          options = extraOptions.toMap).relation)
-    }
+    format("parquet").load(paths: _*)
   }
 
   /**

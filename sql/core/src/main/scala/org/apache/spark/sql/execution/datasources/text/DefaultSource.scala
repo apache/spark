@@ -66,6 +66,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): BucketedOutputWriterFactory = {
+    verifySchema(dataSchema)
+
     val conf = job.getConfiguration
     val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
     compressionCodec.foreach { codec =>
@@ -93,9 +95,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       inputFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
+    verifySchema(dataSchema)
+
     val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
     val conf = job.getConfiguration
-    val paths = inputFiles.map(_.getPath).sortBy(_.toUri)
+    val paths = inputFiles
+        .filterNot(_.getPath.getName startsWith "_")
+        .map(_.getPath)
+        .sortBy(_.toUri)
 
     if (paths.nonEmpty) {
       FileInputFormat.setInputPaths(job, paths: _*)
