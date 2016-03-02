@@ -75,46 +75,27 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
-  test("Test set weights by training restart") {
+  test("Test setWeights by training restart") {
     val dataFrame = sqlContext.createDataFrame(Seq(
       (Vectors.dense(0.0, 0.0), 0.0),
       (Vectors.dense(0.0, 1.0), 1.0),
       (Vectors.dense(1.0, 0.0), 1.0),
       (Vectors.dense(1.0, 1.0), 0.0))
     ).toDF("features", "label")
-    val layers = Array[Int](2, 7, 6, 5, 4, 3, 2)
+    val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
       .setSeed(12L)
-      .setMaxIter(100)
+      .setMaxIter(1)
       .setTol(1e-6)
-    val badModel = trainer.fit(dataFrame)
-    val badResult = badModel.transform(dataFrame)
-    val badPredictionAndLabels = badResult.select("prediction", "label").collect()
-    // solution converged to a bad optimum
-    assert(!badPredictionAndLabels.forall { case Row(p: Double, l: Double) =>
-      p == l
-    }, "Model should not predict as expected")
-    // restart training each 10 iterations using the weights from the last iteration
-    trainer.setMaxIter(10)
-    val model2 = trainer.fit(dataFrame)
-    var weights2 = model2.weights
-    var goodOptimum = false
-    var i = 0
-    // i less than 10 just to make sure we don't run infinite loop
-    while (!goodOptimum && i < 10) {
-      i += 1
-      trainer.setWeights(weights2)
-      val nextModel = trainer.fit(dataFrame)
-      weights2 = nextModel.weights
-      val result2 = nextModel.transform(dataFrame)
-      val predictionAndLabels2 = result2.select("prediction", "label").collect()
-      goodOptimum = predictionAndLabels2.forall { case Row(p: Double, l: Double) =>
-        p == l
-      }
-    }
-    assert(goodOptimum && i == 5, "Should converge to a good optimum after the 5th restart")
+    val initialWeights = trainer.fit(dataFrame).weights
+    trainer.setWeights(initialWeights.copy)
+    val weights1 = trainer.fit(dataFrame).weights
+    trainer.setWeights(initialWeights.copy)
+    val weights2 = trainer.fit(dataFrame).weights
+    assert(weights1 ~== weights2 absTol 10e-5,
+      "Training should produce the same weights given equal initial weights and number of steps")
   }
 
   test("3 class classification with 2 hidden layers") {

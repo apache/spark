@@ -25,18 +25,23 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("Gradient test") {
+  test("Gradient computation against numerical differentiation") {
     val input = new BDM[Double](3, 1, Array(1.0, 1.0, 1.0))
     // output must contain zeros and one 1 for SoftMax
     val target = new BDM[Double](2, 1, Array(0.0, 1.0))
-    val topology = FeedForwardTopology.multiLayerPerceptron(Array(3, 4, 2), false)
+    val topology = FeedForwardTopology.multiLayerPerceptron(Array(3, 4, 2), softmaxOnTop = false)
     val layersWithErrors = Seq(
       new SigmoidLayerWithSquaredError(),
       new SoftmaxLayerWithCrossEntropyLoss()
     )
+    // check all layers that provide loss computation
+    // 1) compute loss and gradient given the model and initial weights
+    // 2) modify weights with small number epsilon (per dimension i)
+    // 3) compute new loss
+    // 4) ((newLoss - loss) / epsilon) should be close to the i-th component of the gradient
     for (layerWithError <- layersWithErrors) {
       topology.layers(topology.layers.length - 1) = layerWithError
-      val model = topology.model(12L)
+      val model = topology.model(seed = 12L)
       val weights = model.weights.toArray
       val numWeights = weights.size
       val gradient = Vectors.dense(Array.fill[Double](numWeights)(0.0))
@@ -50,7 +55,8 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
         val newModel = topology.model(Vectors.dense(weights))
         val newLoss = computeLoss(input, target, newModel)
         val derivativeEstimate = (newLoss - loss) / eps
-        assert((gradient(i) - derivativeEstimate) < tol)
+        assert(math.abs(gradient(i) - derivativeEstimate) < tol, "Layer failed gradient check: " +
+          layerWithError.getClass)
         weights(i) = originalValue
         i += 1
       }
@@ -63,7 +69,8 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
       case layerWithLoss: LossFunction =>
         layerWithLoss.loss(outputs.last, target, new BDM[Double](target.rows, target.cols))
       case _ =>
-        throw new UnsupportedOperationException("Top layer is required to have loss.")
+        throw new UnsupportedOperationException("Top layer is required to have loss." +
+          " Failed layer:" + model.layerModels.last.getClass)
     }
   }
 }
