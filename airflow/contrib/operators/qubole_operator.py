@@ -2,6 +2,7 @@ from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 from airflow.contrib.hooks import QuboleHook
 
+
 class QuboleOperator(BaseOperator):
     """
     Executes commands on Qubole (https://qubole.com).
