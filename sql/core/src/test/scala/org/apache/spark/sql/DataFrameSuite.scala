@@ -26,9 +26,10 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
-import org.apache.spark.sql.execution.Exchange
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
@@ -112,6 +113,22 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("unionAll should union DataFrames with UDTs (SPARK-13410)") {
+    val rowRDD1 = sparkContext.parallelize(Seq(Row(1, new ExamplePoint(1.0, 2.0))))
+    val schema1 = StructType(Array(StructField("label", IntegerType, false),
+                    StructField("point", new ExamplePointUDT(), false)))
+    val rowRDD2 = sparkContext.parallelize(Seq(Row(2, new ExamplePoint(3.0, 4.0))))
+    val schema2 = StructType(Array(StructField("label", IntegerType, false),
+                    StructField("point", new ExamplePointUDT(), false)))
+    val df1 = sqlContext.createDataFrame(rowRDD1, schema1)
+    val df2 = sqlContext.createDataFrame(rowRDD2, schema2)
+
+    checkAnswer(
+      df1.unionAll(df2).orderBy("label"),
+      Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
+    )
+  }
+
   test("empty data frame") {
     assert(sqlContext.emptyDataFrame.columns.toSeq === Seq.empty[String])
     assert(sqlContext.emptyDataFrame.count() === 0)
@@ -176,6 +193,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(explode($"a").as("a"), $"*"),
       Row("a", Seq("a"), 1) :: Nil)
+  }
+
+  test("sort after generate with join=true") {
+    val df = Seq((Array("a"), 1)).toDF("a", "b")
+
+    checkAnswer(
+      df.select($"*", explode($"a").as("c")).sortWithinPartitions("b", "c"),
+      Row(Seq("a"), 1, "a") :: Nil)
   }
 
   test("selectExpr") {
@@ -1119,7 +1144,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         }
         atFirstAgg = true
       }
-      case e: Exchange => atFirstAgg = false
+      case e: ShuffleExchange => atFirstAgg = false
       case _ =>
     }
   }

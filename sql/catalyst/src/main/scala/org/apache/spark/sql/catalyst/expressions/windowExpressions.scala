@@ -556,8 +556,8 @@ abstract class RankLike extends AggregateWindowFunction {
   override def inputTypes: Seq[AbstractDataType] = children.map(_ => AnyDataType)
 
   /** Store the values of the window 'order' expressions. */
-  protected val orderAttrs = children.map{ expr =>
-    AttributeReference(expr.prettyString, expr.dataType)()
+  protected val orderAttrs = children.map { expr =>
+    AttributeReference(expr.sql, expr.dataType)()
   }
 
   /** Predicate that detects if the order attributes have changed. */
@@ -636,7 +636,7 @@ case class DenseRank(children: Seq[Expression]) extends RankLike {
 
 /**
  * The PercentRank function computes the percentage ranking of a value in a group of values. The
- * result the rank of the minus one divided by the total number of rows in the partitiion minus one:
+ * result the rank of the minus one divided by the total number of rows in the partition minus one:
  * (r - 1) / (n - 1). If a partition only contains one row, the function will return 0.
  *
  * The PercentRank function is similar to the CumeDist function, but it uses rank values instead of

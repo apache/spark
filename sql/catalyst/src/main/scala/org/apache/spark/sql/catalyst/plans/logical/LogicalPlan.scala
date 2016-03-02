@@ -91,6 +91,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
+   * Returns the maximum number of rows that this plan may compute.
+   *
+   * Any operator that a Limit can be pushed passed should override this function (e.g., Union).
+   * Any operator that can push through a Limit should override this function (e.g., Project).
+   */
+  def maxRows: Option[Long] = None
+
+  /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it still contains any unresolved placeholders. Implementations of LogicalPlan
    * can override this (e.g.
@@ -120,8 +128,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    * can do better should override this function.
    */
   def sameResult(plan: LogicalPlan): Boolean = {
-    val cleanLeft = EliminateSubQueries(this)
-    val cleanRight = EliminateSubQueries(plan)
+    val cleanLeft = EliminateSubqueryAliases(this)
+    val cleanRight = EliminateSubqueryAliases(plan)
 
     cleanLeft.getClass == cleanRight.getClass &&
       cleanLeft.children.size == cleanRight.children.size && {
@@ -307,7 +315,38 @@ abstract class UnaryNode extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
 
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+    projectList.flatMap {
+      case a @ Alias(e, _) =>
+        child.constraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(e) =>
+            a.toAttribute
+        }).union(Set(EqualNullSafe(e, a.toAttribute)))
+      case _ =>
+        Set.empty[Expression]
+    }.toSet
+  }
+
   override protected def validConstraints: Set[Expression] = child.constraints
+
+  override def statistics: Statistics = {
+    // There should be some overhead in Row object, the size should not be zero when there is
+    // no columns, this help to prevent divide-by-zero error.
+    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
+    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
+    // Assume there will be the same number of rows as child has.
+    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 /**

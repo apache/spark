@@ -29,7 +29,7 @@ else:
 from py4j.protocol import Py4JError
 
 from pyspark import since
-from pyspark.rdd import RDD, _prepare_for_python_RDD, ignore_unicode_prefix
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 from pyspark.sql.types import Row, StringType, StructType, _verify_type, \
     _infer_schema, _has_nulltype, _merge_type, _create_converter
@@ -92,8 +92,8 @@ class SQLContext(object):
         >>> df.registerTempTable("allTypes")
         >>> sqlContext.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
-        [Row(_c0=2, _c1=2.0, _c2=False, _c3=2, _c4=0, \
-            time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
+        [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
+            dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
         >>> df.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
@@ -210,17 +210,17 @@ class SQLContext(object):
 
         >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
         >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(_c0=u'4')]
+        [Row(stringLengthString(test)=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(_c0=4)]
+        [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(_c0=4)]
+        [Row(stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType, name)
         self._ssql_ctx.udf().registerPython(name, udf._judf)

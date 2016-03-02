@@ -19,14 +19,12 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
 import java.util.{Collections, List => JList}
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{Buffer, HashMap, HashSet}
 
-import com.google.common.base.Stopwatch
 import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 
@@ -124,6 +122,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
+  // This method is factored out for testability
   protected def getShuffleClient(): MesosExternalShuffleClient = {
     new MesosExternalShuffleClient(
       SparkTransportConf.fromSparkConf(conf, "shuffle"),
@@ -492,12 +491,11 @@ private[spark] class CoarseMesosSchedulerBackend(
 
     // Wait for executors to report done, or else mesosDriver.stop() will forcefully kill them.
     // See SPARK-12330
-    val stopwatch = new Stopwatch()
-    stopwatch.start()
+    val startTime = System.nanoTime()
 
     // slaveIdsWithExecutors has no memory barrier, so this is eventually consistent
     while (numExecutors() > 0 &&
-      stopwatch.elapsed(TimeUnit.MILLISECONDS) < shutdownTimeoutMS) {
+      System.nanoTime() - startTime < shutdownTimeoutMS * 1000L * 1000L) {
       Thread.sleep(100)
     }
 
@@ -518,10 +516,11 @@ private[spark] class CoarseMesosSchedulerBackend(
    * Called when a slave is lost or a Mesos task finished. Updates local view on
    * what tasks are running. It also notifies the driver that an executor was removed.
    */
-  private def executorTerminated(d: SchedulerDriver,
-                                 slaveId: String,
-                                 taskId: String,
-                                 reason: String): Unit = {
+  private def executorTerminated(
+      d: SchedulerDriver,
+      slaveId: String,
+      taskId: String,
+      reason: String): Unit = {
     stateLock.synchronized {
       removeExecutor(taskId, SlaveLost(reason))
       slaves(slaveId).taskIDs.remove(taskId)

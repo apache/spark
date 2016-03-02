@@ -219,17 +219,17 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        +----+
-        |r[b]|
-        +----+
-        |   b|
-        +----+
+        +---+
+        |r.b|
+        +---+
+        |  b|
+        +---+
         >>> df.select(df.r.a).show()
-        +----+
-        |r[a]|
-        +----+
-        |   1|
-        +----+
+        +---+
+        |r.a|
+        +---+
+        |  1|
+        +---+
         """
         return self[name]
 
@@ -346,12 +346,12 @@ class Column(object):
         expression is between the given columns.
 
         >>> df.select(df.name, df.age.between(2, 4)).show()
-        +-----+--------------------------+
-        | name|((age >= 2) && (age <= 4))|
-        +-----+--------------------------+
-        |Alice|                      true|
-        |  Bob|                     false|
-        +-----+--------------------------+
+        +-----+---------------------------+
+        | name|((age >= 2) AND (age <= 4))|
+        +-----+---------------------------+
+        |Alice|                       true|
+        |  Bob|                      false|
+        +-----+---------------------------+
         """
         return (self >= lowerBound) & (self <= upperBound)
 

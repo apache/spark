@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -100,7 +101,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       (implicit df: DataFrame): Unit = {
     def checkBinaryAnswer(df: DataFrame, expected: Seq[Row]) = {
       assertResult(expected.map(_.getAs[Array[Byte]](0).mkString(",")).sorted) {
-        df.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
+        df.rdd.map(_.getAs[Array[Byte]](0).mkString(",")).collect().toSeq.sorted
       }
     }
 

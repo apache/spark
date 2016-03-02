@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 
@@ -46,7 +47,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val operators = physical.collect {
       case j: LeftSemiJoinHash => j
       case j: BroadcastHashJoin => j
-      case j: BroadcastHashOuterJoin => j
       case j: LeftSemiJoinBNL => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
@@ -64,36 +64,41 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("join operator selection") {
     sqlContext.cacheManager.clearCache()
 
-    Seq(
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
-      ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData RIGHT JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
-      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
-      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[SortMergeOuterJoin]),
-      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[SortMergeOuterJoin]),
-      ("SELECT * FROM testData full outer join testData2 ON key = a",
-        classOf[SortMergeOuterJoin]),
-      ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
-        classOf[BroadcastNestedLoopJoin]),
-      ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
-        classOf[BroadcastNestedLoopJoin]),
-      ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
-        classOf[BroadcastNestedLoopJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+      Seq(
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
+        ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+        ("SELECT * FROM testData LEFT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
+          classOf[CartesianProduct]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeOuterJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+          classOf[SortMergeJoin]),
+        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+          classOf[SortMergeOuterJoin]),
+        ("SELECT * FROM testData full outer join testData2 ON key = a",
+          classOf[SortMergeOuterJoin]),
+        ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoin])
+      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+    }
   }
 
 //  ignore("SortMergeJoin shouldn't work on unsortable columns") {
@@ -119,13 +124,14 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("broadcasted hash outer join operator selection") {
     sqlContext.cacheManager.clearCache()
     sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData2")
     Seq(
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
-        classOf[SortMergeOuterJoin]),
+        classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[BroadcastHashOuterJoin]),
+        classOf[BroadcastHashJoin]),
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[BroadcastHashOuterJoin])
+        classOf[BroadcastHashJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
     sql("UNCACHE TABLE testData")
   }
