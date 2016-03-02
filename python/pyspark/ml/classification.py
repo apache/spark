@@ -26,11 +26,12 @@ from pyspark.ml.regression import (
 from pyspark.mllib.common import inherit_doc
 
 
-__all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassifier',
-           'DecisionTreeClassificationModel', 'GBTClassifier', 'GBTClassificationModel',
-           'RandomForestClassifier', 'RandomForestClassificationModel', 'NaiveBayes',
-           'NaiveBayesModel', 'MultilayerPerceptronClassifier',
-           'MultilayerPerceptronClassificationModel']
+__all__ = ['LogisticRegression', 'LogisticRegressionModel',
+           'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
+           'GBTClassifier', 'GBTClassificationModel',
+           'RandomForestClassifier', 'RandomForestClassificationModel',
+           'NaiveBayes', 'NaiveBayesModel',
+           'MultilayerPerceptronClassifier', 'MultilayerPerceptronClassificationModel']
 
 
 @inherit_doc

@@ -27,15 +27,34 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
-           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString',
-           'MaxAbsScaler', 'MaxAbsScalerModel', 'MinMaxScaler', 'MinMaxScalerModel',
-           'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel', 'PolynomialExpansion',
-           'QuantileDiscretizer', 'RegexTokenizer', 'RFormula', 'RFormulaModel',
-           'SQLTransformer', 'StandardScaler', 'StandardScalerModel', 'StopWordsRemover',
-           'StringIndexer', 'StringIndexerModel', 'Tokenizer', 'VectorAssembler',
-           'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel', 'ChiSqSelector',
-           'ChiSqSelectorModel']
+__all__ = ['Binarizer',
+           'Bucketizer',
+           'ChiSqSelector', 'ChiSqSelectorModel',
+           'CountVectorizer', 'CountVectorizerModel',
+           'DCT',
+           'ElementwiseProduct',
+           'HashingTF',
+           'IDF', 'IDFModel',
+           'IndexToString',
+           'MaxAbsScaler', 'MaxAbsScalerModel',
+           'MinMaxScaler', 'MinMaxScalerModel',
+           'NGram',
+           'Normalizer',
+           'OneHotEncoder',
+           'PCA', 'PCAModel',
+           'PolynomialExpansion',
+           'QuantileDiscretizer',
+           'RegexTokenizer',
+           'RFormula', 'RFormulaModel',
+           'SQLTransformer',
+           'StandardScaler', 'StandardScalerModel',
+           'StopWordsRemover',
+           'StringIndexer', 'StringIndexerModel',
+           'Tokenizer',
+           'VectorAssembler',
+           'VectorIndexer', 'VectorIndexerModel',
+           'VectorSlicer',
+           'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
