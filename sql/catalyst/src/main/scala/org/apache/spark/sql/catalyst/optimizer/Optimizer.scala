@@ -71,6 +71,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ColumnPruning,
       // Operator combine
       CollapseRepartition,
+      CollapseSorts,
       CollapseProject,
       CombineFilters,
       CombineLimits,
@@ -479,6 +480,25 @@ object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case r @ Repartition(numPartitions, shuffle, Repartition(_, _, child)) =>
       Repartition(numPartitions, shuffle, child)
+  }
+}
+
+/**
+ * Collapse two adjacent [[Sort]] operators into one if possible. Keep the last sort
+ * This rule applies to the scenario where the global is same for the Sort nodes and then
+ * either a) The sorts are adjacent or b) In between two Sort nodes, there is a Filter or
+ * a Project or a Limit
+ */
+object CollapseSorts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ss @ Sort( _, globalOrder, ns @ Sort ( _, g, grandChild))
+      if globalOrder == g => ss.copy( child = grandChild)
+    case ss @ Sort( _, globalOrder, p @ Project( _, c @ Sort( _, g, ggchild)))
+      if globalOrder == g => ss.copy( child = p.copy( child = ggchild))
+    case ss @ Sort( _, globalOrder, f @ Filter( _, c @ Sort( _, g, ggchild)))
+      if globalOrder == g => ss.copy( child = f.copy( child = ggchild))
+    case ss @ Sort( _, globalOrder, l @ Limit( _, c @ Sort( _, g, ggchild)))
+      if globalOrder == g => ss.copy( child = l.copy( child = ggchild))
   }
 }
 
