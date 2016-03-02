@@ -257,8 +257,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         throw new IOException("Unsupported type: " + t);
       }
       if (originalTypes[i] == OriginalType.DECIMAL &&
-          primitiveType.getDecimalMetadata().getPrecision() >
-              CatalystSchemaConverter.MAX_PRECISION_FOR_INT64()) {
+          primitiveType.getDecimalMetadata().getPrecision() > Decimal.MAX_LONG_DIGITS()) {
         throw new IOException("Decimal with high precision is not supported.");
       }
       if (primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT96) {
@@ -439,7 +438,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     PrimitiveType type = requestedSchema.getFields().get(col).asPrimitiveType();
     int precision = type.getDecimalMetadata().getPrecision();
     int scale = type.getDecimalMetadata().getScale();
-    Preconditions.checkState(precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64(),
+    Preconditions.checkState(precision <= Decimal.MAX_LONG_DIGITS(),
         "Unsupported precision.");
 
     for (int n = 0; n < num; ++n) {
@@ -479,11 +478,6 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
      * If true, the current page is dictionary encoded.
      */
     private boolean useDictionary;
-
-    /**
-     * If useDictionary is true, the staging vector used to decode the ids.
-     */
-    private ColumnVector dictionaryIds;
 
     /**
      * Maximum definition level for this column.
@@ -620,18 +614,13 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
         }
         int num = Math.min(total, leftInPage);
         if (useDictionary) {
-          // Data is dictionary encoded. We will vector decode the ids and then resolve the values.
-          if (dictionaryIds == null) {
-            dictionaryIds = ColumnVector.allocate(total, DataTypes.IntegerType, MemoryMode.ON_HEAP);
-          } else {
-            dictionaryIds.reset();
-            dictionaryIds.reserve(total);
-          }
           // Read and decode dictionary ids.
+          ColumnVector dictionaryIds = column.reserveDictionaryIds(total);;
           defColumn.readIntegers(
               num, dictionaryIds, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-          decodeDictionaryIds(rowId, num, column);
+          decodeDictionaryIds(rowId, num, column, dictionaryIds);
         } else {
+          column.setDictionary(null);
           switch (descriptor.getType()) {
             case BOOLEAN:
               readBooleanBatch(rowId, num, column);
@@ -668,72 +657,31 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     /**
      * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
      */
-    private void decodeDictionaryIds(int rowId, int num, ColumnVector column) {
+    private void decodeDictionaryIds(int rowId, int num, ColumnVector column,
+                                     ColumnVector dictionaryIds) {
       switch (descriptor.getType()) {
         case INT32:
-          if (column.dataType() == DataTypes.IntegerType) {
-            for (int i = rowId; i < rowId + num; ++i) {
-              column.putInt(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
-            }
-          } else if (column.dataType() == DataTypes.ByteType) {
-            for (int i = rowId; i < rowId + num; ++i) {
-              column.putByte(i, (byte) dictionary.decodeToInt(dictionaryIds.getInt(i)));
-            }
-          } else if (column.dataType() == DataTypes.ShortType) {
-            for (int i = rowId; i < rowId + num; ++i) {
-              column.putShort(i, (short) dictionary.decodeToInt(dictionaryIds.getInt(i)));
-            }
-          } else if (DecimalType.is64BitDecimalType(column.dataType())) {
-            for (int i = rowId; i < rowId + num; ++i) {
-              column.putLong(i, dictionary.decodeToInt(dictionaryIds.getInt(i)));
-            }
-          } else {
-            throw new NotImplementedException("Unimplemented type: " + column.dataType());
-          }
-          break;
-
         case INT64:
-          if (column.dataType() == DataTypes.LongType ||
-              DecimalType.is64BitDecimalType(column.dataType())) {
-            for (int i = rowId; i < rowId + num; ++i) {
-              column.putLong(i, dictionary.decodeToLong(dictionaryIds.getInt(i)));
-            }
-          } else {
-            throw new NotImplementedException("Unimplemented type: " + column.dataType());
-          }
-          break;
-
         case FLOAT:
-          for (int i = rowId; i < rowId + num; ++i) {
-            column.putFloat(i, dictionary.decodeToFloat(dictionaryIds.getInt(i)));
-          }
-          break;
-
         case DOUBLE:
-          for (int i = rowId; i < rowId + num; ++i) {
-            column.putDouble(i, dictionary.decodeToDouble(dictionaryIds.getInt(i)));
-          }
+        case BINARY:
+          column.setDictionary(dictionary);
           break;
 
         case FIXED_LEN_BYTE_ARRAY:
-          if (DecimalType.is64BitDecimalType(column.dataType())) {
+          // DecimalType written in the legacy mode
+          if (DecimalType.is32BitDecimalType(column.dataType())) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
+              column.putInt(i, (int) CatalystRowConverter.binaryToUnscaledLong(v));
+            }
+          } else if (DecimalType.is64BitDecimalType(column.dataType())) {
             for (int i = rowId; i < rowId + num; ++i) {
               Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
               column.putLong(i, CatalystRowConverter.binaryToUnscaledLong(v));
             }
           } else {
             throw new NotImplementedException();
-          }
-          break;
-
-        case BINARY:
-          // TODO: this is incredibly inefficient as it blows up the dictionary right here. We
-          // need to do this better. We should probably add the dictionary data to the ColumnVector
-          // and reuse it across batches. This should mean adding a ByteArray would just update
-          // the length and offset.
-          for (int i = rowId; i < rowId + num; ++i) {
-            Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(i));
-            column.putByteArray(i, v.getBytes());
           }
           break;
 
@@ -756,14 +704,12 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
     private void readIntBatch(int rowId, int num, ColumnVector column) throws IOException {
       // This is where we implement support for the valid type conversions.
       // TODO: implement remaining type conversions
-      if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType) {
+      if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType ||
+        DecimalType.is32BitDecimalType(column.dataType())) {
         defColumn.readIntegers(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else if (column.dataType() == DataTypes.ByteType) {
         defColumn.readBytes(
-            num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
-      } else if (DecimalType.is64BitDecimalType(column.dataType())) {
-        defColumn.readIntsAsLongs(
             num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
       } else if (column.dataType() == DataTypes.ShortType) {
         defColumn.readShorts(
@@ -822,7 +768,16 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
       // This is where we implement support for the valid type conversions.
       // TODO: implement remaining type conversions
-      if (DecimalType.is64BitDecimalType(column.dataType())) {
+      if (DecimalType.is32BitDecimalType(column.dataType())) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            column.putInt(rowId + i,
+              (int) CatalystRowConverter.binaryToUnscaledLong(data.readBinary(arrayLen)));
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else if (DecimalType.is64BitDecimalType(column.dataType())) {
         for (int i = 0; i < num; i++) {
           if (defColumn.readInteger() == maxDefLevel) {
             column.putLong(rowId + i,

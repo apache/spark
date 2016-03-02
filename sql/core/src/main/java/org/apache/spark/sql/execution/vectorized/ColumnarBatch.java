@@ -16,10 +16,10 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Iterator;
+
+import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -30,8 +30,6 @@ import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * This class is the in memory representation of rows as they are streamed through operators. It
@@ -193,29 +191,17 @@ public final class ColumnarBatch {
 
     @Override
     public final Decimal getDecimal(int ordinal, int precision, int scale) {
-      if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        return Decimal.apply(getLong(ordinal), precision, scale);
-      } else {
-        // TODO: best perf?
-        byte[] bytes = getBinary(ordinal);
-        BigInteger bigInteger = new BigInteger(bytes);
-        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-        return Decimal.apply(javaDecimal, precision, scale);
-      }
+      return columns[ordinal].getDecimal(rowId, precision, scale);
     }
 
     @Override
     public final UTF8String getUTF8String(int ordinal) {
-      ColumnVector.Array a = columns[ordinal].getByteArray(rowId);
-      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+      return columns[ordinal].getUTF8String(rowId);
     }
 
     @Override
     public final byte[] getBinary(int ordinal) {
-      ColumnVector.Array array = columns[ordinal].getByteArray(rowId);
-      byte[] bytes = new byte[array.length];
-      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
-      return bytes;
+      return columns[ordinal].getBinary(rowId);
     }
 
     @Override

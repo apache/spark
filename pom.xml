@@ -89,7 +89,8 @@
     <module>common/sketch</module>
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
-    <module>tags</module>
+    <module>common/unsafe</module>
+    <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
@@ -99,7 +100,6 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>docker-integration-tests</module>
-    <module>unsafe</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>
