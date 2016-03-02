@@ -21,7 +21,7 @@ from pyspark import since
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
-from pyspark.mllib.common import inherit_doc
+from pyspark.mllib.common import inherit_doc, JavaCallable
 
 
 __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
@@ -29,6 +29,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
+           'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
            'RandomForestRegressor', 'RandomForestRegressionModel']
 
 
@@ -131,7 +132,6 @@ class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
         """
         Model weights.
         """
-
         warnings.warn("weights is deprecated. Use coefficients instead.")
         return self._call_java("weights")
 
@@ -150,6 +150,209 @@ class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
         Model intercept.
         """
         return self._call_java("intercept")
+
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary (e.g. residuals, mse, r-squared ) of model on
+        training set. An exception is thrown if
+        `trainingSummary == None`.
+        """
+        java_lrt_summary = self._call_java("summary")
+        return LinearRegressionTrainingSummary._fromActiveSparkContext(java_lrt_summary)
+
+    @property
+    @since("2.0.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    """
+    TODO: enable once Scala API is made public
+    def evaluate(self, df):
+        ""
+        Evaluates the model on a testset.
+        @param dataset Test dataset to evaluate model on.
+        ""
+        java_lr_summary = self._call_java("evaluate", df)
+        return LinearRegressionSummary._fromActiveSparkContext(java_lr_summary)
+    """
+
+
+class LinearRegressionSummary(JavaCallable):
+    """
+    .. note:: Experimental
+
+    Linear regression results evaluated on a dataset.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        Dataframe outputted by the model's `transform` method.
+        """
+        return self._call("predictions")
+
+    @property
+    @since("2.0.0")
+    def predictionCol(self):
+        """
+        Field in "predictions" which gives the predicted value of
+        the label at each instance.
+        """
+        return self._call("predictionCol")
+
+    @property
+    @since("2.0.0")
+    def labelCol(self):
+        """
+        Field in "predictions" which gives the true label of each
+        instance.
+        """
+        return self._call("labelCol")
+
+    @property
+    @since("2.0.0")
+    def explainedVariance(self):
+        """
+        Returns the explained variance regression score.
+        explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
+        Reference: http://en.wikipedia.org/wiki/Explained_variation
+
+        Note: This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
+        """
+        return self._call("explainedVariance")
+
+    @property
+    @since("2.0.0")
+    def meanAbsoluteError(self):
+        """
+        Returns the mean absolute error, which is a risk function
+        corresponding to the expected value of the absolute error
+        loss or l1-norm loss.
+
+        Note: This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
+        """
+        return self._call("meanAbsoluteError")
+
+    @property
+    @since("2.0.0")
+    def meanSquaredError(self):
+        """
+        Returns the mean squared error, which is a risk function
+        corresponding to the expected value of the squared error
+        loss or quadratic loss.
+
+        Note: This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
+        """
+        return self._call("meanSquaredError")
+
+    @property
+    @since("2.0.0")
+    def rootMeanSquaredError(self):
+        """
+        Returns the root mean squared error, which is defined as the
+        square root of the mean squared error.
+
+        Note: This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
+        """
+        return self._call("rootMeanSquaredError")
+
+    @property
+    @since("2.0.0")
+    def r2(self):
+        """
+        Returns R^2^, the coefficient of determination.
+        Reference: http://en.wikipedia.org/wiki/Coefficient_of_determination
+
+        Note: This ignores instance weights (setting all to 1.0) from
+        `LinearRegression.weightCol`. This will change in later Spark
+        versions.
+        """
+        return self._call("r2")
+
+    @property
+    @since("2.0.0")
+    def residuals(self):
+        """
+        Residuals (label - predicted value)
+        """
+        return self._call("residuals")
+
+    @property
+    @since("2.0.0")
+    def numInstances(self):
+        """
+        Number of instances in DataFrame predictions
+        """
+        return self._call("numInstances")
+
+    @property
+    @since("2.0.0")
+    def devianceResiduals(self):
+        """
+        The weighted residuals, the usual residuals rescaled by the
+        square root of the instance weights.
+        """
+        return self._call("devianceResiduals")
+
+    @property
+    @since("2.0.0")
+    def coefficientStandardErrors(self):
+        """
+        Standard error of estimated coefficients and intercept.
+        """
+        return self._call("coefficientStandardErrors")
+
+    @property
+    @since("2.0.0")
+    def tValues(self):
+        """
+        T-statistic of estimated coefficients and intercept.
+        """
+        return self._call("tValues")
+
+    @property
+    @since("2.0.0")
+    def pValues(self):
+        """
+        Two-sided p-value of estimated coefficients and intercept.
+        """
+        return self._call("pValues")
+
+
+class LinearRegressionTrainingSummary(LinearRegressionSummary):
+    """
+    .. note:: Experimental
+
+    Linear regression training results. Currently, the training summary ignores the
+    training coefficients except for the objective trace.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def totalIterations(self):
+        """
+        Number of training iterations until termination.
+        """
+        return self._call("totalIterations")
 
 
 @inherit_doc
