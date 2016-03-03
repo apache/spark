@@ -679,7 +679,7 @@ private[spark] class BlockManager(
         // The put failed, likely because the data was too large to fit in memory and could not be
         // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
         // that they can decide what to do with the values (e.g. process them without caching).
-       Right(failedPutResult.data)
+       Right(failedPutResult.get)
     }
   }
 
@@ -740,9 +740,9 @@ private[spark] class BlockManager(
    * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
    *                     block already exists). If false, this method will hold no locks when it
    *                     returns.
-   * @return `Some(PutResult)` if the block did not exist and could not be successfully cached,
-   *         or None if the block already existed or was successfully stored (fully consuming
-   *         the input data / input iterator).
+   * @return `Some(Option[Iterator[Any])` if the block did not exist and could not be successfully
+   *          cached, or None if the block already existed or was successfully stored (fully
+   *          consuming the input data / input iterator).
    */
   private def doPut(
       blockId: BlockId,
@@ -750,7 +750,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None,
-      keepReadLock: Boolean = false): Option[PutResult] = {
+      keepReadLock: Boolean = false): Option[Option[Iterator[Any]]] = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -798,6 +798,7 @@ private[spark] class BlockManager(
     }
 
     var blockWasSuccessfullyStored = false
+    var iteratorFromFailedMemoryStorePut: Option[Iterator[Any]] = None
 
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
@@ -823,7 +824,9 @@ private[spark] class BlockManager(
           case IteratorValues(iterator) =>
             blockStore.putIterator(blockId, iterator(), putLevel) match {
               case Right(s) => s
-              case Left(_) => 0
+              case Left(iter) =>
+                iteratorFromFailedMemoryStorePut = Some(iter)
+                0
             }
           case ByteBufferValues(bytes) =>
             bytes.rewind()
@@ -886,7 +889,7 @@ private[spark] class BlockManager(
     if (blockWasSuccessfullyStored) {
       None
     } else {
-      Some(PutResult(size, null))
+      Some(iteratorFromFailedMemoryStorePut)
     }
   }
 

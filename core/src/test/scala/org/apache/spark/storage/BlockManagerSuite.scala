@@ -1285,7 +1285,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
     })
     assert(result.size === 13000)
-    assert(result.data === null)
   }
 
   test("put a small ByteBuffer to MemoryStore") {
