@@ -335,7 +335,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.taskInfo.accumulables.flatMap { a =>
         // Filter out accumulators that are not SQL metrics
         // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
-        if (a.metadata.contains(SQLMetrics.ACCUM_IDENTIFIER)) {
+        if (a.metadata == Some(SQLMetrics.ACCUM_IDENTIFIER)) {
           val newValue = new LongSQLMetricValue(a.update.map(_.toString.toLong).getOrElse(0L))
           Some(a.copy(update = Some(newValue)))
         } else {
