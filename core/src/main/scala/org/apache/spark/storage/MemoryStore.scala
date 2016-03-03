@@ -87,21 +87,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Unit = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level) match {
-        case Right(size) =>
-          PutResult(size)
-        case Left(_) =>
-          PutResult(0)
-      }
+      putIterator(blockId, values, level)
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit())
     }
   }
 
@@ -111,14 +105,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    *
    * The caller should guarantee that `size` is correct.
    */
-  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): PutResult = {
+  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Unit = {
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
     val putSuccess = tryToPut(blockId, () => bytes, size, deserialized = false)
     if (putSuccess) {
       assert(bytes.limit == size)
     }
-    PutResult(size)
   }
 
   override def putIterator(

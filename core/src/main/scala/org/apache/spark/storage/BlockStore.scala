@@ -26,7 +26,7 @@ import org.apache.spark.Logging
  */
 private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
 
-  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult
+  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): Unit
 
   /**
    * Attempt to store an iterator of values.

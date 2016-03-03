@@ -1281,10 +1281,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockId = BlockId("rdd_3_10")
     store.blockInfoManager.lockNewBlockForWriting(
       blockId, new BlockInfo(StorageLevel.MEMORY_ONLY, tellMaster = false))
-    val result = memoryStore.putBytes(blockId, 13000, () => {
+    memoryStore.putBytes(blockId, 13000, () => {
       fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
     })
-    assert(result.size === 13000)
   }
 
   test("put a small ByteBuffer to MemoryStore") {
@@ -1292,11 +1291,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val memoryStore = store.memoryStore
     val blockId = BlockId("rdd_3_10")
     var bytes: ByteBuffer = null
-    val result = memoryStore.putBytes(blockId, 10000, () => {
+    memoryStore.putBytes(blockId, 10000, () => {
       bytes = ByteBuffer.allocate(10000)
       bytes
     })
-    assert(result.size === 10000)
+    assert(memoryStore.getSize(blockId) === 10000)
   }
 
   test("read-locked blocks cannot be evicted from the MemoryStore") {
