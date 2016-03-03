@@ -54,7 +54,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
-    PutResult(bytes.limit(), null)
+    PutResult(bytes.limit())
   }
 
   override def putIterator(

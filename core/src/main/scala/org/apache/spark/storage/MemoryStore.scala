@@ -95,13 +95,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       val values = blockManager.dataDeserialize(blockId, bytes)
       putIterator(blockId, values, level) match {
         case Right(size) =>
-          PutResult(size, null)
+          PutResult(size)
         case Left(_) =>
-          PutResult(0, null)
+          PutResult(0)
       }
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), null)
+      PutResult(bytes.limit())
     }
   }
 
@@ -118,7 +118,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     if (putSuccess) {
       assert(bytes.limit == size)
     }
-    PutResult(size, null)
+    PutResult(size)
   }
 
   override def putIterator(
@@ -153,11 +153,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           if (level.deserialized) {
             val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
             tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)
-            PutResult(sizeEstimate, arrayValues.iterator)
+            PutResult(sizeEstimate)
           } else {
             val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
             tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-            PutResult(bytes.limit(), null)
+            PutResult(bytes.limit())
           }
         }
         Right(res.size)
