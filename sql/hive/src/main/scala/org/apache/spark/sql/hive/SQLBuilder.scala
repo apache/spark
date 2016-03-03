@@ -53,7 +53,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case e => e
       }
 
-      val generatedSQL = toSQL(canonicalizedPlan)
+      val generatedSQL = toSQL(canonicalizedPlan, true)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
            |
@@ -75,6 +75,27 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
            |${canonicalizedPlan.treeString}
          """.stripMargin)
       throw e
+    }
+  }
+
+  private def toSQL(node: LogicalPlan, topNode: Boolean): String = {
+    if (topNode) {
+      node match {
+        case d: Distinct => toSQL(node)
+        case p: Project => toSQL(node)
+        case a: Aggregate => toSQL(node)
+        case s: Sort => toSQL(node)
+        case r: RepartitionByExpression => toSQL(node)
+        case _ =>
+          build(
+            "SELECT",
+            node.output.map(_.sql).mkString(", "),
+            "FROM",
+            toSQL(node)
+          )
+      }
+    } else {
+      toSQL(node)
     }
   }
 
