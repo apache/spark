@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.expressions.SortDirection
 import org.apache.spark.sql.sources.{HadoopFsRelation, HadoopFsRelationProvider, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +36,8 @@ import org.apache.spark.sql.types.StructType
 private[sql] case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String])
+    sortColumnNames: Seq[String],
+    sortDirections: Seq[SortDirection] = Nil)
 
 private[sql] trait BucketedHadoopFsRelationProvider extends HadoopFsRelationProvider {
   final override def createRelation(

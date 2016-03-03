@@ -31,7 +31,7 @@ import org.apache.hadoop.hive.ql.metadata.{Table => HiveTable, _}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.{AnalysisException, SaveMode, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.catalog._
@@ -248,7 +248,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
-      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _) = bucketSpec.get
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
       tableProperties.put("spark.sql.sources.schema.numBucketCols",
@@ -716,6 +716,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
   override def setCurrentDatabase(databaseName: String): Unit = {
     client.setCurrentDatabase(databaseName)
+  }
+
+  override def runNativeCommand(sql: String): Seq[Row] = {
+    hive.runSqlHive(sql).map(Row(_))
   }
 }
 

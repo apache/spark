@@ -16,18 +16,38 @@
  */
 package org.apache.spark.sql.execution
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending}
+import org.apache.spark.sql.catalyst.parser.{ASTNode, CatalystQl, ParserConf, ParserSupport, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.execution.commands._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.StructType
 
 private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends CatalystQl(conf) {
+  import ParserSupport._
+
   /** Check if a command should not be explained. */
-  protected def isNoExplainCommand(command: String): Boolean = "TOK_DESCTABLE" == command
+  protected def isNoExplainCommand(command: String): Boolean =
+    "TOK_DESCTABLE" == command || "TOK_ALTERTABLE" == command
+
+  protected def extractProps(
+      node: ASTNode,
+      firstLevelNodeStr: String,
+      secondLevelNodeStr: String): Seq[(String, String)] = node match {
+    case Token(firstLevelNodeStr, options) =>
+      options.map {
+        case Token(secondLevelNodeStr, keysAndValue) =>
+          val key = keysAndValue.init.map(x => unquoteString(x.text)).mkString(".")
+          val value = unquoteString(keysAndValue.last.text)
+          (key, value)
+      }
+  }
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
     node match {
@@ -62,6 +82,56 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         val tableIdent = extractTableIdent(nameParts)
         RefreshTable(tableIdent)
 
+      case Token("TOK_CREATEDATABASE", Token(databaseName, Nil) :: createDatabaseArgs) =>
+        val Seq(
+          allowExisting,
+          dbLocation,
+          databaseComment,
+          dbprops) = getClauses(Seq(
+          "TOK_IFNOTEXISTS",
+          "TOK_DATABASELOCATION",
+          "TOK_DATABASECOMMENT",
+          "TOK_DATABASEPROPERTIES"), createDatabaseArgs)
+
+        val location = dbLocation.map {
+          case Token("TOK_DATABASELOCATION", Token(loc, Nil) :: Nil) => unquoteString(loc)
+        }
+        val comment = databaseComment.map {
+          case Token("TOK_DATABASECOMMENT", Token(comment, Nil) :: Nil) => unquoteString(comment)
+        }
+        val props: Map[String, String] = dbprops.toSeq.flatMap {
+          case Token("TOK_DATABASEPROPERTIES", propList) =>
+            propList.flatMap(extractProps(_, "TOK_DBPROPLIST", "TOK_TABLEPROPERTY"))
+        }.toMap
+
+        CreateDataBase(databaseName, allowExisting.isDefined, location, comment, props)(node.source)
+
+      case Token("TOK_CREATEFUNCTION", func :: as :: createFuncArgs) =>
+        val funcName = func.map(x => unquoteString(x.text)).mkString(".")
+        val asName = unquoteString(as.text)
+        val Seq(
+          rList,
+          temp) = getClauses(Seq(
+          "TOK_RESOURCE_LIST",
+          "TOK_TEMPORARY"), createFuncArgs)
+
+        val resourcesMap: Map[String, String] = rList.toSeq.flatMap {
+          case Token("TOK_RESOURCE_LIST", resources) =>
+            resources.map {
+              case Token("TOK_RESOURCE_URI", rType :: Token(rPath, Nil) :: Nil) =>
+                val resourceType = rType match {
+                  case Token("TOK_JAR", Nil) => "jar"
+                  case Token("TOK_FILE", Nil) => "file"
+                  case Token("TOK_ARCHIVE", Nil) => "archive"
+                }
+                (resourceType, unquoteString(rPath))
+            }
+        }.toMap
+        CreateFunction(funcName, asName, resourcesMap, temp.isDefined)(node.source)
+
+      case Token("TOK_ALTERTABLE", alterTableArgs) =>
+        AlterTableCommandParser.parse(node)
+
       case Token("TOK_CREATETABLEUSING", createTableArgs) =>
         val Seq(
           temp,
@@ -88,16 +158,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case Token(name, Nil) => name
         }.mkString(".")
 
-        val options: Map[String, String] = tableOpts.toSeq.flatMap {
-          case Token("TOK_TABLEOPTIONS", options) =>
-            options.map {
-              case Token("TOK_TABLEOPTION", keysAndValue) =>
-                val key = keysAndValue.init.map(_.text).mkString(".")
-                val value = unquoteString(keysAndValue.last.text)
-                (key, value)
-            }
-        }.toMap
-
+        val options: Map[String, String] =
+          tableOpts.toSeq.flatMap(extractProps(_, "TOK_TABLEOPTIONS", "TOK_TABLEOPTION")).toMap
         val asClause = tableAs.map(nodeToPlan(_))
 
         if (temp.isDefined && allowExisting.isDefined) {
