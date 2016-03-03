@@ -228,7 +228,7 @@ object ResolvedDataSource extends Logging {
           sqlContext,
           fileCatalog,
           partitionSchema = partitionSchema,
-          dataSchema = dataSchema,
+          dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
           options)
