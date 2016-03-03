@@ -232,8 +232,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     })
 
     val groupByAttributes = plan.groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
-    val groupByAttrMap = AttributeMap(groupByAttributes.zip(
-      project.projectList.drop(project.child.output.length).map(_.asInstanceOf[Alias].child)))
+    val groupByExprs =
+      project.projectList.drop(project.child.output.length).map(_.asInstanceOf[Alias].child)
+    val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
     val groupingExprs = groupByAttrMap.values.toArray
     val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
 
@@ -261,8 +262,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           } else {
             throw new UnsupportedOperationException(s"unsupported operator $a")
           }
-        case a @ Alias(child: AttributeReference, name) if aliasMap.contains(child) =>
+        case a @ Alias(child: AttributeReference, _) if aliasMap.contains(child) =>
           aliasMap(child).child
+        case ar: AttributeReference if aliasMap.contains(ar) =>
+          aliasMap(ar).child
         case o => o
       }
     }
