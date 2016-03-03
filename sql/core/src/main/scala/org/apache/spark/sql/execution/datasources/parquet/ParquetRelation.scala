@@ -286,7 +286,7 @@ private[sql] class ParquetRelation(
       ParquetRelation
         .shortParquetCompressionCodecNames
         .getOrElse(
-          sqlContext.conf.parquetCompressionCodec.toUpperCase,
+          sqlContext.conf.parquetCompressionCodec.toLowerCase(),
           CompressionCodecName.UNCOMPRESSED).name())
 
     new BucketedOutputWriterFactory {
@@ -905,9 +905,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE" -> CompressionCodecName.UNCOMPRESSED,
-    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY" -> CompressionCodecName.SNAPPY,
-    "GZIP" -> CompressionCodecName.GZIP,
-    "LZO" -> CompressionCodecName.LZO)
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
 }

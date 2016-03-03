@@ -292,11 +292,8 @@ private[spark] class Executor(
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize >= maxRpcMessageSize) {
             val blockId = TaskResultBlockId(taskId)
-            val putSucceeded = env.blockManager.putBytes(
+            env.blockManager.putBytes(
               blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
-            if (putSucceeded) {
-              env.blockManager.releaseLock(blockId)
-            }
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
