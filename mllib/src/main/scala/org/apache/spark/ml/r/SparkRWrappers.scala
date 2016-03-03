@@ -161,7 +161,7 @@ private[r] object SparkRWrappers {
 
   def getNaiveBayesPi(model: PipelineModel): Array[Double] = {
     model.stages.last match {
-      case m: NaiveBayesModel => m.pi.toArray
+      case m: NaiveBayesModel => m.pi.toArray.map(math.exp)  // Use exp to reveal the probability
       case other => throw new UnsupportedOperationException(
         s"NaiveBayesModel required but ${other.getClass.getSimpleName} found.")
     }
@@ -169,7 +169,7 @@ private[r] object SparkRWrappers {
 
   def getNaiveBayesTheta(model: PipelineModel): Array[Double] = {
     model.stages.last match {
-      case m: NaiveBayesModel => m.theta.toArray
+      case m: NaiveBayesModel => m.theta.toArray.map(math.exp)  // Use exp to reveal the probability
       case other => throw new UnsupportedOperationException(
         s"NaiveBayesModel required but ${other.getClass.getSimpleName} found.")
     }

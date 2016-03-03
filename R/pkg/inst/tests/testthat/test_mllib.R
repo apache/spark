@@ -150,4 +150,12 @@ test_that("naiveBayes", {
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "double")
   expect_equal(sample$prediction, 0)
+
+  # Test summary works on naiveBayes
+  summary.model <- summary(model)
+  expect_equal(length(summary.model$pi), 2)
+  l1 <- summary(model)$theta[1,]
+  l2 <- summary(model)$theta[2,]
+  expect_true(all.equal(Reduce(`+`, l1), 1))
+  expect_true(all.equal(Reduce(`+`, l2), 1))
 })
