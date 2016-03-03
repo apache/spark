@@ -466,8 +466,7 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertAlmostEqual(s.meanSquaredError, 0.0)
         self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
         self.assertAlmostEqual(s.r2, 1.0, 2)
-        residuals = s.residuals.rdd.map(lambda r: r.residuals).collect()
-        self.assertTrue(isinstance(residuals, list) and isinstance(residuals[0], float))
+        self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
         devResiduals = s.devianceResiduals
         self.assertTrue(isinstance(devResiduals, list) and isinstance(devResiduals[0], float))
