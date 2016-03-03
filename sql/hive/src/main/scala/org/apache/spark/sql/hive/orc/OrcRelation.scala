@@ -23,7 +23,8 @@ import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.{OrcInputFormat, OrcOutputFormat, OrcSerde, OrcSplit, OrcStruct}
+import org.apache.hadoop.hive.ql.io.orc._
+import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.SettableStructObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
@@ -162,6 +163,19 @@ private[sql] class OrcRelation(
   extends HadoopFsRelation(maybePartitionSpec, parameters)
   with Logging {
 
+  private val compressionCodec: Option[String] = parameters
+    .get("compression")
+    .map { codecName =>
+      // Validate if given compression codec is supported or not.
+      val shortOrcCompressionCodecNames = OrcRelation.shortOrcCompressionCodecNames
+      if (!shortOrcCompressionCodecNames.contains(codecName.toLowerCase)) {
+        val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
+        throw new IllegalArgumentException(s"Codec [$codecName] " +
+          s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      }
+      codecName.toLowerCase
+    }
+
   private[sql] def this(
       paths: Array[String],
       maybeDataSchema: Option[StructType],
@@ -211,6 +225,15 @@ private[sql] class OrcRelation(
   }
 
   override def prepareJobForWrite(job: Job): BucketedOutputWriterFactory = {
+    // Sets compression scheme
+    compressionCodec.foreach { codecName =>
+      job.getConfiguration.set(
+        OrcTableProperties.COMPRESSION.getPropName,
+        OrcRelation
+          .shortOrcCompressionCodecNames
+          .getOrElse(codecName, CompressionKind.NONE).name())
+    }
+
     job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
@@ -337,3 +360,14 @@ private[orc] object OrcTableScan {
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 }
+
+private[orc] object OrcRelation {
+  // The ORC compression short names
+  val shortOrcCompressionCodecNames = Map(
+    "none" -> CompressionKind.NONE,
+    "uncompressed" -> CompressionKind.NONE,
+    "snappy" -> CompressionKind.SNAPPY,
+    "zlib" -> CompressionKind.ZLIB,
+    "lzo" -> CompressionKind.LZO)
+}
+
