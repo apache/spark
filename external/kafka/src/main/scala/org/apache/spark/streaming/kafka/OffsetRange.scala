@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka
 
 import kafka.common.TopicAndPartition
+import org.apache.kafka.common.TopicPartition
 
 /**
  * Represents any object that has a collection of [[OffsetRange]]s. This can be used to access the
@@ -35,8 +36,10 @@ trait HasOffsetRanges {
 }
 
 /**
- * Represents a range of offsets from a single Kafka TopicAndPartition. Instances of this class
+ * Represents a range of offsets from a single Kafka TopicAndPartition (for old API) or
+ * TopicPartition (when using the new unified API) . Instances of this class
  * can be created with `OffsetRange.create()`.
+ *
  * @param topic Kafka topic name
  * @param partition Kafka partition id
  * @param fromOffset Inclusive starting offset
@@ -51,6 +54,9 @@ final class OffsetRange private(
 
   /** Kafka TopicAndPartition object, for convenience */
   def topicAndPartition(): TopicAndPartition = TopicAndPartition(topic, partition)
+
+  /** Kafka TopicPartition object, for convenience */
+  def topicPartition(): TopicPartition = new TopicPartition(topic, partition)
 
   /** Number of messages this OffsetRange refers to */
   def count(): Long = untilOffset - fromOffset
@@ -75,6 +81,8 @@ final class OffsetRange private(
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[streaming]
   def toTuple: OffsetRangeTuple = (topic, partition, fromOffset, untilOffset)
+
+
 }
 
 /**
@@ -90,6 +98,13 @@ object OffsetRange {
       untilOffset: Long): OffsetRange =
     new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
 
+  def create(
+      topicPartition: TopicPartition,
+      fromOffset: Long,
+      untilOffset: Long): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
+
+
   def apply(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset)
 
@@ -98,6 +113,12 @@ object OffsetRange {
       fromOffset: Long,
       untilOffset: Long): OffsetRange =
     new OffsetRange(topicAndPartition.topic, topicAndPartition.partition, fromOffset, untilOffset)
+
+  def apply(
+      topicPartition: TopicPartition,
+      fromOffset: Long,
+      untilOffset: Long): OffsetRange =
+    new OffsetRange(topicPartition.topic, topicPartition.partition, fromOffset, untilOffset)
 
   /** this is to avoid ClassNotFoundException during checkpoint restore */
   private[kafka]

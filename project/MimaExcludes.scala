@@ -247,6 +247,18 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnDriverEndpoint"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
       ) ++ Seq(
+        // [SPARK-12177] [STREAMING] Update KafkaDStreams to new Kafka 0.9 Consumer API
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.KafkaTestUtils.zookeeperClient"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.streaming.kafka.KafkaCluster$LeaderOffset$"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.ReliableKafkaReceiver.org$apache$spark$streaming$kafka$ReliableKafkaReceiver$$zkClient"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.streaming.kafka.KafkaCluster$LeaderOffset"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.streaming.kafka.DirectKafkaInputDStream$DirectKafkaRateController"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.DirectKafkaInputDStream.org$apache$spark$streaming$kafka$DirectKafkaInputDStream$$maxRateLimitPerPartition"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.streaming.kafka.KafkaRDD$KafkaRDDIterator"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errRanOutBeforeEnd"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errBeginAfterEnd"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.KafkaRDD.org$apache$spark$streaming$kafka$KafkaRDD$$errOvershotEnd")
+      ) ++ Seq(
         // SPARK-7889
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.deploy.history.HistoryServer.org$apache$spark$deploy$history$HistoryServer$@tachSparkUI"),
         // SPARK-13296

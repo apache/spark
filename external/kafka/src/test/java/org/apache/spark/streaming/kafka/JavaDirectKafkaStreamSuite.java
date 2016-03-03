@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import scala.Tuple2;
 
 import kafka.common.TopicAndPartition;
@@ -154,6 +156,93 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     ssc.stop();
   }
 
+  @Test
+  public void testNewKafkaStream() throws InterruptedException {
+    final String topic1 = "topic1";
+    final String topic2 = "topic2";
+    // hold a reference to the current offset ranges, so it can be used downstream
+    final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
+
+    String[] topic1data = createTopicAndSendData(topic1);
+    String[] topic2data = createTopicAndSendData(topic2);
+
+    Set<String> sent = new HashSet<>();
+    sent.addAll(Arrays.asList(topic1data));
+    sent.addAll(Arrays.asList(topic2data));
+
+    Map<String, String> kafkaParams = new HashMap<>();
+    kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());
+    kafkaParams.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+    kafkaParams.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer"
+    );
+    kafkaParams.put("auto.offset.reset", "earliest");
+
+    JavaDStream<String> stream1 = KafkaUtils.createNewDirectStream(
+            ssc,
+            String.class,
+            String.class,
+            kafkaParams,
+            topicToSet(topic1)
+    ).transformToPair(
+            // Make sure you can get offset ranges from the rdd
+            new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
+              @Override
+              public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) {
+                OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+                offsetRanges.set(offsets);
+                Assert.assertEquals(topic1, offsets[0].topic());
+                return rdd;
+              }
+            }
+    ).map(
+            new Function<Tuple2<String, String>, String>() {
+              @Override
+              public String call(Tuple2<String, String> kv) {
+                return kv._2();
+              }
+            }
+    );
+
+    JavaDStream<String> stream2 = KafkaUtils.createNewDirectStream(
+            ssc,
+            String.class,
+            String.class,
+            String.class,
+            kafkaParams,
+            newTopicOffsetToMap(topic2, 0L),
+            new Function<ConsumerRecord<String, String>, String>() {
+              @Override
+              public String call(ConsumerRecord<String, String> cr) {
+                return cr.value();
+              }
+            }
+    );
+    JavaDStream<String> unifiedStream = stream1.union(stream2);
+
+    final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
+    unifiedStream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
+                               @Override
+                               public void call(JavaRDD<String> rdd) {
+                                 result.addAll(rdd.collect());
+                                 for (OffsetRange o : offsetRanges.get()) {
+                                   System.out.println(
+                                           o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
+                                   );
+                                 }
+                               }
+                             }
+    );
+    ssc.start();
+    long startTime = System.currentTimeMillis();
+    boolean matches = false;
+    while (!matches && System.currentTimeMillis() - startTime < 20000) {
+      matches = sent.size() == result.size();
+      Thread.sleep(50);
+    }
+    Assert.assertEquals(sent, result);
+    ssc.stop();
+  }
+
   private static Set<String> topicToSet(String topic) {
     Set<String> topicSet = new HashSet<>();
     topicSet.add(topic);
@@ -163,6 +252,12 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
   private static Map<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
     Map<TopicAndPartition, Long> topicMap = new HashMap<>();
     topicMap.put(new TopicAndPartition(topic, 0), offsetToStart);
+    return topicMap;
+  }
+
+  private static Map<TopicPartition, Long> newTopicOffsetToMap(String topic, Long offsetToStart) {
+    Map<TopicPartition, Long> topicMap = new HashMap<>();
+    topicMap.put(new TopicPartition(topic, 0), offsetToStart);
     return topicMap;
   }
 

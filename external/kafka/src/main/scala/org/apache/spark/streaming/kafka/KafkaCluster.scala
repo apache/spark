@@ -19,7 +19,6 @@ package org.apache.spark.streaming.kafka
 
 import java.util.Properties
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -43,7 +42,7 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
-  import KafkaCluster.{Err, LeaderOffset, SimpleConsumerConfig}
+  import KafkaCluster.{Err, SimpleConsumerConfig}
 
   // ConsumerConfig isn't serializable
   @transient private var _config: SimpleConsumerConfig = null
@@ -374,8 +373,6 @@ object KafkaCluster {
       ok => ok
     )
   }
-
-  case class LeaderOffset(host: String, port: Int, offset: Long)
 
   /**
    * High-level kafka consumers connect to ZK.  ConsumerConfig assumes this use case.
