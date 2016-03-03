@@ -321,6 +321,9 @@ public final class ColumnarBatch {
    * projections.
    */
   public void setColumn(int ordinal, ColumnVector column) {
+    if (column instanceof OffHeapColumnVector) {
+      throw new NotImplementedException("Need to ref count columns.");
+    }
     columns[ordinal] = column;
   }
 
