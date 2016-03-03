@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.storage.disk
 
 import java.io.{File, FileOutputStream, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
 /**

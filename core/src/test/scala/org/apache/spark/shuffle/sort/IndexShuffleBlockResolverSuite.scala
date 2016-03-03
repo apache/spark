@@ -30,6 +30,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.storage._
+import org.apache.spark.storage.disk.DiskBlockManager
 import org.apache.spark.util.Utils
 
 

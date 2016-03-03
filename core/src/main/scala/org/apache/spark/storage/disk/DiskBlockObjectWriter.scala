@@ -21,7 +21,7 @@ import java.io.{File, OutputStream}
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance}
-import org.apache.spark.storage.{BlockId, FileSegment}
+import org.apache.spark.storage.BlockId
 import org.apache.spark.util.Utils
 
 /**

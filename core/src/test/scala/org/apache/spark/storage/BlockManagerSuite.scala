@@ -40,6 +40,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.storage.disk.{DiskBlockManager, DiskStore}
 import org.apache.spark.util._
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
