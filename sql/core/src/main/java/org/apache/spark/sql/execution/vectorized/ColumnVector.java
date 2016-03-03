@@ -19,6 +19,10 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.apache.commons.lang.NotImplementedException;
+import org.apache.parquet.column.Dictionary;
+import org.apache.parquet.io.api.Binary;
+
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
@@ -26,8 +30,6 @@ import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * This class represents a column of values and provides the main APIs to access the data
@@ -157,7 +159,7 @@ public abstract class ColumnVector {
       } else if (dt instanceof StringType) {
         for (int i = 0; i < length; i++) {
           if (!data.getIsNull(offset + i)) {
-            list[i] = ColumnVectorUtils.toString(data.getByteArray(offset + i));
+            list[i] = getUTF8String(i).toString();
           }
         }
       } else if (dt instanceof CalendarIntervalType) {
@@ -204,28 +206,17 @@ public abstract class ColumnVector {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
-      if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        return Decimal.apply(getLong(ordinal), precision, scale);
-      } else {
-        byte[] bytes = getBinary(ordinal);
-        BigInteger bigInteger = new BigInteger(bytes);
-        BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
-        return Decimal.apply(javaDecimal, precision, scale);
-      }
+      return data.getDecimal(offset + ordinal, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
-      Array child = data.getByteArray(offset + ordinal);
-      return UTF8String.fromBytes(child.byteArray, child.byteArrayOffset, child.length);
+      return data.getUTF8String(offset + ordinal);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
-      ColumnVector.Array array = data.getByteArray(offset + ordinal);
-      byte[] bytes = new byte[array.length];
-      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
-      return bytes;
+      return data.getBinary(offset + ordinal);
     }
 
     @Override
@@ -534,10 +525,55 @@ public abstract class ColumnVector {
   /**
    * Returns the value for rowId.
    */
-  public final Array getByteArray(int rowId) {
+  private Array getByteArray(int rowId) {
     Array array = getArray(rowId);
     array.data.loadBytes(array);
     return array;
+  }
+
+  /**
+   * Returns the decimal for rowId.
+   */
+  public final Decimal getDecimal(int rowId, int precision, int scale) {
+    if (precision <= Decimal.MAX_INT_DIGITS()) {
+      return Decimal.apply(getInt(rowId), precision, scale);
+    } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
+      return Decimal.apply(getLong(rowId), precision, scale);
+    } else {
+      // TODO: best perf?
+      byte[] bytes = getBinary(rowId);
+      BigInteger bigInteger = new BigInteger(bytes);
+      BigDecimal javaDecimal = new BigDecimal(bigInteger, scale);
+      return Decimal.apply(javaDecimal, precision, scale);
+    }
+  }
+
+  /**
+   * Returns the UTF8String for rowId.
+   */
+  public final UTF8String getUTF8String(int rowId) {
+    if (dictionary == null) {
+      ColumnVector.Array a = getByteArray(rowId);
+      return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
+    } else {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      return UTF8String.fromBytes(v.getBytes());
+    }
+  }
+
+  /**
+   * Returns the byte array for rowId.
+   */
+  public final byte[] getBinary(int rowId) {
+    if (dictionary == null) {
+      ColumnVector.Array array = getByteArray(rowId);
+      byte[] bytes = new byte[array.length];
+      System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
+      return bytes;
+    } else {
+      Binary v = dictionary.decodeToBinary(dictionaryIds.getInt(rowId));
+      return v.getBytes();
+    }
   }
 
   /**
@@ -815,6 +851,39 @@ public abstract class ColumnVector {
    * Reusable Struct holder for getStruct().
    */
   protected final ColumnarBatch.Row resultStruct;
+
+  /**
+   * The Dictionary for this column.
+   *
+   * If it's not null, will be used to decode the value in getXXX().
+   */
+  protected Dictionary dictionary;
+
+  /**
+   * Reusable column for ids of dictionary.
+   */
+  protected ColumnVector dictionaryIds;
+
+  /**
+   * Update the dictionary.
+   */
+  public void setDictionary(Dictionary dictionary) {
+    this.dictionary = dictionary;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  public ColumnVector reserveDictionaryIds(int capacity) {
+    if (dictionaryIds == null) {
+      dictionaryIds = allocate(capacity, DataTypes.IntegerType,
+        this instanceof OnHeapColumnVector ? MemoryMode.ON_HEAP : MemoryMode.OFF_HEAP);
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
+  }
 
   /**
    * Sets up the common state and also handles creating the child columns if this is a nested

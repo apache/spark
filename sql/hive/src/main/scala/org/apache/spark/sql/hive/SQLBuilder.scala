@@ -24,7 +24,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, NonSQLExpression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, NonSQLExpression,
+  SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -53,7 +54,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case e => e
       }
 
-      val generatedSQL = toSQL(canonicalizedPlan)
+      val generatedSQL = toSQL(canonicalizedPlan, true)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
            |
@@ -75,6 +76,27 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
            |${canonicalizedPlan.treeString}
          """.stripMargin)
       throw e
+    }
+  }
+
+  private def toSQL(node: LogicalPlan, topNode: Boolean): String = {
+    if (topNode) {
+      node match {
+        case d: Distinct => toSQL(node)
+        case p: Project => toSQL(node)
+        case a: Aggregate => toSQL(node)
+        case s: Sort => toSQL(node)
+        case r: RepartitionByExpression => toSQL(node)
+        case _ =>
+          build(
+            "SELECT",
+            node.output.map(_.sql).mkString(", "),
+            "FROM",
+            toSQL(node)
+          )
+      }
+    } else {
+      toSQL(node)
     }
   }
 

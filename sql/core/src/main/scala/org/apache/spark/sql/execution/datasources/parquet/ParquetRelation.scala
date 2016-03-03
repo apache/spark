@@ -67,6 +67,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+
     val conf = ContextUtil.getConfiguration(job)
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
@@ -88,6 +89,19 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
     } else {
       logInfo("Using user defined output committer for Parquet: " + committerClass.getCanonicalName)
     }
+
+    val compressionCodec: Option[String] = options
+      .get("compression")
+      .map { codecName =>
+        // Validate if given compression codec is supported or not.
+        val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
+        if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
+          val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+          throw new IllegalArgumentException(s"Codec [$codecName] " +
+              s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+        }
+        codecName.toLowerCase
+      }
 
     conf.setClass(
       SQLConf.OUTPUT_COMMITTER_CLASS.key,
@@ -126,10 +140,11 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
     conf.set(
       ParquetOutputFormat.COMPRESSION,
       ParquetRelation
-          .shortParquetCompressionCodecNames
-          .getOrElse(
-            sqlContext.conf.parquetCompressionCodec.toUpperCase,
-            CompressionCodecName.UNCOMPRESSED).name())
+        .shortParquetCompressionCodecNames
+        .getOrElse(
+          compressionCodec
+            .getOrElse(sqlContext.conf.parquetCompressionCodec.toLowerCase),
+          CompressionCodecName.UNCOMPRESSED).name())
 
     new OutputWriterFactory {
       override def newInstance(
@@ -758,9 +773,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE" -> CompressionCodecName.UNCOMPRESSED,
-    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY" -> CompressionCodecName.SNAPPY,
-    "GZIP" -> CompressionCodecName.GZIP,
-    "LZO" -> CompressionCodecName.LZO)
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
 }

@@ -385,7 +385,7 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         if (o != null) {
           val s = o.asInstanceOf[UTF8String].toString
-          new HiveVarchar(s, s.size)
+          new HiveVarchar(s, s.length)
         } else {
           null
         }
@@ -394,7 +394,7 @@ private[hive] trait HiveInspectors {
       (o: Any) =>
         if (o != null) {
           val s = o.asInstanceOf[UTF8String].toString
-          new HiveChar(s, s.size)
+          new HiveChar(s, s.length)
         } else {
           null
         }
