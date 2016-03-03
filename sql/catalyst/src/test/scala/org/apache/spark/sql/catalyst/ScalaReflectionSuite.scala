@@ -20,11 +20,10 @@ package org.apache.spark.sql.catalyst
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
-import scala.concurrent.{Await, Future}
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
+import scala.reflect.runtime.universe.typeOf
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -243,22 +242,44 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
 
-  test("thread safety of mirror") {
-    for (_ <- 0 until 100) {
-      val loader = new java.net.URLClassLoader(Array(), Utils.getContextOrSparkClassLoader)
-      Await.result(
-        Future.sequence(
-          (0 until 10).map(_ =>
-            Future {
-              val cl = Thread.currentThread.getContextClassLoader
-              try {
-                Thread.currentThread.setContextClassLoader(loader)
-                mirror
-              } finally {
-                Thread.currentThread.setContextClassLoader(cl)
-              }
-            })),
-        Duration.Inf)
+  private def testThreadSafetyFor(name: String)(exec: () => Any) = {
+    test(s"thread safety of ${name}") {
+      for (_ <- 0 until 100) {
+        val loader = new java.net.URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
+        (0 until 10).par.foreach { _ =>
+          val cl = Thread.currentThread.getContextClassLoader
+          try {
+            Thread.currentThread.setContextClassLoader(loader)
+            exec()
+          } finally {
+            Thread.currentThread.setContextClassLoader(cl)
+          }
+        }
+      }
     }
+  }
+
+  private val dataTypeForComplexData = dataTypeFor[ComplexData]
+  private val typeOfComplexData = typeOf[ComplexData]
+
+  for {
+    (name, exec) <- Seq(
+      ("mirror", () => mirror),
+      ("dataTypeFor", () => dataTypeFor[ComplexData]),
+      ("constructorFor", () => constructorFor[ComplexData]),
+      ("extractorsFor", {
+        val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
+        () => extractorsFor[ComplexData](inputObject)
+      }),
+      ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
+      ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
+      ("getClassFromType", () => getClassFromType(typeOfComplexData)),
+      ("schemaFor", () => schemaFor[ComplexData]),
+      ("localTypeOf", () => localTypeOf[ComplexData]),
+      ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
+      ("getParameterTypes", () => getParameterTypes(() => ())),
+      ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData)))
+  } {
+    testThreadSafetyFor(name)(exec)
   }
 }
