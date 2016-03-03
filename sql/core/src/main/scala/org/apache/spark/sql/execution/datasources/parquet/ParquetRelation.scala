@@ -153,12 +153,12 @@ private[sql] class ParquetRelation(
     .map { codecName =>
       // Validate if given compression codec is supported or not.
       val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
-      if (!shortParquetCompressionCodecNames.contains(codecName.toUpperCase)) {
+      if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
         val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
         throw new IllegalArgumentException(s"Codec [$codecName] " +
           s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
       }
-      codecName.toUpperCase
+      codecName.toLowerCase
     }
 
   private lazy val metadataCache: MetadataCache = {
