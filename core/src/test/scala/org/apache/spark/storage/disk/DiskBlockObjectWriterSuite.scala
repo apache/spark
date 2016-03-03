@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.storage
+package org.apache.spark.storage.disk
 
 import java.io.File
 
@@ -23,7 +23,6 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.storage.disk.{DiskBlockObjectWriter, DiskBlockWriter}
 import org.apache.spark.util.Utils
 
 class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
