@@ -39,7 +39,7 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
     blockId: BlockId,
     values: Iterator[Any],
     level: StorageLevel,
-    returnValues: Boolean): PutResult
+    returnValues: Boolean = false): PutResult
 
   /**
    * Return the size of a block in bytes.
