@@ -19,9 +19,9 @@ package org.apache.spark.ml.api.r
 
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, NaiveBayes}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, NaiveBayes, NaiveBayesModel}
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
-import org.apache.spark.ml.feature.{RFormula, VectorAssembler}
+import org.apache.spark.ml.feature._
 import org.apache.spark.ml.regression.{LinearRegression, LinearRegressionModel}
 import org.apache.spark.sql.DataFrame
 
@@ -55,11 +55,11 @@ private[r] object SparkRWrappers {
   def fitNaiveBayes(
       value: String,
       df: DataFrame,
-      laplace: Double,
+      lambda: Double,
       modelType: String): PipelineModel = {
 
     val formula = new RFormula().setFormula(value)
-    val naiveBayes = new NaiveBayes().setSmoothing(laplace).setModelType(modelType)
+    val naiveBayes = new NaiveBayes().setSmoothing(lambda).setModelType(modelType)
     val pipeline = new Pipeline().setStages(Array(formula, naiveBayes))
     pipeline.fit(df)
   }
@@ -103,6 +103,7 @@ private[r] object SparkRWrappers {
       }
       case m: KMeansModel =>
         m.clusterCenters.flatMap(_.toArray)
+      case m: NaiveBayesModel => Array()  // A dummy result to prevent unmatched error.
     }
   }
 
@@ -141,6 +142,39 @@ private[r] object SparkRWrappers {
     }
   }
 
+  def getNaiveBayesLabels(model: PipelineModel): Array[String] = {
+    val lastModel = model.stages.last
+    assert(lastModel.isInstanceOf[NaiveBayesModel],
+      s"Naive Bayes model expected, ${lastModel.getClass.getName} found.")
+    val numOfStages = model.stages.length
+    assert(numOfStages == 2,
+      "The number of Pipeline stages does not match with the training phase.")
+    // If the original label column is a String column, the next to last stage should be a
+    // StringIndexerModel. Otherwise we transform the original label column to a String array.
+    val rFormulaModel = model.stages.head.asInstanceOf[RFormulaModel]
+
+    rFormulaModel.getOriginalLabels match {
+      case Some(labels) => labels
+      case None => lastModel.asInstanceOf[NaiveBayesModel].labels.toArray.map(_.toString)
+    }
+  }
+
+  def getNaiveBayesPi(model: PipelineModel): Array[Double] = {
+    model.stages.last match {
+      case m: NaiveBayesModel => m.pi.toArray
+      case other => throw new UnsupportedOperationException(
+        s"NaiveBayesModel required but ${other.getClass.getSimpleName} found.")
+    }
+  }
+
+  def getNaiveBayesTheta(model: PipelineModel): Array[Double] = {
+    model.stages.last match {
+      case m: NaiveBayesModel => m.theta.toArray
+      case other => throw new UnsupportedOperationException(
+        s"NaiveBayesModel required but ${other.getClass.getSimpleName} found.")
+    }
+  }
+
   def getModelFeatures(model: PipelineModel): Array[String] = {
     model.stages.last match {
       case m: LinearRegressionModel =>
@@ -160,6 +194,10 @@ private[r] object SparkRWrappers {
           attrs.attributes.get.map(_.name.get)
         }
       case m: KMeansModel =>
+        val attrs = AttributeGroup.fromStructField(
+          m.summary.predictions.schema(m.summary.featuresCol))
+        attrs.attributes.get.map(_.name.get)
+      case m: NaiveBayesModel =>
         val attrs = AttributeGroup.fromStructField(
           m.summary.predictions.schema(m.summary.featuresCol))
         attrs.attributes.get.map(_.name.get)

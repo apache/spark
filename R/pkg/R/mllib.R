@@ -140,6 +140,19 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- unlist(features)
               rownames(coefficients) <- 1:k
               return(list(coefficients = coefficients, size = size, cluster = dataFrame(cluster)))
+            } else if (modelName == "NaiveBayesModel") {
+              labels <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                    "getNaiveBayesLabels", object@model)
+              pi <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                "getNaiveBayesPi", object@model)
+              theta <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
+                                   "getNaiveBayesTheta", object@model)
+              pi <- t(as.matrix(unlist(pi)))
+              colnames(pi) <- unlist(labels)
+              theta <- matrix(theta, nrow = length(labels))
+              rownames(theta) <- unlist(labels)
+              colnames(theta) <- unlist(features)
+              return(list(pi = pi, theta = theta))
             } else {
               stop(paste("Unsupported model", modelName, sep = " "))
             }

@@ -104,7 +104,16 @@ class NaiveBayes @Since("1.5.0") (
   override protected def train(dataset: DataFrame): NaiveBayesModel = {
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
-    NaiveBayesModel.fromOld(oldModel, this)
+    val nbModel = copyValues(NaiveBayesModel.fromOld(oldModel, this))
+    val summary = new NaiveBayesSummary(
+      nbModel.transform(dataset),
+      $(predictionCol),
+      $(rawPredictionCol),
+      $(probabilityCol),
+      $(featuresCol),
+      $(labelCol))
+    nbModel.setSummary(summary)
+    nbModel
   }
 
   @Since("1.5.0")
@@ -129,12 +138,17 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 @Experimental
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
+    @Since("2.0.0") val labels: Vector,
     @Since("1.5.0") val pi: Vector,
     @Since("1.5.0") val theta: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
   import OldNaiveBayes.{Bernoulli, Multinomial}
+
+  private[ml] def this(uid: String, pi: Vector, theta: Matrix) = {
+    this(uid, Vectors.dense((0 until pi.size).map(_.toDouble).toArray), pi, theta)
+  }
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
@@ -217,7 +231,7 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
-    copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
+    copyValues(new NaiveBayesModel(uid, labels, pi, theta).setParent(this.parent), extra)
   }
 
   @Since("1.5.0")
@@ -227,6 +241,25 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.6.0")
   override def write: MLWriter = new NaiveBayesModel.NaiveBayesModelWriter(this)
+
+  private var trainingSummary: Option[NaiveBayesSummary] = None
+
+  private[classification] def setSummary(summary: NaiveBayesSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+   * Gets summary of model on training set. An exception is thrown if `trainingSummary == None`.
+   */
+  @Since("2.0.0")
+  def summary: NaiveBayesSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        s"No training summary available for the ${this.getClass.getSimpleName}",
+        new NullPointerException())
+  }
 }
 
 @Since("1.6.0")
@@ -241,7 +274,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     val pi = Vectors.dense(oldModel.pi)
     val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
       oldModel.theta.flatten, true)
-    new NaiveBayesModel(uid, pi, theta)
+    new NaiveBayesModel(uid, labels, pi, theta)
   }
 
   @Since("1.6.0")
@@ -253,13 +286,13 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   /** [[MLWriter]] instance for [[NaiveBayesModel]] */
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
 
-    private case class Data(pi: Vector, theta: Matrix)
+    private case class Data(labels: Vector, pi: Vector, theta: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: pi, theta
-      val data = Data(instance.pi, instance.theta)
+      val data = Data(instance.labels, instance.pi, instance.theta)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -275,12 +308,21 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
 
       val dataPath = new Path(path, "data").toString
       val data = sqlContext.read.parquet(dataPath).select("pi", "theta").head()
-      val pi = data.getAs[Vector](0)
-      val theta = data.getAs[Matrix](1)
-      val model = new NaiveBayesModel(metadata.uid, pi, theta)
+      val labels = data.getAs[Vector](0)
+      val pi = data.getAs[Vector](1)
+      val theta = data.getAs[Matrix](2)
+      val model = new NaiveBayesModel(metadata.uid, labels, pi, theta)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
   }
 }
+
+class NaiveBayesSummary private[classification] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val rawPredictionCol: String,
+    @Since("2.0.0") val probabilityCol: String,
+    @Since("2.0.0") val featuresCol: String,
+    @Since("2.0.0") val labelCol: String) extends Serializable {}
