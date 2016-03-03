@@ -187,13 +187,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("join plan") {
-    val originalSql = "SELECT x.key FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key"
-    val plan = sql(originalSql).queryExecution.analyzed
-    val joinPlan = plan.children.collect {
-      case j: Join => j
-    }
-    assert(joinPlan.nonEmpty)
-    checkPlan(joinPlan.head, sqlContext, originalSql)
+    val expectedSql = "SELECT x.key FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key"
+
+    val df1 = sqlContext.table("parquet_t1").as("x")
+    val df2 = sqlContext.table("parquet_t1").as("y")
+    val joinPlan = df1.join(df2).queryExecution.analyzed
+
+    // Make sure we have a plain Join operator without Project on top of it.
+    assert(joinPlan.isInstanceOf[Join])
+    checkPlan(joinPlan, sqlContext, expectedSql)
   }
 
   test("case") {

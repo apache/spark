@@ -88,11 +88,11 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case r: RepartitionByExpression => toSQL(node)
         case _ =>
           build(
-          "SELECT",
-          node.output.map(_.sql).mkString(", "),
-          "FROM",
-          toSQL(node)
-        )
+            "SELECT",
+            node.output.map(_.sql).mkString(", "),
+            "FROM",
+            toSQL(node)
+          )
       }
     } else {
       toSQL(node)
