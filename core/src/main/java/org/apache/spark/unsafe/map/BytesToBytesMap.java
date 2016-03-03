@@ -146,7 +146,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private int mask;
 
   /**
-   * Return value of {@link BytesToBytesMap#lookup(Object, long, int)}.
+   * Return value of {@link BytesToBytesMap#lookup(MemoryBlock, long, int)}.
    */
   private final Location loc;
 
@@ -227,7 +227,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     private MemoryBlock currentPage = null;
     private int recordsInPage = 0;
-    private Object pageBaseObject;
+    private MemoryBlock pageBaseObject;
     private long offsetInPage;
 
     // If this iterator destructive or not. When it is true, it frees each page as it moves onto
@@ -254,7 +254,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
         }
         if (dataPages.size() > nextIdx) {
           currentPage = dataPages.get(nextIdx);
-          pageBaseObject = currentPage.getBaseObject();
+          pageBaseObject = currentPage;
           offsetInPage = currentPage.getBaseOffset();
           recordsInPage = Platform.getInt(pageBaseObject, offsetInPage);
           offsetInPage += 4;
@@ -347,7 +347,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
             break;
           }
 
-          Object base = block.getBaseObject();
+          MemoryBlock base = block;
           long offset = block.getBaseOffset();
           int numRecords = Platform.getInt(base, offset);
           offset += 4;
@@ -413,7 +413,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always return the same {@link Location} instance to avoid object allocation.
    */
-  public Location lookup(Object keyBase, long keyOffset, int keyLength) {
+  public Location lookup(MemoryBlock keyBase, long keyOffset, int keyLength) {
     safeLookup(keyBase, keyOffset, keyLength, loc,
       Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
     return loc;
@@ -425,7 +425,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always return the same {@link Location} instance to avoid object allocation.
    */
-  public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
+  public Location lookup(MemoryBlock keyBase, long keyOffset, int keyLength, int hash) {
     safeLookup(keyBase, keyOffset, keyLength, loc, hash);
     return loc;
   }
@@ -435,7 +435,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
-  public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
+  public void safeLookup(MemoryBlock keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
 
     if (enablePerfMetrics) {
@@ -480,7 +480,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
+   * Handle returned by {@link BytesToBytesMap#lookup(MemoryBlock, long, int)} function.
    */
   public final class Location {
     /** An index into the hash map's Long array */
@@ -489,11 +489,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean isDefined;
     /**
      * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
+     * {@link BytesToBytesMap#lookup(MemoryBlock, long, int, int)}. Caching this hashcode here allows us
      * to avoid re-hashing the key when storing a value for that key.
      */
     private int keyHashcode;
-    private Object baseObject;  // the base object for key and value
+    private MemoryBlock baseObject;  // the base object for key and value
     private long keyOffset;
     private int keyLength;
     private long valueOffset;
@@ -505,12 +505,13 @@ public final class BytesToBytesMap extends MemoryConsumer {
     @Nullable private MemoryBlock memoryPage;
 
     private void updateAddressesAndSizes(long fullKeyAddress) {
+      MemoryBlock page = taskMemoryManager.getPage(fullKeyAddress);
       updateAddressesAndSizes(
-        taskMemoryManager.getPage(fullKeyAddress),
+        page,
         taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
-    private void updateAddressesAndSizes(final Object base, long offset) {
+    private void updateAddressesAndSizes(final MemoryBlock base, long offset) {
       baseObject = base;
       final int totalLength = Platform.getInt(base, offset);
       offset += 4;
@@ -536,14 +537,14 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private Location with(MemoryBlock page, long offsetInPage) {
       this.isDefined = true;
       this.memoryPage = page;
-      updateAddressesAndSizes(page.getBaseObject(), offsetInPage);
+      updateAddressesAndSizes(page, offsetInPage);
       return this;
     }
 
     /**
      * This is only used for spilling
      */
-    private Location with(Object base, long offset, int length) {
+    private Location with(MemoryBlock base, long offset, int length) {
       this.isDefined = true;
       this.memoryPage = null;
       baseObject = base;
@@ -572,7 +573,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     /**
      * Returns the base object for key.
      */
-    public Object getKeyBase() {
+    public MemoryBlock getKeyBase() {
       assert (isDefined);
       return baseObject;
     }
@@ -588,7 +589,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
     /**
      * Returns the base object for value.
      */
-    public Object getValueBase() {
+    public MemoryBlock getValueBase() {
       assert (isDefined);
       return baseObject;
     }
@@ -652,8 +653,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * @return true if the put() was successful and false if the put() failed because memory could
      *         not be acquired.
      */
-    public boolean putNewKey(Object keyBase, long keyOffset, int keyLength,
-        Object valueBase, long valueOffset, int valueLength) {
+    public boolean putNewKey(MemoryBlock keyBase, long keyOffset, int keyLength,
+                             MemoryBlock valueBase, long valueOffset, int valueLength) {
       assert (!isDefined) : "Can only set value once for a key";
       assert (keyLength % 8 == 0);
       assert (valueLength % 8 == 0);
@@ -679,7 +680,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
 
       // --- Append the key and value data to the current data page --------------------------------
-      final Object base = currentPage.getBaseObject();
+      final MemoryBlock base = currentPage;
       long offset = currentPage.getBaseOffset() + pageCursor;
       final long recordOffset = offset;
       Platform.putInt(base, offset, keyLength + valueLength + 4);
@@ -723,7 +724,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       return false;
     }
     dataPages.add(currentPage);
-    Platform.putInt(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
+    Platform.putInt(currentPage, currentPage.getBaseOffset(), 0);
     pageCursor = 4;
     return true;
   }

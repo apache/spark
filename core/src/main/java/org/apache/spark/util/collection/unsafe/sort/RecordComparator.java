@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 /**
  * Compares records for ordering. In cases where the entire sorting key can fit in the 8-byte
  * prefix, this may simply return 0.
@@ -30,8 +32,8 @@ public abstract class RecordComparator {
    *         equal to, or greater than the second.
    */
   public abstract int compare(
-    Object leftBaseObject,
+    MemoryBlock leftBaseObject,
     long leftBaseOffset,
-    Object rightBaseObject,
+    MemoryBlock rightBaseObject,
     long rightBaseOffset);
 }

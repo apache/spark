@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 import java.io.IOException;
 import java.util.Comparator;
 import java.util.PriorityQueue;
@@ -91,7 +93,7 @@ final class UnsafeSorterSpillMerger {
       }
 
       @Override
-      public Object getBaseObject() { return spillReader.getBaseObject(); }
+      public MemoryBlock getBaseObject() { return spillReader.getBaseObject(); }
 
       @Override
       public long getBaseOffset() { return spillReader.getBaseOffset(); }

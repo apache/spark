@@ -38,7 +38,7 @@ import static org.mockito.Mockito.mock;
 
 public class UnsafeInMemorySorterSuite {
 
-  private static String getStringFromDataPage(Object baseObject, long baseOffset, int length) {
+  private static String getStringFromDataPage(MemoryBlock baseObject, long baseOffset, int length) {
     final byte[] strBytes = new byte[length];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, length);
     return new String(strBytes);
@@ -75,7 +75,7 @@ public class UnsafeInMemorySorterSuite {
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
-    final Object baseObject = dataPage.getBaseObject();
+    final MemoryBlock baseObject = dataPage;
     // Write the records into the data page:
     long position = dataPage.getBaseOffset();
     for (String str : dataToSort) {
@@ -91,9 +91,9 @@ public class UnsafeInMemorySorterSuite {
     final RecordComparator recordComparator = new RecordComparator() {
       @Override
       public int compare(
-        Object leftBaseObject,
+        MemoryBlock leftBaseObject,
         long leftBaseOffset,
-        Object rightBaseObject,
+        MemoryBlock rightBaseObject,
         long rightBaseOffset) {
         return 0;
       }

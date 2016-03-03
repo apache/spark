@@ -22,6 +22,7 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -232,8 +233,9 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final int serializedRecordSize = serBuffer.size();
     assert (serializedRecordSize > 0);
 
+    ByteArrayMemoryBlock serBytes = ByteArrayMemoryBlock.fromByteArray(serBuffer.getBuf());
     sorter.insertRecord(
-      serBuffer.getBuf(), Platform.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
+      serBytes, Platform.BYTE_ARRAY_OFFSET, serializedRecordSize, partitionId);
   }
 
   @VisibleForTesting

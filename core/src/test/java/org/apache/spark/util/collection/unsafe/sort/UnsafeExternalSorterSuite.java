@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
+import org.apache.spark.unsafe.memory.*;
 import scala.Tuple2;
 import scala.Tuple2$;
 import scala.runtime.AbstractFunction1;
@@ -72,9 +73,9 @@ public class UnsafeExternalSorterSuite {
   final RecordComparator recordComparator = new RecordComparator() {
     @Override
     public int compare(
-      Object leftBaseObject,
+      MemoryBlock leftBaseObject,
       long leftBaseOffset,
-      Object rightBaseObject,
+      MemoryBlock rightBaseObject,
       long rightBaseOffset) {
       return 0;
     }
@@ -157,7 +158,7 @@ public class UnsafeExternalSorterSuite {
   }
 
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
-    final int[] arr = new int[]{ value };
+    final IntArrayMemoryBlock arr = IntArrayMemoryBlock.fromIntArray(new int[]{ value });
     sorter.insertRecord(arr, Platform.INT_ARRAY_OFFSET, 4, value);
   }
 
@@ -165,7 +166,7 @@ public class UnsafeExternalSorterSuite {
       UnsafeExternalSorter sorter,
       int[] record,
       long prefix) throws IOException {
-    sorter.insertRecord(record, Platform.INT_ARRAY_OFFSET, record.length * 4, prefix);
+    sorter.insertRecord(IntArrayMemoryBlock.fromIntArray(record), Platform.INT_ARRAY_OFFSET, record.length * 4, prefix);
   }
 
   private UnsafeExternalSorter newSorter() throws IOException {
@@ -206,13 +207,14 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testSortingEmptyArrays() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    sorter.insertRecord(null, 0, 0, 0);
-    sorter.insertRecord(null, 0, 0, 0);
+    OffHeapMemoryBlock b = new OffHeapMemoryBlock(null, 0, 0);
+    sorter.insertRecord(b, 0, 0, 0);
+    sorter.insertRecord(b, 0, 0, 0);
     sorter.spill();
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(b, 0, 0, 0);
     sorter.spill();
-    sorter.insertRecord(null, 0, 0, 0);
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(b, 0, 0, 0);
+    sorter.insertRecord(b, 0, 0, 0);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
@@ -259,9 +261,9 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testFillingPage() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    byte[] record = new byte[16];
+    ByteArrayMemoryBlock record = ByteArrayMemoryBlock.fromByteArray(new byte[16]);
     while (sorter.getNumberOfAllocatedPages() < 2) {
-      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.length, 0);
+      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.getByteArray().length, 0);
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -316,11 +318,11 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void forcedSpillingWithReadIterator() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    long[] record = new long[100];
-    int recordSize = record.length * 8;
+    LongArrayMemoryBlock record = LongArrayMemoryBlock.fromLongArray(new long[100]);
+    int recordSize = record.getLongArray().length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
     for (int i = 0; i < n; i++) {
-      record[0] = (long) i;
+      record.getLongArray()[0] = (long) i;
       sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
     }
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
@@ -348,11 +350,11 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void forcedSpillingWithNotReadIterator() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    long[] record = new long[100];
-    int recordSize = record.length * 8;
+    LongArrayMemoryBlock record = LongArrayMemoryBlock.fromLongArray(new long[100]);
+    int recordSize = record.getLongArray().length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
     for (int i = 0; i < n; i++) {
-      record[0] = (long) i;
+      record.getLongArray()[0] = (long) i;
       sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
     }
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
@@ -379,12 +381,12 @@ public class UnsafeExternalSorterSuite {
       null,
       /* initialSize */ 1024,
       pageSizeBytes);
-    long[] record = new long[100];
-    int recordSize = record.length * 8;
+    LongArrayMemoryBlock record = LongArrayMemoryBlock.fromLongArray(new long[100]);
+    int recordSize = record.getLongArray().length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
     int batch = n / 4;
     for (int i = 0; i < n; i++) {
-      record[0] = (long) i;
+      record.getLongArray()[0] = (long) i;
       sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
       if (i % batch == batch - 1) {
         sorter.spill();

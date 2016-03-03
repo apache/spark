@@ -38,7 +38,7 @@ public class ShuffleInMemorySorterSuite {
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
-  private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
+  private static String getStringFromDataPage(MemoryBlock baseObject, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
     Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
     return new String(strBytes);
@@ -68,7 +68,7 @@ public class ShuffleInMemorySorterSuite {
     final TaskMemoryManager memoryManager =
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
-    final Object baseObject = dataPage.getBaseObject();
+    final MemoryBlock baseObject = dataPage;
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4);
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
 

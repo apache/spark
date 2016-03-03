@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 import java.io.IOException;
 
 public abstract class UnsafeSorterIterator {
@@ -25,7 +27,7 @@ public abstract class UnsafeSorterIterator {
 
   public abstract void loadNext() throws IOException;
 
-  public abstract Object getBaseObject();
+  public abstract MemoryBlock getBaseObject();
 
   public abstract long getBaseOffset();
 

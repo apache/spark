@@ -20,6 +20,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 import java.io.File;
 import java.io.IOException;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import scala.Tuple2;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
@@ -100,7 +101,7 @@ public final class UnsafeSorterSpillWriter {
    * @param keyPrefix a sort key prefix
    */
   public void write(
-      Object baseObject,
+      MemoryBlock baseObject,
       long baseOffset,
       int recordLength,
       long keyPrefix) throws IOException {

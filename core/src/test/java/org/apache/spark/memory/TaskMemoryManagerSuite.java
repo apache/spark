@@ -50,7 +50,7 @@ public class TaskMemoryManagerSuite {
     // encode. This test exercises that corner-case:
     final long offset = ((1L << TaskMemoryManager.OFFSET_BITS) + 10);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, offset);
-    Assert.assertEquals(null, manager.getPage(encodedAddress));
+    Assert.assertEquals(null, manager.getPage(encodedAddress).getBaseObject());
     Assert.assertEquals(offset, manager.getOffsetInPage(encodedAddress));
   }
 
@@ -60,7 +60,7 @@ public class TaskMemoryManagerSuite {
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final MemoryBlock dataPage = manager.allocatePage(256, null);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
-    Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
+    Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress).getBaseObject());
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
   }
 
