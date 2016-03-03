@@ -259,9 +259,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     val groupingSet = expand.projections.map { project =>
       // Assumption: expand.projections are composed of
-      // 1) the original output (project.child.output),
+      // 1) the original output (Project's child.output),
       // 2) group by attributes(or null literal)
-      // 3) gid, which is always the last one in each project
+      // 3) gid, which is always the last one in each project in Expand
       project.dropRight(1).collect {
         case attr: Attribute if groupByAttrMap.contains(attr) => groupByAttrMap(attr)
       }
