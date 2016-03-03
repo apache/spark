@@ -276,7 +276,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
           config)
         case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
       }
-      if (rdd.partitions.size == 0) {
+      if (rdd.partitions.isEmpty) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +
           "Refer to the streaming programming guide for more details.")

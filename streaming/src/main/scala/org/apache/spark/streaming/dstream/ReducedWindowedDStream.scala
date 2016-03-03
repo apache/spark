@@ -129,7 +129,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     val numNewValues = newRDDs.size
 
     val mergeValues = (arrayOfValues: Array[Iterable[V]]) => {
-      if (arrayOfValues.size != 1 + numOldValues + numNewValues) {
+      if (arrayOfValues.length != 1 + numOldValues + numNewValues) {
         throw new Exception("Unexpected number of sequences of reduced values")
       }
       // Getting reduced values "old time steps" that will be removed from current window

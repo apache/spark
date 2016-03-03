@@ -1297,7 +1297,7 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
-      val bytes = new Array[Byte](8 * m.values.size)
+      val bytes = new Array[Byte](8 * m.values.length)
       val order = ByteOrder.nativeOrder()
       val isTransposed = if (m.isTransposed) 1 else 0
       ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
@@ -1389,7 +1389,7 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
-      val n = v.indices.size
+      val n = v.indices.length
       val indiceBytes = new Array[Byte](4 * n)
       val order = ByteOrder.nativeOrder()
       ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
