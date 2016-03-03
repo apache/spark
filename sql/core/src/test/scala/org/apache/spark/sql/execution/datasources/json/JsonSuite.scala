@@ -1497,6 +1497,34 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("SPARK-12872 Support to specify the option for compression codec") {
+    withTempDir { dir =>
+      val dir = Utils.createTempDir()
+      dir.delete()
+      val path = dir.getCanonicalPath
+      primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+
+      val jsonDF = sqlContext.read.json(path)
+      val jsonDir = new File(dir, "json").getCanonicalPath
+      jsonDF.coalesce(1).write
+        .format("json")
+        .option("compression", "gZiP")
+        .save(jsonDir)
+
+      val compressedFiles = new File(jsonDir).listFiles()
+      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+
+      val jsonCopy = sqlContext.read
+        .format("json")
+        .load(jsonDir)
+
+      assert(jsonCopy.count == jsonDF.count)
+      val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+      val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+      checkAnswer(jsonCopySome, jsonDFSome)
+    }
+  }
+
   test("SPARK-13543 Set explicitly the output as uncompressed") {
     val clonedConf = new Configuration(hadoopConfiguration)
     hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
