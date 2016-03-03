@@ -666,7 +666,7 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
-  def localTypeOf[T: TypeTag]: `Type` = {
+  def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.normalize
   }
