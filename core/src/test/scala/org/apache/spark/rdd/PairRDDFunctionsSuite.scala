@@ -17,19 +17,23 @@
 
 package org.apache.spark.rdd
 
-import org.apache.commons.math3.distribution.{PoissonDistribution, BinomialDistribution}
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.mapred._
-import org.apache.hadoop.util.Progressable
+import java.io.IOException
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
+import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
+import org.apache.hadoop.util.Progressable
+
 import org.apache.spark.{Partitioner, SharedSparkContext, SparkFunSuite}
+import org.apache.spark._
+import org.apache.spark.Partitioner
 import org.apache.spark.util.Utils
 
 class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
@@ -533,6 +537,38 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
+  test("failure callbacks should be called before calling writer.close() in saveNewAPIHadoopFile") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+
+    FakeWriterWithCallback.calledBy = ""
+    FakeWriterWithCallback.exception = null
+    val e = intercept[SparkException] {
+      pairs.saveAsNewAPIHadoopFile[NewFakeFormatWithCallback]("ignored")
+    }
+    assert(e.getMessage contains "failed to write")
+
+    assert(FakeWriterWithCallback.calledBy === "write,callback,close")
+    assert(FakeWriterWithCallback.exception != null, "exception should be captured")
+    assert(FakeWriterWithCallback.exception.getMessage contains "failed to write")
+  }
+
+  test("failure callbacks should be called before calling writer.close() in saveAsHadoopFile") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
+    val conf = new JobConf()
+
+    FakeWriterWithCallback.calledBy = ""
+    FakeWriterWithCallback.exception = null
+    val e = intercept[SparkException] {
+      pairs.saveAsHadoopFile(
+        "ignored", pairs.keyClass, pairs.valueClass, classOf[FakeFormatWithCallback], conf)
+    }
+    assert(e.getMessage contains "failed to write")
+
+    assert(FakeWriterWithCallback.calledBy === "write,callback,close")
+    assert(FakeWriterWithCallback.exception != null, "exception should be captured")
+    assert(FakeWriterWithCallback.exception.getMessage contains "failed to write")
+  }
+
   test("lookup") {
     val pairs = sc.parallelize(Array((1, 2), (3, 4), (5, 6), (5, 7)))
 
@@ -773,6 +809,60 @@ class NewFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 
   def getOutputCommitter(p1: NewTaskAttempContext): NewOutputCommitter = {
     new NewFakeCommitter()
+  }
+}
+
+object FakeWriterWithCallback {
+  var calledBy: String = ""
+  var exception: Throwable = _
+
+  def onFailure(ctx: TaskContext, e: Throwable): Unit = {
+    calledBy += "callback,"
+    exception = e
+  }
+}
+
+class FakeWriterWithCallback extends FakeWriter {
+
+  override def close(p1: Reporter): Unit = {
+    FakeWriterWithCallback.calledBy += "close"
+  }
+
+  override def write(p1: Integer, p2: Integer): Unit = {
+    FakeWriterWithCallback.calledBy += "write,"
+    TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
+      FakeWriterWithCallback.onFailure(t, e)
+    }
+    throw new IOException("failed to write")
+  }
+}
+
+class FakeFormatWithCallback() extends FakeOutputFormat {
+  override def getRecordWriter(
+    ignored: FileSystem,
+    job: JobConf, name: String,
+    progress: Progressable): RecordWriter[Integer, Integer] = {
+    new FakeWriterWithCallback()
+  }
+}
+
+class NewFakeWriterWithCallback extends NewFakeWriter {
+  override def close(p1: NewTaskAttempContext): Unit = {
+    FakeWriterWithCallback.calledBy += "close"
+  }
+
+  override def write(p1: Integer, p2: Integer): Unit = {
+    FakeWriterWithCallback.calledBy += "write,"
+    TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
+      FakeWriterWithCallback.onFailure(t, e)
+    }
+    throw new IOException("failed to write")
+  }
+}
+
+class NewFakeFormatWithCallback() extends NewFakeFormat {
+  override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+    new NewFakeWriterWithCallback()
   }
 }
 

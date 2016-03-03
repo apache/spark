@@ -252,10 +252,8 @@ private[sql] class DefaultWriterContainer(
     executorSideSetup(taskContext)
     val configuration = SparkHadoopUtil.get.getConfigurationFromJobContext(taskAttemptContext)
     configuration.set("spark.sql.sources.output.path", outputPath)
-    val writer = newOutputWriter(getWorkPath)
+    var writer = newOutputWriter(getWorkPath)
     writer.initConverter(dataSchema)
-
-    var writerClosed = false
 
     // If anything below fails, we should abort the task.
     try {
@@ -268,16 +266,17 @@ private[sql] class DefaultWriterContainer(
     } catch {
       case cause: Throwable =>
         logError("Aborting task.", cause)
+        // call failure callbacks first, so we could have a chance to cleanup the writer.
+        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(cause)
         abortTask()
         throw new SparkException("Task failed while writing rows.", cause)
     }
 
     def commitTask(): Unit = {
       try {
-        assert(writer != null, "OutputWriter instance should have been initialized")
-        if (!writerClosed) {
+        if (writer != null) {
           writer.close()
-          writerClosed = true
+          writer = null
         }
         super.commitTask()
       } catch {
@@ -290,9 +289,8 @@ private[sql] class DefaultWriterContainer(
 
     def abortTask(): Unit = {
       try {
-        if (!writerClosed) {
+        if (writer != null) {
           writer.close()
-          writerClosed = true
         }
       } finally {
         super.abortTask()
@@ -343,13 +341,14 @@ private[sql] class DynamicPartitionWriterContainer(
       UnsafeProjection.create(Concat(partitionStringExpression) :: Nil, partitionColumns)
 
     // If anything below fails, we should abort the task.
+    var currentWriter: OutputWriter = null
     try {
       // This will be filled in if we have to fall back on sorting.
       var sorter: UnsafeKVExternalSorter = null
       while (iterator.hasNext && sorter == null) {
         val inputRow = iterator.next()
         val currentKey = getPartitionKey(inputRow)
-        var currentWriter = outputWriters.get(currentKey)
+        currentWriter = outputWriters.get(currentKey)
 
         if (currentWriter == null) {
           if (outputWriters.size < maxOpenFiles) {
@@ -383,26 +382,27 @@ private[sql] class DynamicPartitionWriterContainer(
         val sortedIterator = sorter.sortedIterator()
         var currentKey: InternalRow = null
         var currentWriter: OutputWriter = null
-        try {
-          while (sortedIterator.next()) {
-            if (currentKey != sortedIterator.getKey) {
-              if (currentWriter != null) {
-                currentWriter.close()
-              }
-              currentKey = sortedIterator.getKey.copy()
-              logDebug(s"Writing partition: $currentKey")
-
-              // Either use an existing file from before, or open a new one.
-              currentWriter = outputWriters.remove(currentKey)
-              if (currentWriter == null) {
-                currentWriter = newOutputWriter(currentKey)
-              }
+        while (sortedIterator.next()) {
+          if (currentKey != sortedIterator.getKey) {
+            if (currentWriter != null) {
+              currentWriter.close()
+              currentWriter = null;
             }
+            currentKey = sortedIterator.getKey.copy()
+            logDebug(s"Writing partition: $currentKey")
 
-            currentWriter.writeInternal(sortedIterator.getValue)
+            // Either use an existing file from before, or open a new one.
+            currentWriter = outputWriters.remove(currentKey)
+            if (currentWriter == null) {
+              currentWriter = newOutputWriter(currentKey)
+            }
           }
-        } finally {
-          if (currentWriter != null) { currentWriter.close() }
+
+          currentWriter.writeInternal(sortedIterator.getValue)
+        }
+        if (currentWriter != null) {
+          currentWriter.close()
+          currentWriter = null;
         }
       }
 
@@ -410,6 +410,11 @@ private[sql] class DynamicPartitionWriterContainer(
     } catch {
       case cause: Throwable =>
         logError("Aborting task.", cause)
+        // call failure callbacks first, so we could have a chance to cleanup the writer.
+        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(cause)
+        if (currentWriter != null) {
+          currentWriter.close()
+        }
         abortTask()
         throw new SparkException("Task failed while writing rows.", cause)
     }
