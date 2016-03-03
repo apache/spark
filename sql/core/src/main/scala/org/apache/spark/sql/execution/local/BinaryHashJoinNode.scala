@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.local
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashedRelation}
 import org.apache.spark.sql.internal.SQLConf

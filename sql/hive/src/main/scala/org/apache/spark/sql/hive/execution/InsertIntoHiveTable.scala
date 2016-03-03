@@ -33,7 +33,6 @@ import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.SerializableJobConf
 
 private[hive]

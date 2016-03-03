@@ -17,7 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.util.{Arrays, Comparator}
+import java.util.Comparator
 
 import com.google.common.hash.Hashing
 
