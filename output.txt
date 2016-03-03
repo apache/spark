@@ -1,0 +1,1415 @@
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] Spark Project Parent POM
+[INFO] Spark Project Test Tags
+[INFO] Spark Project Sketch
+[INFO] Spark Project Launcher
+[INFO] Spark Project Networking
+[INFO] Spark Project Shuffle Streaming Service
+[INFO] Spark Project Unsafe
+[INFO] Spark Project Core
+[INFO] Spark Project GraphX
+[INFO] Spark Project Streaming
+[INFO] Spark Project Catalyst
+[INFO] Spark Project SQL
+[INFO] Spark Project ML Library
+[INFO] Spark Project Tools
+[INFO] Spark Project Hive
+[INFO] Spark Project Docker Integration Tests
+[INFO] Spark Project REPL
+[INFO] Spark Project Assembly
+[INFO] Spark Project External Twitter
+[INFO] Spark Project External Flume Sink
+[INFO] Spark Project External Flume
+[INFO] Spark Project External Flume Assembly
+[INFO] Spark Project External Akka
+[INFO] Spark Project External MQTT
+[INFO] Spark Project External MQTT Assembly
+[INFO] Spark Project External ZeroMQ
+[INFO] Spark Project External Kafka
+[INFO] Spark Project Examples
+[INFO] Spark Project External Kafka Assembly
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Parent POM 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-parent_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-parent_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-parent_2.11 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-parent_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-parent_2.11 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-parent_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 64 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 150 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Test Tags 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-test-tags_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-test-tags_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/tags/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/tags/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-test-tags_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/org/scalatest/scalatest_2.11/2.2.1/scalatest_2.11-2.2.1.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-test-tags_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-test-tags_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/tags/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-test-tags_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 3 Java sources to /Users/sweng/Desktop/spark/tags/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:43 PM [0.726s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-test-tags_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-test-tags_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-test-tags_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/tags/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-test-tags_2.11 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-test-tags_2.11 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-test-tags_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-test-tags_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-test-tags_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 81 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 153 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Sketch 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-sketch_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/common/sketch/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/common/sketch/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-sketch_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-sketch_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/common/sketch/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-sketch_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 9 Java sources to /Users/sweng/Desktop/spark/common/sketch/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/common/sketch/src/main/java/org/apache/spark/util/sketch/Platform.java:22: warning: Unsafe is internal proprietary API and may be removed in a future release[0m
+[0m[[33mwarn[0m] [0mimport sun.misc.Unsafe;[0m
+[0m[[33mwarn[0m] [0m               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/common/sketch/src/main/java/org/apache/spark/util/sketch/Platform.java:28: warning: Unsafe is internal proprietary API and may be removed in a future release[0m
+[0m[[33mwarn[0m] [0m  private static final Unsafe _UNSAFE;[0m
+[0m[[33mwarn[0m] [0m                       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/common/sketch/src/main/java/org/apache/spark/util/sketch/Platform.java:150: warning: Unsafe is internal proprietary API and may be removed in a future release[0m
+[0m[[33mwarn[0m] [0m    sun.misc.Unsafe unsafe;[0m
+[0m[[33mwarn[0m] [0m            ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/common/sketch/src/main/java/org/apache/spark/util/sketch/Platform.java:152: warning: Unsafe is internal proprietary API and may be removed in a future release[0m
+[0m[[33mwarn[0m] [0m      Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");[0m
+[0m[[33mwarn[0m] [0m                          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/common/sketch/src/main/java/org/apache/spark/util/sketch/Platform.java:154: warning: Unsafe is internal proprietary API and may be removed in a future release[0m
+[0m[[33mwarn[0m] [0m      unsafe = (sun.misc.Unsafe) unsafeField.get(null);[0m
+[0m[[33mwarn[0m] [0m                        ^[0m
+[0m[[33mwarn[0m] [0m6 warnings[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:45 PM [0.899s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-sketch_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-sketch_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-sketch_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/common/sketch/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-sketch_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:45 PM [0.061s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-sketch_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-sketch_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 87 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 135 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Launcher 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-launcher_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/launcher/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/launcher/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-launcher_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.1/commons-io-2.1.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.3/paranamer-2.3.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-launcher_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/launcher/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-launcher_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 15 Java sources to /Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:49 PM [1.388s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-launcher_2.11 ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 15 source files to /Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-launcher_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-launcher_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 2 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-launcher_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 5 Java sources to /Users/sweng/Desktop/spark/launcher/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:52 PM [1.180s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-launcher_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-launcher_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 67 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 130 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Networking 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-network-common_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/network/common/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/network/common/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-network-common_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar:/Users/sweng/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-network-common_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/network/common/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-network-common_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 65 Java sources to /Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:54 PM [1.494s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-network-common_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-network-common_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-network-common_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-network-common_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 12 Java sources to /Users/sweng/Desktop/spark/network/common/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:56 PM [1.422s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-network-common_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- maven-jar-plugin:2.6:test-jar (test-jar-on-test-compile) @ spark-network-common_2.11 ---
+[INFO] Building jar: /Users/sweng/Desktop/spark/network/common/target/spark-network-common_2.11-2.0.0-SNAPSHOT-tests.jar
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-network-common_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 110 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 157 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Shuffle Streaming Service 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-network-shuffle_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/network/shuffle/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/network/shuffle/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-network-shuffle_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-network-shuffle_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/network/shuffle/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-network-shuffle_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 16 Java sources to /Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:58 PM [1.092s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-network-shuffle_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-network-shuffle_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-network-shuffle_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/network/shuffle/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-network-shuffle_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 10 Java sources to /Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:52:59 PM [1.113s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-network-shuffle_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-network-shuffle_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 67 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 128 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Unsafe 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-unsafe_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/unsafe/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/unsafe/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-unsafe_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.0/objenesis-1.0.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-unsafe_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/unsafe/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-unsafe_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 14 Java sources to /Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:01 PM [0.982s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-unsafe_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-unsafe_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-unsafe_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/unsafe/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-unsafe_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 1 Scala source and 5 Java sources to /Users/sweng/Desktop/spark/unsafe/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:02 PM [1.858s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-unsafe_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-unsafe_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 93 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 136 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Core 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-core_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-core_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/core/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/core/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-core_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.2.0/hadoop-mapreduce-client-jobclient-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-servlet/8.1.14.v20131031/jetty-servlet-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-log4j12/1.7.10/slf4j-log4j12-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/net/razorvine/pyrolite/4.9/pyrolite-4.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-continuation/8.1.14.v20131031/jetty-continuation-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math/2.2/commons-math-2.2.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/sweng/.m2/repository/net/java/dev/jets3t/jets3t/0.7.1/jets3t-0.7.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-common/2.2.0/hadoop-common-2.2.0.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-compiler/2.11.7/scala-compiler-2.11.7.jar:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar:/Users/sweng/.m2/repository/org/slf4j/jul-to-slf4j/1.7.10/jul-to-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-auth/2.2.0/hadoop-auth-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/net/jpountz/lz4/lz4/1.3.0/lz4-1.3.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/io/netty/netty/3.8.0.Final/netty-3.8.0.Final.jar:/Users/sweng/.m2/repository/org/apache/mesos/mesos/0.21.1/mesos-0.21.1-shaded-protobuf.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/jline/jline/0.9.94/jline-0.9.94.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-security/8.1.14.v20131031/jetty-security-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.1/commons-io-2.1.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.mail.glassfish/1.4.1.v201005082020/javax.mail.glassfish-1.4.1.v201005082020.jar:/Users/sweng/.m2/repository/asm/asm/3.1/asm-3.1.jar:/Users/sweng/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-recipes/2.4.0/curator-recipes-2.4.0.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.activation/1.1.0.v201105071233/javax.activation-1.1.0.v201105071233.jar:/Users/sweng/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.2.0/hadoop-mapreduce-client-core-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.5.3/jackson-module-scala_2.11-2.5.3.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.2.0/hadoop-mapreduce-client-common-2.2.0.jar:/Users/sweng/.m2/repository/org/json4s/json4s-core_2.11/3.2.10/json4s-core_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-http/8.1.14.v20131031/jetty-http-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-plus/8.1.14.v20131031/jetty-plus-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/sweng/.m2/repository/net/sf/py4j/py4j/0.9.1/py4j-0.9.1.jar:/Users/sweng/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/sweng/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-jndi/8.1.14.v20131031/jetty-jndi-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-client/2.4.0/curator-client-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/org/scala-lang/scalap/2.11.7/scalap-2.11.7.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.2.0/hadoop-mapreduce-client-app-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/xbean/xbean-asm5-shaded/4.4/xbean-asm5-shaded-4.4.jar:/Users/sweng/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-webapp/8.1.14.v20131031/jetty-webapp-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.2.0/hadoop-yarn-server-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.1/scala-parser-combinators_2.11-1.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7-tests.jar:/Users/sweng/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/sweng/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.2.0/hadoop-mapreduce-client-shuffle-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-framework/2.4.0/curator-framework-2.4.0.jar:/Users/sweng/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-annotations/2.2.0/hadoop-annotations-2.2.0.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-api/1.7.10/slf4j-api-1.7.10.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-server/8.1.14.v20131031/jetty-server-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.0/objenesis-1.0.jar:/Users/sweng/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/sweng/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-io/8.1.14.v20131031/jetty-io-8.1.14.v20131031.jar:/Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.10/json4s-jackson_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.transaction/1.1.1.v201105210645/javax.transaction-1.1.1.v201105210645.jar:/Users/sweng/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/sweng/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.10/jcl-over-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-xml/8.1.14.v20131031/jetty-xml-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/json4s/json4s-ast_2.11/3.2.10/json4s-ast_2.11-3.2.10.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/jetty-util/8.1.14.v20131031/jetty-util-8.1.14.v20131031.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-core_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-core_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 32 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-core_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 30 Scala sources and 66 Java sources to /Users/sweng/Desktop/spark/core/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala:984: method getStackTraceString in class RichException is deprecated: Use Throwable#getStackTrace[0m
+[0m[[33mwarn[0m] [0m        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))[0m
+[0m[[33mwarn[0m] [0m                                                          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala:1020: method getStackTraceString in class RichException is deprecated: Use Throwable#getStackTrace[0m
+[0m[[33mwarn[0m] [0m        abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}", Some(e))[0m
+[0m[[33mwarn[0m] [0m                                                               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala:1047: method getStackTraceString in class RichException is deprecated: Use Throwable#getStackTrace[0m
+[0m[[33mwarn[0m] [0m        abortStage(stage, s"Task creation failed: $e\n${e.getStackTraceString}", Some(e))[0m
+[0m[[33mwarn[0m] [0m                                                          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/main/scala/org/apache/spark/util/Utils.scala:1621: method lines_! in trait ProcessBuilder is deprecated: Use stream_! instead.[0m
+[0m[[33mwarn[0m] [0m    (linkCmd + src.getAbsolutePath() + " " + dst.getPath() + cmdSuffix) lines_![0m
+[0m[[33mwarn[0m] [0m                                                                        ^[0m
+[0m[[33mwarn[0m] [0mfour warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:13 PM [7.733s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-core_2.11 ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 78 source files to /Users/sweng/Desktop/spark/core/target/scala-2.11/classes
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-core_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-core_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 50 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-core_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 11 Scala sources and 18 Java sources to /Users/sweng/Desktop/spark/core/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/test/scala/org/apache/spark/network/netty/NettyBlockTransferSecuritySuite.scala:123: Adaptation of argument list by inserting () has been deprecated: this is unlikely to be what you want.[0m
+[0m[[33mwarn[0m] [0m        signature: Success.apply[T](value: T): scala.util.Success[T][0m
+[0m[[33mwarn[0m] [0m  given arguments: <none>[0m
+[0m[[33mwarn[0m] [0m after adaptation: Success((): Unit)[0m
+[0m[[33mwarn[0m] [0m        Success()[0m
+[0m[[33mwarn[0m] [0m               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/test/scala/org/apache/spark/storage/ShuffleBlockFetcherIteratorSuite.scala:152: method future in package concurrent is deprecated: Use `Future { ... }` instead.[0m
+[0m[[33mwarn[0m] [0m        future {[0m
+[0m[[33mwarn[0m] [0m        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/test/scala/org/apache/spark/storage/ShuffleBlockFetcherIteratorSuite.scala:214: method future in package concurrent is deprecated: Use `Future { ... }` instead.[0m
+[0m[[33mwarn[0m] [0m        future {[0m
+[0m[[33mwarn[0m] [0m        ^[0m
+[0m[[33mwarn[0m] [0mthree warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/test/java/test/org/apache/spark/JavaTaskCompletionListenerImpl.java:36: warning: [deprecation] isRunningLocally() in TaskContext has been deprecated[0m
+[0m[[33mwarn[0m] [0m    context.isRunningLocally();[0m
+[0m[[33mwarn[0m] [0m           ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/core/src/test/java/test/org/apache/spark/JavaTaskContextCompileCheck.java:32: warning: [deprecation] isRunningLocally() in TaskContext has been deprecated[0m
+[0m[[33mwarn[0m] [0m    tc.isRunningLocally();[0m
+[0m[[33mwarn[0m] [0m      ^[0m
+[0m[[33mwarn[0m] [0m3 warnings[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:23 PM [7.748s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-core_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-core_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-core_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-core_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 2 seconds, 624 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 2 seconds, 695 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project GraphX 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-graphx_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-graphx_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/graphx/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/graphx/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-graphx_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.2.0/hadoop-mapreduce-client-jobclient-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-log4j12/1.7.10/slf4j-log4j12-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/net/razorvine/pyrolite/4.9/pyrolite-4.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/sweng/.m2/repository/net/java/dev/jets3t/jets3t/0.7.1/jets3t-0.7.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-common/2.2.0/hadoop-common-2.2.0.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-compiler/2.11.7/scala-compiler-2.11.7.jar:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar:/Users/sweng/.m2/repository/org/slf4j/jul-to-slf4j/1.7.10/jul-to-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/net/sourceforge/f2j/arpack_combined_all/0.1/arpack_combined_all-0.1.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-auth/2.2.0/hadoop-auth-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/net/jpountz/lz4/lz4/1.3.0/lz4-1.3.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/io/netty/netty/3.8.0.Final/netty-3.8.0.Final.jar:/Users/sweng/.m2/repository/org/apache/mesos/mesos/0.21.1/mesos-0.21.1-shaded-protobuf.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/jline/jline/0.9.94/jline-0.9.94.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.1/commons-io-2.1.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/asm/asm/3.1/asm-3.1.jar:/Users/sweng/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-recipes/2.4.0/curator-recipes-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.2.0/hadoop-mapreduce-client-core-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.5.3/jackson-module-scala_2.11-2.5.3.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.2.0/hadoop-mapreduce-client-common-2.2.0.jar:/Users/sweng/.m2/repository/org/json4s/json4s-core_2.11/3.2.10/json4s-core_2.11-3.2.10.jar:/Users/sweng/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/sweng/.m2/repository/net/sf/py4j/py4j/0.9.1/py4j-0.9.1.jar:/Users/sweng/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/sweng/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-client/2.4.0/curator-client-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/org/scala-lang/scalap/2.11.7/scalap-2.11.7.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.2.0/hadoop-mapreduce-client-app-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/xbean/xbean-asm5-shaded/4.4/xbean-asm5-shaded-4.4.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.2/objenesis-1.2.jar:/Users/sweng/.m2/repository/com/github/fommil/netlib/core/1.1.2/core-1.1.2.jar:/Users/sweng/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.2.0/hadoop-yarn-server-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.1/scala-parser-combinators_2.11-1.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7-tests.jar:/Users/sweng/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/sweng/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.2.0/hadoop-mapreduce-client-shuffle-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-framework/2.4.0/curator-framework-2.4.0.jar:/Users/sweng/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-annotations/2.2.0/hadoop-annotations-2.2.0.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-api/1.7.10/slf4j-api-1.7.10.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/sweng/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/sweng/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.10/json4s-jackson_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/sweng/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.10/jcl-over-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/sweng/.m2/repository/org/json4s/json4s-ast_2.11/3.2.10/json4s-ast_2.11-3.2.10.jar:/Users/sweng/Desktop/spark/core/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-graphx_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-graphx_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/graphx/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-graphx_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 37 Scala sources and 5 Java sources to /Users/sweng/Desktop/spark/graphx/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/main/scala/org/apache/spark/graphx/Pregel.scala:124: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)[0m
+[0m[[33mwarn[0m] [0m                     ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/main/scala/org/apache/spark/graphx/Pregel.scala:138: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      messages = g.mapReduceTriplets([0m
+[0m[[33mwarn[0m] [0m                   ^[0m
+[0m[[33mwarn[0m] [0mtwo warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:33 PM [5.655s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-graphx_2.11 ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 5 source files to /Users/sweng/Desktop/spark/graphx/target/scala-2.11/classes
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-graphx_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-graphx_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 2 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-graphx_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 19 Scala sources to /Users/sweng/Desktop/spark/graphx/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/test/scala/org/apache/spark/graphx/GraphSuite.scala:224: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      val result = graph.mapReduceTriplets[Int](et => Iterator((et.dstId, et.srcAttr)), _ + _)[0m
+[0m[[33mwarn[0m] [0m                         ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/test/scala/org/apache/spark/graphx/GraphSuite.scala:289: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      val neighborDegreeSums = starDeg.mapReduceTriplets([0m
+[0m[[33mwarn[0m] [0m                                       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/test/scala/org/apache/spark/graphx/GraphSuite.scala:299: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      val numEvenNeighbors = vids.mapReduceTriplets(et => {[0m
+[0m[[33mwarn[0m] [0m                                  ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/test/scala/org/apache/spark/graphx/GraphSuite.scala:315: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      val numOddNeighbors = changedGraph.mapReduceTriplets(et => {[0m
+[0m[[33mwarn[0m] [0m                                         ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/test/scala/org/apache/spark/graphx/GraphSuite.scala:350: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      val neighborDegreeSums = reverseStarDegrees.mapReduceTriplets([0m
+[0m[[33mwarn[0m] [0m                                                  ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/graphx/src/test/scala/org/apache/spark/graphx/GraphSuite.scala:423: method mapReduceTriplets in class Graph is deprecated: use aggregateMessages[0m
+[0m[[33mwarn[0m] [0m      val neighborAttrSums = graph.mapReduceTriplets[Int]([0m
+[0m[[33mwarn[0m] [0m                                   ^[0m
+[0m[[33mwarn[0m] [0m6 warnings found[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:39 PM [5.053s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-graphx_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-graphx_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-graphx_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-graphx_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 288 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 347 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Streaming 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-streaming_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-streaming_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/streaming/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/streaming/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-streaming_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.2.0/hadoop-mapreduce-client-jobclient-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-log4j12/1.7.10/slf4j-log4j12-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/net/razorvine/pyrolite/4.9/pyrolite-4.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/sweng/.m2/repository/net/java/dev/jets3t/jets3t/0.7.1/jets3t-0.7.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-common/2.2.0/hadoop-common-2.2.0.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-compiler/2.11.7/scala-compiler-2.11.7.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.4/commons-io-2.4.jar:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar:/Users/sweng/.m2/repository/org/slf4j/jul-to-slf4j/1.7.10/jul-to-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-auth/2.2.0/hadoop-auth-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/net/jpountz/lz4/lz4/1.3.0/lz4-1.3.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/io/netty/netty/3.8.0.Final/netty-3.8.0.Final.jar:/Users/sweng/.m2/repository/org/apache/mesos/mesos/0.21.1/mesos-0.21.1-shaded-protobuf.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/jline/jline/0.9.94/jline-0.9.94.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/asm/asm/3.1/asm-3.1.jar:/Users/sweng/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-recipes/2.4.0/curator-recipes-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.2.0/hadoop-mapreduce-client-core-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.5.3/jackson-module-scala_2.11-2.5.3.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.2.0/hadoop-mapreduce-client-common-2.2.0.jar:/Users/sweng/.m2/repository/org/json4s/json4s-core_2.11/3.2.10/json4s-core_2.11-3.2.10.jar:/Users/sweng/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/sweng/.m2/repository/net/sf/py4j/py4j/0.9.1/py4j-0.9.1.jar:/Users/sweng/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/sweng/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-client/2.4.0/curator-client-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/org/scala-lang/scalap/2.11.7/scalap-2.11.7.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.2.0/hadoop-mapreduce-client-app-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/xbean/xbean-asm5-shaded/4.4/xbean-asm5-shaded-4.4.jar:/Users/sweng/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.2.0/hadoop-yarn-server-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.1/scala-parser-combinators_2.11-1.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7-tests.jar:/Users/sweng/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/sweng/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.2.0/hadoop-mapreduce-client-shuffle-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-framework/2.4.0/curator-framework-2.4.0.jar:/Users/sweng/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-annotations/2.2.0/hadoop-annotations-2.2.0.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-api/1.7.10/slf4j-api-1.7.10.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.0/objenesis-1.0.jar:/Users/sweng/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/sweng/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.10/json4s-jackson_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/sweng/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.10/jcl-over-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/sweng/.m2/repository/org/json4s/json4s-ast_2.11/3.2.10/json4s-ast_2.11-3.2.10.jar:/Users/sweng/Desktop/spark/core/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-streaming_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-streaming_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 2 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-streaming_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 99 Scala sources and 5 Java sources to /Users/sweng/Desktop/spark/streaming/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/dstream/FileInputDStream.scala:120: trait SynchronizedMap in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentHashMap as an alternative.[0m
+[0m[[33mwarn[0m] [0m    new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]][0m
+[0m[[33mwarn[0m] [0m                                                          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/dstream/FileInputDStream.scala:311: trait SynchronizedMap in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentHashMap as an alternative.[0m
+[0m[[33mwarn[0m] [0m      new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]][0m
+[0m[[33mwarn[0m] [0m                                                            ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/receiver/ReceiverSupervisor.scala:177: method getStackTraceString in class RichException is deprecated: Use Throwable#getStackTrace[0m
+[0m[[33mwarn[0m] [0m        logError("Error stopping receiver " + streamId + t.getStackTraceString)[0m
+[0m[[33mwarn[0m] [0m                                                           ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/receiver/ReceiverSupervisorImpl.scala:96: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    with mutable.SynchronizedBuffer[BlockGenerator][0m
+[0m[[33mwarn[0m] [0m                 ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/ui/StreamingJobProgressListener.scala:44: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    new LinkedHashMap[Time, SynchronizedBuffer[OutputOpIdAndSparkJobId]] {[0m
+[0m[[33mwarn[0m] [0m        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/ui/StreamingJobProgressListener.scala:46: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m          p1: JMap.Entry[Time, SynchronizedBuffer[OutputOpIdAndSparkJobId]]): Boolean = {[0m
+[0m[[33mwarn[0m] [0m                   ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/ui/StreamingJobProgressListener.scala:136: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m            with SynchronizedBuffer[OutputOpIdAndSparkJobId][0m
+[0m[[33mwarn[0m] [0m                 ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/main/scala/org/apache/spark/streaming/util/FileBasedWriteAheadLog.scala:284: class ThreadPoolTaskSupport in package parallel is deprecated: Use `ForkJoinTaskSupport` instead.[0m
+[0m[[33mwarn[0m] [0m    val taskSupport = new ThreadPoolTaskSupport(tpool)[0m
+[0m[[33mwarn[0m] [0m                          ^[0m
+[0m[[33mwarn[0m] [0m8 warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:53:51 PM [10.204s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming_2.11 ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 5 source files to /Users/sweng/Desktop/spark/streaming/target/scala-2.11/classes
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-streaming_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-streaming_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-streaming_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 39 Scala sources and 8 Java sources to /Users/sweng/Desktop/spark/streaming/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/CheckpointSuite.scala:153: abstract type V in type org.apache.spark.streaming.TestOutputStreamWithPartitions[V] is unchecked since it is eliminated by erasure[0m
+[0m[[33mwarn[0m] [0m        dstream.isInstanceOf[TestOutputStreamWithPartitions[V]][0m
+[0m[[33mwarn[0m] [0m                            ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/CheckpointSuite.scala:909: abstract type V in type org.apache.spark.streaming.TestOutputStreamWithPartitions[V] is unchecked since it is eliminated by erasure[0m
+[0m[[33mwarn[0m] [0m      dstream.isInstanceOf[TestOutputStreamWithPartitions[V]][0m
+[0m[[33mwarn[0m] [0m                          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/scheduler/ReceiverTrackerSuite.scala:108: no valid targets for annotation on value _ssc - it is discarded unused. You may specify targets with meta-annotations, e.g. @(transient @param)[0m
+[0m[[33mwarn[0m] [0mprivate[streaming] class RateTestInputDStream(@transient _ssc: StreamingContext)[0m
+[0m[[33mwarn[0m] [0m                                               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/BasicOperationsSuite.scala:648: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]][0m
+[0m[[33mwarn[0m] [0m                                                             ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/CheckpointSuite.scala:108: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])[0m
+[0m[[33mwarn[0m] [0m                                        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/CheckpointSuite.scala:594: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val outputBuffer = new ArrayBuffer[Seq[Int]] with SynchronizedBuffer[Seq[Int]][0m
+[0m[[33mwarn[0m] [0m                                                      ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/DStreamClosureSuite.scala:112: method foreach in class DStream is deprecated: use foreachRDD[0m
+[0m[[33mwarn[0m] [0m    expectCorrectException { ds.foreach(foreachF1) }[0m
+[0m[[33mwarn[0m] [0m                                ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/DStreamClosureSuite.scala:113: method foreach in class DStream is deprecated: use foreachRDD[0m
+[0m[[33mwarn[0m] [0m    expectCorrectException { ds.foreach(foreachF2) }[0m
+[0m[[33mwarn[0m] [0m                                ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:61: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]][0m
+[0m[[33mwarn[0m] [0m                                                             ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:122: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]][0m
+[0m[[33mwarn[0m] [0m                                                             ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:160: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m          with SynchronizedBuffer[Seq[Array[Byte]]][0m
+[0m[[33mwarn[0m] [0m               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:209: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]][0m
+[0m[[33mwarn[0m] [0m                                                       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:244: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]][0m
+[0m[[33mwarn[0m] [0m                                                         ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:249: class SynchronizedQueue in package mutable is deprecated: Synchronization via selective overriding of methods is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      val queue = new SynchronizedQueue[RDD[String]]()[0m
+[0m[[33mwarn[0m] [0m                      ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:285: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]][0m
+[0m[[33mwarn[0m] [0m                                                         ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:292: class SynchronizedQueue in package mutable is deprecated: Synchronization via selective overriding of methods is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      val queue = new SynchronizedQueue[RDD[String]]()[0m
+[0m[[33mwarn[0m] [0m                      ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/InputStreamsSuite.scala:376: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]][0m
+[0m[[33mwarn[0m] [0m                                                             ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/MapWithStateSuite.scala:553: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val collectedOutputs = new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]][0m
+[0m[[33mwarn[0m] [0m                                                        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/MapWithStateSuite.scala:555: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val collectedStateSnapshots = new ArrayBuffer[Seq[(K, S)]] with SynchronizedBuffer[Seq[(K, S)]][0m
+[0m[[33mwarn[0m] [0m                                                                    ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:286: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val batchInfosCompleted = new ArrayBuffer[BatchInfo] with SynchronizedBuffer[BatchInfo][0m
+[0m[[33mwarn[0m] [0m                                                            ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:287: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val batchInfosStarted = new ArrayBuffer[BatchInfo] with SynchronizedBuffer[BatchInfo][0m
+[0m[[33mwarn[0m] [0m                                                          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:288: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val batchInfosSubmitted = new ArrayBuffer[BatchInfo] with SynchronizedBuffer[BatchInfo][0m
+[0m[[33mwarn[0m] [0m                                                            ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:305: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val startedReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int][0m
+[0m[[33mwarn[0m] [0m                                                           ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:306: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val stoppedReceiverStreamIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int][0m
+[0m[[33mwarn[0m] [0m                                                           ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:308: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    new ArrayBuffer[(Int, String, String)] with SynchronizedBuffer[(Int, String, String)][0m
+[0m[[33mwarn[0m] [0m                                                ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:326: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val startedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int][0m
+[0m[[33mwarn[0m] [0m                                                            ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:327: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val completedOutputOperationIds = new ArrayBuffer[Int] with SynchronizedBuffer[Int][0m
+[0m[[33mwarn[0m] [0m                                                              ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/StreamingListenerSuite.scala:360: trait SynchronizedMap in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentHashMap as an alternative.[0m
+[0m[[33mwarn[0m] [0m  val failureReasons = new HashMap[Int, String] with SynchronizedMap[Int, String][0m
+[0m[[33mwarn[0m] [0m                                                     ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/TestSuiteBase.scala:96: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val output: SynchronizedBuffer[Seq[T]] =[0m
+[0m[[33mwarn[0m] [0m                ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/TestSuiteBase.scala:97: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]][0m
+[0m[[33mwarn[0m] [0m                                   ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/TestSuiteBase.scala:120: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val output: SynchronizedBuffer[Seq[Seq[T]]] =[0m
+[0m[[33mwarn[0m] [0m                ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/TestSuiteBase.scala:121: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      new ArrayBuffer[Seq[Seq[T]]] with SynchronizedBuffer[Seq[Seq[T]]])[0m
+[0m[[33mwarn[0m] [0m                                        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/TestSuiteBase.scala:325: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])[0m
+[0m[[33mwarn[0m] [0m                                        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/TestSuiteBase.scala:350: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m      new ArrayBuffer[Seq[Seq[W]]] with SynchronizedBuffer[Seq[Seq[W]]])[0m
+[0m[[33mwarn[0m] [0m                                        ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/receiver/BlockGeneratorSuite.scala:234: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val pushedData = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any][0m
+[0m[[33mwarn[0m] [0m                                                               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/receiver/BlockGeneratorSuite.scala:235: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val addedData = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any][0m
+[0m[[33mwarn[0m] [0m                                                              ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/receiver/BlockGeneratorSuite.scala:236: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val addedMetadata = new mutable.ArrayBuffer[Any] with mutable.SynchronizedBuffer[Any][0m
+[0m[[33mwarn[0m] [0m                                                                  ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/util/RecurringTimerSuite.scala:33: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val results = new mutable.ArrayBuffer[Long]() with mutable.SynchronizedBuffer[Long][0m
+[0m[[33mwarn[0m] [0m                                                               ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/streaming/src/test/scala/org/apache/spark/streaming/util/RecurringTimerSuite.scala:54: trait SynchronizedBuffer in package mutable is deprecated: Synchronization via traits is deprecated as it is inherently unreliable.  Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.[0m
+[0m[[33mwarn[0m] [0m    val results = new mutable.ArrayBuffer[Long]() with mutable.SynchronizedBuffer[Long][0m
+[0m[[33mwarn[0m] [0m                                                               ^[0m
+[0m[[33mwarn[0m] [0m39 warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:54:06 PM [13.516s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-streaming_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-streaming_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 794 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 887 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Catalyst 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-catalyst_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-catalyst_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/sql/catalyst/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/sql/catalyst/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-catalyst_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.2.0/hadoop-mapreduce-client-jobclient-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-log4j12/1.7.10/slf4j-log4j12-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/net/razorvine/pyrolite/4.9/pyrolite-4.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/sweng/.m2/repository/net/java/dev/jets3t/jets3t/0.7.1/jets3t-0.7.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-common/2.2.0/hadoop-common-2.2.0.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-compiler/2.11.7/scala-compiler-2.11.7.jar:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar:/Users/sweng/.m2/repository/org/slf4j/jul-to-slf4j/1.7.10/jul-to-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-auth/2.2.0/hadoop-auth-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/net/jpountz/lz4/lz4/1.3.0/lz4-1.3.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/io/netty/netty/3.8.0.Final/netty-3.8.0.Final.jar:/Users/sweng/.m2/repository/org/apache/mesos/mesos/0.21.1/mesos-0.21.1-shaded-protobuf.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/jline/jline/0.9.94/jline-0.9.94.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.1/commons-io-2.1.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/asm/asm/3.1/asm-3.1.jar:/Users/sweng/.m2/repository/org/codehaus/janino/janino/2.7.8/janino-2.7.8.jar:/Users/sweng/.m2/repository/org/antlr/antlr-runtime/3.5.2/antlr-runtime-3.5.2.jar:/Users/sweng/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-recipes/2.4.0/curator-recipes-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.2.0/hadoop-mapreduce-client-core-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.5.3/jackson-module-scala_2.11-2.5.3.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.2.0/hadoop-mapreduce-client-common-2.2.0.jar:/Users/sweng/.m2/repository/org/json4s/json4s-core_2.11/3.2.10/json4s-core_2.11-3.2.10.jar:/Users/sweng/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/sweng/.m2/repository/net/sf/py4j/py4j/0.9.1/py4j-0.9.1.jar:/Users/sweng/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/sweng/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/codehaus/janino/commons-compiler/2.7.8/commons-compiler-2.7.8.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-client/2.4.0/curator-client-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/org/scala-lang/scalap/2.11.7/scalap-2.11.7.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.2.0/hadoop-mapreduce-client-app-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/xbean/xbean-asm5-shaded/4.4/xbean-asm5-shaded-4.4.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.2/objenesis-1.2.jar:/Users/sweng/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.2.0/hadoop-yarn-server-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.1/scala-parser-combinators_2.11-1.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7-tests.jar:/Users/sweng/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/sweng/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.2.0/hadoop-mapreduce-client-shuffle-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-framework/2.4.0/curator-framework-2.4.0.jar:/Users/sweng/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-annotations/2.2.0/hadoop-annotations-2.2.0.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-api/1.7.10/slf4j-api-1.7.10.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/sweng/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/sweng/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.10/json4s-jackson_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/sweng/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.10/jcl-over-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/sweng/.m2/repository/org/json4s/json4s-ast_2.11/3.2.10/json4s-ast_2.11-3.2.10.jar:/Users/sweng/Desktop/spark/core/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- antlr3-maven-plugin:3.5.2:antlr (default) @ spark-catalyst_2.11 ---
+[INFO] ANTLR: Processing source directory /Users/sweng/Desktop/spark/sql/catalyst/src/main/antlr3
+Grammar /Users/sweng/Desktop/spark/sql/catalyst/src/main/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlLexer.g is up to date - build skipped
+Grammar /Users/sweng/Desktop/spark/sql/catalyst/src/main/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlParser.g is up to date - build skipped
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-catalyst_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-catalyst_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/sweng/Desktop/spark/sql/catalyst/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-catalyst_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 156 Scala sources and 21 Java sources to /Users/sweng/Desktop/spark/sql/catalyst/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/ScalaReflection.scala:661: method normalize in class TypeApi is deprecated: Use `dealias` or `etaExpand` instead[0m
+[0m[[33mwarn[0m] [0m    tag.in(mirror).tpe.normalize[0m
+[0m[[33mwarn[0m] [0m                       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/ScalaReflection.scala:768: value nme in trait StandardNames is deprecated: Use `termNames` instead[0m
+[0m[[33mwarn[0m] [0m    val constructorSymbol = tpe.member(nme.CONSTRUCTOR)[0m
+[0m[[33mwarn[0m] [0m                                       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/ScalaReflection.scala:770: method paramss in trait MethodSymbolApi is deprecated: Use `paramLists` instead[0m
+[0m[[33mwarn[0m] [0m      constructorSymbol.asMethod.paramss[0m
+[0m[[33mwarn[0m] [0m                                 ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/ScalaReflection.scala:778: method paramss in trait MethodSymbolApi is deprecated: Use `paramLists` instead[0m
+[0m[[33mwarn[0m] [0m        primaryConstructorSymbol.get.asMethod.paramss[0m
+[0m[[33mwarn[0m] [0m                                              ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/codegen/package.scala:54: class AbstractFileClassLoader in package interpreter is deprecated: Use `scala.tools.nsc.util.AbstractFileClassLoader`[0m
+[0m[[33mwarn[0m] [0m          .asInstanceOf[scala.tools.nsc.interpreter.AbstractFileClassLoader][0m
+[0m[[33mwarn[0m] [0m                                                    ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/mathExpressions.scala:749: method apply in object BigDecimal is deprecated: The default conversion from Float may not do what you want.  Use BigDecimal.decimal for a String representation, or explicitly convert the Float with .toDouble.[0m
+[0m[[33mwarn[0m] [0m          BigDecimal(f).setScale(_scale, HALF_UP).toFloat[0m
+[0m[[33mwarn[0m] [0m          ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/misc.scala:146: method shaHex in object DigestUtils is deprecated: see corresponding Javadoc for more information.[0m
+[0m[[33mwarn[0m] [0m    UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))[0m
+[0m[[33mwarn[0m] [0m                                      ^[0m
+[0m[[33mwarn[0m] [0m7 warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/target/generated-sources/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlParser.java:924: warning: [rawtypes] found raw type: Stack[0m
+[0m[[33mwarn[0m] [0m	  Stack msgs = new Stack<String>();[0m
+[0m[[33mwarn[0m] [0m	  ^[0m
+[0m[[33mwarn[0m] [0m  missing type arguments for generic class Stack<E>[0m
+[0m[[33mwarn[0m] [0m  where E is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    E extends Object declared in class Stack[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/target/generated-sources/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlParser.java:1175: warning: [unchecked] unchecked call to push(E) as a member of the raw type Stack[0m
+[0m[[33mwarn[0m] [0m	      msgs.push(msg);[0m
+[0m[[33mwarn[0m] [0m	               ^[0m
+[0m[[33mwarn[0m] [0m  where E is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    E extends Object declared in class Stack[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/target/generated-sources/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlParser.java:1785: warning: [unchecked] unchecked call to push(E) as a member of the raw type Stack[0m
+[0m[[33mwarn[0m] [0m		 msgs.push("explain option"); [0m
+[0m[[33mwarn[0m] [0m		          ^[0m
+[0m[[33mwarn[0m] [0m  where E is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    E extends Object declared in class Stack[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/target/generated-sources/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlParser.java:8251: warning: [unchecked] unchecked call to push(E) as a member of the raw type Stack[0m
+[0m[[33mwarn[0m] [0m		msgs.push("alter partition key type"); [0m
+[0m[[33mwarn[0m] [0m		         ^[0m
+[0m[[33mwarn[0m] [0m  where E is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    E extends Object declared in class Stack[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/target/generated-sources/antlr3/org/apache/spark/sql/catalyst/parser/SparkSqlParser.java:13366: warning: [unchecked] unchecked call to push(E) as a member of the raw type Stack[0m
+[0m[[33mwarn[0m] [0m		 msgs.push("compaction request"); [0m
+[0m[[33mwarn[0m] [0m		          ^[0m
+[0m[[33mwarn[0m] [0m  where E is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    E extends Object declared in class Stack[0m
+[0m[[33mwarn[0m] [0m6 warnings[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:54:42 PM [32.610s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-catalyst_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-catalyst_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-catalyst_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-catalyst_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 90 Scala sources to /Users/sweng/Desktop/spark/sql/catalyst/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/test/scala/org/apache/spark/sql/catalyst/expressions/LiteralExpressionSuite.scala:99: Octal escape literals are deprecated, use \u0000 instead.[0m
+[0m[[33mwarn[0m] [0m    checkEvaluation(Literal("\0"), "\0")[0m
+[0m[[33mwarn[0m] [0m                             ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/test/scala/org/apache/spark/sql/catalyst/expressions/LiteralExpressionSuite.scala:99: Octal escape literals are deprecated, use \u0000 instead.[0m
+[0m[[33mwarn[0m] [0m    checkEvaluation(Literal("\0"), "\0")[0m
+[0m[[33mwarn[0m] [0m                                    ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/test/scala/org/apache/spark/sql/catalyst/expressions/CodeGenerationSuite.scala:39: method future in package concurrent is deprecated: Use `Future { ... }` instead.[0m
+[0m[[33mwarn[0m] [0m      future {[0m
+[0m[[33mwarn[0m] [0m      ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/catalyst/src/test/scala/org/apache/spark/sql/catalyst/expressions/ExpressionEvalHelper.scala:85: method getStackTraceString in class RichException is deprecated: Use Throwable#getStackTrace[0m
+[0m[[33mwarn[0m] [0m            |${e.getStackTraceString}[0m
+[0m[[33mwarn[0m] [0m                 ^[0m
+[0m[[33mwarn[0m] [0mfour warnings found[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:55:00 PM [17.877s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-catalyst_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-catalyst_2.11 ---
+[INFO] 
+[INFO] --- maven-jar-plugin:2.6:test-jar (test-jar-on-test-compile) @ spark-catalyst_2.11 ---
+[INFO] Building jar: /Users/sweng/Desktop/spark/sql/catalyst/target/spark-catalyst_2.11-2.0.0-SNAPSHOT-tests.jar
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-catalyst_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-catalyst_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 1 second, 582 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 1 second, 635 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project SQL 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-sql_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-sql_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/sql/core/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/sql/core/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-sql_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.2.0/hadoop-mapreduce-client-jobclient-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-jackson/1.7.0/parquet-jackson-1.7.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-log4j12/1.7.10/slf4j-log4j12-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/net/razorvine/pyrolite/4.9/pyrolite-4.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-format/2.3.0-incubating/parquet-format-2.3.0-incubating.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/sweng/.m2/repository/net/java/dev/jets3t/jets3t/0.7.1/jets3t-0.7.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-common/2.2.0/hadoop-common-2.2.0.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-compiler/2.11.7/scala-compiler-2.11.7.jar:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar:/Users/sweng/.m2/repository/org/slf4j/jul-to-slf4j/1.7.10/jul-to-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-auth/2.2.0/hadoop-auth-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/net/jpountz/lz4/lz4/1.3.0/lz4-1.3.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/io/netty/netty/3.8.0.Final/netty-3.8.0.Final.jar:/Users/sweng/.m2/repository/org/apache/mesos/mesos/0.21.1/mesos-0.21.1-shaded-protobuf.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/jline/jline/0.9.94/jline-0.9.94.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/com/univocity/univocity-parsers/1.5.6/univocity-parsers-1.5.6.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.1/commons-io-2.1.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/asm/asm/3.1/asm-3.1.jar:/Users/sweng/.m2/repository/org/codehaus/janino/janino/2.7.8/janino-2.7.8.jar:/Users/sweng/.m2/repository/org/antlr/antlr-runtime/3.5.2/antlr-runtime-3.5.2.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-recipes/2.4.0/curator-recipes-2.4.0.jar:/Users/sweng/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/sweng/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.2.0/hadoop-mapreduce-client-core-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.5.3/jackson-module-scala_2.11-2.5.3.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.2.0/hadoop-mapreduce-client-common-2.2.0.jar:/Users/sweng/.m2/repository/org/json4s/json4s-core_2.11/3.2.10/json4s-core_2.11-3.2.10.jar:/Users/sweng/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/sweng/.m2/repository/net/sf/py4j/py4j/0.9.1/py4j-0.9.1.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-encoding/1.7.0/parquet-encoding-1.7.0.jar:/Users/sweng/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/sweng/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/codehaus/janino/commons-compiler/2.7.8/commons-compiler-2.7.8.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-hadoop/1.7.0/parquet-hadoop-1.7.0.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-client/2.4.0/curator-client-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/org/scala-lang/scalap/2.11.7/scalap-2.11.7.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.2.0/hadoop-mapreduce-client-app-2.2.0.jar:/Users/sweng/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.2.0/hadoop-yarn-server-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.1/scala-parser-combinators_2.11-1.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/sweng/Desktop/spark/sql/catalyst/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/parquet/parquet-column/1.7.0/parquet-column-1.7.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7-tests.jar:/Users/sweng/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/sweng/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.2.0/hadoop-mapreduce-client-shuffle-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-common/1.7.0/parquet-common-1.7.0.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-framework/2.4.0/curator-framework-2.4.0.jar:/Users/sweng/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-generator/1.7.0/parquet-generator-1.7.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-annotations/2.2.0/hadoop-annotations-2.2.0.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-api/1.7.10/slf4j-api-1.7.10.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.0/objenesis-1.0.jar:/Users/sweng/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/sweng/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.10/json4s-jackson_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/sweng/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.10/jcl-over-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/sweng/.m2/repository/org/json4s/json4s-ast_2.11/3.2.10/json4s-ast_2.11-3.2.10.jar:/Users/sweng/Desktop/spark/common/sketch/target/scala-2.11/classes:/Users/sweng/Desktop/spark/core/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-sql_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-sql_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 4 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-sql_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 180 Scala sources and 37 Java sources to /Users/sweng/Desktop/spark/sql/core/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/main/scala/org/apache/spark/sql/execution/joins/BroadcastHashJoin.scala:80: method future in package concurrent is deprecated: Use `Future { ... }` instead.[0m
+[0m[[33mwarn[0m] [0m    future {[0m
+[0m[[33mwarn[0m] [0m    ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/main/scala/org/apache/spark/sql/execution/joins/BroadcastHashOuterJoin.scala:79: method future in package concurrent is deprecated: Use `Future { ... }` instead.[0m
+[0m[[33mwarn[0m] [0m    future {[0m
+[0m[[33mwarn[0m] [0m    ^[0m
+[0m[[33mwarn[0m] [0mtwo warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/main/java/org/apache/spark/sql/execution/datasources/parquet/UnsafeRowParquetRecordReader.java:766: warning: [deprecation] PLAIN_DICTIONARY in Encoding has been deprecated[0m
+[0m[[33mwarn[0m] [0m        if (columnarBatch != null && dataEncoding == Encoding.PLAIN_DICTIONARY) {[0m
+[0m[[33mwarn[0m] [0m                                                             ^[0m
+[0m[[33mwarn[0m] [0m2 warnings[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:55:26 PM [22.155s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-sql_2.11 ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 37 source files to /Users/sweng/Desktop/spark/sql/core/target/scala-2.11/classes
+[WARNING] /Users/sweng/Desktop/spark/sql/core/src/main/java/org/apache/spark/sql/execution/datasources/parquet/UnsafeRowParquetRecordReader.java:[766,61] [deprecation] PLAIN_DICTIONARY in Encoding has been deprecated
+[INFO] 
+[INFO] --- build-helper-maven-plugin:1.9.1:add-test-source (add-scala-test-sources) @ spark-sql_2.11 ---
+[INFO] Test Source directory: /Users/sweng/Desktop/spark/sql/core/src/test/gen-java added.
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-sql_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-sql_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 26 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-sql_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 131 Scala sources and 16 Java sources to /Users/sweng/Desktop/spark/sql/core/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/scala/org/apache/spark/sql/execution/columnar/ColumnarTestUtils.scala:52: unreachable code[0m
+[0m[[33mwarn[0m] [0m      case STRING => UTF8String.fromString(Random.nextString(Random.nextInt(32)))[0m
+[0m[[33mwarn[0m] [0m                                          ^[0m
+[0m[[33mwarn[0m] [0mone warning found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/AvroArrayOfArray.java:135: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.int_arrays_column = fieldSetFlags()[0] ? this.int_arrays_column : (java.util.List<java.util.List<java.lang.Integer>>) defaultValue(fields()[0]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                                                 ^[0m
+[0m[[33mwarn[0m] [0m  required: List<List<Integer>>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/AvroMapOfArray.java:135: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.string_to_ints_column = fieldSetFlags()[0] ? this.string_to_ints_column : (java.util.Map<java.lang.String,java.util.List<java.lang.Integer>>) defaultValue(fields()[0]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                                                                         ^[0m
+[0m[[33mwarn[0m] [0m  required: Map<String,List<Integer>>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/AvroNonNullableArrays.java:188: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.strings_column = fieldSetFlags()[0] ? this.strings_column : (java.util.List<java.lang.String>) defaultValue(fields()[0]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                          ^[0m
+[0m[[33mwarn[0m] [0m  required: List<String>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/AvroNonNullableArrays.java:189: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.maybe_ints_column = fieldSetFlags()[1] ? this.maybe_ints_column : (java.util.List<java.lang.Integer>) defaultValue(fields()[1]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                                 ^[0m
+[0m[[33mwarn[0m] [0m  required: List<Integer>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/Nested.java:188: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.nested_ints_column = fieldSetFlags()[0] ? this.nested_ints_column : (java.util.List<java.lang.Integer>) defaultValue(fields()[0]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                                   ^[0m
+[0m[[33mwarn[0m] [0m  required: List<Integer>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/ParquetAvroCompat.java:241: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.strings_column = fieldSetFlags()[0] ? this.strings_column : (java.util.List<java.lang.String>) defaultValue(fields()[0]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                          ^[0m
+[0m[[33mwarn[0m] [0m  required: List<String>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/ParquetAvroCompat.java:242: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.string_to_int_column = fieldSetFlags()[1] ? this.string_to_int_column : (java.util.Map<java.lang.String,java.lang.Integer>) defaultValue(fields()[1]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                                                       ^[0m
+[0m[[33mwarn[0m] [0m  required: Map<String,Integer>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/gen-java/org/apache/spark/sql/execution/datasources/parquet/test/avro/ParquetAvroCompat.java:243: warning: [unchecked] unchecked cast[0m
+[0m[[33mwarn[0m] [0m        record.complex_column = fieldSetFlags()[2] ? this.complex_column : (java.util.Map<java.lang.String,java.util.List<org.apache.spark.sql.execution.datasources.parquet.test.avro.Nested>>) defaultValue(fields()[2]);[0m
+[0m[[33mwarn[0m] [0m                                                                                                                                                                                                             ^[0m
+[0m[[33mwarn[0m] [0m  required: Map<String,List<Nested>>[0m
+[0m[[33mwarn[0m] [0m  found:    Object[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/java/test/org/apache/spark/sql/JavaDatasetSuite.java:215: warning: [unchecked] unchecked generic array creation for varargs parameter of type Tuple2<Integer,String>[][0m
+[0m[[33mwarn[0m] [0m      asSet(tuple2(1, "a"), tuple2(3, "foobar")),[0m
+[0m[[33mwarn[0m] [0m           ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/sql/core/src/test/java/test/org/apache/spark/sql/JavaDatasetSuite.java:315: warning: [unchecked] Possible heap pollution from parameterized vararg type T[0m
+[0m[[33mwarn[0m] [0m  private <T> Set<T> asSet(T... records) {[0m
+[0m[[33mwarn[0m] [0m                                ^[0m
+[0m[[33mwarn[0m] [0m  where T is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    T extends Object declared in method <T>asSet(T...)[0m
+[0m[[33mwarn[0m] [0m11 warnings[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:56:02 PM [33.883s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-sql_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-sql_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-sql_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-sql_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 1 second, 990 milliseconds.[0m
+[36mRun starting. Expected test count is: 0[0m
+[32mDiscoverySuite:[0m
+[36mRun completed in 2 seconds, 50 milliseconds.[0m
+[36mTotal number of tests run: 0[0m
+[36mSuites: completed 1, aborted 0[0m
+[36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
+[33mNo tests were executed.[0m
+[INFO]                                                                         
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project ML Library 2.0.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-mllib_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-mllib_2.11 ---
+[INFO] Add Source directory: /Users/sweng/Desktop/spark/mllib/src/main/scala
+[INFO] Add Test Source directory: /Users/sweng/Desktop/spark/mllib/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default-cli) @ spark-mllib_2.11 ---
+[INFO] Dependencies classpath:
+/Users/sweng/.m2/repository/com/esotericsoftware/kryo/kryo/2.21/kryo-2.21.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.2.0/hadoop-mapreduce-client-jobclient-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-jackson/1.7.0/parquet-jackson-1.7.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http/2.1.2/grizzly-http-2.1.2.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-log4j12/1.7.10/slf4j-log4j12-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/sweng/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/sweng/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/sweng/.m2/repository/org/spire-math/spire-macros_2.11/0.7.4/spire-macros_2.11-0.7.4.jar:/Users/sweng/.m2/repository/net/razorvine/pyrolite/4.9/pyrolite-4.9.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-json/1.9/jersey-json-1.9.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-client/2.2.0/hadoop-client-2.2.0.jar:/Users/sweng/.m2/repository/com/esotericsoftware/minlog/minlog/1.2/minlog-1.2.jar:/Users/sweng/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-format/2.3.0-incubating/parquet-format-2.3.0-incubating.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-rcm/2.1.2/grizzly-rcm-2.1.2.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/sweng/.m2/repository/org/spire-math/spire_2.11/0.7.4/spire_2.11-0.7.4.jar:/Users/sweng/.m2/repository/net/java/dev/jets3t/jets3t/0.7.1/jets3t-0.7.1.jar:/Users/sweng/Desktop/spark/graphx/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-common/2.2.0/hadoop-common-2.2.0.jar:/Users/sweng/.m2/repository/org/jpmml/pmml-schema/1.2.7/pmml-schema-1.2.7.jar:/Users/sweng/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-compiler/2.11.7/scala-compiler-2.11.7.jar:/Users/sweng/Desktop/spark/sql/core/target/scala-2.11/classes:/Users/sweng/.m2/repository/javax/servlet/javax.servlet-api/3.0.1/javax.servlet-api-3.0.1.jar:/Users/sweng/.m2/repository/org/eclipse/jetty/orbit/javax.servlet/3.0.0.v201112011016/javax.servlet-3.0.0.v201112011016.jar:/Users/sweng/.m2/repository/org/slf4j/jul-to-slf4j/1.7.10/jul-to-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/net/sourceforge/f2j/arpack_combined_all/0.1/arpack_combined_all-0.1.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-core/1.9/jersey-core-1.9.jar:/Users/sweng/.m2/repository/org/jpmml/pmml-agent/1.2.7/pmml-agent-1.2.7.jar:/Users/sweng/.m2/repository/org/glassfish/gmbal/gmbal-api-only/3.0.0-b023/gmbal-api-only-3.0.0-b023.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-auth/2.2.0/hadoop-auth-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-core/1.9/jersey-test-framework-core-1.9.jar:/Users/sweng/.m2/repository/net/jpountz/lz4/lz4/1.3.0/lz4-1.3.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/contribs/jersey-guice/1.9/jersey-guice-1.9.jar:/Users/sweng/.m2/repository/com/github/rwl/jtransforms/2.4.0/jtransforms-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.2.0/hadoop-yarn-client-2.2.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-client/1.9/jersey-client-1.9.jar:/Users/sweng/.m2/repository/io/netty/netty/3.8.0.Final/netty-3.8.0.Final.jar:/Users/sweng/.m2/repository/org/apache/mesos/mesos/0.21.1/mesos-0.21.1-shaded-protobuf.jar:/Users/sweng/.m2/repository/org/glassfish/external/management-api/3.0.0-b012/management-api-3.0.0-b012.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.5.3/jackson-annotations-2.5.3.jar:/Users/sweng/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/sweng/.m2/repository/jline/jline/0.9.94/jline-0.9.94.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-server/2.1.2/grizzly-http-server-2.1.2.jar:/Users/sweng/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/sweng/.m2/repository/com/univocity/univocity-parsers/1.5.6/univocity-parsers-1.5.6.jar:/Users/sweng/.m2/repository/net/sf/opencsv/opencsv/2.3/opencsv-2.3.jar:/Users/sweng/.m2/repository/com/twitter/chill_2.11/0.5.0/chill_2.11-0.5.0.jar:/Users/sweng/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/sweng/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/sweng/.m2/repository/org/xerial/snappy/snappy-java/1.1.2/snappy-java-1.1.2.jar:/Users/sweng/.m2/repository/commons-io/commons-io/2.1/commons-io-2.1.jar:/Users/sweng/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.5.3/jackson-databind-2.5.3.jar:/Users/sweng/.m2/repository/asm/asm/3.1/asm-3.1.jar:/Users/sweng/.m2/repository/org/codehaus/janino/janino/2.7.8/janino-2.7.8.jar:/Users/sweng/.m2/repository/org/antlr/antlr-runtime/3.5.2/antlr-runtime-3.5.2.jar:/Users/sweng/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-recipes/2.4.0/curator-recipes-2.4.0.jar:/Users/sweng/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/sweng/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.2.0/hadoop-mapreduce-client-core-2.2.0.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-http-servlet/2.1.2/grizzly-http-servlet-2.1.2.jar:/Users/sweng/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.5.3/jackson-module-scala_2.11-2.5.3.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/sweng/.m2/repository/org/glassfish/grizzly/grizzly-framework/2.1.2/grizzly-framework-2.1.2.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.2.0/hadoop-mapreduce-client-common-2.2.0.jar:/Users/sweng/.m2/repository/org/json4s/json4s-core_2.11/3.2.10/json4s-core_2.11-3.2.10.jar:/Users/sweng/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/sweng/.m2/repository/net/sf/py4j/py4j/0.9.1/py4j-0.9.1.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-encoding/1.7.0/parquet-encoding-1.7.0.jar:/Users/sweng/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/sweng/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-test-framework/jersey-test-framework-grizzly2/1.9/jersey-test-framework-grizzly2-1.9.jar:/Users/sweng/.m2/repository/org/codehaus/janino/commons-compiler/2.7.8/commons-compiler-2.7.8.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-hadoop/1.7.0/parquet-hadoop-1.7.0.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-client/2.4.0/curator-client-2.4.0.jar:/Users/sweng/.m2/repository/org/jpmml/pmml-model/1.2.7/pmml-model-1.2.7.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/sweng/.m2/repository/com/sun/xml/bind/jaxb-impl/2.2.3-1/jaxb-impl-2.2.3-1.jar:/Users/sweng/.m2/repository/org/scala-lang/scalap/2.11.7/scalap-2.11.7.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.2.0/hadoop-mapreduce-client-app-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/xbean/xbean-asm5-shaded/4.4/xbean-asm5-shaded-4.4.jar:/Users/sweng/.m2/repository/com/github/fommil/netlib/core/1.1.2/core-1.1.2.jar:/Users/sweng/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.2.0/hadoop-yarn-server-common-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.2.0/hadoop-hdfs-2.2.0.jar:/Users/sweng/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.2.0/hadoop-yarn-api-2.2.0.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.1/scala-parser-combinators_2.11-1.0.1.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.2.0/hadoop-yarn-common-2.2.0.jar:/Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/sweng/Desktop/spark/sql/catalyst/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/apache/parquet/parquet-column/1.7.0/parquet-column-1.7.0.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-server/1.9/jersey-server-1.9.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7-tests.jar:/Users/sweng/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/sweng/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.2.0/hadoop-mapreduce-client-shuffle-2.2.0.jar:/Users/sweng/.m2/repository/org/apache/zookeeper/zookeeper/3.4.5/zookeeper-3.4.5.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-common/1.7.0/parquet-common-1.7.0.jar:/Users/sweng/.m2/repository/org/apache/curator/curator-framework/2.4.0/curator-framework-2.4.0.jar:/Users/sweng/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar:/Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/sweng/.m2/repository/org/apache/commons/commons-math/2.1/commons-math-2.1.jar:/Users/sweng/.m2/repository/org/apache/parquet/parquet-generator/1.7.0/parquet-generator-1.7.0.jar:/Users/sweng/.m2/repository/org/apache/hadoop/hadoop-annotations/2.2.0/hadoop-annotations-2.2.0.jar:/Users/sweng/.m2/repository/org/slf4j/slf4j-api/1.7.10/slf4j-api-1.7.10.jar:/Users/sweng/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/sweng/.m2/repository/org/objenesis/objenesis/1.0/objenesis-1.0.jar:/Users/sweng/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/sweng/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/sweng/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.10/json4s-jackson_2.11-3.2.10.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-reflect/2.11.7/scala-reflect-2.11.7.jar:/Users/sweng/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/sweng/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/sweng/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.10/jcl-over-slf4j-1.7.10.jar:/Users/sweng/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/sweng/.m2/repository/org/scalanlp/breeze_2.11/0.11.2/breeze_2.11-0.11.2.jar:/Users/sweng/.m2/repository/org/json4s/json4s-ast_2.11/3.2.10/json4s-ast_2.11-3.2.10.jar:/Users/sweng/Desktop/spark/common/sketch/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/scalanlp/breeze-macros_2.11/0.11.2/breeze-macros_2.11-0.11.2.jar:/Users/sweng/Desktop/spark/core/target/scala-2.11/classes:/Users/sweng/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.5.3/jackson-core-2.5.3.jar:/Users/sweng/Desktop/spark/streaming/target/scala-2.11/classes:/Users/sweng/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/sweng/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/sweng/.m2/repository/com/esotericsoftware/reflectasm/reflectasm/1.07/reflectasm-1.07-shaded.jar:/Users/sweng/.m2/repository/org/scala-lang/scala-library/2.11.7/scala-library-2.11.7.jar:/Users/sweng/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/sweng/.m2/repository/com/twitter/chill-java/0.5.0/chill-java-0.5.0.jar:/Users/sweng/.m2/repository/org/codehaus/jettison/jettison/1.1/jettison-1.1.jar:/Users/sweng/.m2/repository/org/glassfish/javax.servlet/3.1/javax.servlet-3.1.jar:/Users/sweng/.m2/repository/com/sun/jersey/jersey-grizzly2/1.9/jersey-grizzly2-1.9.jar:/Users/sweng/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/sweng/.m2/repository/io/netty/netty-all/4.0.29.Final/netty-all-4.0.29.Final.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-mllib_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-mllib_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-mllib_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 241 Scala sources and 4 Java sources to /Users/sweng/Desktop/spark/mllib/target/scala-2.11/classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/main/scala/org/apache/spark/mllib/api/python/PythonMLLibAPI.scala:360: method setRuns in class KMeans is deprecated: Support for runs is deprecated. This param will have no effect in 2.0.0.[0m
+[0m[[33mwarn[0m] [0m      .setRuns(runs)[0m
+[0m[[33mwarn[0m] [0m       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/main/scala/org/apache/spark/mllib/clustering/KMeans.scala:505: method setRuns in class KMeans is deprecated: Support for runs is deprecated. This param will have no effect in 2.0.0.[0m
+[0m[[33mwarn[0m] [0m      .setRuns(runs)[0m
+[0m[[33mwarn[0m] [0m       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/main/scala/org/apache/spark/mllib/clustering/KMeans.scala:531: method setRuns in class KMeans is deprecated: Support for runs is deprecated. This param will have no effect in 2.0.0.[0m
+[0m[[33mwarn[0m] [0m      .setRuns(runs)[0m
+[0m[[33mwarn[0m] [0m       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/main/scala/org/apache/spark/mllib/clustering/PowerIterationClustering.scala:390: method setRuns in class KMeans is deprecated: Support for runs is deprecated. This param will have no effect in 2.0.0.[0m
+[0m[[33mwarn[0m] [0m      .setRuns(5)[0m
+[0m[[33mwarn[0m] [0m       ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/main/scala/org/apache/spark/mllib/util/MFDataGenerator.scala:109: method round in package math is deprecated: This is an integer type; there is no reason to round it.  Perhaps you meant to call this with a floating-point value?[0m
+[0m[[33mwarn[0m] [0m        math.round(sampSize * testSampFact), math.round(mn - sampSize)).toInt[0m
+[0m[[33mwarn[0m] [0m                                                  ^[0m
+[0m[[33mwarn[0m] [0m5 warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m1 warning[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:56:34 PM [27.672s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-mllib_2.11 ---
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 4 source files to /Users/sweng/Desktop/spark/mllib/target/scala-2.11/classes
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-mllib_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-mllib_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-mllib_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[0m[[0minfo[0m] [0mCompiling 146 Scala sources and 60 Java sources to /Users/sweng/Desktop/spark/mllib/target/scala-2.11/test-classes...[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/test/scala/org/apache/spark/mllib/fpm/FPGrowthSuite.scala:303: inferred existential type Array[(scala.collection.immutable.Set[_$2], Long)] forSome { type _$2 }, which cannot be expressed by wildcards,  should be enabled[0m
+[0m[[33mwarn[0m] [0mby making the implicit value scala.language.existentials visible.[0m
+[0m[[33mwarn[0m] [0mThis can be achieved by adding the import clause 'import scala.language.existentials'[0m
+[0m[[33mwarn[0m] [0mor by setting the compiler option -language:existentials.[0m
+[0m[[33mwarn[0m] [0mSee the Scala docs for value scala.language.existentials for a discussion[0m
+[0m[[33mwarn[0m] [0mwhy the feature should be explicitly enabled.[0m
+[0m[[33mwarn[0m] [0m      val newFreqItemsets = newModel.freqItemsets.collect().map { itemset =>[0m
+[0m[[33mwarn[0m] [0m                                                                ^[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/test/scala/org/apache/spark/mllib/fpm/FPGrowthSuite.scala:337: inferred existential type Array[(scala.collection.immutable.Set[_$2], Long)] forSome { type _$2 }, which cannot be expressed by wildcards,  should be enabled[0m
+[0m[[33mwarn[0m] [0mby making the implicit value scala.language.existentials visible.[0m
+[0m[[33mwarn[0m] [0m      val newFreqItemsets = newModel.freqItemsets.collect().map { itemset =>[0m
+[0m[[33mwarn[0m] [0m                                                                ^[0m
+[0m[[33mwarn[0m] [0mtwo warnings found[0m
+[0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/test/java/org/apache/spark/mllib/fpm/JavaFPGrowthSuite.java:98: warning: [rawtypes] found raw type: FPGrowthModel[0m
+[0m[[33mwarn[0m] [0m      FPGrowthModel newModel = FPGrowthModel.load(sc.sc(), outputPath);[0m
+[0m[[33mwarn[0m] [0m      ^[0m
+[0m[[33mwarn[0m] [0m  missing type arguments for generic class FPGrowthModel<Item>[0m
+[0m[[33mwarn[0m] [0m  where Item is a type-variable:[0m
+[0m[[33mwarn[0m] [0m    Item extends Object declared in class FPGrowthModel[0m
+[0m[[33mwarn[0m] [0m/Users/sweng/Desktop/spark/mllib/src/test/java/org/apache/spark/mllib/fpm/JavaFPGrowthSuite.java:100: warning: [unchecked] unchecked conversion[0m
+[0m[[33mwarn[0m] [0m        .collect();[0m
+[0m[[33mwarn[0m] [0m                ^[0m
+[0m[[33mwarn[0m] [0m  required: List<FreqItemset<String>>[0m
+[0m[[33mwarn[0m] [0m  found:    List[0m
+[0m[[33mwarn[0m] [0m3 warnings[0m
+[0m[[0minfo[0m] [0mCompile success at Mar 2, 2016 4:57:03 PM [28.363s][0m
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-mllib_2.11 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- maven-dependency-plugin:2.10:build-classpath (default) @ spark-mllib_2.11 ---
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.18.1:test (default-test) @ spark-mllib_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-mllib_2.11 ---
+Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
+[36mDiscovery starting.[0m
+[36mDiscovery completed in 1 second, 487 milliseconds.[0m
+[36mRun starting. Expected test count is: 2[0m
+[32mWord2PhraseSuite:[0m
+[31m- Word2Phrase Read/Write *** FAILED ***[0m
+[31m  java.lang.NoSuchMethodException: org.apache.spark.ml.feature.Word2Phrase.read()[0m
+[31m  at java.lang.Class.getMethod(Class.java:1786)[0m
+[31m  at org.apache.spark.ml.util.DefaultReadWriteTest$class.testDefaultReadWrite(DefaultReadWriteTest.scala:55)[0m
+[31m  at org.apache.spark.ml.feature.Word2PhraseSuite.testDefaultReadWrite(Word2PhraseSuite.scala:26)[0m
+[31m  at org.apache.spark.ml.feature.Word2PhraseSuite$$anonfun$1.apply$mcV$sp(Word2PhraseSuite.scala:69)[0m
+[31m  at org.apache.spark.ml.feature.Word2PhraseSuite$$anonfun$1.apply(Word2PhraseSuite.scala:59)[0m
+[31m  at org.apache.spark.ml.feature.Word2PhraseSuite$$anonfun$1.apply(Word2PhraseSuite.scala:59)[0m
+[31m  at org.scalatest.Transformer$$anonfun$apply$1.apply$mcV$sp(Transformer.scala:22)[0m
+[31m  at org.scalatest.OutcomeOf$class.outcomeOf(OutcomeOf.scala:85)[0m
+[31m  at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)[0m
+[31m  at org.scalatest.Transformer.apply(Transformer.scala:22)[0m
+[31m  ...[0m
+SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+SLF4J: Defaulting to no-operation (NOP) logger implementation
+SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
+[31m- Word2PhraseModel Read/Write *** FAILED ***[0m
+[31m  org.apache.spark.SparkException: Job aborted.[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1.apply$mcV$sp(InsertIntoHadoopFsRelation.scala:157)[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1.apply(InsertIntoHadoopFsRelation.scala:109)[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1.apply(InsertIntoHadoopFsRelation.scala:109)[0m
+[31m  at org.apache.spark.sql.execution.SQLExecution$.withNewExecutionId(SQLExecution.scala:53)[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation.run(InsertIntoHadoopFsRelation.scala:109)[0m
+[31m  at org.apache.spark.sql.execution.ExecutedCommand.sideEffectResult$lzycompute(commands.scala:58)[0m
+[31m  at org.apache.spark.sql.execution.ExecutedCommand.sideEffectResult(commands.scala:56)[0m
+[31m  at org.apache.spark.sql.execution.ExecutedCommand.doExecute(commands.scala:70)[0m
+[31m  at org.apache.spark.sql.execution.SparkPlan$$anonfun$execute$1.apply(SparkPlan.scala:108)[0m
+[31m  at org.apache.spark.sql.execution.SparkPlan$$anonfun$execute$1.apply(SparkPlan.scala:106)[0m
+[31m  ...[0m
+[31m  Cause: org.apache.spark.SparkException: Job aborted due to stage failure: Task 0 in stage 20.0 failed 1 times, most recent failure: Lost task 0.0 in stage 20.0 (TID 616, localhost): org.apache.spark.SparkException: Task failed while writing rows.[0m
+[31m	at org.apache.spark.sql.execution.datasources.DefaultWriterContainer.writeRows(WriterContainer.scala:266)[0m
+[31m	at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1$$anonfun$apply$mcV$sp$3.apply(InsertIntoHadoopFsRelation.scala:151)[0m
+[31m	at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1$$anonfun$apply$mcV$sp$3.apply(InsertIntoHadoopFsRelation.scala:151)[0m
+[31m	at org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:69)[0m
+[31m	at org.apache.spark.scheduler.Task.run(Task.scala:81)[0m
+[31m	at org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:214)[0m
+[31m	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)[0m
+[31m	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)[0m
+[31m	at java.lang.Thread.run(Thread.java:745)[0m
+[31mCaused by: java.lang.ArrayIndexOutOfBoundsException: 0[0m
+[31m	at org.apache.parquet.io.MessageColumnIO$MessageColumnIORecordConsumer.startMessage(MessageColumnIO.java:213)[0m
+[31m	at org.apache.spark.sql.execution.datasources.parquet.CatalystWriteSupport.consumeMessage(CatalystWriteSupport.scala:408)[0m
+[31m	at org.apache.spark.sql.execution.datasources.parquet.CatalystWriteSupport.write(CatalystWriteSupport.scala:103)[0m
+[31m	at org.apache.spark.sql.execution.datasources.parquet.CatalystWriteSupport.write(CatalystWriteSupport.scala:51)[0m
+[31m	at org.apache.parquet.hadoop.InternalParquetRecordWriter.write(InternalParquetRecordWriter.java:121)[0m
+[31m	at org.apache.parquet.hadoop.ParquetRecordWriter.write(ParquetRecordWriter.java:123)[0m
+[31m	at org.apache.parquet.hadoop.ParquetRecordWriter.write(ParquetRecordWriter.java:42)[0m
+[31m	at org.apache.spark.sql.execution.datasources.parquet.ParquetOutputWriter.writeInternal(ParquetRelation.scala:104)[0m
+[31m	at org.apache.spark.sql.execution.datasources.DefaultWriterContainer.writeRows(WriterContainer.scala:258)[0m
+[31m	... 8 more[0m
+[31m[0m
+[31mDriver stacktrace:[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler.org$apache$spark$scheduler$DAGScheduler$$failJobAndIndependentStages(DAGScheduler.scala:1452)[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler$$anonfun$abortStage$1.apply(DAGScheduler.scala:1440)[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler$$anonfun$abortStage$1.apply(DAGScheduler.scala:1439)[0m
+[31m  at scala.collection.mutable.ResizableArray$class.foreach(ResizableArray.scala:59)[0m
+[31m  at scala.collection.mutable.ArrayBuffer.foreach(ArrayBuffer.scala:48)[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler.abortStage(DAGScheduler.scala:1439)[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler$$anonfun$handleTaskSetFailed$1.apply(DAGScheduler.scala:802)[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler$$anonfun$handleTaskSetFailed$1.apply(DAGScheduler.scala:802)[0m
+[31m  at scala.Option.foreach(Option.scala:257)[0m
+[31m  at org.apache.spark.scheduler.DAGScheduler.handleTaskSetFailed(DAGScheduler.scala:802)[0m
+[31m  ...[0m
+[31m  Cause: org.apache.spark.SparkException: Task failed while writing rows.[0m
+[31m  at org.apache.spark.sql.execution.datasources.DefaultWriterContainer.writeRows(WriterContainer.scala:266)[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1$$anonfun$apply$mcV$sp$3.apply(InsertIntoHadoopFsRelation.scala:151)[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1$$anonfun$apply$mcV$sp$3.apply(InsertIntoHadoopFsRelation.scala:151)[0m
+[31m  at org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:69)[0m
+[31m  at org.apache.spark.scheduler.Task.run(Task.scala:81)[0m
+[31m  at org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:214)[0m
+[31m  at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1142)[0m
+[31m  at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:617)[0m
+[31m  at java.lang.Thread.run(Thread.java:745)[0m
+[31m  ...[0m
+[31m  Cause: java.lang.ArrayIndexOutOfBoundsException: 0[0m
+[31m  at org.apache.parquet.io.MessageColumnIO$MessageColumnIORecordConsumer.startMessage(MessageColumnIO.java:213)[0m
+[31m  at org.apache.spark.sql.execution.datasources.parquet.CatalystWriteSupport.consumeMessage(CatalystWriteSupport.scala:408)[0m
+[31m  at org.apache.spark.sql.execution.datasources.parquet.CatalystWriteSupport.write(CatalystWriteSupport.scala:103)[0m
+[31m  at org.apache.spark.sql.execution.datasources.parquet.CatalystWriteSupport.write(CatalystWriteSupport.scala:51)[0m
+[31m  at org.apache.parquet.hadoop.InternalParquetRecordWriter.write(InternalParquetRecordWriter.java:121)[0m
+[31m  at org.apache.parquet.hadoop.ParquetRecordWriter.write(ParquetRecordWriter.java:123)[0m
+[31m  at org.apache.parquet.hadoop.ParquetRecordWriter.write(ParquetRecordWriter.java:42)[0m
+[31m  at org.apache.spark.sql.execution.datasources.parquet.ParquetOutputWriter.writeInternal(ParquetRelation.scala:104)[0m
+[31m  at org.apache.spark.sql.execution.datasources.DefaultWriterContainer.writeRows(WriterContainer.scala:258)[0m
+[31m  at org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelation$$anonfun$run$1$$anonfun$apply$mcV$sp$3.apply(InsertIntoHadoopFsRelation.scala:151)[0m
+[31m  ...[0m
+[36mRun completed in 10 seconds, 690 milliseconds.[0m
+[36mTotal number of tests run: 2[0m
+[36mSuites: completed 2, aborted 0[0m
+[36mTests: succeeded 0, failed 2, canceled 0, ignored 0, pending 0[0m
+[31m*** 2 TESTS FAILED ***[0m
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary:
+[INFO] 
+[INFO] Spark Project Parent POM ........................... SUCCESS [  3.181 s]
+[INFO] Spark Project Test Tags ............................ SUCCESS [  1.981 s]
+[INFO] Spark Project Sketch ............................... SUCCESS [  1.769 s]
+[INFO] Spark Project Launcher ............................. SUCCESS [  6.839 s]
+[INFO] Spark Project Networking ........................... SUCCESS [  3.847 s]
+[INFO] Spark Project Shuffle Streaming Service ............ SUCCESS [  3.018 s]
+[INFO] Spark Project Unsafe ............................... SUCCESS [  3.520 s]
+[INFO] Spark Project Core ................................. SUCCESS [ 23.454 s]
+[INFO] Spark Project GraphX ............................... SUCCESS [ 13.443 s]
+[INFO] Spark Project Streaming ............................ SUCCESS [ 27.740 s]
+[INFO] Spark Project Catalyst ............................. SUCCESS [ 55.464 s]
+[INFO] Spark Project SQL .................................. SUCCESS [01:02 min]
+[INFO] Spark Project ML Library ........................... FAILURE [01:10 min]
+[INFO] Spark Project Tools ................................ SKIPPED
+[INFO] Spark Project Hive ................................. SKIPPED
+[INFO] Spark Project Docker Integration Tests ............. SKIPPED
+[INFO] Spark Project REPL ................................. SKIPPED
+[INFO] Spark Project Assembly ............................. SKIPPED
+[INFO] Spark Project External Twitter ..................... SKIPPED
+[INFO] Spark Project External Flume Sink .................. SKIPPED
+[INFO] Spark Project External Flume ....................... SKIPPED
+[INFO] Spark Project External Flume Assembly .............. SKIPPED
+[INFO] Spark Project External Akka ........................ SKIPPED
+[INFO] Spark Project External MQTT ........................ SKIPPED
+[INFO] Spark Project External MQTT Assembly ............... SKIPPED
+[INFO] Spark Project External ZeroMQ ...................... SKIPPED
+[INFO] Spark Project External Kafka ....................... SKIPPED
+[INFO] Spark Project Examples ............................. SKIPPED
+[INFO] Spark Project External Kafka Assembly .............. SKIPPED
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time: 04:37 min
+[INFO] Finished at: 2016-03-02T16:57:16-08:00
+[INFO] Final Memory: 57M/760M
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.scalatest:scalatest-maven-plugin:1.0:test (test) on project spark-mllib_2.11: There are test failures -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <goals> -rf :spark-mllib_2.11
