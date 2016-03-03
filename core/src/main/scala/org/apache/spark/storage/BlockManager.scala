@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import org.apache.spark.storage.disk.DiskBlockWriter
+import org.apache.spark.storage.disk.{DiskBlockObjectWriter, DiskBlockWriter}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -703,10 +703,8 @@ private[spark] class BlockManager(
       serializerInstance: SerializerInstance,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): DiskBlockObjectWriter = {
-    val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
-    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
-    new DiskBlockObjectWriter(file, serializerInstance, bufferSize, compressStream,
-      syncWrites, writeMetrics, blockId)
+    val diskBlockWriter = getDiskWriter(blockId, file, bufferSize, writeMetrics)
+    new DiskBlockObjectWriter(diskBlockWriter, serializerInstance, blockId)
   }
 
   /**

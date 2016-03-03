@@ -19,6 +19,8 @@ package org.apache.spark.shuffle
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
+import org.apache.spark.storage.disk.DiskBlockObjectWriter
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.{Logging, SparkConf, SparkEnv}

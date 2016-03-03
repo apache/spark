@@ -44,6 +44,7 @@ import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.*;
+import org.apache.spark.storage.disk.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.util.Utils;
@@ -112,12 +113,13 @@ public abstract class AbstractBytesToBytesMapSuite {
         Object[] args = invocationOnMock.getArguments();
 
         return new DiskBlockObjectWriter(
-          (File) args[1],
+          new DiskBlockWriter(
+            (File) args[1],
+            (Integer) args[3],
+            new CompressStream(),
+            false,
+            (ShuffleWriteMetrics) args[4]),
           (SerializerInstance) args[2],
-          (Integer) args[3],
-          new CompressStream(),
-          false,
-          (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]
         );
       }

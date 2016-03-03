@@ -37,7 +37,7 @@ private[spark] class DiskBlockWriter(
     val file: File,
     bufferSize: Int,
     compressStream: OutputStream => OutputStream,
-    syncWrites: Boolean,
+    val syncWrites: Boolean,
     // These write metrics concurrently shared with other active DiskBlockWriters who
     // are themselves performing writes. All updates must be relative.
     writeMetrics: ShuffleWriteMetrics)
