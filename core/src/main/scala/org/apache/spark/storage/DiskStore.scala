@@ -119,10 +119,6 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     getBytes(file, 0, file.length)
   }
 
-  def getBytes(segment: FileSegment): Option[ByteBuffer] = {
-    getBytes(segment.file, segment.offset, segment.length)
-  }
-
   override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
