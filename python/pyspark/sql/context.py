@@ -50,55 +50,54 @@ __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 def _monkey_patch_RDD(sqlContext):
     def toDF(self, schema=None, sampleRatio=None):
         """
-        Converts current :class:`RDD` into a :class:`DataFrame`
+        Converts current :class:`RDD` into a :class:`DataFrame` according to the given schema.
+        If the given schema is None or just column names, the schema will be inferred by scanning
+        the data in this RDD according to the sampleRatio.
 
-        This is a shorthand for ``sqlContext.createDataFrame(rdd, schema, sampleRatio)``
+        Note that, the given schema must match the real data, or exception will be thrown at
+        runtime. If the given schema is not StructType, it will be wrapped into a StructType as
+        its only field, and the field name will be "value", each record will also be wrapped into a
+        tuple, which can be converted to row later.
 
-        :param schema: a StructType or list of names of columns
+        :param schema: a :class:`DataType` or a datatype string or list of names of columns
         :param samplingRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
+        .. versionchanged:: 2.0
+           The schema parameter can be a DataType or a datatype string after 2.0. If it's not a
+           StructType, it will be wrapped into a StructType and each record will also be wrapped
+           into a tuple.
+
         >>> rdd.toDF().collect()
         [Row(name=u'Alice', age=1)]
+        >>> rdd.toDF("a: string, b: int").collect()
+        [Row(a=u'Alice', b=1)]
+        >>> rdd.map(lambda row: row.age).toDF("int").collect()
+        [Row(value=1)]
         """
-        return sqlContext.createDataFrame(self, schema, sampleRatio)
+        if schema is None or isinstance(schema, (list, tuple)):
+            # if schema is going to be inferred, no need to verify it.
+            return sqlContext.createDataFrame(self, schema, sampleRatio)
 
-    def schema(self, datatype):
-        """
-        Converts current :class:`RDD` into a :class:`DataFrame` according to the given data type.
-        Note that, the given datatype must match the real data, or exception will be thrown at
-        runtime. If the given datatype is not StructType, it will be wrapped into a StructType as
-        its only field, and the field name will be "value", each record will also be wrapped into a
-        list, which can be converted to row later.
+        if isinstance(schema, basestring):
+            schema = _parse_datatype_string(schema)
 
-        :param datatype:
-            a :class:`DataType` or a data type string. The data type string format equals to
-            `DataType.simpleString`, except that top level struct type can omit the `struct<>` and
-            numeric types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
-            ByteType. We can also use `int` as a short name for IntegerType.
-
-        """
-        if isinstance(datatype, basestring):
-            datatype = _parse_datatype_string(datatype)
-
-        if not isinstance(datatype, DataType):
-            raise TypeError("datatype should be DataType or string, but got: %s" % datatype)
+        if not isinstance(schema, DataType):
+            raise TypeError("schema should be DataType or string or list or tuple, " +
+                "but got: %s" % schema)
         else:
             def verify(obj):
-                _verify_type(obj, datatype)
+                _verify_type(obj, schema)
                 return obj
             rdd = self.map(verify)
 
             if isinstance(datatype, StructType):
-                schema = datatype
+                return sqlContext.createDataFrame(rdd, schema)
             else:
-                schema = StructType().add("value", datatype)
-                rdd = rdd.map(lambda obj: [obj])
-
-            return sqlContext.createDataFrame(rdd, schema)
+                return sqlContext.createDataFrame(rdd.map(lambda obj: (obj, )),
+                                                  StructType().add("value", schema))
 
     RDD.toDF = toDF
-    RDD.schema = schema
 
 
 class SQLContext(object):
