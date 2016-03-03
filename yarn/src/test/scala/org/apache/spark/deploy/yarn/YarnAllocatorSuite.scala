@@ -55,7 +55,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   val sparkConf = new SparkConf()
   sparkConf.set("spark.driver.host", "localhost")
   sparkConf.set("spark.driver.port", "4040")
-  sparkConf.set("spark.yarn.jar", "notarealjar.jar")
+  sparkConf.set(Client.CONF_SPARK_JARS, "notarealjar.jar")
   sparkConf.set("spark.yarn.launchContainers", "false")
 
   val appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(0, 0), 0)

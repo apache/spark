@@ -202,7 +202,7 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraConf: Map[String, String] = Map()): String = {
     val props = new Properties()
-    props.put("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
+    props.put(Client.CONF_SPARK_JARS, "local:" + fakeSparkJar.getAbsolutePath())
 
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(
