@@ -603,7 +603,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(parquetDF.inputFiles.nonEmpty)
 
       val unioned = jsonDF.unionAll(parquetDF).inputFiles.sorted
-      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).toSet.toArray.sorted
+      val allFiles = (jsonDF.inputFiles ++ parquetDF.inputFiles).distinct.sorted
       assert(unioned === allFiles)
     }
   }

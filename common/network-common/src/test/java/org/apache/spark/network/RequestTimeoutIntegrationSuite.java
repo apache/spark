@@ -124,8 +124,8 @@ public class RequestTimeoutIntegrationSuite {
     synchronized (callback1) {
       client.sendRpc(ByteBuffer.allocate(0), callback1);
       callback1.wait(4 * 1000);
-      assert (callback1.failure != null);
-      assert (callback1.failure instanceof IOException);
+      assertNotNull(callback1.failure);
+      assertTrue(callback1.failure instanceof IOException);
     }
     semaphore.release();
   }
@@ -167,8 +167,8 @@ public class RequestTimeoutIntegrationSuite {
     synchronized (callback0) {
       client0.sendRpc(ByteBuffer.allocate(0), callback0);
       callback0.wait(FOREVER);
-      assert (callback0.failure instanceof IOException);
-      assert (!client0.isActive());
+      assertTrue(callback0.failure instanceof IOException);
+      assertFalse(client0.isActive());
     }
 
     // Increment the semaphore and the second request should succeed quickly.
@@ -236,7 +236,7 @@ public class RequestTimeoutIntegrationSuite {
 
     synchronized (callback1) {
       // failed at same time as previous
-      assert (callback0.failure instanceof IOException);
+      assertTrue(callback0.failure instanceof IOException);
     }
   }
 
@@ -244,7 +244,7 @@ public class RequestTimeoutIntegrationSuite {
    * Callback which sets 'success' or 'failure' on completion.
    * Additionally notifies all waiters on this callback when invoked.
    */
-  class TestCallback implements RpcResponseCallback, ChunkReceivedCallback {
+  static class TestCallback implements RpcResponseCallback, ChunkReceivedCallback {
 
     int successLength = -1;
     Throwable failure;

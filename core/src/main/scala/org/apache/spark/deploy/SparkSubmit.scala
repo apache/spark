@@ -22,6 +22,7 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.commons.lang3.StringUtils
@@ -150,6 +151,7 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    */
+  @tailrec
   private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
@@ -721,6 +723,7 @@ object SparkSubmit {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
 
+    @tailrec
     def findCause(t: Throwable): Throwable = t match {
       case e: UndeclaredThrowableException =>
         if (e.getCause() != null) findCause(e.getCause()) else e

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubqueryAliases}
@@ -67,7 +68,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
-      // LimitPushDown, // Disabled until we have whole-stage codegen for limit
+      LimitPushDown,
       ColumnPruning,
       // Operator combine
       CollapseRepartition,
@@ -312,6 +313,10 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  *   - LeftSemiJoin
  */
 object ColumnPruning extends Rule[LogicalPlan] {
+  def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
+    output1.size == output2.size &&
+      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Window/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
@@ -378,7 +383,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, l: LeafNode) => p
 
     // Eliminate no-op Projects
-    case p @ Project(projectList, child) if child.output == p.output => child
+    case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
@@ -911,6 +916,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     * @param input a list of LogicalPlans to join.
     * @param conditions a list of condition for join.
     */
+  @tailrec
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {

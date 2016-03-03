@@ -20,7 +20,6 @@ package org.apache.spark.shuffle.hash
 import java.io.IOException
 
 import org.apache.spark._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._

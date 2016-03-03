@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSQLContext
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
