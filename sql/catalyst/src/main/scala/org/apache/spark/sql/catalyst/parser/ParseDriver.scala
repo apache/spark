@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.annotation.tailrec
+
 import org.antlr.runtime._
 import org.antlr.runtime.tree.CommonTree
 
@@ -71,6 +73,7 @@ object ParseDriver extends Logging {
       logInfo(s"Parse completed.")
 
       // Find the non null token tree in the result.
+      @tailrec
       def nonNullToken(tree: CommonTree): CommonTree = {
         if (tree.token != null || tree.getChildCount == 0) tree
         else nonNullToken(tree.getChild(0).asInstanceOf[CommonTree])

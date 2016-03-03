@@ -213,7 +213,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     appContext.getClass.getMethods.filter(_.getName.equals("getApplicationTags")).foreach{ method =>
       val tags = method.invoke(appContext).asInstanceOf[java.util.Set[String]]
       tags should contain allOf ("tag1", "dup", "tag2", "multi word")
-      tags.asScala.filter(_.nonEmpty).size should be (4)
+      tags.asScala.count(_.nonEmpty) should be (4)
     }
     appContext.getMaxAppAttempts should be (42)
   }

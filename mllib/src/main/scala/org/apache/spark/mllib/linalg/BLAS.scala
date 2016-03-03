@@ -75,7 +75,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     if (a == 1.0) {
       var k = 0
@@ -135,7 +135,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val xIndices = x.indices
     val yValues = y.values
-    val nnz = xIndices.size
+    val nnz = xIndices.length
 
     var sum = 0.0
     var k = 0
@@ -154,8 +154,8 @@ private[spark] object BLAS extends Serializable with Logging {
     val xIndices = x.indices
     val yValues = y.values
     val yIndices = y.indices
-    val nnzx = xIndices.size
-    val nnzy = yIndices.size
+    val nnzx = xIndices.length
+    val nnzy = yIndices.length
 
     var kx = 0
     var ky = 0
@@ -188,7 +188,7 @@ private[spark] object BLAS extends Serializable with Logging {
             val sxIndices = sx.indices
             val sxValues = sx.values
             val dyValues = dy.values
-            val nnz = sxIndices.size
+            val nnz = sxIndices.length
 
             var i = 0
             var k = 0

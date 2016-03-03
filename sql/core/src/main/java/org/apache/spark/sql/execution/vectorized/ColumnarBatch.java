@@ -251,7 +251,6 @@ public final class ColumnarBatch {
 
       @Override
       public Row next() {
-        assert(hasNext());
         while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
           ++rowId;
         }

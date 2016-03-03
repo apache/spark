@@ -60,7 +60,9 @@ class JavaSampleActorReceiver<T> extends JavaActorReceiver {
 
   @Override
   public void onReceive(Object msg) throws Exception {
-    store((T) msg);
+    @SuppressWarnings("unchecked")
+    T msgT = (T) msg;
+    store(msgT);
   }
 
   @Override

@@ -91,7 +91,7 @@ public class RpcIntegrationSuite {
     clientFactory.close();
   }
 
-  class RpcResult {
+  static class RpcResult {
     public Set<String> successMessages;
     public Set<String> errorMessages;
   }

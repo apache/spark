@@ -28,7 +28,7 @@ private[graphx]
 class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: Array[VD])
   extends Serializable {
   def iterator: Iterator[(VertexId, VD)] =
-    (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
+    (0 until vids.length).iterator.map { i => (vids(i), attrs(i)) }
 }
 
 private[graphx]

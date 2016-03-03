@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -286,6 +287,7 @@ object DecisionTree extends Serializable with Logging {
    *                This index is different from the index used during training a particular
    *                group of nodes on one call to [[findBestSplits()]].
    */
+  @tailrec
   private def predictNodeIndex(
       node: Node,
       binnedFeatures: Array[Int],
@@ -350,7 +352,7 @@ object DecisionTree extends Serializable with Logging {
       featuresForNode: Option[Array[Int]]): Unit = {
     val numFeaturesPerNode = if (featuresForNode.nonEmpty) {
       // Use subsampled features
-      featuresForNode.get.size
+      featuresForNode.get.length
     } else {
       // Use all features
       agg.metadata.numFeatures
@@ -411,7 +413,7 @@ object DecisionTree extends Serializable with Logging {
     if (featuresForNode.nonEmpty) {
       // Use subsampled features
       var featureIndexIdx = 0
-      while (featureIndexIdx < featuresForNode.get.size) {
+      while (featureIndexIdx < featuresForNode.get.length) {
         val binIndex = treePoint.binnedFeatures(featuresForNode.get.apply(featureIndexIdx))
         agg.update(featureIndexIdx, binIndex, label, instanceWeight)
         featureIndexIdx += 1
@@ -483,7 +485,7 @@ object DecisionTree extends Serializable with Logging {
      */
 
     // numNodes:  Number of nodes in this group
-    val numNodes = nodesForGroup.values.map(_.size).sum
+    val numNodes = nodesForGroup.values.map(_.length).sum
     logDebug("numNodes = " + numNodes)
     logDebug("numFeatures = " + metadata.numFeatures)
     logDebug("numClasses = " + metadata.numClasses)

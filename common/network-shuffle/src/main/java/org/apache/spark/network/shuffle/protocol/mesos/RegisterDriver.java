@@ -56,6 +56,14 @@ public class RegisterDriver extends BlockTransferMessage {
     return Objects.hashCode(appId);
   }
 
+  @Override
+  public boolean equals(Object o) {
+    if (!(o instanceof RegisterDriver)) {
+      return false;
+    }
+    return Objects.equal(appId, ((RegisterDriver) o).appId);
+  }
+
   public static RegisterDriver decode(ByteBuf buf) {
     String appId = Encoders.Strings.decode(buf);
     return new RegisterDriver(appId);

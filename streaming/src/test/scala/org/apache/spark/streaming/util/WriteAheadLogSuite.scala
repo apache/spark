@@ -74,12 +74,12 @@ abstract class CommonWriteAheadLogTests(
 
   test(testPrefix + "read all logs") {
     // Write data manually for testing reading through WriteAheadLog
-    val writtenData = (1 to 10).map { i =>
+    val writtenData = (1 to 10).flatMap { i =>
       val data = generateRandomData()
       val file = testDir + s"/log-$i-$i"
       writeDataManually(data, file, allowBatching)
       data
-    }.flatten
+    }
 
     val logDirectoryPath = new Path(testDir)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
@@ -193,12 +193,12 @@ abstract class CommonWriteAheadLogTests(
 
   test(testPrefix + "parallel recovery not enabled if closeFileAfterWrite = false") {
     // write some data
-    val writtenData = (1 to 10).map { i =>
+    val writtenData = (1 to 10).flatMap { i =>
       val data = generateRandomData()
       val file = testDir + s"/log-$i-$i"
       writeDataManually(data, file, allowBatching)
       data
-    }.flatten
+    }
 
     val wal = createWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)
     // create iterator but don't materialize it

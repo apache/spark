@@ -109,7 +109,7 @@ public class ExternalShuffleIntegrationSuite {
     handler.applicationRemoved(APP_ID, false /* cleanupLocalDirs */);
   }
 
-  class FetchResult {
+  static class FetchResult {
     public Set<String> successBlocks;
     public Set<String> failedBlocks;
     public List<ManagedBuffer> buffers;

@@ -79,7 +79,7 @@ object SampledRDDs {
     val sampledRDD = examples.sample(withReplacement = true, fraction = fraction)
     println(s"  RDD.sample(): sample has ${sampledRDD.count()} examples")
     val sampledArray = examples.takeSample(withReplacement = true, num = expectedSampleSize)
-    println(s"  RDD.takeSample(): sample has ${sampledArray.size} examples")
+    println(s"  RDD.takeSample(): sample has ${sampledArray.length} examples")
 
     println()
 

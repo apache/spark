@@ -550,7 +550,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   /**
    * Chain multiple UnsafeSorterIterator together as single one.
    */
-  class ChainedIterator extends UnsafeSorterIterator {
+  static class ChainedIterator extends UnsafeSorterIterator {
 
     private final Queue<UnsafeSorterIterator> iterators;
     private UnsafeSorterIterator current;

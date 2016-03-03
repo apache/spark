@@ -132,7 +132,7 @@ public class ChunkFetchIntegrationSuite {
     testFile.delete();
   }
 
-  class FetchResult {
+  static class FetchResult {
     public Set<Integer> successChunks;
     public Set<Integer> failedChunks;
     public List<ManagedBuffer> buffers;

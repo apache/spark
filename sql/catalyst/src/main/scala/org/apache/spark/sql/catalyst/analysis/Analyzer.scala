@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.reflect.Modifier
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
@@ -689,6 +690,7 @@ class Analyzer(
       * Resolve the expression on a specified logical plan and it's child (recursively), until
       * the expression is resolved or meet a non-unary node or Subquery.
       */
+    @tailrec
     private def resolveExpressionRecursively(expr: Expression, plan: LogicalPlan): Expression = {
       val resolved = resolveExpression(expr, plan)
       if (resolved.resolved) {

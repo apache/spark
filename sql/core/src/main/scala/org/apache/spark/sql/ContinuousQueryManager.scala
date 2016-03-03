@@ -55,9 +55,8 @@ class ContinuousQueryManager(sqlContext: SQLContext) {
    * @since 2.0.0
    */
   def get(name: String): ContinuousQuery = activeQueriesLock.synchronized {
-    activeQueries.get(name).getOrElse {
-      throw new IllegalArgumentException(s"There is no active query with name $name")
-    }
+    activeQueries.getOrElse(name,
+      throw new IllegalArgumentException(s"There is no active query with name $name"))
   }
 
   /**

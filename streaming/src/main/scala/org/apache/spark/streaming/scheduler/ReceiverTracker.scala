@@ -131,7 +131,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   // Track the active receiver job number. When a receiver job exits ultimately, countDown will
   // be called.
-  private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.size)
+  private val receiverJobExitLatch = new CountDownLatch(receiverInputStreams.length)
 
   /**
    * Track all receivers' information. The key is the receiver id, the value is the receiver info.

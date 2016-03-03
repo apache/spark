@@ -65,7 +65,7 @@ public class MessageWithHeaderSuite {
     assertEquals(42, result.readLong());
     assertEquals(84, result.readLong());
 
-    assert(msg.release());
+    assertTrue(msg.release());
     assertEquals(0, bodyPassedToNettyManagedBuffer.refCnt());
     assertEquals(0, header.refCnt());
   }
@@ -77,7 +77,7 @@ public class MessageWithHeaderSuite {
     ByteBuf body = (ByteBuf) managedBuf.convertToNetty();
     assertEquals(2, body.refCnt());
     MessageWithHeader msg = new MessageWithHeader(managedBuf, header, body, body.readableBytes());
-    assert(msg.release());
+    assertTrue(msg.release());
     Mockito.verify(managedBuf, Mockito.times(1)).release();
     assertEquals(0, body.refCnt());
   }
@@ -94,7 +94,7 @@ public class MessageWithHeaderSuite {
     for (long i = 0; i < 8; i++) {
       assertEquals(i, result.readLong());
     }
-    assert(msg.release());
+    assertTrue(msg.release());
   }
 
   private ByteBuf doWrite(MessageWithHeader msg, int minExpectedWrites) throws Exception {

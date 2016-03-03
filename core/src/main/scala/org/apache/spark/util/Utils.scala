@@ -27,6 +27,7 @@ import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import javax.net.ssl.HttpsURLConnection
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
@@ -2219,6 +2220,7 @@ private[spark] object Utils extends Logging {
   /**
    * Return whether the specified file is a parent directory of the child file.
    */
+  @tailrec
   def isInDirectory(parent: File, child: File): Boolean = {
     if (child == null || parent == null) {
       return false

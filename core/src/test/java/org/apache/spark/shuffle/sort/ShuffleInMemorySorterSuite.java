@@ -48,7 +48,7 @@ public class ShuffleInMemorySorterSuite {
   public void testSortingEmptyInput() {
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 100);
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
-    assert(!iter.hasNext());
+    Assert.assertFalse(iter.hasNext());
   }
 
   @Test

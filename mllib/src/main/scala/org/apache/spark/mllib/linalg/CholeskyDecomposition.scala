@@ -33,7 +33,7 @@ private[spark] object CholeskyDecomposition {
    * @return the solution array
    */
   def solve(A: Array[Double], bx: Array[Double]): Array[Double] = {
-    val k = bx.size
+    val k = bx.length
     val info = new intW(0)
     lapack.dppsv("U", k, 1, A, bx, k, info)
     val code = info.`val`

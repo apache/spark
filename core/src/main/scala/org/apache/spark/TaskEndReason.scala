@@ -248,7 +248,6 @@ case class ExecutorLostFailure(
     } else {
       "unrelated to the running tasks"
     }
-    s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
       reason.map { r => s" Reason: $r" }.getOrElse("")
   }

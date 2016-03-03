@@ -202,7 +202,7 @@ private[spark] class TaskSetManager(
                 ", but there are no executors alive there.")
           }
         }
-        case _ => Unit
+        case _ =>
       }
       pendingTasksForHost.getOrElseUpdate(loc.host, new ArrayBuffer) += index
       for (rack <- sched.getRackForHost(loc.host)) {
@@ -828,7 +828,7 @@ private[spark] class TaskSetManager(
       val time = clock.getTimeMillis()
       val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
       Arrays.sort(durations)
-      val medianDuration = durations(min((0.5 * tasksSuccessful).round.toInt, durations.size - 1))
+      val medianDuration = durations(min((0.5 * tasksSuccessful).round.toInt, durations.length - 1))
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, 100)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.

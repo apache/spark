@@ -66,7 +66,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    */
   @Since("1.1.0")
   def confusionMatrix: Matrix = {
-    val n = labels.size
+    val n = labels.length
     val values = Array.ofDim[Double](n * n)
     var i = 0
     while (i < n) {

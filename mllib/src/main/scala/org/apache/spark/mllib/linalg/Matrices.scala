@@ -987,7 +987,7 @@ object Matrices {
   def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
       return new DenseMatrix(0, 0, Array[Double]())
-    } else if (matrices.size == 1) {
+    } else if (matrices.length == 1) {
       return matrices(0)
     }
     val numRows = matrices(0).numRows
@@ -1046,7 +1046,7 @@ object Matrices {
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.isEmpty) {
       return new DenseMatrix(0, 0, Array[Double]())
-    } else if (matrices.size == 1) {
+    } else if (matrices.length == 1) {
       return matrices(0)
     }
     val numCols = matrices(0).numCols

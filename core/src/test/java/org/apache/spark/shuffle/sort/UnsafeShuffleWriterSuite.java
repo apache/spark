@@ -139,7 +139,7 @@ public class UnsafeShuffleWriterSuite {
       new Answer<InputStream>() {
         @Override
         public InputStream answer(InvocationOnMock invocation) throws Throwable {
-          assert (invocation.getArguments()[0] instanceof TempShuffleBlockId);
+          assertTrue(invocation.getArguments()[0] instanceof TempShuffleBlockId);
           InputStream is = (InputStream) invocation.getArguments()[1];
           if (conf.getBoolean("spark.shuffle.compress", true)) {
             return CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(is);
@@ -154,7 +154,7 @@ public class UnsafeShuffleWriterSuite {
       new Answer<OutputStream>() {
         @Override
         public OutputStream answer(InvocationOnMock invocation) throws Throwable {
-          assert (invocation.getArguments()[0] instanceof TempShuffleBlockId);
+          assertTrue(invocation.getArguments()[0] instanceof TempShuffleBlockId);
           OutputStream os = (OutputStream) invocation.getArguments()[1];
           if (conf.getBoolean("spark.shuffle.compress", true)) {
             return CompressionCodec$.MODULE$.createCodec(conf).compressedOutputStream(os);
@@ -252,7 +252,7 @@ public class UnsafeShuffleWriterSuite {
     createWriter(false).stop(false);
   }
 
-  class PandaException extends RuntimeException {
+  static class PandaException extends RuntimeException {
   }
 
   @Test(expected=PandaException.class)

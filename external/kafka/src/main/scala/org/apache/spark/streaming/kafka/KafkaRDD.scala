@@ -79,7 +79,7 @@ class KafkaRDD[
       .map(_.asInstanceOf[KafkaRDDPartition])
       .filter(_.count > 0)
 
-    if (num < 1 || nonEmptyPartitions.size < 1) {
+    if (num < 1 || nonEmptyPartitions.isEmpty) {
       return new Array[R](0)
     }
 

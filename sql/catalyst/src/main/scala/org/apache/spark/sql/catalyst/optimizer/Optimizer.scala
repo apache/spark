@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, EliminateSubqueryAliases}
@@ -915,6 +916,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     * @param input a list of LogicalPlans to join.
     * @param conditions a list of condition for join.
     */
+  @tailrec
   def createOrderedJoin(input: Seq[LogicalPlan], conditions: Seq[Expression]): LogicalPlan = {
     assert(input.size >= 2)
     if (input.size == 2) {

@@ -54,16 +54,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(!nums.isEmpty())
     assert(nums.max() === 4)
     assert(nums.min() === 1)
-    val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
+    val partitionSums = nums.mapPartitions(iter => Iterator(iter.sum))
     assert(partitionSums.collect().toList === List(3, 7))
 
     val partitionSumsWithSplit = nums.mapPartitionsWithIndex {
-      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+      case(split, iter) => Iterator((split, iter.sum))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
 
     val partitionSumsWithIndex = nums.mapPartitionsWithIndex {
-      case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
+      case(split, iter) => Iterator((split, iter.sum))
     }
     assert(partitionSumsWithIndex.collect().toList === List((0, 3), (1, 7)))
 

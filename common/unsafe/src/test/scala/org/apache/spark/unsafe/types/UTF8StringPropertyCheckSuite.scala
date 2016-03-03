@@ -193,7 +193,7 @@ class UTF8StringPropertyCheckSuite extends FunSuite with GeneratorDrivenProperty
 
   test("concat") {
     def concat(orgin: Seq[String]): String =
-      if (orgin.exists(_ == null)) null else orgin.mkString
+      if (orgin.contains(null)) null else orgin.mkString
 
     forAll { (inputs: Seq[String]) =>
       assert(UTF8String.concat(inputs.map(toUTF8): _*) === toUTF8(inputs.mkString))

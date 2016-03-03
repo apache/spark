@@ -243,7 +243,7 @@ class TaskResultGetterSuite extends SparkFunSuite with BeforeAndAfter with Local
     val resAfter = captor.getValue
     val resSizeBefore = resBefore.accumUpdates.find(_.name == Some(RESULT_SIZE)).flatMap(_.update)
     val resSizeAfter = resAfter.accumUpdates.find(_.name == Some(RESULT_SIZE)).flatMap(_.update)
-    assert(resSizeBefore.exists(_ == 0L))
+    assert(resSizeBefore.contains(0L))
     assert(resSizeAfter.exists(_.toString.toLong > 0L))
   }
 

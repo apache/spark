@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Maps;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -95,7 +96,7 @@ public class TransportClientFactorySuite {
           try {
             TransportClient client =
               factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-            assert (client.isActive());
+            assertTrue(client.isActive());
             clients.add(client);
           } catch (IOException e) {
             failed.incrementAndGet();
@@ -115,8 +116,8 @@ public class TransportClientFactorySuite {
       attempts[i].join();
     }
 
-    assert(failed.get() == 0);
-    assert(clients.size() == maxConnections);
+    Assert.assertEquals(0, failed.get());
+    Assert.assertEquals(clients.size(), maxConnections);
 
     for (TransportClient client : clients) {
       client.close();

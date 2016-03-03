@@ -166,7 +166,7 @@ class MinMaxScalerModel private[ml] (
 
       // 0 in sparse vector will probably be rescaled to non-zero
       val values = vector.toArray
-      val size = values.size
+      val size = values.length
       var i = 0
       while (i < size) {
         val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5

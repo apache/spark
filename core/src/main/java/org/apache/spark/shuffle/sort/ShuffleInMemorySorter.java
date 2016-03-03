@@ -30,7 +30,9 @@ final class ShuffleInMemorySorter {
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
     @Override
     public int compare(PackedRecordPointer left, PackedRecordPointer right) {
-      return left.getPartitionId() - right.getPartitionId();
+      int leftId = left.getPartitionId();
+      int rightId = right.getPartitionId();
+      return leftId < rightId ? -1 : (leftId > rightId ? 1 : 0);
     }
   }
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
