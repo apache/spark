@@ -29,7 +29,6 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
-import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.{MemorySink, MemoryStream, StreamExecution, StreamingRelation}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -48,20 +47,6 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
   after {
     assert(sqlContext.streams.active.isEmpty)
     sqlContext.streams.resetTerminated()
-  }
-
-  /**
-   * Disable stdout and stderr when running the test. To not output the logs to the console,
-   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
-   * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
-   * we change System.out and System.err.
-   */
-  private def testQuietly(name: String)(f: => Unit): Unit = {
-    test(name) {
-      quietly {
-        f
-      }
-    }
   }
 
   testQuietly("listing") {
