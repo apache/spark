@@ -49,7 +49,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     sqlContext.streams.resetTerminated()
   }
 
-  test("listing") {
+  testQuietly("listing") {
     val (m1, ds1) = makeDataset
     val (m2, ds2) = makeDataset
     val (m3, ds3) = makeDataset
@@ -83,7 +83,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         require(!q2.isActive)
         require(q2.exception.isDefined)
       }
-      val ex2 = withClue("no error while getting non-active query") {
+      withClue("no error while getting non-active query") {
         intercept[IllegalArgumentException] {
           sqlContext.streams.get(q2.name).eq(q2)
         }
@@ -93,7 +93,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     }
   }
 
-  test("awaitAnyTermination without timeout and resetTerminated") {
+  testQuietly("awaitAnyTermination without timeout and resetTerminated") {
     val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
@@ -139,7 +139,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     }
   }
 
-  test("awaitAnyTermination with timeout and resetTerminated") {
+  testQuietly("awaitAnyTermination with timeout and resetTerminated") {
     val datasets = Seq.fill(6)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)

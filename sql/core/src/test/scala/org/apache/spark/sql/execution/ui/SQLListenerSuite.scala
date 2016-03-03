@@ -25,6 +25,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -376,9 +377,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
 class SQLListenerMemoryLeakSuite extends SparkFunSuite {
 
   test("no memory leak") {
-    val oldLogLevel = org.apache.log4j.Logger.getRootLogger().getLevel()
-    try {
-      org.apache.log4j.Logger.getRootLogger().setLevel(org.apache.log4j.Level.FATAL)
+    quietly {
       val conf = new SparkConf()
         .setMaster("local")
         .setAppName("test")
@@ -413,8 +412,6 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
       } finally {
         sc.stop()
       }
-    } finally {
-      org.apache.log4j.Logger.getRootLogger().setLevel(oldLogLevel)
     }
   }
 }
