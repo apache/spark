@@ -95,7 +95,7 @@ def _monkey_patch_RDD(sqlContext):
                 return obj
             rdd = self.map(verify)
 
-            if isinstance(datatype, StructType):
+            if isinstance(schema, StructType):
                 return sqlContext.createDataFrame(rdd, schema)
             else:
                 return sqlContext.createDataFrame(rdd.map(lambda obj: (obj, )),
