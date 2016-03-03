@@ -39,7 +39,7 @@ import org.apache.parquet.schema.Type;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+import org.apache.spark.sql.catalyst.expressions.codegen.MemoryBlockHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
@@ -281,7 +281,7 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
     for (int i = 0; i < rows.length; ++i) {
       rows[i] = new UnsafeRow(requestedSchema.getFieldCount());
-      BufferHolder holder = new BufferHolder(rows[i], numVarLenFields * DEFAULT_VAR_LEN_SIZE);
+      MemoryBlockHolder holder = new MemoryBlockHolder(rows[i], numVarLenFields * DEFAULT_VAR_LEN_SIZE);
       rowWriters[i] = new UnsafeRowWriter(holder, requestedSchema.getFieldCount());
     }
   }

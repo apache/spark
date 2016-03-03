@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.util.AbstractScalaRowIterator;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
@@ -179,7 +180,7 @@ public final class UnsafeExternalRowSorter {
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
+    public int compare(MemoryBlock baseObj1, long baseOff1, MemoryBlock baseObj2, long baseOff2) {
       // TODO: Why are the sizes -1?
       row1.pointTo(baseObj1, baseOff1, -1);
       row2.pointTo(baseObj2, baseOff2, -1);

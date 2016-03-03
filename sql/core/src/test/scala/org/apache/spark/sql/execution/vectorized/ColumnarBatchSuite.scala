@@ -27,6 +27,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.memory.{ByteArrayMemoryBlock, MemoryBlock}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnarBatchSuite extends SparkFunSuite {
@@ -69,7 +70,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(v._1 == column.getIsNull(v._2))
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.nullsNativeAddress()
-          assert(v._1 == (Platform.getByte(null, addr + v._2) == 1), "index=" + v._2)
+          assert(v._1 == (Platform.getByte(null.asInstanceOf[Array[Byte]], addr + v._2) == 1),
+            "index=" + v._2)
         }
       }
       column.close
@@ -109,7 +111,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(v._1 == column.getByte(v._2), "MemoryMode" + memMode)
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
-          assert(v._1 == Platform.getByte(null, addr + v._2))
+          assert(v._1 == Platform.getByte(null.asInstanceOf[Array[Byte]], addr + v._2))
         }
       }
     }}
@@ -176,7 +178,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(v._1 == column.getInt(v._2), "Seed = " + seed + " Mem Mode=" + memMode)
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
-          assert(v._1 == Platform.getInt(null, addr + 4 * v._2))
+          assert(v._1 == Platform.getInt(null.asInstanceOf[Array[Byte]], addr + 4 * v._2))
         }
       }
       column.close
@@ -247,7 +249,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
             " Seed = " + seed + " MemMode=" + memMode)
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
-          assert(v._1 == Platform.getLong(null, addr + 8 * v._2))
+          assert(v._1 == Platform.getLong(null.asInstanceOf[Array[Byte]], addr + 8 * v._2))
         }
       }
     }}
@@ -274,17 +276,17 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += 5.0
       idx += 3
 
-      val buffer = new Array[Byte](16)
+      val buffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET, 2.234)
       Platform.putDouble(buffer, Platform.BYTE_ARRAY_OFFSET + 8, 1.123)
 
-      column.putDoubles(idx, 1, buffer, 8)
-      column.putDoubles(idx + 1, 1, buffer, 0)
+      column.putDoubles(idx, 1, buffer.getByteArray, 8)
+      column.putDoubles(idx + 1, 1, buffer.getByteArray, 0)
       reference += 1.123
       reference += 2.234
       idx += 2
 
-      column.putDoubles(idx, 2, buffer, 0)
+      column.putDoubles(idx, 2, buffer.getByteArray, 0)
       reference += 2.234
       reference += 1.123
       idx += 2
@@ -313,7 +315,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
         assert(v._1 == column.getDouble(v._2), "Seed = " + seed + " MemMode=" + memMode)
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
-          assert(v._1 == Platform.getDouble(null, addr + 8 * v._2))
+          assert(v._1 == Platform.getDouble(null.asInstanceOf[Array[Byte]], addr + 8 * v._2))
         }
       }
       column.close

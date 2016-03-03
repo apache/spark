@@ -26,6 +26,8 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -49,7 +51,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 // todo: there is a lof of duplicated code between UnsafeRow and UnsafeArrayData.
 public class UnsafeArrayData extends ArrayData {
 
-  private Object baseObject;
+  private MemoryBlock baseObject;
   private long baseOffset;
 
   // The number of elements in this array
@@ -101,7 +103,7 @@ public class UnsafeArrayData extends ArrayData {
    * @param baseOffset the offset within the base object
    * @param sizeInBytes the size of this array's backing data, in bytes
    */
-  public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+  public void pointTo(MemoryBlock baseObject, long baseOffset, int sizeInBytes) {
     // Read the number of elements from the first 4 bytes.
     final int numElements = Platform.getInt(baseObject, baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
@@ -314,7 +316,11 @@ public class UnsafeArrayData extends ArrayData {
     return false;
   }
 
-  public void writeToMemory(Object target, long targetOffset) {
+  public void writeToMemory(byte[] target, long targetOffset) {
+    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeToMemory(MemoryBlock target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
 
@@ -330,10 +336,10 @@ public class UnsafeArrayData extends ArrayData {
   @Override
   public UnsafeArrayData copy() {
     UnsafeArrayData arrayCopy = new UnsafeArrayData();
-    final byte[] arrayDataCopy = new byte[sizeInBytes];
+    ByteArrayMemoryBlock newBlock = ByteArrayMemoryBlock.fromByteArray(new byte[sizeInBytes]);
     Platform.copyMemory(
-      baseObject, baseOffset, arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-    arrayCopy.pointTo(arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+      baseObject, baseOffset, newBlock, newBlock.getBaseOffset(), sizeInBytes);
+    arrayCopy.pointTo(newBlock, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return arrayCopy;
   }
 }

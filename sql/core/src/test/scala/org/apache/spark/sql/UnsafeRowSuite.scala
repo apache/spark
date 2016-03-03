@@ -26,35 +26,35 @@ import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.memory.MemoryAllocator
+import org.apache.spark.unsafe.memory.{OffHeapMemoryBlock, ByteArrayMemoryBlock, MemoryAllocator}
 import org.apache.spark.unsafe.types.UTF8String
 
 class UnsafeRowSuite extends SparkFunSuite {
 
   test("UnsafeRow Java serialization") {
     // serializing an UnsafeRow pointing to a large buffer should only serialize the relevant data
-    val data = new Array[Byte](1024)
+    val data = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](1024))
     val row = new UnsafeRow(1)
-    row.pointTo(data, 16)
+    row.pointTo(data, Platform.BYTE_ARRAY_OFFSET, 16)
     row.setLong(0, 19285)
 
     val ser = new JavaSerializer(new SparkConf).newInstance()
     val row1 = ser.deserialize[UnsafeRow](ser.serialize(row))
     assert(row1.getLong(0) == 19285)
-    assert(row1.getBaseObject().asInstanceOf[Array[Byte]].length == 16)
+    assert(row1.getBaseObject().asInstanceOf[ByteArrayMemoryBlock].getByteArray.length == 16)
   }
 
   test("UnsafeRow Kryo serialization") {
     // serializing an UnsafeRow pointing to a large buffer should only serialize the relevant data
-    val data = new Array[Byte](1024)
+    val data = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](1024))
     val row = new UnsafeRow(1)
-    row.pointTo(data, 16)
+    row.pointTo(data, Platform.BYTE_ARRAY_OFFSET, 16)
     row.setLong(0, 19285)
 
     val ser = new KryoSerializer(new SparkConf).newInstance()
     val row1 = ser.deserialize[UnsafeRow](ser.serialize(row))
     assert(row1.getLong(0) == 19285)
-    assert(row1.getBaseObject().asInstanceOf[Array[Byte]].length == 16)
+    assert(row1.getBaseObject().asInstanceOf[ByteArrayMemoryBlock].getByteArray.length == 16)
   }
 
   test("bitset width calculation") {
@@ -70,7 +70,7 @@ class UnsafeRowSuite extends SparkFunSuite {
     val row = InternalRow.apply(UTF8String.fromString("hello"), UTF8String.fromString("world"), 123)
     val arrayBackedUnsafeRow: UnsafeRow =
       UnsafeProjection.create(Array[DataType](StringType, StringType, IntegerType)).apply(row)
-    assert(arrayBackedUnsafeRow.getBaseObject.isInstanceOf[Array[Byte]])
+//    assert(arrayBackedUnsafeRow.getBaseObject.isInstanceOf[Array[Byte]])
     val (bytesFromArrayBackedRow, field0StringFromArrayBackedRow): (Array[Byte], String) = {
       val baos = new ByteArrayOutputStream()
       arrayBackedUnsafeRow.writeToStream(baos, null)
@@ -82,17 +82,17 @@ class UnsafeRowSuite extends SparkFunSuite {
         Platform.copyMemory(
           arrayBackedUnsafeRow.getBaseObject,
           arrayBackedUnsafeRow.getBaseOffset,
-          offheapRowPage.getBaseObject,
+          offheapRowPage,
           offheapRowPage.getBaseOffset,
           arrayBackedUnsafeRow.getSizeInBytes
         )
         val offheapUnsafeRow: UnsafeRow = new UnsafeRow(3)
         offheapUnsafeRow.pointTo(
-          offheapRowPage.getBaseObject,
+          offheapRowPage,
           offheapRowPage.getBaseOffset,
           arrayBackedUnsafeRow.getSizeInBytes
         )
-        assert(offheapUnsafeRow.getBaseObject === null)
+        assert(offheapUnsafeRow.getBaseObject.isInstanceOf[OffHeapMemoryBlock])
         val baos = new ByteArrayOutputStream()
         val writeBuffer = new Array[Byte](1024)
         offheapUnsafeRow.writeToStream(baos, writeBuffer)

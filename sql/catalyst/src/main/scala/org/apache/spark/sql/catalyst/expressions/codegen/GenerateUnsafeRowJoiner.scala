@@ -163,7 +163,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |}
        |
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
-       |  private byte[] buf = new byte[64];
+       |  org.apache.spark.unsafe.memory.ByteArrayMemoryBlock
+       |  buf = org.apache.spark.unsafe.memory.ByteArrayMemoryBlock.fromByteArray(new byte[64]);
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
@@ -171,13 +172,14 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    // row2: ${schema2.size}, $bitset2Words words in bitset
        |    // output: ${schema1.size + schema2.size} fields, $outputBitsetWords words in bitset
        |    final int sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes() - $sizeReduction;
-       |    if (sizeInBytes > buf.length) {
-       |      buf = new byte[sizeInBytes];
+       |    if (sizeInBytes > buf.size()) {
+       |      buf = org.apache.spark.unsafe.memory.ByteArrayMemoryBlock.fromByteArray(
+       |              new byte[sizeInBytes] );
        |    }
        |
-       |    final java.lang.Object obj1 = row1.getBaseObject();
+       |    final org.apache.spark.unsafe.memory.MemoryBlock obj1 = row1.getBaseObject();
        |    final long offset1 = row1.getBaseOffset();
-       |    final java.lang.Object obj2 = row2.getBaseObject();
+       |    final org.apache.spark.unsafe.memory.MemoryBlock obj2 = row2.getBaseObject();
        |    final long offset2 = row2.getBaseOffset();
        |
        |    $copyBitset
@@ -187,7 +189,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    $copyVariableLengthRow2
        |    $updateOffset
        |
-       |    out.pointTo(buf, sizeInBytes);
+       |    out.pointTo(buf, buf.getBaseOffset(), sizeInBytes);
        |
        |    return out;
        |  }

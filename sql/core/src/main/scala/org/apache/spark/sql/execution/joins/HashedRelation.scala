@@ -30,6 +30,7 @@ import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.execution.local.LocalNode
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.memory.{ByteArrayMemoryBlock, MemoryBlock, MemoryLocation}
 import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 
@@ -308,7 +309,7 @@ private[joins] final class UnsafeHashedRelation(
       out.writeInt(binaryMap.numElements())
 
       var buffer = new Array[Byte](64)
-      def write(base: Object, offset: Long, length: Int): Unit = {
+      def write(base: MemoryBlock, offset: Long, length: Int): Unit = {
         if (buffer.length < length) {
           buffer = new Array[Byte](length)
         }
@@ -392,19 +393,19 @@ private[joins] final class UnsafeHashedRelation(
       pageSizeBytes)
 
     var i = 0
-    var keyBuffer = new Array[Byte](1024)
-    var valuesBuffer = new Array[Byte](1024)
+    var keyBuffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](1024))
+    var valuesBuffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](1024))
     while (i < nKeys) {
       val keySize = in.readInt()
       val valuesSize = in.readInt()
-      if (keySize > keyBuffer.length) {
-        keyBuffer = new Array[Byte](keySize)
+      if (keySize > keyBuffer.size()) {
+        keyBuffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](keySize))
       }
-      in.readFully(keyBuffer, 0, keySize)
-      if (valuesSize > valuesBuffer.length) {
-        valuesBuffer = new Array[Byte](valuesSize)
+      in.readFully(keyBuffer.getByteArray, 0, keySize)
+      if (valuesSize > valuesBuffer.size()) {
+        valuesBuffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](valuesSize))
       }
-      in.readFully(valuesBuffer, 0, valuesSize)
+      in.readFully(valuesBuffer.getByteArray, 0, valuesSize)
 
       // put it into binary map
       val loc = binaryMap.lookup(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize)
@@ -547,7 +548,8 @@ private[joins] final class LongArrayRelation(
     val idx = (key - start).toInt
     if (idx >= 0 && idx < sizes.length && sizes(idx) > 0) {
       val result = new UnsafeRow(numFields)
-      result.pointTo(bytes, Platform.BYTE_ARRAY_OFFSET + offsets(idx), sizes(idx))
+      result.pointTo( ByteArrayMemoryBlock.fromByteArray(bytes),
+        Platform.BYTE_ARRAY_OFFSET + offsets(idx), sizes(idx) )
       result
     } else {
       null

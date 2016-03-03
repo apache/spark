@@ -36,6 +36,8 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -111,7 +113,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   // Private fields and methods
   //////////////////////////////////////////////////////////////////////////////
 
-  private Object baseObject;
+  private MemoryBlock baseObject;
   private long baseOffset;
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
@@ -150,35 +152,19 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   // for serializer
   public UnsafeRow() {}
 
-  public Object getBaseObject() { return baseObject; }
+  public MemoryBlock getBaseObject() { return baseObject; }
   public long getBaseOffset() { return baseOffset; }
   public int getSizeInBytes() { return sizeInBytes; }
 
   @Override
   public int numFields() { return numFields; }
 
-  /**
-   * Update this UnsafeRow to point to different backing data.
-   *
-   * @param baseObject the base object
-   * @param baseOffset the offset within the base object
-   * @param sizeInBytes the size of this row's backing data, in bytes
-   */
-  public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+  public void pointTo( MemoryBlock aBlock, long anOffset, int aSizeInBytes ) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
-    this.baseObject = baseObject;
-    this.baseOffset = baseOffset;
-    this.sizeInBytes = sizeInBytes;
-  }
+    this.baseObject = aBlock;
+    this.baseOffset = anOffset;
+    this.sizeInBytes = aSizeInBytes;
 
-  /**
-   * Update this UnsafeRow to point to the underlying byte array.
-   *
-   * @param buf byte array to point to
-   * @param sizeInBytes the number of bytes valid in the byte array
-   */
-  public void pointTo(byte[] buf, int sizeInBytes) {
-    pointTo(buf, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
   }
 
   public void setTotalSize(int sizeInBytes) {
@@ -500,15 +486,15 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   @Override
   public UnsafeRow copy() {
     UnsafeRow rowCopy = new UnsafeRow(numFields);
-    final byte[] rowDataCopy = new byte[sizeInBytes];
+    ByteArrayMemoryBlock block = ByteArrayMemoryBlock.fromByteArray(new byte[sizeInBytes]);
     Platform.copyMemory(
       baseObject,
       baseOffset,
-      rowDataCopy,
-      Platform.BYTE_ARRAY_OFFSET,
+      block,
+      block.getBaseOffset(),
       sizeInBytes
     );
-    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    rowCopy.pointTo(block, block.getBaseOffset(), sizeInBytes);
     return rowCopy;
   }
 
@@ -518,7 +504,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public static UnsafeRow createFromByteArray(int numBytes, int numFields) {
     final UnsafeRow row = new UnsafeRow(numFields);
-    row.pointTo(new byte[numBytes], numBytes);
+    ByteArrayMemoryBlock block = ByteArrayMemoryBlock.fromByteArray(new byte[numBytes]);
+    row.pointTo(block, block.getBaseOffset(), numBytes);
     return row;
   }
 
@@ -528,13 +515,15 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void copyFrom(UnsafeRow row) {
     // copyFrom is only available for UnsafeRow created from byte array.
-    assert (baseObject instanceof byte[]) && baseOffset == Platform.BYTE_ARRAY_OFFSET;
+    assert (baseObject instanceof ByteArrayMemoryBlock);
     if (row.sizeInBytes > this.sizeInBytes) {
       // resize the underlying byte[] if it's not large enough.
-      this.baseObject = new byte[row.sizeInBytes];
+      this.baseObject = ByteArrayMemoryBlock.fromByteArray(new byte[row.sizeInBytes]);
     }
     Platform.copyMemory(
-      row.baseObject, row.baseOffset, this.baseObject, this.baseOffset, row.sizeInBytes);
+      row.baseObject, row.baseOffset,
+      this.baseObject, this.baseOffset,
+      row.sizeInBytes );
     // update the sizeInBytes.
     this.sizeInBytes = row.sizeInBytes;
   }
@@ -548,9 +537,9 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    *                    buffer will not be used and may be null.
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
-    if (baseObject instanceof byte[]) {
-      int offsetInByteArray = (int) (Platform.BYTE_ARRAY_OFFSET - baseOffset);
-      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+    if (baseObject instanceof ByteArrayMemoryBlock) {
+      int startIndex = (int) (baseOffset - baseObject.getBaseOffset());
+      out.write((byte[])baseObject.getBaseObject(), startIndex, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
       long rowReadPosition = baseOffset;
@@ -585,9 +574,11 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
-    if (baseObject instanceof byte[] && baseOffset == Platform.BYTE_ARRAY_OFFSET
-      && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
+    if (    baseObject instanceof ByteArrayMemoryBlock
+         && baseOffset == Platform.BYTE_ARRAY_OFFSET
+         && (((byte[]) baseObject.getBaseObject()).length == sizeInBytes) )
+    {
+      return (byte[]) baseObject.getBaseObject();
     } else {
       byte[] bytes = new byte[sizeInBytes];
       Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
@@ -617,7 +608,11 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    * The target memory address must already been allocated, and have enough space to hold all the
    * bytes in this string.
    */
-  public void writeToMemory(Object target, long targetOffset) {
+  public void writeToMemory(byte[] target, long targetOffset) {
+    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeToMemory(MemoryBlock target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
 
@@ -665,8 +660,8 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     this.sizeInBytes = in.readInt();
     this.numFields = in.readInt();
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
-    this.baseObject = new byte[sizeInBytes];
-    in.readFully((byte[]) baseObject);
+    this.baseObject = ByteArrayMemoryBlock.fromByteArray(new byte[sizeInBytes]);
+    in.readFully((byte[]) baseObject.getBaseObject());
   }
 
   @Override
@@ -683,7 +678,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     this.sizeInBytes = in.readInt();
     this.numFields = in.readInt();
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
-    this.baseObject = new byte[sizeInBytes];
-    in.read((byte[]) baseObject);
+    this.baseObject = ByteArrayMemoryBlock.fromByteArray(new byte[sizeInBytes]);
+    in.read((byte[]) baseObject.getBaseObject());
   }
 }

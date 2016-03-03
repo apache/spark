@@ -28,6 +28,7 @@ import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock
 import org.apache.spark.util.Benchmark
 
 /**
@@ -259,7 +260,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("hash") { iter =>
       var i = 0
-      val keyBytes = new Array[Byte](16)
+      val keyBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       var s = 0
@@ -274,7 +275,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("fast hash") { iter =>
       var i = 0
-      val keyBytes = new Array[Byte](16)
+      val keyBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       var s = 0
@@ -288,8 +289,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("arrayEqual") { iter =>
       var i = 0
-      val keyBytes = new Array[Byte](16)
-      val valueBytes = new Array[Byte](16)
+      val keyBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
+      val valueBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       val value = new UnsafeRow(1)
@@ -307,8 +308,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("Java HashMap (Long)") { iter =>
       var i = 0
-      val keyBytes = new Array[Byte](16)
-      val valueBytes = new Array[Byte](16)
+      val keyBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
+      val valueBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       val value = new UnsafeRow(1)
       value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       value.setInt(0, 555)
@@ -330,7 +331,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("Java HashMap (two ints) ") { iter =>
       var i = 0
-      val valueBytes = new Array[Byte](16)
+      val valueBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       val value = new UnsafeRow(1)
       value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       value.setInt(0, 555)
@@ -354,8 +355,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
 
     benchmark.addCase("Java HashMap (UnsafeRow)") { iter =>
       var i = 0
-      val keyBytes = new Array[Byte](16)
-      val valueBytes = new Array[Byte](16)
+      val keyBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
+      val valueBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
       val key = new UnsafeRow(1)
       key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
       val value = new UnsafeRow(1)
@@ -390,8 +391,8 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
             1),
           0)
         val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L<<20)
-        val keyBytes = new Array[Byte](16)
-        val valueBytes = new Array[Byte](16)
+        val keyBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
+        val valueBytes = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](16))
         val key = new UnsafeRow(1)
         key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
         val value = new UnsafeRow(1)
