@@ -20,8 +20,9 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
+
+import org.apache.spark.graphx._
 
 /**
  * Manages shipping vertex attributes to the edge partitions of an
@@ -85,12 +86,14 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * vertex ids present in `actives`. This ships a vertex id to all edge partitions where it is
    * referenced, ignoring the attribute shipping level.
    */
-  def withActiveSet(actives: VertexRDD[_]): ReplicatedVertexView[VD, ED] = {
-    val shippedActives = actives.shipVertexIds()
+  def withActiveSetPosition(actives: VertexRDD[_], useSrc: Boolean, useDst: Boolean):
+   ReplicatedVertexView[VD, ED] = {
+    val shippedActives = actives.shipVertexIds(useSrc, useDst)
       .setName("ReplicatedVertexView.withActiveSet - shippedActives (broadcast)")
       .partitionBy(edges.partitioner.get)
 
-    val newEdges = edges.withPartitionsRDD(edges.partitionsRDD.zipPartitions(shippedActives) {
+    val newEdges = edges.withPartitionsRDD(edges.partitionsRDD
+      .zipPartitions(shippedActives) {
       (ePartIter, shippedActivesIter) => ePartIter.map {
         case (pid, edgePartition) =>
           (pid, edgePartition.withActiveSet(shippedActivesIter.flatMap(_._2.iterator)))
@@ -98,6 +101,24 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
     })
     new ReplicatedVertexView(newEdges, hasSrcId, hasDstId)
   }
+
+
+  def withActiveSet(actives: VertexRDD[_], edgeDir: Option[EdgeDirection]):
+   ReplicatedVertexView[VD, ED] = {
+    edgeDir match {
+      case Some(EdgeDirection.Both) =>
+          withActiveSetPosition(actives, true, true)
+      case Some(EdgeDirection.Either) =>
+          withActiveSetPosition(actives, true, true)
+      case Some(EdgeDirection.Out) =>
+          withActiveSetPosition(actives, true, false)
+      case Some(EdgeDirection.In) =>
+          withActiveSetPosition(actives, false, true)
+      case _ =>
+          this
+    }
+  }
+
 
   /**
    * Return a new `ReplicatedVertexView` where vertex attributes in edge partition are updated using

@@ -21,11 +21,12 @@ import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.HashPartitioner
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.{RDD, ShuffledRDD}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.impl.GraphImpl._
 import org.apache.spark.graphx.util.BytecodeUtils
-import org.apache.spark.rdd.{RDD, ShuffledRDD}
-import org.apache.spark.storage.StorageLevel
+
 
 /**
  * An implementation of [[org.apache.spark.graphx.Graph]] to support computation on graphs.
@@ -197,13 +198,14 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
     replicatedVertexView.upgrade(vertices, tripletFields.useSrc, tripletFields.useDst)
+    val activeDirectionOpt = activeSetOpt.map(_._2)
+
     val view = activeSetOpt match {
       case Some((activeSet, _)) =>
-        replicatedVertexView.withActiveSet(activeSet)
+        replicatedVertexView.withActiveSet(activeSet, activeDirectionOpt)
       case None =>
         replicatedVertexView
     }
-    val activeDirectionOpt = activeSetOpt.map(_._2)
 
     // Map and combine.
     val preAgg = view.edges.partitionsRDD.mapPartitions(_.flatMap {

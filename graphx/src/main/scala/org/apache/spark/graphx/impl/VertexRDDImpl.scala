@@ -21,9 +21,10 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-import org.apache.spark.graphx._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
+
+import org.apache.spark.graphx._
 
 class VertexRDDImpl[VD] private[graphx] (
     @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],
@@ -246,8 +247,9 @@ class VertexRDDImpl[VD] private[graphx] (
     partitionsRDD.mapPartitions(_.flatMap(_.shipVertexAttributes(shipSrc, shipDst)))
   }
 
-  override private[graphx] def shipVertexIds(): RDD[(PartitionID, Array[VertexId])] = {
-    partitionsRDD.mapPartitions(_.flatMap(_.shipVertexIds()))
+  override private[graphx] def shipVertexIds(shipSrc: Boolean, shipDst: Boolean):
+   RDD[(PartitionID, Array[VertexId])] = {
+    partitionsRDD.mapPartitions(_.flatMap(_.shipVertexIds(shipSrc, shipDst)))
   }
 
 }
