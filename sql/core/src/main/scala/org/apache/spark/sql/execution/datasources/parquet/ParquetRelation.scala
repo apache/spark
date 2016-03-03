@@ -47,6 +47,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -285,7 +286,7 @@ private[sql] class ParquetRelation(
       ParquetRelation
         .shortParquetCompressionCodecNames
         .getOrElse(
-          sqlContext.conf.parquetCompressionCodec.toUpperCase,
+          sqlContext.conf.parquetCompressionCodec.toLowerCase(),
           CompressionCodecName.UNCOMPRESSED).name())
 
     new BucketedOutputWriterFactory {
@@ -904,9 +905,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE" -> CompressionCodecName.UNCOMPRESSED,
-    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY" -> CompressionCodecName.SNAPPY,
-    "GZIP" -> CompressionCodecName.GZIP,
-    "LZO" -> CompressionCodecName.LZO)
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
 }

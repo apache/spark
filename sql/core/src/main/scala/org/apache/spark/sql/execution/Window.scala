@@ -198,7 +198,8 @@ case class Window(
           functions,
           ordinal,
           child.output,
-          (expressions, schema) => newMutableProjection(expressions, schema))
+          (expressions, schema) =>
+            newMutableProjection(expressions, schema, subexpressionEliminationEnabled))
 
         // Create the factory
         val factory = key match {
@@ -210,7 +211,8 @@ case class Window(
                 ordinal,
                 functions,
                 child.output,
-                (expressions, schema) => newMutableProjection(expressions, schema),
+                (expressions, schema) =>
+                  newMutableProjection(expressions, schema, subexpressionEliminationEnabled),
                 offset)
 
           // Growing Frame.

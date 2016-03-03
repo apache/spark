@@ -21,19 +21,15 @@ import org.apache.log4j.{Level, LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
-import org.apache.spark.annotation.Private
 import org.apache.spark.util.Utils
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
  * logging messages at different levels using methods that only evaluate parameters lazily if the
  * log level is enabled.
- *
- * NOTE: DO NOT USE this class outside of Spark. It is intended as an internal utility.
- *       This will likely be changed or removed in future releases.
  */
-@Private
-trait Logging {
+private[spark] trait Logging {
+
   // Make the log field transient so that objects with Logging can
   // be serialized and used on another machine
   @transient private var log_ : Logger = null

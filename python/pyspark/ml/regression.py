@@ -68,25 +68,18 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
-    >>> import os, tempfile
-    >>> path = tempfile.mkdtemp()
-    >>> lr_path = path + "/lr"
+    >>> lr_path = temp_path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)
     >>> lr2.getMaxIter()
     5
-    >>> model_path = path + "/lr_model"
+    >>> model_path = temp_path + "/lr_model"
     >>> model.save(model_path)
     >>> model2 = LinearRegressionModel.load(model_path)
     >>> model.coefficients[0] == model2.coefficients[0]
     True
     >>> model.intercept == model2.intercept
     True
-    >>> from shutil import rmtree
-    >>> try:
-    ...     rmtree(path)
-    ... except OSError:
-    ...     pass
 
     .. versionadded:: 1.4.0
     """
@@ -161,7 +154,7 @@ class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
 
 @inherit_doc
 class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                         HasWeightCol):
+                         HasWeightCol, MLWritable, MLReadable):
     """
     .. note:: Experimental
 
@@ -179,6 +172,18 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     0.0
     >>> model.boundaries
     DenseVector([0.0, 1.0])
+    >>> ir_path = temp_path + "/ir"
+    >>> ir.save(ir_path)
+    >>> ir2 = IsotonicRegression.load(ir_path)
+    >>> ir2.getIsotonic()
+    True
+    >>> model_path = temp_path + "/ir_model"
+    >>> model.save(model_path)
+    >>> model2 = IsotonicRegressionModel.load(model_path)
+    >>> model.boundaries == model2.boundaries
+    True
+    >>> model.predictions == model2.predictions
+    True
     """
 
     isotonic = \
@@ -244,7 +249,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         return self.getOrDefault(self.featureIndex)
 
 
-class IsotonicRegressionModel(JavaModel):
+class IsotonicRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     .. note:: Experimental
 
@@ -670,7 +675,7 @@ class GBTRegressionModel(TreeEnsembleModels):
 
 @inherit_doc
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                            HasFitIntercept, HasMaxIter, HasTol):
+                            HasFitIntercept, HasMaxIter, HasTol, MLWritable, MLReadable):
     """
     Accelerated Failure Time (AFT) Model Survival Regression
 
@@ -697,6 +702,20 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     |  0.0|(1,[],[])|   0.0|       1.0|
     +-----+---------+------+----------+
     ...
+    >>> aftsr_path = temp_path + "/aftsr"
+    >>> aftsr.save(aftsr_path)
+    >>> aftsr2 = AFTSurvivalRegression.load(aftsr_path)
+    >>> aftsr2.getMaxIter()
+    100
+    >>> model_path = temp_path + "/aftsr_model"
+    >>> model.save(model_path)
+    >>> model2 = AFTSurvivalRegressionModel.load(model_path)
+    >>> model.coefficients == model2.coefficients
+    True
+    >>> model.intercept == model2.intercept
+    True
+    >>> model.scale == model2.scale
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -794,7 +813,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return self.getOrDefault(self.quantilesCol)
 
 
-class AFTSurvivalRegressionModel(JavaModel):
+class AFTSurvivalRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by AFTSurvivalRegression.
 
@@ -850,7 +869,17 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)

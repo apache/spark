@@ -346,7 +346,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_apply_schema_to_row(self):
         df = self.sqlCtx.read.json(self.sc.parallelize(["""{"a":2}"""]))
-        df2 = self.sqlCtx.createDataFrame(df.map(lambda x: x), df.schema)
+        df2 = self.sqlCtx.createDataFrame(df.rdd.map(lambda x: x), df.schema)
         self.assertEqual(df.collect(), df2.collect())
 
         rdd = self.sc.parallelize(range(10)).map(lambda x: Row(a=x))
@@ -382,15 +382,15 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1, row.l[0].a)
         self.assertEqual("2", row.d["key"].d)
 
-        l = df.map(lambda x: x.l).first()
+        l = df.rdd.map(lambda x: x.l).first()
         self.assertEqual(1, len(l))
         self.assertEqual('s', l[0].b)
 
-        d = df.map(lambda x: x.d).first()
+        d = df.rdd.map(lambda x: x.d).first()
         self.assertEqual(1, len(d))
         self.assertEqual(1.0, d["key"].c)
 
-        row = df.map(lambda x: x.d["key"]).first()
+        row = df.rdd.map(lambda x: x.d["key"]).first()
         self.assertEqual(1.0, row.c)
         self.assertEqual("2", row.d)
 
@@ -399,16 +399,16 @@ class SQLTests(ReusedPySparkTestCase):
              Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
         rdd = self.sc.parallelize(d)
         df = self.sqlCtx.createDataFrame(rdd)
-        self.assertEqual([], df.map(lambda r: r.l).first())
-        self.assertEqual([None, ""], df.map(lambda r: r.s).collect())
+        self.assertEqual([], df.rdd.map(lambda r: r.l).first())
+        self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
         df.registerTempTable("test")
         result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
         df2 = self.sqlCtx.createDataFrame(rdd, samplingRatio=1.0)
         self.assertEqual(df.schema, df2.schema)
-        self.assertEqual({}, df2.map(lambda r: r.d).first())
-        self.assertEqual([None, ""], df2.map(lambda r: r.s).collect())
+        self.assertEqual({}, df2.rdd.map(lambda r: r.d).first())
+        self.assertEqual([None, ""], df2.rdd.map(lambda r: r.s).collect())
         df2.registerTempTable("test2")
         result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
@@ -462,8 +462,8 @@ class SQLTests(ReusedPySparkTestCase):
             StructField("list1", ArrayType(ByteType(), False), False),
             StructField("null1", DoubleType(), True)])
         df = self.sqlCtx.createDataFrame(rdd, schema)
-        results = df.map(lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int1, x.float1, x.date1,
-                                    x.time1, x.map1["a"], x.struct1.b, x.list1, x.null1))
+        results = df.rdd.map(lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int1, x.float1,
+                             x.date1, x.time1, x.map1["a"], x.struct1.b, x.list1, x.null1))
         r = (127, -128, -32768, 32767, 2147483647, 1.0, date(2010, 1, 1),
              datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         self.assertEqual(r, results.first())
@@ -570,7 +570,7 @@ class SQLTests(ReusedPySparkTestCase):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
         df = self.sqlCtx.createDataFrame([row])
-        self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
+        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
         udf2 = UserDefinedFunction(lambda p: ExamplePoint(p.x + 1, p.y + 1), ExamplePointUDT())
@@ -578,7 +578,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         row = Row(label=1.0, point=PythonOnlyPoint(1.0, 2.0))
         df = self.sqlCtx.createDataFrame([row])
-        self.assertEqual(1.0, df.map(lambda r: r.point.x).first())
+        self.assertEqual(1.0, df.rdd.map(lambda r: r.point.x).first())
         udf = UserDefinedFunction(lambda p: p.y, DoubleType())
         self.assertEqual(2.0, df.select(udf(df.point)).first()[0])
         udf2 = UserDefinedFunction(lambda p: PythonOnlyPoint(p.x + 1, p.y + 1), PythonOnlyUDT())
@@ -600,6 +600,24 @@ class SQLTests(ReusedPySparkTestCase):
         df1 = self.sqlCtx.read.parquet(output_dir)
         point = df1.head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
+
+    def test_unionAll_with_udt(self):
+        from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
+        row1 = (1.0, ExamplePoint(1.0, 2.0))
+        row2 = (2.0, ExamplePoint(3.0, 4.0))
+        schema = StructType([StructField("label", DoubleType(), False),
+                             StructField("point", ExamplePointUDT(), False)])
+        df1 = self.sqlCtx.createDataFrame([row1], schema)
+        df2 = self.sqlCtx.createDataFrame([row2], schema)
+
+        result = df1.unionAll(df2).orderBy("label").collect()
+        self.assertEqual(
+            result,
+            [
+                Row(label=1.0, point=ExamplePoint(1.0, 2.0)),
+                Row(label=2.0, point=ExamplePoint(3.0, 4.0))
+            ]
+        )
 
     def test_column_operators(self):
         ci = self.df.key
@@ -650,6 +668,13 @@ class SQLTests(ReusedPySparkTestCase):
                          functions.last(df2.id, False).alias('c'),
                          functions.last(df2.id, True).alias('d'))
         self.assertEqual([Row(a=None, b=1, c=None, d=98)], df3.collect())
+
+    def test_approxQuantile(self):
+        df = self.sc.parallelize([Row(a=i) for i in range(10)]).toDF()
+        aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
+        self.assertTrue(isinstance(aq, list))
+        self.assertEqual(len(aq), 3)
+        self.assertTrue(all(isinstance(q, float) for q in aq))
 
     def test_corr(self):
         import math

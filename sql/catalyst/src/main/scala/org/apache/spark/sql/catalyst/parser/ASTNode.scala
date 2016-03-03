@@ -58,12 +58,12 @@ case class ASTNode(
   override val origin: Origin = Origin(Some(line), Some(positionInLine))
 
   /** Source text. */
-  lazy val source: String = stream.toString(startIndex, stopIndex)
+  lazy val source: String = stream.toOriginalString(startIndex, stopIndex)
 
   /** Get the source text that remains after this token. */
   lazy val remainder: String = {
     stream.fill()
-    stream.toString(stopIndex + 1, stream.size() - 1).trim()
+    stream.toOriginalString(stopIndex + 1, stream.size() - 1).trim()
   }
 
   def text: String = token.getText

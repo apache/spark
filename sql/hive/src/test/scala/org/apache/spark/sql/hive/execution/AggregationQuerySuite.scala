@@ -26,6 +26,7 @@ import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAg
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.aggregate.{MyDoubleAvg, MyDoubleSum}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -798,7 +799,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """
           |SELECT corr(b, c) FROM covar_tab WHERE a = 3
         """.stripMargin),
-      Row(null) :: Nil)
+      Row(Double.NaN) :: Nil)
 
     checkAnswer(
       sqlContext.sql(
@@ -807,10 +808,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         """.stripMargin),
       Row(1, null) ::
       Row(2, null) ::
-      Row(3, null) ::
-      Row(4, null) ::
-      Row(5, null) ::
-      Row(6, null) :: Nil)
+      Row(3, Double.NaN) ::
+      Row(4, Double.NaN) ::
+      Row(5, Double.NaN) ::
+      Row(6, Double.NaN) :: Nil)
 
     val corr7 = sqlContext.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
     assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
@@ -841,11 +842,8 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    val cov_samp3 = df3.groupBy().agg(covar_samp("a", "b")).collect()(0).get(0)
-    assert(cov_samp3 == null)
-
-    val cov_pop3 = df3.groupBy().agg(covar_pop("a", "b")).collect()(0).getDouble(0)
-    assert(cov_pop3 == 0.0)
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 
   test("no aggregation function (SPARK-11486)") {

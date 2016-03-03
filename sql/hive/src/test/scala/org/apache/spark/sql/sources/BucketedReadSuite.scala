@@ -19,22 +19,30 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.apache.spark.sql.{Column, DataFrame, DataFrameWriter, QueryTest, SQLConf}
-import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.Exchange
-import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSourceStrategy}
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.SortMergeJoin
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
+  private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
+  private val nullDF = (for {
+    i <- 0 to 50
+    s <- Seq(null, "a", "b", "c", "d", "e", "f", null, "g")
+  } yield (i % 5, s, i % 13)).toDF("i", "j", "k")
+
   test("read bucketed data") {
-    val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
     withTable("bucketed_table") {
       df.write
         .format("parquet")
@@ -55,6 +63,154 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         })
 
         assert(checkBucketId.collect().reduce(_ && _))
+      }
+    }
+  }
+
+  // To verify if the bucket pruning works, this function checks two conditions:
+  //   1) Check if the pruned buckets (before filtering) are empty.
+  //   2) Verify the final result is the same as the expected one
+  private def checkPrunedAnswers(
+      bucketSpec: BucketSpec,
+      bucketValues: Seq[Integer],
+      filterCondition: Column,
+      originalDataFrame: DataFrame): Unit = {
+    // This test verifies parts of the plan. Disable whole stage codegen.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val bucketedDataFrame = hiveContext.table("bucketed_table").select("i", "j", "k")
+      val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
+      // Limit: bucket pruning only works when the bucket column has one and only one column
+      assert(bucketColumnNames.length == 1)
+      val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
+      val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
+      val matchedBuckets = new BitSet(numBuckets)
+      bucketValues.foreach { value =>
+        matchedBuckets.set(DataSourceStrategy.getBucketId(bucketColumn, numBuckets, value))
+      }
+
+      // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
+      val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
+      val rdd = plan.find(_.isInstanceOf[PhysicalRDD])
+      assert(rdd.isDefined, plan)
+
+      val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+        if (matchedBuckets.get(index % numBuckets)) Iterator(true) else Iterator(iter.isEmpty)
+      }
+      // checking if all the pruned buckets are empty
+      assert(checkedResult.collect().forall(_ == true))
+
+      checkAnswer(
+        bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
+        originalDataFrame.filter(filterCondition).orderBy("i", "j", "k"))
+    }
+  }
+
+  test("read partitioning bucketed tables with bucket pruning filters") {
+    withTable("bucketed_table") {
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      // json does not support predicate push-down, and thus json is used here
+      df.write
+        .format("json")
+        .partitionBy("i")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      for (j <- 0 until 13) {
+        // Case 1: EqualTo
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
+          filterCondition = $"j" === j,
+          df)
+
+        // Case 2: EqualNullSafe
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
+          filterCondition = $"j" <=> j,
+          df)
+
+        // Case 3: In
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Seq(j, j + 1, j + 2, j + 3),
+          filterCondition = $"j".isin(j, j + 1, j + 2, j + 3),
+          df)
+      }
+    }
+  }
+
+  test("read non-partitioning bucketed tables with bucket pruning filters") {
+    withTable("bucketed_table") {
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      // json does not support predicate push-down, and thus json is used here
+      df.write
+        .format("json")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      for (j <- 0 until 13) {
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
+          filterCondition = $"j" === j,
+          df)
+      }
+    }
+  }
+
+  test("read partitioning bucketed tables having null in bucketing key") {
+    withTable("bucketed_table") {
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      // json does not support predicate push-down, and thus json is used here
+      nullDF.write
+        .format("json")
+        .partitionBy("i")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      // Case 1: isNull
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = null :: Nil,
+        filterCondition = $"j".isNull,
+        nullDF)
+
+      // Case 2: <=> null
+      checkPrunedAnswers(
+        bucketSpec,
+        bucketValues = null :: Nil,
+        filterCondition = $"j" <=> null,
+        nullDF)
+    }
+  }
+
+  test("read partitioning bucketed tables having composite filters") {
+    withTable("bucketed_table") {
+      val numBuckets = 8
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      // json does not support predicate push-down, and thus json is used here
+      df.write
+        .format("json")
+        .partitionBy("i")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      for (j <- 0 until 13) {
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
+          filterCondition = $"j" === j && $"k" > $"j",
+          df)
+
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = j :: Nil,
+          filterCondition = $"j" === j && $"i" > j % 5,
+          df)
       }
     }
   }
@@ -87,7 +243,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       withBucket(df1.write.format("parquet"), bucketSpecLeft).saveAsTable("bucketed_table1")
       withBucket(df2.write.format("parquet"), bucketSpecRight).saveAsTable("bucketed_table2")
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
         val t1 = hiveContext.table("bucketed_table1")
         val t2 = hiveContext.table("bucketed_table2")
         val joined = t1.join(t2, joinCondition(t1, t2, joinColumns))
@@ -100,8 +257,8 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoin])
         val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoin]
 
-        assert(joinOperator.left.find(_.isInstanceOf[Exchange]).isDefined == shuffleLeft)
-        assert(joinOperator.right.find(_.isInstanceOf[Exchange]).isDefined == shuffleRight)
+        assert(joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft)
+        assert(joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight)
       }
     }
   }
@@ -160,7 +317,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         agged.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isEmpty)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isEmpty)
     }
   }
 
@@ -174,7 +331,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         agged.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isEmpty)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isEmpty)
     }
   }
 
@@ -187,7 +344,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
 
       val agged = hiveContext.table("bucketed_table").groupBy("i").count()
       // make sure we fall back to non-bucketing mode and can't avoid shuffle
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[Exchange]).isDefined)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isDefined)
       checkAnswer(agged.sort("i"), df1.groupBy("i").count().sort("i"))
     }
   }

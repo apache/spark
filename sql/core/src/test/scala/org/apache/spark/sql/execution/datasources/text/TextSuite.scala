@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -55,6 +55,24 @@ class TextSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       sqlContext.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
     }
+  }
+
+  test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
+    val testDf = sqlContext.read.text(testFile)
+
+    Seq("bzip2", "deflate", "gzip").foreach { codecName =>
+      val tempDir = Utils.createTempDir()
+      val tempDirPath = tempDir.getAbsolutePath()
+      testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
+      verifyFrame(sqlContext.read.text(tempDirPath))
+    }
+
+    val errMsg = intercept[IllegalArgumentException] {
+      val tempDirPath = Utils.createTempDir().getAbsolutePath()
+      testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
+    }
+    assert(errMsg.getMessage === "Codec [illegal] is not available. " +
+      "Known codecs are bzip2, deflate, lz4, gzip, snappy.")
   }
 
   private def testFile: String = {

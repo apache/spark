@@ -32,7 +32,7 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 
 # Installing Mesos
 
-Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} and does not
+Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
 require any special patches of Mesos.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
@@ -188,7 +188,7 @@ overhead, but at the cost of reserving the Mesos resources for the complete dura
 application.
 
 Coarse-grained is the default mode. You can also set `spark.mesos.coarse` property to true
-to turn it on explictly in [SparkConf](configuration.html#spark-properties):
+to turn it on explicitly in [SparkConf](configuration.html#spark-properties):
 
 {% highlight scala %}
 conf.set("spark.mesos.coarse", "true")
@@ -246,18 +246,15 @@ In either case, HDFS runs separately from Hadoop MapReduce, without being schedu
 
 # Dynamic Resource Allocation with Mesos
 
-Mesos supports dynamic allocation only with coarse grain mode, which can resize the number of executors based on statistics
-of the application. While dynamic allocation supports both scaling up and scaling down the number of executors, the coarse grain scheduler only supports scaling down
-since it is already designed to run one executor per slave with the configured amount of resources. However, after scaling down the number of executors the coarse grain scheduler
-can scale back up to the same amount of executors when Spark signals more executors are needed.
+Mesos supports dynamic allocation only with coarse-grain mode, which can resize the number of
+executors based on statistics of the application. For general information,
+see [Dynamic Resource Allocation](job-scheduling.html#dynamic-resource-allocation).
 
-Users that like to utilize this feature should launch the Mesos Shuffle Service that
-provides shuffle data cleanup functionality on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
-termination. To launch/stop the Mesos Shuffle Service please use the provided sbin/start-mesos-shuffle-service.sh and sbin/stop-mesos-shuffle-service.sh
-scripts accordingly.
+The External Shuffle Service to use is the Mesos Shuffle Service. It provides shuffle data cleanup functionality
+on top of the Shuffle Service since Mesos doesn't yet support notifying another framework's
+termination. To launch it, run `$SPARK_HOME/sbin/start-mesos-shuffle-service.sh` on all slave nodes, with `spark.shuffle.service.enabled` set to `true`.
 
-The Shuffle Service is expected to be running on each slave node that will run Spark executors. One way to easily achieve this with Mesos
-is to launch the Shuffle Service with Marathon with a unique host constraint.
+This can also be achieved through Marathon, using a unique host constraint, and the following command: `bin/spark-class org.apache.spark.deploy.mesos.MesosExternalShuffleService`.
 
 # Configuration
 
@@ -280,9 +277,11 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.extra.cores</code></td>
   <td><code>0</code></td>
   <td>
-    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
-    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
-    Note that total amount of cores the executor will request in total will not exceed the <code>spark.cores.max</code> setting.
+    Set the extra number of cores for an executor to advertise. This
+    does not result in more cores allocated.  It instead means that an
+    executor will "pretend" it has more cores, so that the driver will
+    send it more tasks.  Use this to increase parallelism.  This
+    setting is only used for Mesos coarse-grained mode.
   </td>
 </tr>
 <tr>
@@ -350,8 +349,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.uris</code></td>
   <td>(none)</td>
   <td>
-    A list of URIs to be downloaded to the sandbox when driver or executor is launched by Mesos.
-    This applies to both coarse-grain and fine-grain mode.
+    A comma-separated list of URIs to be downloaded to the sandbox
+    when driver or executor is launched by Mesos.  This applies to
+    both coarse-grained and fine-grained mode.
   </td>
 </tr>
 <tr>
@@ -385,7 +385,7 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
       <li>Set constraints are matched with "subset of" semantics i.e. value in the constraint must be a subset of the resource offer's value.</li>
-      <li>Text constraints are metched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
+      <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
   </td>

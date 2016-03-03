@@ -87,7 +87,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
     // copied model must have the same parent.
     MLTestingUtils.checkCopy(model)
     val preds = model.transform(df)
-    val predictions = preds.select("prediction").map(_.getDouble(0))
+    val predictions = preds.select("prediction").rdd.map(_.getDouble(0))
     // Checks based on SPARK-8736 (to ensure it is not doing classification)
     assert(predictions.max() > 2)
     assert(predictions.min() < -1)

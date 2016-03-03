@@ -27,14 +27,34 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.mllib.linalg import _convert_to_vector
 
-__all__ = ['Binarizer', 'Bucketizer', 'CountVectorizer', 'CountVectorizerModel', 'DCT',
-           'ElementwiseProduct', 'HashingTF', 'IDF', 'IDFModel', 'IndexToString', 'MinMaxScaler',
-           'MinMaxScalerModel', 'NGram', 'Normalizer', 'OneHotEncoder', 'PCA', 'PCAModel',
-           'PolynomialExpansion', 'QuantileDiscretizer', 'RegexTokenizer', 'RFormula',
-           'RFormulaModel', 'SQLTransformer', 'StandardScaler', 'StandardScalerModel',
-           'StopWordsRemover', 'StringIndexer', 'StringIndexerModel', 'Tokenizer',
-           'VectorAssembler', 'VectorIndexer', 'VectorSlicer', 'Word2Vec', 'Word2VecModel',
-           'ChiSqSelector', 'ChiSqSelectorModel']
+__all__ = ['Binarizer',
+           'Bucketizer',
+           'ChiSqSelector', 'ChiSqSelectorModel',
+           'CountVectorizer', 'CountVectorizerModel',
+           'DCT',
+           'ElementwiseProduct',
+           'HashingTF',
+           'IDF', 'IDFModel',
+           'IndexToString',
+           'MaxAbsScaler', 'MaxAbsScalerModel',
+           'MinMaxScaler', 'MinMaxScalerModel',
+           'NGram',
+           'Normalizer',
+           'OneHotEncoder',
+           'PCA', 'PCAModel',
+           'PolynomialExpansion',
+           'QuantileDiscretizer',
+           'RegexTokenizer',
+           'RFormula', 'RFormulaModel',
+           'SQLTransformer',
+           'StandardScaler', 'StandardScalerModel',
+           'StopWordsRemover',
+           'StringIndexer', 'StringIndexerModel',
+           'Tokenizer',
+           'VectorAssembler',
+           'VectorIndexer', 'VectorIndexerModel',
+           'VectorSlicer',
+           'Word2Vec', 'Word2VecModel']
 
 
 @inherit_doc
@@ -545,6 +565,66 @@ class IDFModel(JavaModel):
 
 
 @inherit_doc
+class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol):
+    """
+    .. note:: Experimental
+
+    Rescale each feature individually to range [-1, 1] by dividing through the largest maximum
+    absolute value in each feature. It does not shift/center the data, and thus does not destroy
+    any sparsity.
+
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> df = sqlContext.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
+    >>> model = maScaler.fit(df)
+    >>> model.transform(df).show()
+    +-----+------+
+    |    a|scaled|
+    +-----+------+
+    |[1.0]| [0.5]|
+    |[2.0]| [1.0]|
+    +-----+------+
+    ...
+
+    .. versionadded:: 2.0.0
+    """
+
+    @keyword_only
+    def __init__(self, inputCol=None, outputCol=None):
+        """
+        __init__(self, inputCol=None, outputCol=None)
+        """
+        super(MaxAbsScaler, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.MaxAbsScaler", self.uid)
+        self._setDefault()
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.0.0")
+    def setParams(self, inputCol=None, outputCol=None):
+        """
+        setParams(self, inputCol=None, outputCol=None)
+        Sets params for this MaxAbsScaler.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return MaxAbsScalerModel(java_model)
+
+
+class MaxAbsScalerModel(JavaModel):
+    """
+    .. note:: Experimental
+
+    Model fitted by :py:class:`MaxAbsScaler`.
+
+    .. versionadded:: 2.0.0
+    """
+
+
+@inherit_doc
 class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol):
     """
     .. note:: Experimental
@@ -939,7 +1019,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed):
     """
     .. note:: Experimental
 
@@ -951,7 +1031,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
 
     >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets")
+    ...     inputCol="values", outputCol="buckets", seed=123)
+    >>> qds.getSeed()
+    123
     >>> bucketizer = qds.fit(df)
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
@@ -971,9 +1053,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
                        "categories) into which data points are grouped. Must be >= 2. Default 2.")
 
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None)
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
@@ -987,9 +1069,9 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol):
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
@@ -1836,12 +1918,12 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     +----+--------------------+
     ...
     >>> model.findSynonyms("a", 2).show()
-    +----+--------------------+
-    |word|          similarity|
-    +----+--------------------+
-    |   b| 0.16782984556103436|
-    |   c|-0.46761559092107646|
-    +----+--------------------+
+    +----+-------------------+
+    |word|         similarity|
+    +----+-------------------+
+    |   b| 0.2505344027513247|
+    |   c|-0.6980510075367647|
+    +----+-------------------+
     ...
     >>> model.transform(doc).head().model
     DenseVector([0.5524, -0.4995, -0.3599, 0.0241, 0.3461])

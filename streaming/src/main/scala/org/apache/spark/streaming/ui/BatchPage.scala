@@ -37,10 +37,10 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
   private def columns: Seq[Node] = {
     <th>Output Op Id</th>
       <th>Description</th>
-      <th>Duration</th>
+      <th>Output Op Duration</th>
       <th>Status</th>
       <th>Job Id</th>
-      <th>Duration</th>
+      <th>Job Duration</th>
       <th class="sorttable_nosort">Stages: Succeeded/Total</th>
       <th class="sorttable_nosort">Tasks (for all stages): Succeeded/Total</th>
       <th>Error</th>
@@ -273,7 +273,7 @@ private[ui] class BatchPage(parent: StreamingTab) extends WebUIPage("batch") {
     val outputOpIdToSparkJobIds = batchUIData.outputOpIdSparkJobIdPairs.groupBy(_.outputOpId).
       map { case (outputOpId, outputOpIdAndSparkJobIds) =>
         // sort SparkJobIds for each OutputOpId
-        (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).sorted)
+        (outputOpId, outputOpIdAndSparkJobIds.map(_.sparkJobId).toSeq.sorted)
       }
 
     val outputOps: Seq[(OutputOperationUIData, Seq[SparkJobId])] =

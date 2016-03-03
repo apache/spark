@@ -23,7 +23,7 @@ import java.sql.{Date, DriverManager, SQLException, Statement}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{future, Await, ExecutionContext, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 import scala.io.Source
 import scala.util.{Random, Try}
@@ -202,7 +202,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test multiple session") {
-    import org.apache.spark.sql.SQLConf
+    import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
@@ -362,7 +362,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       try {
         // Start a very-long-running query that will take hours to finish, then cancel it in order
         // to demonstrate that cancellation works.
-        val f = future {
+        val f = Future {
           statement.executeQuery(
             "SELECT COUNT(*) FROM test_map " +
             List.fill(10)("join test_map").mkString(" "))
@@ -380,7 +380,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
         // Cancellation is a no-op if spark.sql.hive.thriftServer.async=false
         statement.executeQuery("SET spark.sql.hive.thriftServer.async=false")
         try {
-          val sf = future {
+          val sf = Future {
             statement.executeQuery(
               "SELECT COUNT(*) FROM test_map " +
                 List.fill(4)("join test_map").mkString(" ")
@@ -721,13 +721,13 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   }
 
   /**
-   * String to scan for when looking for the the thrift binary endpoint running.
+   * String to scan for when looking for the thrift binary endpoint running.
    * This can change across Hive versions.
    */
   val THRIFT_BINARY_SERVICE_LIVE = "Starting ThriftBinaryCLIService on port"
 
   /**
-   * String to scan for when looking for the the thrift HTTP endpoint running.
+   * String to scan for when looking for the thrift HTTP endpoint running.
    * This can change across Hive versions.
    */
   val THRIFT_HTTP_SERVICE_LIVE = "Started ThriftHttpCLIService in http"

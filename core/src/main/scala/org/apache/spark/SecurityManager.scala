@@ -69,7 +69,7 @@ import org.apache.spark.util.Utils
  *
  *  - HTTP for broadcast and file server (via HttpServer) ->  Spark currently uses Jetty
  *            for the HttpServer. Jetty supports multiple authentication mechanisms -
- *            Basic, Digest, Form, Spengo, etc. It also supports multiple different login
+ *            Basic, Digest, Form, Spnego, etc. It also supports multiple different login
  *            services - Hash, JAAS, Spnego, JDBC, etc.  Spark currently uses the HashLoginService
  *            to authenticate using DIGEST-MD5 via a single user and the shared secret.
  *            Since we are using DIGEST-MD5, the shared secret is not passed on the wire

@@ -25,14 +25,12 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
-import org.apache.spark.sql.{execution => sparkexecution}
-import org.apache.spark.sql.SQLConf.SQLConfEntry
-import org.apache.spark.sql.catalyst.{InternalRow, _}
+import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
@@ -42,6 +40,8 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.internal.SQLConf.SQLConfEntry
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -59,7 +59,6 @@ import org.apache.spark.util.Utils
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
  * @groupname Ungrouped Support functions for language integrated queries
- *
  * @since 1.0.0
  */
 class SQLContext private[sql](
@@ -67,7 +66,7 @@ class SQLContext private[sql](
     @transient protected[sql] val cacheManager: CacheManager,
     @transient private[sql] val listener: SQLListener,
     val isRootContext: Boolean)
-  extends org.apache.spark.Logging with Serializable {
+  extends Logging with Serializable {
 
   self =>
 
@@ -114,9 +113,27 @@ class SQLContext private[sql](
   }
 
   /**
-   * @return Spark SQL configuration
+   * Per-session state, e.g. configuration, functions, temporary tables etc.
    */
-  protected[sql] lazy val conf = new SQLConf
+  @transient
+  protected[sql] lazy val sessionState: SessionState = new SessionState(self)
+  protected[sql] def conf: SQLConf = sessionState.conf
+  protected[sql] def catalog: Catalog = sessionState.catalog
+  protected[sql] def functionRegistry: FunctionRegistry = sessionState.functionRegistry
+  protected[sql] def analyzer: Analyzer = sessionState.analyzer
+  protected[sql] def optimizer: Optimizer = sessionState.optimizer
+  protected[sql] def sqlParser: ParserInterface = sessionState.sqlParser
+  protected[sql] def planner: SparkPlanner = sessionState.planner
+  protected[sql] def continuousQueryManager = sessionState.continuousQueryManager
+  protected[sql] def prepareForExecution: RuleExecutor[SparkPlan] =
+    sessionState.prepareForExecution
+
+  /**
+   * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
+   * that listen for execution metrics.
+   */
+  @Experimental
+  def listenerManager: ExecutionListenerManager = sessionState.listenerManager
 
   /**
    * Set Spark SQL configuration properties.
@@ -178,41 +195,11 @@ class SQLContext private[sql](
    */
   def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
-  @transient
-  lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
-
-  @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(conf)
-
-  @transient
-  protected[sql] lazy val functionRegistry: FunctionRegistry = FunctionRegistry.builtin.copy()
-
-  @transient
-  protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, conf) {
-      override val extendedResolutionRules =
-        ExtractPythonUDFs ::
-        PreInsertCastAndRename ::
-        (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
-
-      override val extendedCheckRules = Seq(
-        datasources.PreWriteCheck(catalog)
-      )
-    }
-
-  @transient
-  protected[sql] lazy val optimizer: Optimizer = new SparkOptimizer(this)
-
-  @transient
-  protected[sql] val sqlParser: ParserInterface = new SparkQl(conf)
-
   protected[sql] def parseSql(sql: String): LogicalPlan = sqlParser.parsePlan(sql)
 
-  protected[sql] def executeSql(sql: String):
-    org.apache.spark.sql.execution.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executeSql(sql: String): QueryExecution = executePlan(parseSql(sql))
 
-  protected[sql] def executePlan(plan: LogicalPlan) =
-    new sparkexecution.QueryExecution(this, plan)
+  protected[sql] def executePlan(plan: LogicalPlan) = new QueryExecution(this, plan)
 
   /**
    * Add a jar to SQLContext
@@ -296,10 +283,8 @@ class SQLContext private[sql](
    *
    * @group basic
    * @since 1.3.0
-   * TODO move to SQLSession?
    */
-  @transient
-  val udf: UDFRegistration = new UDFRegistration(this)
+  def udf: UDFRegistration = sessionState.udf
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -311,10 +296,10 @@ class SQLContext private[sql](
   }
 
   /**
-    * Returns true if the [[Queryable]] is currently cached in-memory.
-    * @group cachemgmt
-    * @since 1.3.0
-    */
+   * Returns true if the [[Queryable]] is currently cached in-memory.
+   * @group cachemgmt
+   * @since 1.3.0
+   */
   private[sql] def isCached(qName: Queryable): Boolean = {
     cacheManager.lookupCachedData(qName).nonEmpty
   }
@@ -362,6 +347,7 @@ class SQLContext private[sql](
 
     /**
      * Converts $"col name" into an [[Column]].
+     *
      * @since 1.3.0
      */
     // This must live here to preserve binary compatibility with Spark < 1.5.
@@ -579,10 +565,9 @@ class SQLContext private[sql](
     DataFrame(self, LocalRelation(attrSeq, rows.toSeq))
   }
 
-
   /**
    * :: Experimental ::
-   * Returns a [[DataFrameReader]] that can be used to read data in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
    *   sqlContext.read.schema(schema).json("/path/to/file.json")
@@ -719,7 +704,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(TableIdentifier(tableName), df.logicalPlan)
+    catalog.registerTable(sqlParser.parseTableIdentifier(tableName), df.logicalPlan)
   }
 
   /**
@@ -727,7 +712,6 @@ class SQLContext private[sql](
    * cached/persisted before, it's also unpersisted.
    *
    * @param tableName the name of the table to be unregistered.
-   *
    * @group basic
    * @since 1.3.0
    */
@@ -837,6 +821,16 @@ class SQLContext private[sql](
   }
 
   /**
+   * Returns a [[ContinuousQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   *
+   * @since 2.0.0
+   */
+  def streams: ContinuousQueryManager = {
+    continuousQueryManager
+  }
+
+  /**
    * Returns the names of tables in the current database as an array.
    *
    * @group ddl_ops
@@ -861,22 +855,7 @@ class SQLContext private[sql](
   }
 
   @transient
-  protected[sql] val planner: sparkexecution.SparkPlanner = new sparkexecution.SparkPlanner(this)
-
-  @transient
   protected[sql] lazy val emptyResult = sparkContext.parallelize(Seq.empty[InternalRow], 1)
-
-  /**
-   * Prepares a planned SparkPlan for execution by inserting shuffle operations and internal
-   * row format conversions as needed.
-   */
-  @transient
-  protected[sql] val prepareForExecution = new RuleExecutor[SparkPlan] {
-    val batches = Seq(
-      Batch("Add exchange", Once, EnsureRequirements(self)),
-      Batch("Whole stage codegen", Once, CollapseCodegenStages(self))
-    )
-  }
 
   /**
    * Parses the data type in our internal string representation. The data type string should
@@ -904,7 +883,7 @@ class SQLContext private[sql](
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
 
-    val rowRdd = rdd.map(r => EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
+    val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])
     DataFrame(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
 
