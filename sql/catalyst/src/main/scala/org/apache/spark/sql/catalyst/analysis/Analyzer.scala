@@ -255,11 +255,21 @@ class Analyzer(
         }
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
+          // collect all the found AggregateExpression, so we can check an expression is part of
+          // any AggregateExpression or not.
+          val aggsBuffer = ArrayBuffer[Expression]()
+          // Returns whether the expression belongs to any expressions in `aggsBuffer` or not.
+          def isPartOfAggregation(e: Expression): Boolean = {
+            aggsBuffer.exists(a => a.find(_ eq e).isDefined)
+          }
           expr.transformDown {
             // AggregateExpression should be computed on the unmodified value of its argument
             // expressions, so we should not replace any references to grouping expression
             // inside it.
-            case e: AggregateExpression => e
+            case e: AggregateExpression =>
+              aggsBuffer += e
+              e
+            case e if isPartOfAggregation(e) => e
             case e: GroupingID =>
               if (e.groupByExprs.isEmpty || e.groupByExprs == x.groupByExprs) {
                 gid
