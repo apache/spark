@@ -114,7 +114,10 @@ trait CodegenSupport extends SparkPlan {
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
   final def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
-    if (input != null && !parent.consumeUnsafeRow) {
+    // We check if input expressions has same length as output when:
+    // 1. parent can't consume UnsafeRow and input is not null.
+    // 2. parent consumes UnsafeRow and row is null.
+    if ((input != null && !parent.consumeUnsafeRow) || (parent.consumeUnsafeRow && row == null)) {
       assert(input.length == output.length)
     }
     parent.consumeChild(ctx, this, input, row)
@@ -211,12 +214,15 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     val row = ctx.freshName("row")
 
+    // If the parent of this InputAdapter can't consume UnsafeRow,
+    // we unpack variables from the row.
     val columns: Seq[ExprCode] = if (!this.parent.consumeUnsafeRow) {
       val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
       ctx.INPUT_ROW = row
       ctx.currentVars = null
       exprs.map(_.gen(ctx))
     } else {
+      // If the parent consumes UnsafeRow, we don't need to unpack the row.
       Seq.empty
     }
     val columnsCode = if (columns.isEmpty) {
