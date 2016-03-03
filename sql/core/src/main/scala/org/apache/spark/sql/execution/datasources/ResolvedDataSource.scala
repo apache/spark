@@ -229,7 +229,7 @@ object ResolvedDataSource extends Logging {
           fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = dataSchema,
-          bucketSpec = None,
+          bucketSpec = bucketSpec,
           format,
           options)
 

@@ -367,6 +367,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         throw new AnalysisException(s"Table $tableIdent already exists.")
 
       case _ =>
+        println(s"saveAsTable bucketing: $getBucketSpec")
         val cmd =
           CreateTableUsingAsSelect(
             tableIdent,

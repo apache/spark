@@ -72,14 +72,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): BucketedOutputWriterFactory = {
+      dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
     val parsedOptions: JSONOptions = new JSONOptions(options)
     parsedOptions.compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
-    new BucketedOutputWriterFactory {
+    new OutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

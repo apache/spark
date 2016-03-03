@@ -175,9 +175,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
           BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
+        println(s"Loaded bucket: $bucketSpec")
 
-        // It does not appear that the ql client for the metastore has a way to enumerate all the
-        // SerDe properties directly...
         val options = table.storage.serdeProperties
         val resolvedRelation =
           ResolvedDataSource(
@@ -221,6 +220,8 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
+    println(s"createDataSourceTable: $bucketSpec")
+
     val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
 
     val tableProperties = new mutable.HashMap[String, String]
@@ -249,6 +250,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
+      println("setting table props")
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
       tableProperties.put("spark.sql.sources.schema.numBucketCols",
@@ -527,7 +529,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
           location = fileCatalog,
           partitionSchema = partitionSchema,
           dataSchema = mergedSchema,
-          bucketSpec = None, // TODO: doesn't seem right
+          bucketSpec = None, // We don't support hive bucketed tables, only ones we write out.
           fileFormat = new DefaultSource(),
           options = parquetOptions)
 

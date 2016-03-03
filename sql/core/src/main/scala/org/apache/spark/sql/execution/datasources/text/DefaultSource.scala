@@ -31,7 +31,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
-import org.apache.spark.sql.execution.datasources.{BucketedOutputWriterFactory, CompressionCodecs, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -65,7 +65,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): BucketedOutputWriterFactory = {
+      dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema)
 
     val conf = job.getConfiguration
@@ -74,7 +74,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
-    new BucketedOutputWriterFactory {
+    new OutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

@@ -66,7 +66,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): BucketedOutputWriterFactory = {
+      dataSchema: StructType): OutputWriterFactory = {
     val conf = ContextUtil.getConfiguration(job)
 
     // SPARK-9849 DirectParquetOutputCommitter qualified name should be backward compatible
@@ -131,7 +131,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
             sqlContext.conf.parquetCompressionCodec.toUpperCase,
             CompressionCodecName.UNCOMPRESSED).name())
 
-    new BucketedOutputWriterFactory {
+    new OutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

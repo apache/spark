@@ -319,6 +319,8 @@ private[sql] class DynamicPartitionWriterContainer(
     spec => spec.bucketColumnNames.map(c => inputSchema.find(_.name == c).get)
   }
 
+  println(s"bucketColumns: $bucketColumns")
+
   private val sortColumns: Seq[Attribute] = bucketSpec.toSeq.flatMap {
     spec => spec.sortColumnNames.map(c => inputSchema.find(_.name == c).get)
   }
@@ -378,7 +380,6 @@ private[sql] class DynamicPartitionWriterContainer(
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val sortingExpressions: Seq[Expression] = partitionColumns ++ bucketIdExpression ++ sortColumns
-
     val getSortingKey = UnsafeProjection.create(sortingExpressions, inputSchema)
 
     val sortingKeySchema = StructType(sortingExpressions.map {
@@ -430,11 +431,8 @@ private[sql] class DynamicPartitionWriterContainer(
               currentWriter.close()
             }
             currentKey = nextKey.copy()
-            logDebug(s"Writing partition: $currentKey")
-
             currentWriter = newOutputWriter(currentKey, getPartitionString)
           }
-
           currentWriter.writeInternal(sortedIterator.getValue)
         }
       } finally {

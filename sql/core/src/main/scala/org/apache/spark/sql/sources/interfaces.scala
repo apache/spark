@@ -25,15 +25,14 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{SerializableWritable, Logging, SparkContext}
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.{RDD, UnionRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
-import org.apache.spark.sql.execution.{FileRelation, RDDConversions}
+import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -144,88 +143,6 @@ trait StreamSinkProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String]): Sink
-}
-
-/**
- * ::Experimental::
- * Implemented by objects that produce relations for a specific kind of data source
- * with a given schema and partitioned columns.  When Spark SQL is given a DDL operation with a
- * USING clause specified (to specify the implemented [[HadoopFsRelationProvider]]), a user defined
- * schema, and an optional list of partition columns, this interface is used to pass in the
- * parameters specified by a user.
- *
- * Users may specify the fully qualified class name of a given data source.  When that class is
- * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
- * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
- * data source 'org.apache.spark.sql.json.DefaultSource'
- *
- * A new instance of this class will be instantiated each time a DDL call is made.
- *
- * The difference between a [[RelationProvider]] and a [[HadoopFsRelationProvider]] is
- * that users need to provide a schema and a (possibly empty) list of partition columns when
- * using a [[HadoopFsRelationProvider]]. A relation provider can inherits both [[RelationProvider]],
- * and [[HadoopFsRelationProvider]] if it can support schema inference, user-specified
- * schemas, and accessing partitioned relations.
- *
- * @since 1.4.0
- */
-@Experimental
-trait HadoopFsRelationProvider extends StreamSourceProvider {
-  /**
-   * Returns a new base relation with the given parameters, a user defined schema, and a list of
-   * partition columns. Note: the parameters' keywords are case insensitive and this insensitivity
-   * is enforced by the Map that is passed to the function.
-   *
-   * @param dataSchema Schema of data columns (i.e., columns that are not partition columns).
-   */
-  def createRelation(
-      sqlContext: SQLContext,
-      paths: Array[String],
-      dataSchema: Option[StructType],
-      partitionColumns: Option[StructType],
-      parameters: Map[String, String]): HadoopFsRelation
-
-  def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String]): FileFormat = ???
-
-  private[sql] def createRelation(
-      sqlContext: SQLContext,
-      paths: Array[String],
-      dataSchema: Option[StructType],
-      partitionColumns: Option[StructType],
-      bucketSpec: Option[BucketSpec],
-      parameters: Map[String, String]): HadoopFsRelation = {
-    if (bucketSpec.isDefined) {
-      throw new AnalysisException("Currently we don't support bucketing for this data source.")
-    }
-    createRelation(sqlContext, paths, dataSchema, partitionColumns, parameters)
-  }
-
-  override def createSource(
-      sqlContext: SQLContext,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): Source = {
-    val caseInsensitiveOptions = new CaseInsensitiveMap(parameters)
-    val path = caseInsensitiveOptions.getOrElse("path", {
-      throw new IllegalArgumentException("'path' is not specified")
-    })
-    val metadataPath = caseInsensitiveOptions.getOrElse("metadataPath", s"$path/_metadata")
-
-    def dataFrameBuilder(files: Array[String]): DataFrame = {
-      val relation = createRelation(
-        sqlContext,
-        files,
-        schema,
-        partitionColumns = None,
-        bucketSpec = None,
-        parameters)
-      DataFrame(sqlContext, LogicalRelation(relation))
-    }
-
-    new FileStreamSource(sqlContext, metadataPath, path, schema, providerName, dataFrameBuilder)
-  }
 }
 
 /**
@@ -415,17 +332,11 @@ abstract class OutputWriterFactory extends Serializable {
    * @param context The Hadoop MapReduce task context.
    * @since 1.4.0
    */
-  def newInstance(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): OutputWriter
-
   private[sql] def newInstance(
       path: String,
-      bucketId: Option[Int],
+      bucketId: Option[Int], // TODO: This doesn't belong here...
       dataSchema: StructType,
-      context: TaskAttemptContext): OutputWriter =
-    newInstance(path, dataSchema, context)
+      context: TaskAttemptContext): OutputWriter
 }
 
 /**
@@ -515,7 +426,7 @@ trait FileFormat {
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): BucketedOutputWriterFactory
+      dataSchema: StructType): OutputWriterFactory
 
   def buildInternalScan(
       sqlContext: SQLContext,

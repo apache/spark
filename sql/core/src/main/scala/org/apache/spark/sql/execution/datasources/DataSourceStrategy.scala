@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.{CoalescedRDDPartition, MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
@@ -136,7 +136,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // Prune the buckets based on the pushed filters that do not contain partitioning key
       // since the bucketing key is not allowed to use the columns in partitioning key
       val bucketSet = getBuckets(pushedFilters, t.bucketSpec)
-
       val scan = buildPartitionedTableScan(
         l,
         partitionAndNormalColumnProjs,
@@ -213,43 +212,82 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     // Now, we create a scan builder, which will be used by pruneFilterProject. This scan builder
     // will union all partitions and attach partition values if needed.
-    val scanBuilder = {
+    val scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow] = {
       (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
-        val requiredDataColumns =
-          requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 
-        // Builds RDD[Row]s for each selected partition.
-        val perPartitionRows = partitions.map { case Partition(partitionValues, dir) =>
-          // Don't scan any partition columns to save I/O.  Here we are being optimistic and
-          // assuming partition columns data stored in data files are always consistent with those
-          // partition values encoded in partition directory paths.
-          val dataRows = relation.fileFormat.buildInternalScan(
-            relation.sqlContext,
-            relation.dataSchema,
-            requiredDataColumns.map(_.name).toArray,
-            filters,
-            buckets,
-            relation.location.getStatus(dir),
-            confBroadcast,
-            options)
+        relation.bucketSpec match {
+          case Some(spec) =>
+            val requiredDataColumns =
+              requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 
-          // Merges data values with partition values.
-          mergeWithPartitionValues(
-            requiredColumns,
-            requiredDataColumns,
-            partitionColumns,
-            partitionValues,
-            dataRows)
-        }
+            // Builds RDD[Row]s for each selected partition.
+            val perPartitionRows: Seq[(Int, RDD[InternalRow])] = partitions.flatMap {
+              case Partition(partitionValues, dir) =>
+                val files = relation.location.getStatus(dir)
+                val bucketed = files.groupBy(f => BucketingUtils.getBucketId(f.getPath.getName).get)
 
-        val unionedRows =
-          if (perPartitionRows.length == 0) {
-            relation.sqlContext.emptyResult
-          } else {
+                bucketed.map { bucketFiles =>
+                  // Don't scan any partition columns to save I/O.  Here we are being optimistic and
+                  // assuming partition columns data stored in data files are always consistent with
+                  // those partition values encoded in partition directory paths.
+                  val dataRows = relation.fileFormat.buildInternalScan(
+                    relation.sqlContext,
+                    relation.dataSchema,
+                    requiredDataColumns.map(_.name).toArray,
+                    filters,
+                    buckets,
+                    bucketFiles._2,
+                    confBroadcast,
+                    options)
+
+                  // Merges data values with partition values.
+                  bucketFiles._1 -> mergeWithPartitionValues(
+                    requiredColumns,
+                    requiredDataColumns,
+                    partitionColumns,
+                    partitionValues,
+                    dataRows)
+                }
+            }
+
+            val bucketedDataMap: Map[Int, Seq[RDD[InternalRow]]] =
+              perPartitionRows.groupBy(_._1).mapValues(_.map(_._2))
+
+            new UnionRDD(relation.sqlContext.sparkContext,
+              (0 until spec.numBuckets).map { bucketId =>
+                bucketedDataMap.get(bucketId).map(i => i.reduce(_ ++ _).coalesce(1)).getOrElse {
+                  relation.sqlContext.emptyResult: RDD[InternalRow]
+                }
+              })
+
+          case None =>
+            val requiredDataColumns =
+              requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
+
+            // Builds RDD[Row]s for each selected partition.
+            val perPartitionRows = partitions.map {
+              case Partition(partitionValues, dir) =>
+                val dataRows = relation.fileFormat.buildInternalScan(
+                  relation.sqlContext,
+                  relation.dataSchema,
+                  requiredDataColumns.map(_.name).toArray,
+                  filters,
+                  buckets,
+                  relation.location.getStatus(dir),
+                  confBroadcast,
+                  options)
+
+                // Merges data values with partition values.
+                mergeWithPartitionValues(
+                  requiredColumns,
+                  requiredDataColumns,
+                  partitionColumns,
+                  partitionValues,
+                  dataRows)
+            }
+
             new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
-          }
-
-        unionedRows
+        }
       }
     }
 

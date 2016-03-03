@@ -20,17 +20,16 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.nio.charset.Charset
 
 import org.apache.hadoop.fs.FileStatus
-import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
+import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.execution.datasources.{CompressionCodecs, BucketedOutputWriterFactory}
+import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StructField, StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -78,7 +77,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): BucketedOutputWriterFactory = {
+      dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>

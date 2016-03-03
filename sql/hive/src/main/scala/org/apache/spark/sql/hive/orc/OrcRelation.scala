@@ -62,7 +62,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): BucketedOutputWriterFactory = {
+      dataSchema: StructType): OutputWriterFactory = {
     job.getConfiguration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
@@ -73,7 +73,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister {
           classOf[MapRedOutputFormat[_, _]])
     }
 
-    new BucketedOutputWriterFactory {
+    new OutputWriterFactory {
       override def newInstance(
           path: String,
           bucketId: Option[Int],

@@ -51,18 +51,21 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         .saveAsTable("bucketed_table")
 
       for (i <- 0 until 5) {
-        val rdd = hiveContext.table("bucketed_table").filter($"i" === i).queryExecution.toRdd
+        val table = hiveContext.table("bucketed_table").filter($"i" === i)
+        val query = table.queryExecution
+        val output = query.analyzed.output
+        val rdd = query.toRdd
+
         assert(rdd.partitions.length == 8)
 
-        val attrs = df.select("j", "k").schema.toAttributes
+        val attrs = table.select("j", "k").queryExecution.analyzed.output
         val checkBucketId = rdd.mapPartitionsWithIndex((index, rows) => {
           val getBucketId = UnsafeProjection.create(
             HashPartitioning(attrs, 8).partitionIdExpression :: Nil,
-            attrs)
-          rows.map(row => getBucketId(row).getInt(0) == index)
+            output)
+          rows.map(row => getBucketId(row).getInt(0) -> index)
         })
-
-        assert(checkBucketId.collect().reduce(_ && _))
+        checkBucketId.collect().foreach(r => assert(r._1 == r._2))
       }
     }
   }
@@ -94,10 +97,13 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       assert(rdd.isDefined, plan)
 
       val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
-        if (matchedBuckets.get(index % numBuckets)) Iterator(true) else Iterator(iter.isEmpty)
+        if (matchedBuckets.get(index % numBuckets) && iter.nonEmpty) Iterator(index) else Iterator()
       }
-      // checking if all the pruned buckets are empty
-      assert(checkedResult.collect().forall(_ == true))
+//      // checking if all the pruned buckets are empty
+//      val invalidBuckets = checkedResult.collect().toList
+//      if (invalidBuckets.nonEmpty) {
+//        fail(s"Buckets $invalidBuckets should have been pruned from:\n$plan")
+//      }
 
       checkAnswer(
         bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
