@@ -32,8 +32,9 @@ object ScalaReflection extends ScalaReflection {
   // Since we are creating a runtime mirror usign the class loader of current thread,
   // we need to use def at here. So, every time we call mirror, it is using the
   // class loader of the current thread.
-  override def mirror: universe.Mirror =
+  override def mirror: universe.Mirror = ScalaReflectionLock.synchronized {
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
+  }
 
   import universe._
 
