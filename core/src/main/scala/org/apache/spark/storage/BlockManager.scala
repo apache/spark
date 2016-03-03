@@ -806,16 +806,13 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
       try {
-        // returnValues - Whether to return the values put
-        // blockStore - The type of storage to put these values into
-        val (returnValues, blockStore: BlockStore) = {
+        val blockStore: BlockStore = {
           if (putLevel.useMemory) {
             // Put it in memory first, even if it also has useDisk set to true;
             // We will drop it to disk later if the memory store can't hold it.
-            (true, memoryStore)
+            memoryStore
           } else if (putLevel.useDisk) {
-            // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
+            diskStore
           } else {
             assert(putLevel == StorageLevel.NONE)
             throw new BlockException(
@@ -826,7 +823,7 @@ private[spark] class BlockManager(
         // Actually put the values
         result = data match {
           case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator(), putLevel, returnValues)
+            blockStore.putIterator(blockId, iterator(), putLevel, returnValues = false)
           case ByteBufferValues(bytes) =>
             bytes.rewind()
             blockStore.putBytes(blockId, bytes, putLevel)
