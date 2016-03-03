@@ -1525,7 +1525,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("SPARK-13543 Set explicitly the output as uncompressed") {
+  test("SPARK-13543 Write the output as uncompressed via option") {
     val clonedConf = new Configuration(hadoopConfiguration)
     hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
     hadoopConfiguration
