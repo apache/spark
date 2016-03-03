@@ -506,7 +506,7 @@ private[spark] class BlockManager(
           if (level.deserialized) {
             // Cache the values before returning them
             val putResult = memoryStore.putIterator(
-              blockId, values, level, returnValues = true, allowPersistToDisk = false)
+              blockId, values, level, allowPersistToDisk = false)
             // The put may or may not have succeeded, depending on whether there was enough
             // space to unroll the block. Either way, the put here should return an iterator.
             if (putResult.data == null) {
@@ -821,7 +821,7 @@ private[spark] class BlockManager(
         // Actually put the values
         result = data match {
           case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator(), putLevel, returnValues = false)
+            blockStore.putIterator(blockId, iterator(), putLevel)
           case ByteBufferValues(bytes) =>
             bytes.rewind()
             blockStore.putBytes(blockId, bytes, putLevel)
@@ -1041,7 +1041,7 @@ private[spark] class BlockManager(
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
-          diskStore.putIterator(blockId, elements.toIterator, level, returnValues = false)
+          diskStore.putIterator(blockId, elements.toIterator, level)
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes, level)
       }

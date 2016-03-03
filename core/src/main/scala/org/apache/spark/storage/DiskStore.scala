@@ -60,9 +60,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    require(!returnValues, "returnValues should always be false for DiskStore")
+      level: StorageLevel): PutResult = {
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)

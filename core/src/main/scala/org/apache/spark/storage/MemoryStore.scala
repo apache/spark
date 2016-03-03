@@ -93,7 +93,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level, returnValues = false)
+      putIterator(blockId, values, level)
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), null)
@@ -119,9 +119,8 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIterator(blockId, values, level, returnValues, allowPersistToDisk = true)
+      level: StorageLevel): PutResult = {
+    putIterator(blockId, values, level, allowPersistToDisk = true)
   }
 
   /**
@@ -140,7 +139,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean, // TODO(josh): Remove me!
       allowPersistToDisk: Boolean): PutResult = {
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
@@ -163,7 +161,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
           val putResult =
-            blockManager.diskStore.putIterator(blockId, iteratorValues, level, returnValues = false)
+            blockManager.diskStore.putIterator(blockId, iteratorValues, level)
           val data = blockManager.diskStore.getValues(blockId).get
           PutResult(putResult.size, data)
         } else {
