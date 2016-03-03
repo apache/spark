@@ -71,7 +71,9 @@ public class ColumnVectorUtils {
       } else if (t instanceof DecimalType) {
         DecimalType dt = (DecimalType)t;
         Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
-        if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
+          col.putInts(0, capacity, (int)d.toUnscaledLong());
+        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
           col.putLongs(0, capacity, d.toUnscaledLong());
         } else {
           final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
