@@ -67,6 +67,10 @@ def _monkey_patch_RDD(sqlContext):
            The schema parameter can be a DataType or a datatype string after 2.0. If it's not a
            StructType, it will be wrapped into a StructType and each record will also be wrapped
            into a tuple.
+           The data type string format equals to `DataType.simpleString`, except that top level
+           struct type can omit the `struct<>` and numeric types use `typeName()` as their format,
+           e.g. use `byte` instead of `tinyint` for ByteType. We can also use `int` as a short name
+           for IntegerType.
 
         >>> rdd.toDF().collect()
         [Row(name=u'Alice', age=1)]
@@ -84,7 +88,7 @@ def _monkey_patch_RDD(sqlContext):
 
         if not isinstance(schema, DataType):
             raise TypeError("schema should be DataType or string or list or tuple, " +
-                "but got: %s" % schema)
+                            "but got: %s" % schema)
         else:
             def verify(obj):
                 _verify_type(obj, schema)

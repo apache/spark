@@ -714,7 +714,7 @@ def _ignore_brackets_split(s, separator):
             buf += c
         elif c in _BRACKETS.values():
             if level == 0:
-                raise ValueError("Cannot parse datatype string: %s" % s)
+                raise ValueError("Brackets are not correctly paired: %s" % s)
             level -= 1
             buf += c
         elif c == separator and level > 0:
@@ -726,7 +726,7 @@ def _ignore_brackets_split(s, separator):
             buf += c
 
     if len(buf) == 0:
-        raise ValueError("Cannot parse datatype string: %s" % s)
+        raise ValueError("The %s cannot be the last char: %s" % (seperator, s))
     parts.append(buf)
     return parts
 
@@ -737,7 +737,8 @@ def _parse_struct_type_string(s):
     for part in parts:
         name_and_type = _ignore_brackets_split(part, ":")
         if len(name_and_type) != 2:
-            raise ValueError("Cannot parse datatype string: %s" % s)
+            raise ValueError("The strcut field string format is: 'field_name:field_type', " +
+                             "but got: %s" % part)
         field_name = name_and_type[0].strip()
         field_type = _parse_datatype_string(name_and_type[1])
         fields.append(StructField(field_name, field_type))
@@ -781,20 +782,21 @@ def _parse_datatype_string(s):
     s = s.strip()
     if s.startswith("array<"):
         if s[-1] != ">":
-            raise ValueError("Cannot parse datatype string: %s" % s)
+            raise ValueError("'>' should be the last char, but got: %s" % s)
         return ArrayType(_parse_datatype_string(s[6:-1]))
     elif s.startswith("map<"):
         if s[-1] != ">":
-            raise ValueError("Cannot parse datatype string: %s" % s)
+            raise ValueError("'>' should be the last char, but got: %s" % s)
         parts = _ignore_brackets_split(s[4:-1], ",")
         if len(parts) != 2:
-            raise ValueError("Cannot parse datatype string: %s" % s)
+            raise ValueError("The map type string format is: 'map<key_type,value_type>', " +
+                             "but got: %s" % s)
         kt = _parse_datatype_string(parts[0])
         vt = _parse_datatype_string(parts[1])
         return MapType(kt, vt)
     elif s.startswith("struct<"):
         if s[-1] != ">":
-            raise ValueError("Cannot parse datatype string: %s" % s)
+            raise ValueError("'>' should be the last char, but got: %s" % s)
         return _parse_struct_type_string(s[7:-1])
     elif ":" in s:
         return _parse_struct_type_string(s)
