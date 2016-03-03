@@ -20,8 +20,13 @@ package org.apache.spark.sql.catalyst
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
+import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class PrimitiveData(
     intField: Int,
@@ -236,5 +241,24 @@ class ScalaReflectionSuite extends SparkFunSuite {
     val anyTypes = getParameterTypes(anyFunc)
     assert(anyTypes.forall(!_.isPrimitive))
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
+  }
+
+  test("thread safety of mirror") {
+    for (_ <- 0 until 100) {
+      val loader = new java.net.URLClassLoader(Array(), Utils.getContextOrSparkClassLoader)
+      Await.result(
+        Future.sequence(
+          (0 until 10).map(_ =>
+            Future {
+              val cl = Thread.currentThread.getContextClassLoader
+              try {
+                Thread.currentThread.setContextClassLoader(loader)
+                mirror
+              } finally {
+                Thread.currentThread.setContextClassLoader(cl)
+              }
+            })),
+        Duration.Inf)
+    }
   }
 }
