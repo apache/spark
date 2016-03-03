@@ -626,7 +626,7 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, MLReadable, MLWrita
     >>> modelPath = temp_path + "/max-abs-scaler-model"
     >>> model.save(modelPath)
     >>> loadedModel = MaxAbsScalerModel.load(modelPath)
-    >>> loadedModel.transform(df).first().scaled == model.transform(df).first().scaled
+    >>> loadedModel.maxAbs == model.maxAbs
     True
 
     .. versionadded:: 2.0.0
@@ -665,6 +665,14 @@ class MaxAbsScalerModel(JavaModel, MLReadable, MLWritable):
 
     .. versionadded:: 2.0.0
     """
+
+    @property
+    @since("2.0.0")
+    def maxAbs(self):
+        """
+        Max Abs vector.
+        """
+        return self._call_java("maxAbs")
 
 
 @inherit_doc
