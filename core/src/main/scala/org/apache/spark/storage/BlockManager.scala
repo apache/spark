@@ -805,32 +805,38 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
       try {
-        val blockStore: BlockStore = {
-          if (putLevel.useMemory) {
-            // Put it in memory first, even if it also has useDisk set to true;
-            // We will drop it to disk later if the memory store can't hold it.
-            memoryStore
-          } else if (putLevel.useDisk) {
-            diskStore
-          } else {
-            assert(putLevel == StorageLevel.NONE)
-            throw new BlockException(
-              blockId, s"Attempted to put block $blockId without specifying storage level!")
+        if (putLevel.useMemory) {
+          // Put it in memory first, even if it also has useDisk set to true;
+          // We will drop it to disk later if the memory store can't hold it.
+          data match {
+            case IteratorValues(iterator) =>
+              memoryStore.putIterator(blockId, iterator(), putLevel) match {
+                case Right(s) =>
+                  size = s
+                case Left(iter) =>
+                  iteratorFromFailedMemoryStorePut = Some(iter)
+              }
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
+              size = bytes.limit()
+              memoryStore.putBytes(blockId, bytes, putLevel)
           }
-        }
-
-        // Actually put the values
-        size = data match {
-          case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator(), putLevel) match {
-              case Right(s) => s
-              case Left(iter) =>
-                iteratorFromFailedMemoryStorePut = Some(iter)
-                0
-            }
-          case ByteBufferValues(bytes) =>
-            bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel).size
+        } else if (putLevel.useDisk) {
+          data match {
+            case IteratorValues(iterator) =>
+              diskStore.putIterator(blockId, iterator(), putLevel) match {
+                case Right(s) =>
+                  size = s
+              }
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
+              size = bytes.limit()
+              diskStore.putBytes(blockId, bytes, putLevel)
+          }
+        } else {
+          assert(putLevel == StorageLevel.NONE)
+          throw new BlockException(
+            blockId, s"Attempted to put block $blockId without specifying storage level!")
         }
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
