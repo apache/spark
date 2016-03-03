@@ -165,19 +165,6 @@ package object util {
     str.substring(0, len).replace("*/", "\\*\\/").replace("\\u", "\\\\u") + suffix
   }
 
-  /**
-   * Returns the string representation of this expression with origin that is safe to be put in
-   * code comments of generated code.
-   */
-  def toCommentSafeString(expr: Expression): String = {
-    val str = if (expr.origin.callSite.isDefined && !expr.isInstanceOf[BoundReference]) {
-      expr.toString + " @ " + expr.origin.callSite.get
-    } else {
-      expr.toString
-    }
-    str.replace("*/", "\\*\\/").replace("\\u", "\\\\u")
-  }
-
   /* FIX ME
   implicit class debugLogging(a: Any) {
     def debugLogging() {
