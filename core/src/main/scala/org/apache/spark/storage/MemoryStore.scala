@@ -93,10 +93,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level, returnValues = true)
+      putIterator(blockId, values, level, returnValues = false)
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-      PutResult(bytes.limit(), Right(bytes.duplicate()))
+      PutResult(bytes.limit(), null)
     }
   }
 
@@ -110,14 +110,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
     val putSuccess = tryToPut(blockId, () => bytes, size, deserialized = false)
-    val data =
-      if (putSuccess) {
-        assert(bytes.limit == size)
-        Right(bytes.duplicate())
-      } else {
-        null
-      }
-    PutResult(size, data)
+    if (putSuccess) {
+      assert(bytes.limit == size)
+    }
+    PutResult(size, null)
   }
 
   override def putIterator(
@@ -144,7 +140,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      returnValues: Boolean,
+      returnValues: Boolean, // TODO(josh): Remove me!
       allowPersistToDisk: Boolean): PutResult = {
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
@@ -154,11 +150,11 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
           if (level.deserialized) {
             val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
             tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)
-            PutResult(sizeEstimate, Left(arrayValues.iterator))
+            PutResult(sizeEstimate, arrayValues.iterator)
           } else {
             val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
             tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-            PutResult(bytes.limit(), Right(bytes.duplicate()))
+            PutResult(bytes.limit(), null)
           }
         }
         PutResult(res.size, res.data)
@@ -166,10 +162,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         // Not enough space to unroll this block; drop to disk if applicable
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
-          val res = blockManager.diskStore.putIterator(blockId, iteratorValues, level, returnValues)
-          PutResult(res.size, res.data)
+          val putResult =
+            blockManager.diskStore.putIterator(blockId, iteratorValues, level, returnValues = false)
+          val data = blockManager.diskStore.getValues(blockId).get
+          PutResult(putResult.size, data)
         } else {
-          PutResult(0, Left(iteratorValues))
+          PutResult(0, iteratorValues)
         }
     }
   }

@@ -1162,8 +1162,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.contains("b2"))
     assert(result1.size > 0) // unroll was successful
     assert(result2.size > 0)
-    assert(result1.data.isLeft) // unroll did not drop this block to disk
-    assert(result2.data.isLeft)
+    assert(result1.data != null) // unroll did not drop this block to disk
+    assert(result2.data != null)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
@@ -1176,7 +1176,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     val result3 = memoryStore.putIterator("b3", smallIterator, memOnly, returnValues = true)
     assert(result3.size > 0)
-    assert(result3.data.isLeft)
+    assert(result3.data != null)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1187,7 +1187,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
     val result4 = memoryStore.putIterator("b4", bigIterator, memOnly, returnValues = true)
     assert(result4.size === 0) // unroll was unsuccessful
-    assert(result4.data.isLeft)
+    assert(result4.data != null)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1231,7 +1231,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // b3, while disk store should contain b1, b2 and b4.
     val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk, returnValues = true)
     assert(result4.size > 0)
-    assert(result4.data.isRight) // unroll returned bytes from disk
+    assert(result4.data != null) // unroll returned bytes from disk
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1303,7 +1303,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       bytes
     })
     assert(result.size === 10000)
-    assert(result.data === Right(bytes))
   }
 
   test("read-locked blocks cannot be evicted from the MemoryStore") {

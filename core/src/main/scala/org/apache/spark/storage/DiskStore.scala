@@ -54,7 +54,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
-    PutResult(bytes.limit(), Right(bytes.duplicate()))
+    PutResult(bytes.limit(), null)
   }
 
   override def putIterator(
@@ -62,7 +62,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-
+    require(!returnValues, "returnValues should always be false for DiskStore")
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
@@ -90,13 +90,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(length), timeTaken))
 
-    if (returnValues) {
-      // Return a byte buffer for the contents of the file
-      val buffer = getBytes(blockId).get
-      PutResult(length, Right(buffer))
-    } else {
-      PutResult(length, null)
-    }
+    PutResult(length, null)
   }
 
   private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {

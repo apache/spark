@@ -509,13 +509,11 @@ private[spark] class BlockManager(
               blockId, values, level, returnValues = true, allowPersistToDisk = false)
             // The put may or may not have succeeded, depending on whether there was enough
             // space to unroll the block. Either way, the put here should return an iterator.
-            putResult.data match {
-              case Left(it) =>
-                val ci = CompletionIterator[Any, Iterator[Any]](it, releaseLock(blockId))
-                return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
-              case _ =>
-                // This only happens if we dropped the values back to disk (which is never)
-                throw new SparkException("Memory store did not return an iterator!")
+            if (putResult.data == null) {
+              throw new SparkException("Memory store did not return an iterator!")
+            } else {
+              val ci = CompletionIterator[Any, Iterator[Any]](putResult.data, releaseLock(blockId))
+              return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
             }
           } else {
             val ci = CompletionIterator[Any, Iterator[Any]](values, releaseLock(blockId))
@@ -680,7 +678,7 @@ private[spark] class BlockManager(
         // The put failed, likely because the data was too large to fit in memory and could not be
         // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
         // that they can decide what to do with the values (e.g. process them without caching).
-       Right(failedPutResult.data.left.get)
+       Right(failedPutResult.data)
     }
   }
 
