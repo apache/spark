@@ -24,9 +24,7 @@ import java.nio.ByteBuffer
  *   (1) The estimated size of the put,
  *   (2) The values put if the caller asked for them to be returned (e.g. for chaining
  *       replication), and
- *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
  */
 private[spark] case class PutResult(
     size: Long,
-    data: Either[Iterator[_], ByteBuffer],
-    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)
+    data: Either[Iterator[_], ByteBuffer])
