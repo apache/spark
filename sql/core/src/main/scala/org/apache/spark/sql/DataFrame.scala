@@ -30,6 +30,7 @@ import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
@@ -49,7 +50,9 @@ import org.apache.spark.util.Utils
 
 private[sql] object DataFrame {
   def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    new Dataset[Row](sqlContext, logicalPlan)
+    val qe = sqlContext.executePlan(logicalPlan)
+    qe.assertAnalyzed()
+    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
   }
 }
 
@@ -114,7 +117,8 @@ private[sql] object DataFrame {
 @Experimental
 class Dataset[T] private[sql](
     @transient override val sqlContext: SQLContext,
-    @DeveloperApi @transient override val queryExecution: QueryExecution)
+    @DeveloperApi @transient override val queryExecution: QueryExecution,
+    encoder: Encoder[T])
   extends Queryable with Serializable {
 
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
@@ -126,14 +130,14 @@ class Dataset[T] private[sql](
    * This reports error eagerly as the [[DataFrame]] is constructed, unless
    * [[SQLConf.dataFrameEagerAnalysis]] is turned off.
    */
-  def this(sqlContext: SQLContext, logicalPlan: LogicalPlan) = {
+  def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
     this(sqlContext, {
       val qe = sqlContext.executePlan(logicalPlan)
       if (sqlContext.conf.dataFrameEagerAnalysis) {
         qe.assertAnalyzed()  // This should force analysis and throw errors if there are any
       }
       qe
-    })
+    }, encoder)
   }
 
   @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
@@ -146,6 +150,28 @@ class Dataset[T] private[sql](
     case _ =>
       queryExecution.analyzed
   }
+
+  /**
+   * An unresolved version of the internal encoder for the type of this [[DS]].  This one is
+   * marked implicit so that we can use it when constructing new [[DS]] objects that have the
+   * same object type (that will be possibly resolved to a different schema).
+   */
+  private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(encoder)
+  if (sqlContext.conf.dataFrameEagerAnalysis) {
+    unresolvedTEncoder.validate(logicalPlan.output)
+  }
+
+  /** The encoder for this [[DS]] that has been resolved to its output schema. */
+  private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
+    unresolvedTEncoder.resolve(logicalPlan.output, OuterScopes.outerScopes)
+
+  /**
+   * The encoder where the expressions used to construct an object from an input row have been
+   * bound to the ordinals of this [[DS]]'s output schema.
+   */
+  private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
+
+  private implicit def classTag = unresolvedTEncoder.clsTag
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sqlContext.analyzer.resolver).getOrElse {
@@ -196,7 +222,7 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `rdd.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = this.asInstanceOf[DataFrame]
+  def toDF(): DataFrame = new Dataset[Row](sqlContext, queryExecution, RowEncoder(schema))
 
   /**
    * :: Experimental ::
@@ -1066,7 +1092,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.4.0
    */
-  def randomSplit(weights: Array[Double], seed: Long): Array[DataFrame] = {
+  def randomSplit(weights: Array[Double], seed: Long): Array[Dataset[T]] = {
     // It is possible that the underlying dataframe doesn't guarantee the ordering of rows in its
     // constituent partitions each time a split is materialized which could result in
     // overlapping splits. To prevent this, we explicitly sort each input partition to make the
@@ -1075,7 +1101,8 @@ class Dataset[T] private[sql](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)())
+      new Dataset[T](
+        sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)(), encoder)
     }.toArray
   }
 
@@ -1086,7 +1113,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.4.0
    */
-  def randomSplit(weights: Array[Double]): Array[DataFrame] = {
+  def randomSplit(weights: Array[Double]): Array[Dataset[T]] = {
     randomSplit(weights, Utils.random.nextLong)
   }
 
@@ -1097,7 +1124,7 @@ class Dataset[T] private[sql](
    * @param seed Seed for sampling.
    * @group dfops
    */
-  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[DataFrame] = {
+  private[spark] def randomSplit(weights: List[Double], seed: Long): Array[Dataset[T]] = {
     randomSplit(weights.toArray, seed)
   }
 
@@ -1745,7 +1772,7 @@ class Dataset[T] private[sql](
    * Wrap a DataFrame action to track all Spark jobs in the body so that we can connect them with
    * an execution.
    */
-  private[sql] def withNewExecutionId[T](body: => T): T = {
+  private[sql] def withNewExecutionId[U](body: => U): U = {
     SQLExecution.withNewExecutionId(sqlContext, queryExecution)(body)
   }
 
@@ -1753,7 +1780,7 @@ class Dataset[T] private[sql](
    * Wrap a DataFrame action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def withCallback[T](name: String, df: DataFrame)(action: DataFrame => T) = {
+  private def withCallback[U](name: String, df: DataFrame)(action: DataFrame => U) = {
     try {
       df.queryExecution.executedPlan.foreach { plan =>
         plan.resetMetrics()
@@ -1786,7 +1813,11 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    new DataFrame(sqlContext, logicalPlan)
+    DataFrame(sqlContext, logicalPlan)
   }
 
+  /** A convenient function to wrap a logical plan and produce a DataFrame. */
+  @inline private def withTypedPlan(logicalPlan: => LogicalPlan): Dataset[T] = {
+    new Dataset[T](sqlContext, logicalPlan, encoder)
+  }
 }

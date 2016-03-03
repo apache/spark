@@ -64,7 +64,7 @@ class GroupedDataset[K, V] private[sql](
 
   private def groupedData =
     new GroupedData(
-      new DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+      DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
 
   /**
    * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified

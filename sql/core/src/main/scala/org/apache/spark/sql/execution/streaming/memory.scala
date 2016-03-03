@@ -59,7 +59,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    new DataFrame(sqlContext, logicalPlan)
+    DataFrame(sqlContext, logicalPlan)
   }
 
   def addData(data: A*): Offset = {
