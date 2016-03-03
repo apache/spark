@@ -93,7 +93,12 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level)
+      putIterator(blockId, values, level) match {
+        case Right(size) =>
+          PutResult(size, null)
+        case Left(_) =>
+          PutResult(0, null)
+      }
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), null)
@@ -119,7 +124,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
-      level: StorageLevel): PutResult = {
+      level: StorageLevel): Either[Iterator[Any], Long] = {
     putIterator(blockId, values, level, allowPersistToDisk = true)
   }
 
@@ -139,7 +144,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      allowPersistToDisk: Boolean): PutResult = {
+      allowPersistToDisk: Boolean): Either[Iterator[Any], Long] = {
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
       case Left(arrayValues) =>
@@ -155,17 +160,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
             PutResult(bytes.limit(), null)
           }
         }
-        PutResult(res.size, res.data)
+        Right(res.size)
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
-          val putResult =
-            blockManager.diskStore.putIterator(blockId, iteratorValues, level)
-          val data = blockManager.diskStore.getValues(blockId).get
-          PutResult(putResult.size, data)
+          blockManager.diskStore.putIterator(blockId, iteratorValues, level)
         } else {
-          PutResult(0, iteratorValues)
+          Left(iteratorValues)
         }
     }
   }

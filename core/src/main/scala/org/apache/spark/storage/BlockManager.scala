@@ -503,22 +503,23 @@ private[spark] class BlockManager(
           return Some(bytes)
         } else {
           val values = dataDeserialize(blockId, bytes)
-          if (level.deserialized) {
-            // Cache the values before returning them
-            val putResult = memoryStore.putIterator(
-              blockId, values, level, allowPersistToDisk = false)
-            // The put may or may not have succeeded, depending on whether there was enough
-            // space to unroll the block. Either way, the put here should return an iterator.
-            if (putResult.data == null) {
-              throw new SparkException("Memory store did not return an iterator!")
+          val valuesToReturn: Iterator[Any] = {
+            if (level.deserialized) {
+              // Cache the values before returning them
+              memoryStore.putIterator(blockId, values, level, allowPersistToDisk = false) match {
+                case Left(iter) =>
+                  // The memory store put() failed, so it returned the iterator back to us:
+                  iter
+                case Right(_) =>
+                  // The put() succeeded, so we can read the values back:
+                  memoryStore.getValues(blockId).get
+              }
             } else {
-              val ci = CompletionIterator[Any, Iterator[Any]](putResult.data, releaseLock(blockId))
-              return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
+              values
             }
-          } else {
-            val ci = CompletionIterator[Any, Iterator[Any]](values, releaseLock(blockId))
-            return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
           }
+          val ci = CompletionIterator[Any, Iterator[Any]](valuesToReturn, releaseLock(blockId))
+          return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         }
       }
     } else {
@@ -797,7 +798,6 @@ private[spark] class BlockManager(
     }
 
     var blockWasSuccessfullyStored = false
-    var result: PutResult = null
 
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
@@ -819,14 +819,16 @@ private[spark] class BlockManager(
         }
 
         // Actually put the values
-        result = data match {
+        size = data match {
           case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator(), putLevel)
+            blockStore.putIterator(blockId, iterator(), putLevel) match {
+              case Right(s) => s
+              case Left(_) => 0
+            }
           case ByteBufferValues(bytes) =>
             bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel)
+            blockStore.putBytes(blockId, bytes, putLevel).size
         }
-        size = result.size
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
@@ -884,7 +886,7 @@ private[spark] class BlockManager(
     if (blockWasSuccessfullyStored) {
       None
     } else {
-      Some(result)
+      Some(PutResult(size, null))
     }
   }
 

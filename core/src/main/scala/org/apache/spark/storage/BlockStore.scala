@@ -28,7 +28,16 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
 
   def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult
 
-  def putIterator(blockId: BlockId, values: Iterator[Any], level: StorageLevel): PutResult
+  /**
+   * Attempt to store an iterator of values.
+   *
+   * @return an iterator of values (in case the put failed), or the estimated size of the stored
+   *         values if the put succeeded.
+   */
+  def putIterator(
+      blockId: BlockId,
+      values: Iterator[Any],
+      level: StorageLevel): Either[Iterator[Any], Long]
 
   /**
    * Return the size of a block in bytes.

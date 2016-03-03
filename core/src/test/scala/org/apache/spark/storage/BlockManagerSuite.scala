@@ -1160,8 +1160,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val result2 = memoryStore.putIterator("b2", smallIterator, memOnly)
     assert(memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
-    assert(result1.size > 0) // unroll was successful
-    assert(result2.size > 0)
+    assert(result1.isRight) // unroll was successful
+    assert(result2.isRight)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
@@ -1173,7 +1173,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     val result3 = memoryStore.putIterator("b3", smallIterator, memOnly)
-    assert(result3.size > 0)
+    assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1183,8 +1183,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
     val result4 = memoryStore.putIterator("b4", bigIterator, memOnly)
-    assert(result4.size === 0) // unroll was unsuccessful
-    assert(result4.data != null)
+    assert(result4.isLeft) // unroll was unsuccessful
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1212,7 +1211,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
     val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk)
-    assert(result3.size > 0)
+    assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1227,7 +1226,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // directly in addition to kicking out b2 in the process. Memory store should contain only
     // b3, while disk store should contain b1, b2 and b4.
     val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk)
-    assert(result4.size > 0)
+    assert(result4.isRight)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
