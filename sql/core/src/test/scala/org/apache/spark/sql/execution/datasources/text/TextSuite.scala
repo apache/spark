@@ -71,8 +71,8 @@ class TextSuite extends QueryTest with SharedSQLContext {
       val tempDirPath = Utils.createTempDir().getAbsolutePath()
       testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
     }
-    assert(errMsg.getMessage === "Codec [illegal] is not available. " +
-      "Known codecs are bzip2, deflate, lz4, gzip, snappy.")
+    assert(errMsg.getMessage.contains("Codec [illegal] is not available. " +
+      "Known codecs are"))
   }
 
   private def testFile: String = {
