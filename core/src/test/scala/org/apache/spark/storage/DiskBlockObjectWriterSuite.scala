@@ -54,8 +54,6 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-
-
   test("verify write metrics") {
     writer.write(Long.box(20), Long.box(30))
     // Record metrics update on every write

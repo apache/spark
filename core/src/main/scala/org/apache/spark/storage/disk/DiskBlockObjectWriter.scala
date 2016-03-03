@@ -78,8 +78,8 @@ private[spark] class DiskBlockObjectWriter(
   def commitAndClose(): Unit = {
     if (initialized) {
       objOut.flush()
-      diskBlockWriter.commitAndClose()
     }
+    diskBlockWriter.commitAndClose()
     commitAndCloseHasBeenCalled = true
   }
 

@@ -212,6 +212,8 @@ private[spark] class DiskBlockWriter(
 
   // For testing
   private[spark] override def flush() {
-    bs.flush()
+    if (bs != null) {
+      bs.flush()
+    }
   }
 }
