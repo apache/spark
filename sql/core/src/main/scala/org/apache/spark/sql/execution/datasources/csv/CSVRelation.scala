@@ -204,16 +204,16 @@ object CSVRelation extends Logging {
     val rowArray = new Array[Any](safeRequiredIndices.length)
     val requiredSize = requiredFields.length
     tokenizedRDD.flatMap { tokens =>
-      if (params.dropMalformed && schemaFields.length != tokens.size) {
+      if (params.dropMalformed && schemaFields.length != tokens.length) {
         logWarning(s"Dropping malformed line: ${tokens.mkString(params.delimiter.toString)}")
         None
-      } else if (params.failFast && schemaFields.length != tokens.size) {
+      } else if (params.failFast && schemaFields.length != tokens.length) {
         throw new RuntimeException(s"Malformed line in FAILFAST mode: " +
           s"${tokens.mkString(params.delimiter.toString)}")
       } else {
-        val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.size) {
-          tokens ++ new Array[String](schemaFields.length - tokens.size)
-        } else if (params.permissive && schemaFields.length < tokens.size) {
+        val indexSafeTokens = if (params.permissive && schemaFields.length > tokens.length) {
+          tokens ++ new Array[String](schemaFields.length - tokens.length)
+        } else if (params.permissive && schemaFields.length < tokens.length) {
           tokens.take(schemaFields.length)
         } else {
           tokens
