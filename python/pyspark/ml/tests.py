@@ -478,6 +478,31 @@ class TrainingSummaryTest(PySparkTestCase):
         pValues = s.pValues
         self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
 
+    def test_logistic_regression_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        sqlContext = SQLContext(self.sc)
+        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
+        model = lr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.probabilityCol, "probability")
+        self.assertEqual(s.labelCol, "label")
+        self.assertEqual(s.featuresCol, "features")
+        objHist = s.objectiveHistory
+        self.assertTrue(isinstance(objHist, list) and isinstance(objHist[0], float))
+        self.assertGreater(s.totalIterations, 0)
+        self.assertTrue(isinstance(s.roc, DataFrame))
+        self.assertAlmostEqual(s.areaUnderROC, 1.0, 2)
+        self.assertTrue(isinstance(s.pr, DataFrame))
+        self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
+        self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *
