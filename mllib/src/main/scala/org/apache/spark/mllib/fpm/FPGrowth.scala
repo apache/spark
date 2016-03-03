@@ -232,7 +232,7 @@ class FPGrowth private (
       partitioner: Partitioner): Array[Item] = {
     data.flatMap { t =>
       val uniq = t.toSet
-      if (t.size != uniq.size) {
+      if (t.length != uniq.size) {
         throw new SparkException(s"Items in a transaction must be unique but got ${t.toSeq}.")
       }
       t
