@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
 import org.apache.spark.Logging
-import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 
 /**

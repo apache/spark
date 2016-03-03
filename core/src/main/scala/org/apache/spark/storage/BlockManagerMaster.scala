@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import scala.collection.Iterable
 import scala.collection.generic.CanBuildFrom
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.rpc.RpcEndpointRef

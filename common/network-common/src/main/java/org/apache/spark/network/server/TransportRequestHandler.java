@@ -19,7 +19,6 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;

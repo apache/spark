@@ -19,7 +19,6 @@ package org.apache.spark.deploy.client
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfterAll

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite

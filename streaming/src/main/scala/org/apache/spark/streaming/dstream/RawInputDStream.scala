@@ -25,8 +25,8 @@ import java.util.concurrent.ArrayBlockingQueue
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.storage.{StorageLevel, StreamBlockId}
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.receiver.Receiver
 

@@ -25,9 +25,8 @@ import akka.actor.actorRef2Scala
 import akka.util.ByteString
 import akka.zeromq._
 import akka.zeromq.Subscribe
-import com.typesafe.config.ConfigFactory
 
-import org.apache.spark.{SparkConf, TaskContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.zeromq._
 

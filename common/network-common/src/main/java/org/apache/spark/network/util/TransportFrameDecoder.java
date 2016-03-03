@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.util;
 
-import java.util.Iterator;
 import java.util.LinkedList;
 
 import com.google.common.base.Preconditions;

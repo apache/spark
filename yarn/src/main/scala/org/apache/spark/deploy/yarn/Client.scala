@@ -19,15 +19,13 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException,
   OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
-import java.security.PrivilegedExceptionAction
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
-import scala.reflect.runtime.universe
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -38,10 +36,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
-import org.apache.hadoop.io.{DataOutputBuffer, Text}
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment

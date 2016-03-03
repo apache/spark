@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.sql.{Connection, PreparedStatement, ResultSet}
+import java.sql.{Connection, ResultSet}
 
 import scala.reflect.ClassTag
 

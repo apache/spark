@@ -21,8 +21,6 @@ import java.util.Random
 
 import scala.collection.mutable
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, MutableRow, SpecificMutableRow}
 import org.apache.spark.sql.types.{DataType, IntegerType}

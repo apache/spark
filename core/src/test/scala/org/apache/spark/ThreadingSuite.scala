@@ -17,10 +17,8 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{Semaphore, TimeUnit}
+import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
-
-import org.apache.spark.scheduler._
 
 /**
  * Holds state shared across task threads in some ThreadingSuite tests.

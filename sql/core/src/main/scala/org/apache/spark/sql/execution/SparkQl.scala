@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.{CatalystQl, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.{ASTNode, ParserConf, SimpleParserConf}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.StructType
 

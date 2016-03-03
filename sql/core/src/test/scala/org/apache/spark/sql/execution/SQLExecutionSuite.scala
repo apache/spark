@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.Properties
 
-import scala.collection.parallel.CompositeThrowable
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SQLContext
 

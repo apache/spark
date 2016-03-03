@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS}

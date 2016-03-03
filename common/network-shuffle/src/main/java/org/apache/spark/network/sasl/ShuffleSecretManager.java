@@ -24,7 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.util.JavaUtils;
 
 /**

@@ -19,7 +19,6 @@
 package org.apache.spark.examples.streaming
 
 import scala.collection.mutable.LinkedHashSet
-import scala.reflect.ClassTag
 import scala.util.Random
 
 import akka.actor._

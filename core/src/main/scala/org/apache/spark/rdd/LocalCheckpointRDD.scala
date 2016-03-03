@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkContext, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.storage.RDDBlockId
 
 /**

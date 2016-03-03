@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 import scala.util.control.Exception._
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 

@@ -21,7 +21,6 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.{SparkContext, SparkFunSuite}

@@ -19,7 +19,6 @@ package org.apache.spark.mllib.evaluation
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 import org.apache.spark.sql.DataFrame
 
 /**

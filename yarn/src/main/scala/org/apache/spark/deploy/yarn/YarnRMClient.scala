@@ -19,8 +19,8 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
 
-import scala.collection.{Map, Set}
 import scala.collection.JavaConverters._
+import scala.collection.Map
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -32,7 +32,6 @@ import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.Utils
 
 /**

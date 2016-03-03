@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 
 import org.apache.spark._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
