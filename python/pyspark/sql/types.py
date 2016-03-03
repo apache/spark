@@ -1111,6 +1111,17 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
+    >>> # Check if numeric values are within the allowed range.
+    >>> _verify_type(12, ByteType())
+    >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> _verify_type(12.34, FloatType())
+    >>> _verify_type(1.23456789e+50, FloatType()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
     # all objects are nullable
     if obj is None:
@@ -1137,7 +1148,28 @@ def _verify_type(obj, dataType):
         if type(obj) not in _acceptable_types[_type]:
             raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
 
-    if isinstance(dataType, ArrayType):
+    if isinstance(dataType, ByteType):
+        if obj < -128 or obj > 127:
+            raise ValueError("object of ByteType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ShortType):
+        if obj < -32768 or obj > 32767:
+            raise ValueError("object of ShortType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, IntegerType):
+        if obj < -2147483648 or obj > 2147483647:
+            raise ValueError("object of IntegerType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, FloatType):
+        from math import isinf
+        from struct import pack, unpack
+
+        if not isinf(obj):
+            f = unpack("f", pack("f", obj))[0]
+            if isinf(f):
+                raise ValueError("object of FloatType can not fit in a java float, got: %s" % obj)
+
+    elif isinstance(dataType, ArrayType):
         for i in obj:
             _verify_type(i, dataType.elementType)
 
