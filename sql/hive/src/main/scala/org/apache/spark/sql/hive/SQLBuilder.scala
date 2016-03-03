@@ -86,7 +86,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case p: Project =>
       projectToSQL(p, isDistinct = false)
 
-    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) =>
+    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project))
+      if sameOutput(e.output,
+        p.child.output ++ a.groupingExpressions.map(_.asInstanceOf[Attribute])) =>
       groupingSetToSQL(a, e, p)
 
     case p: Aggregate =>
@@ -185,6 +187,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       throw new UnsupportedOperationException(s"unsupported plan $node")
   }
 
+  private def sameOutput(left: Seq[Attribute], right: Seq[Attribute]): Boolean =
+    left.forall(a => right.exists(_.semanticEquals(a))) &&
+      right.forall(a => left.exists(_.semanticEquals(a)))
+
   /**
    * Turns a bunch of string segments into a single string and separate each segment by a space.
    * The segments are trimmed so only a single space appears in the separation.
@@ -231,6 +237,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
 
     val groupingSet = expand.projections.map { project =>
+      // Assumption: expand.projections are composed of
+      // 1) the original output (project.child.output),
+      // 2) group by attributes(or null literal)
+      // 3) gid, which is always the last one in each project
       project.dropRight(1).collect {
         case attr: Attribute if groupByAttrMap.contains(attr) => groupByAttrMap(attr)
       }
@@ -241,9 +251,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     val aggExprs = plan.aggregateExpressions.map { case expr =>
       expr.transformDown {
-        case a @ Alias(child: AttributeReference, name) if child eq gid =>
-          // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
-          Alias(GroupingID(Nil), name)()
+        // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
+        case ar: AttributeReference if ar eq gid => GroupingID(Nil)
         case a @ Alias(_ @ Cast(BitwiseAnd(
             ShiftRight(ar: AttributeReference, _ @ Literal(value: Any, IntegerType)),
             Literal(1, IntegerType)), ByteType), name) if ar == gid =>
@@ -255,11 +264,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           } else {
             throw new UnsupportedOperationException(s"unsupported operator $a")
           }
-        case a @ Alias(child: AttributeReference, _) if groupByAttrMap.contains(child) =>
-          groupByAttrMap(child)
+        case a @ Alias(ar: AttributeReference, _) if groupByAttrMap.contains(ar) =>
+          groupByAttrMap(ar)
         case ar: AttributeReference if groupByAttrMap.contains(ar) =>
           groupByAttrMap(ar)
-        case o => o
       }
     }
 
