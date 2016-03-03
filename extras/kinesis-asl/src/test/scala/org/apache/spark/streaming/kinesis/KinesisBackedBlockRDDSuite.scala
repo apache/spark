@@ -118,7 +118,7 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
       testIsBlockValid = true)
   }
 
-  testIfEnabled("Test whether RDD is valid after removing blocks from block manager") {
+  testIfEnabled("Test whether RDD is valid after removing blocks from block anager") {
     testRDD(numPartitions = 2, numPartitionsInBM = 2, numPartitionsInKinesis = 2,
       testBlockRemove = true)
   }
