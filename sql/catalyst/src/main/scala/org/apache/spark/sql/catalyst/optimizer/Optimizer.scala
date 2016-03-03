@@ -312,6 +312,10 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  *   - LeftSemiJoin
  */
 object ColumnPruning extends Rule[LogicalPlan] {
+  def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
+    output1.size == output2.size &&
+      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Prunes the unused columns from project list of Project/Aggregate/Window/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
@@ -378,7 +382,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case p @ Project(_, l: LeafNode) => p
 
     // Eliminate no-op Projects
-    case p @ Project(projectList, child) if child.output == p.output => child
+    case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
