@@ -465,7 +465,8 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (bzip2, gzip, lz4, and snappy).
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -487,8 +488,8 @@ class DataFrameWriter(object):
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (uncompressed, snappy, gzip, and
-                            lzo). This will overwrite ``spark.sql.parquet.compression.codec``.
+                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
+                            This will overwrite ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -505,7 +506,8 @@ class DataFrameWriter(object):
 
         :param path: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (bzip2, gzip, lz4, and snappy).
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
@@ -527,7 +529,8 @@ class DataFrameWriter(object):
             * ``error`` (default case): Throw an exception if data already exists.
 
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (bzip2, gzip, lz4, and snappy).
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -552,8 +555,8 @@ class DataFrameWriter(object):
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
-                            known case-insensitive shorten names (uncompressed, snappy, zlib, and
-                            lzo). This will overwrite ``orc.compress``.
+                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+                            This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))

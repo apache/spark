@@ -25,6 +25,8 @@ import org.apache.spark.util.Utils
 
 private[datasources] object CompressionCodecs {
   private val shortCompressionCodecNames = Map(
+    "none" -> null,
+    "uncompressed" -> null,
     "bzip2" -> classOf[BZip2Codec].getName,
     "deflate" -> classOf[DeflateCodec].getName,
     "gzip" -> classOf[GzipCodec].getName,
@@ -39,7 +41,9 @@ private[datasources] object CompressionCodecs {
     val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
     try {
       // Validate the codec name
-      Utils.classForName(codecName)
+      if (codecName != null) {
+        Utils.classForName(codecName)
+      }
       codecName
     } catch {
       case e: ClassNotFoundException =>

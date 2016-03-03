@@ -455,7 +455,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * You can set the following JSON-specific option(s) for writing JSON files:
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
    *
    * @since 1.4.0
    */
@@ -470,8 +471,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`uncompressed`, `snappy`,`gzip`, and
-   * `lzo`). This will overwrite `spark.sql.parquet.compression.codec`. </li>
+   * one of the known case-insensitive shorten names(`none`, `snappy`, `gzip`, and `lzo`).
+   * This will overwrite `spark.sql.parquet.compression.codec`. </li>
    *
    * @since 1.4.0
    */
@@ -486,8 +487,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`uncompressed`, `snappy`, `zlib`, and
-   * `lzo`). This will overwrite `orc.compress`. </li>
+   * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
+   * This will overwrite `orc.compress`. </li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used together with `HiveContext`.
@@ -508,7 +509,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * You can set the following option(s) for writing text files:
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
    *
    * @since 1.6.0
    */
@@ -523,7 +525,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names (`bzip2`, `gzip`, `lz4`, and `snappy`). </li>
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
    *
    * @since 2.0.0
    */
