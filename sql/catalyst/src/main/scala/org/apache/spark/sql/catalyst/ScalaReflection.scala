@@ -774,9 +774,9 @@ trait ScalaReflection {
   }
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {
-    val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
+    val constructorSymbol = tpe.member(termNames.CONSTRUCTOR)
     val params = if (constructorSymbol.isMethod) {
-      constructorSymbol.asMethod.paramss
+      constructorSymbol.asMethod.paramLists
     } else {
       // Find the primary constructor, and use its parameter ordering.
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
@@ -784,7 +784,7 @@ trait ScalaReflection {
       if (primaryConstructorSymbol.isEmpty) {
         sys.error("Internal SQL error: Product object did not have a primary constructor.")
       } else {
-        primaryConstructorSymbol.get.asMethod.paramss
+        primaryConstructorSymbol.get.asMethod.paramLists
       }
     }
     params.flatten
