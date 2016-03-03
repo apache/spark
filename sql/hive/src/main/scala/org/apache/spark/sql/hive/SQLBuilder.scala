@@ -228,9 +228,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val groupByExprs =
       project.projectList.drop(project.child.output.length).map(_.asInstanceOf[Alias].child)
     val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
-    val groupingExprs = groupByAttrMap.values.toArray
-
-    val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
+    val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
 
     val groupingSet = expand.projections.map { project =>
       project.dropRight(1).collect {
@@ -250,8 +248,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
             ShiftRight(ar: AttributeReference, _ @ Literal(value: Any, IntegerType)),
             Literal(1, IntegerType)), ByteType), name) if ar == gid =>
           // for converting an expression to its original SQL format grouping(col)
-          val idx = groupingExprs.length - 1 - value.asInstanceOf[Int]
-          val groupingCol = groupingExprs.lift(idx)
+          val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
+          val groupingCol = groupByExprs.lift(idx)
           if (groupingCol.isDefined) {
             Grouping(groupingCol.get)
           } else {
