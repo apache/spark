@@ -23,7 +23,7 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -35,7 +35,7 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
  * serialized ByteBuffers.
  */
 private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: MemoryManager)
-  extends BlockStore(blockManager) {
+  extends Logging {
 
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
   // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
@@ -81,19 +81,22 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     memoryUsed - currentUnrollMemory
   }
 
-  override def getSize(blockId: BlockId): Long = {
+  /**
+   * Return the size of a block in bytes.
+   */
+  def getSize(blockId: BlockId): Long = {
     entries.synchronized {
       entries.get(blockId).size
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level, returnValues = true)
+      putIterator(blockId, values, level, returnValues = false)
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
       PutResult(bytes.limit(), Right(bytes.duplicate()))
@@ -120,16 +123,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     PutResult(size, data)
   }
 
-  override def putIterator(
-      blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIterator(blockId, values, level, returnValues, allowPersistToDisk = true)
-  }
-
   /**
-   * Attempt to put the given block in memory store.
+   * Put in a block and, possibly, also return its content as either bytes or another Iterator.
+   * This is used to efficiently write the values to multiple locations (e.g. for replication).
    *
    * There may not be enough space to fully unroll the iterator in memory, in which case we
    * optionally drop the values to disk if
@@ -139,13 +135,16 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * One scenario in which `allowPersistToDisk` is false is when the BlockManager reads a block
    * back from disk and attempts to cache it in memory. In this case, we should not persist the
    * block back on disk again, as it is already in disk store.
+   *
+   * @return a PutResult that contains the size of the data, as well as the values put if
+   *         returnValues is true (if not, the result's data field can be null)
    */
-  private[storage] def putIterator(
+  def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean,
-      allowPersistToDisk: Boolean): PutResult = {
+      allowPersistToDisk: Boolean = true): PutResult = {
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
       case Left(arrayValues) =>
@@ -174,7 +173,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -187,7 +186,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
+  def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -201,7 +200,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
+  /**
+   * Remove a block, if it exists.
+   *
+   * @param blockId the block to remove.
+   * @return True if the block was found and removed, False otherwise.
+   * @throws IllegalStateException if the block is pinned by a task.
+   */
+  def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
@@ -215,7 +221,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def clear(): Unit = memoryManager.synchronized {
+  def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
       entries.clear()
     }
@@ -460,7 +466,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def contains(blockId: BlockId): Boolean = {
+  def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }
   }
 

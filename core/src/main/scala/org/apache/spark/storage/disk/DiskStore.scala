@@ -29,15 +29,18 @@ import org.apache.spark.util.Utils
  * Stores BlockManager blocks on disk.
  */
 private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
-  extends BlockStore(blockManager) with Logging {
+  extends Logging {
 
   val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
-  override def getSize(blockId: BlockId): Long = {
+  /**
+   * Return the size of a block in bytes.
+   */
+  def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -58,7 +61,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     PutResult(bytes.limit(), Right(bytes.duplicate()))
   }
 
-  override def putIterator(
+  def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
@@ -123,16 +126,19 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = diskManager.getFile(blockId.name)
     getBytes(file, 0, file.length)
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
-  }
-
-  override def remove(blockId: BlockId): Boolean = {
+  /**
+   * Remove a block, if it exists.
+   *
+   * @param blockId the block to remove.
+   * @return True if the block was found and removed, False otherwise.
+   * @throws IllegalStateException if the block is pinned by a task.
+   */
+  def remove(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
       val ret = file.delete()
@@ -145,7 +151,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  override def contains(blockId: BlockId): Boolean = {
+  def contains(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     file.exists()
   }

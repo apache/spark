@@ -785,15 +785,6 @@ private[spark] class BlockManager(
 
     val startTimeMs = System.currentTimeMillis
 
-    /* If we're storing values and we need to replicate the data, we'll want access to the values,
-     * but because our put will read the whole iterator, there will be no values left. For the
-     * case where the put serializes data, we'll remember the bytes, above; but for the case where
-     * it doesn't, such as deserialized storage, let's rely on the put returning an Iterator. */
-    var valuesAfterPut: Iterator[Any] = null
-
-    // Ditto for the bytes after the put
-    var bytesAfterPut: ByteBuffer = null
-
     // Size of the block in bytes
     var size = 0L
 
@@ -822,37 +813,32 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
       try {
-        // returnValues - Whether to return the values put
-        // blockStore - The type of storage to put these values into
-        val (returnValues, blockStore: BlockStore) = {
+        result = {
           if (putLevel.useMemory) {
             // Put it in memory first, even if it also has useDisk set to true;
             // We will drop it to disk later if the memory store can't hold it.
-            (true, memoryStore)
+            data match {
+              case IteratorValues(iterator) =>
+                memoryStore.putIterator(blockId, iterator(), putLevel, returnValues = false)
+              case ByteBufferValues(bytes) =>
+                bytes.rewind()
+                memoryStore.putBytes(blockId, bytes, putLevel)
+            }
           } else if (putLevel.useDisk) {
-            // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
+            data match {
+              case IteratorValues(iterator) =>
+                diskStore.putIterator(blockId, iterator(), putLevel, returnValues = false)
+              case ByteBufferValues(bytes) =>
+                bytes.rewind()
+                diskStore.putBytes(blockId, bytes, putLevel)
+            }
           } else {
             assert(putLevel == StorageLevel.NONE)
             throw new BlockException(
               blockId, s"Attempted to put block $blockId without specifying storage level!")
           }
         }
-
-        // Actually put the values
-        result = data match {
-          case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator(), putLevel, returnValues)
-          case ByteBufferValues(bytes) =>
-            bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel)
-        }
         size = result.size
-        result.data match {
-          case Left (newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
-          case Right (newBytes) => bytesAfterPut = newBytes
-          case _ =>
-        }
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
@@ -884,31 +870,19 @@ private[spark] class BlockManager(
 
     // Either we're storing bytes and we asynchronously started replication, or we're storing
     // values and need to serialize and replicate them now:
-    if (putLevel.replication > 1) {
-      data match {
-        case ByteBufferValues(bytes) =>
-          if (replicationFuture != null) {
-            Await.ready(replicationFuture, Duration.Inf)
-          }
-        case _ =>
-          if (blockWasSuccessfullyStored) {
-            val remoteStartTime = System.currentTimeMillis
-            // Serialize the block if not already done
-            if (bytesAfterPut == null) {
-              if (valuesAfterPut == null) {
-                throw new SparkException(
-                  "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
-              }
-              bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
-            }
-            replicate(blockId, bytesAfterPut, putLevel)
-            logDebug("Put block %s remotely took %s"
-              .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
-          }
+    if (replicationFuture != null) {
+      Await.ready(replicationFuture, Duration.Inf)
+    } else if (putLevel.replication > 1 && blockWasSuccessfullyStored) {
+      val remoteStartTime = System.currentTimeMillis
+      val bytesToReplicate = getLocalBytes(blockId).get
+      try {
+        replicate(blockId, bytesToReplicate, putLevel)
+      } finally {
+        BlockManager.dispose(bytesToReplicate)
       }
+      logDebug("Put block %s remotely took %s"
+        .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
     }
-
-    BlockManager.dispose(bytesAfterPut)
 
     if (putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"
@@ -1230,7 +1204,6 @@ private[spark] class BlockManager(
     rpcEnv.stop(slaveEndpoint)
     blockInfoManager.clear()
     memoryStore.clear()
-    diskStore.clear()
     futureExecutionContext.shutdownNow()
     logInfo("BlockManager stopped")
   }
