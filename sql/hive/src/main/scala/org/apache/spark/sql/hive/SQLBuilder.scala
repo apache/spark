@@ -219,6 +219,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       plan: Aggregate,
       expand: Expand,
       project: Project): String = {
+    require(plan.groupingExpressions.length > 1)
+
     // The last column of Expand is always grouping ID
     val gid = expand.output.last
 
@@ -226,18 +228,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     // Since conversion from attribute back SQL ignore expression IDs, the alias of attribute
     // references are ignored in aliasMap
     val aliasMap = AttributeMap(project.projectList.collect {
-      case a @ Alias(child, name) if !child.isInstanceOf[AttributeReference] => (a.toAttribute, a)
+      case a @ Alias(child, name) => (a.toAttribute, a)
     })
 
-    val groupingExprs = plan.groupingExpressions.filterNot {
-      // VirtualColumn.groupingIdName is added by Analyzer, and thus remove it.
-      case a: AttributeReference => a == gid
-      case o => false
-    }.map {
-      case a: AttributeReference if aliasMap.contains(a) => aliasMap(a).child
-      case o => o
-    }
-
+    val groupByAttributes = plan.groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
+    val groupByAttrMap = AttributeMap(groupByAttributes.zip(
+      project.projectList.drop(project.child.output.length).map(_.asInstanceOf[Alias].child)))
+    val groupingExprs = groupByAttrMap.values.toArray
     val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
 
     val groupingSet = expand.projections.map(_.dropRight(1).filter {
@@ -279,7 +276,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       aggExprs.map(_.sql).mkString(", "),
       if (plan.child == OneRowRelation) "" else "FROM",
       toSQL(project.child),
-      if (groupingSQL.isEmpty) "" else "GROUP BY",
+      "GROUP BY",
       groupingSQL,
       groupingSetSQL
     )

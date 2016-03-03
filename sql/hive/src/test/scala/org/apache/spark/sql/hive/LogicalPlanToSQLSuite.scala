@@ -275,6 +275,13 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (a) ORDER BY a, b")
     checkHiveQl(
       "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (b) ORDER BY a, b")
+    checkHiveQl(
+      "SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b GROUPING SETS (()) ORDER BY a, b")
+    checkHiveQl(
+      s"""
+         |SELECT a, b, sum(c) FROM parquet_t2 GROUP BY a, b
+         |GROUPING SETS ((), (a), (a, b)) ORDER BY a, b
+      """.stripMargin)
   }
 
   test("cluster by") {
