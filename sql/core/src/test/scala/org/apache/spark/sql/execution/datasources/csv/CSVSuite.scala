@@ -402,7 +402,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("SPARK-13543 Write the output as uncompressed via option") {
+  test("SPARK-13543 Write the output as uncompressed via option()") {
     val clonedConf = new Configuration(hadoopConfiguration)
     hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
     hadoopConfiguration

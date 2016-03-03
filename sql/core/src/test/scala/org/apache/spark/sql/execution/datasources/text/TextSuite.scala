@@ -86,7 +86,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
       "Known codecs are"))
   }
 
-  test("SPARK-13543 Write the output as uncompressed via option") {
+  test("SPARK-13543 Write the output as uncompressed via option()") {
     val clonedConf = new Configuration(hadoopConfiguration)
     hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
     hadoopConfiguration
