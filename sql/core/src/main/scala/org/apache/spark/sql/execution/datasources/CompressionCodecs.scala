@@ -25,6 +25,8 @@ import org.apache.spark.util.Utils
 
 private[datasources] object CompressionCodecs {
   private val shortCompressionCodecNames = Map(
+    "none" -> null,
+    "uncompressed" -> null,
     "bzip2" -> classOf[BZip2Codec].getName,
     "deflate" -> classOf[DeflateCodec].getName,
     "gzip" -> classOf[GzipCodec].getName,
@@ -39,7 +41,9 @@ private[datasources] object CompressionCodecs {
     val codecName = shortCompressionCodecNames.getOrElse(name.toLowerCase, name)
     try {
       // Validate the codec name
-      Utils.classForName(codecName)
+      if (codecName != null) {
+        Utils.classForName(codecName)
+      }
       codecName
     } catch {
       case e: ClassNotFoundException =>
@@ -53,10 +57,16 @@ private[datasources] object CompressionCodecs {
    * `codec` should be a full class path
    */
   def setCodecConfiguration(conf: Configuration, codec: String): Unit = {
-    conf.set("mapreduce.output.fileoutputformat.compress", "true")
-    conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-    conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
-    conf.set("mapreduce.map.output.compress", "true")
-    conf.set("mapreduce.map.output.compress.codec", codec)
+    if (codec != null){
+      conf.set("mapreduce.output.fileoutputformat.compress", "true")
+      conf.set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+      conf.set("mapreduce.output.fileoutputformat.compress.codec", codec)
+      conf.set("mapreduce.map.output.compress", "true")
+      conf.set("mapreduce.map.output.compress.codec", codec)
+    } else {
+      // This infers the option `compression` is set to `uncompressed` or `none`.
+      conf.set("mapreduce.output.fileoutputformat.compress", "false")
+      conf.set("mapreduce.map.output.compress", "false")
+    }
   }
 }
