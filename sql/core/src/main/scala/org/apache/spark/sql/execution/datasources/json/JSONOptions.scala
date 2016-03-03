@@ -48,8 +48,7 @@ private[sql] class JSONOptions(
     parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
-  private val compressionName = parameters.get("compression")
-  val compressionCodec = compressionName.map(CompressionCodecs.getCodecClassName)
+  val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
