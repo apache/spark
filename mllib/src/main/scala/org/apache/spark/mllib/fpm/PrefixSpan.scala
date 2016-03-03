@@ -541,7 +541,7 @@ object PrefixSpan extends Logging {
   }
 
   /**
-   * Represents a frequence sequence.
+   * Represents a frequent sequence.
    * @param sequence a sequence of itemsets stored as an Array of Arrays
    * @param freq frequency
    * @tparam Item item type

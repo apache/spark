@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # $example on$
     data = sc.textFile('data/mllib/sample_naive_bayes_data.txt').map(parseLine)
 
-    # Split data aproximately into training (60%) and test (40%)
+    # Split data approximately into training (60%) and test (40%)
     training, test = data.randomSplit([0.6, 0.4], seed=0)
 
     # Train a naive Bayes model.

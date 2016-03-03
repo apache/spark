@@ -30,7 +30,7 @@ import breeze.linalg.{DenseVector, Vector}
  * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
  */
 object LocalFileLR {
-  val D = 10   // Numer of dimensions
+  val D = 10   // Number of dimensions
   val rand = new Random(42)
 
   case class DataPoint(x: Vector[Double], y: Double)

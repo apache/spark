@@ -26,11 +26,11 @@ package org.apache.sparktest
  */
 class ImplicitSuite {
 
-  // We only want to test if `implict` works well with the compiler, so we don't need a real
+  // We only want to test if `implicit` works well with the compiler, so we don't need a real
   // SparkContext.
   def mockSparkContext[T]: org.apache.spark.SparkContext = null
 
-  // We only want to test if `implict` works well with the compiler, so we don't need a real RDD.
+  // We only want to test if `implicit` works well with the compiler, so we don't need a real RDD.
   def mockRDD[T]: org.apache.spark.rdd.RDD[T] = null
 
   def testRddToPairRDDFunctions(): Unit = {

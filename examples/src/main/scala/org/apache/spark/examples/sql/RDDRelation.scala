@@ -60,10 +60,10 @@ object RDDRelation {
     // Write out an RDD as a parquet file with overwrite mode.
     df.write.mode(SaveMode.Overwrite).parquet("pair.parquet")
 
-    // Read in parquet file.  Parquet files are self-describing so the schmema is preserved.
+    // Read in parquet file.  Parquet files are self-describing so the schema is preserved.
     val parquetFile = sqlContext.read.parquet("pair.parquet")
 
-    // Queries can be run using the DSL on parequet files just like the original RDD.
+    // Queries can be run using the DSL on parquet files just like the original RDD.
     parquetFile.where($"key" === 1).select($"value".as("a")).collect().foreach(println)
 
     // These files can also be registered as tables.
