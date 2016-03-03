@@ -224,27 +224,22 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     // The last column of Expand is always grouping ID
     val gid = expand.output.last
 
-    // In cube/rollup/groupingsets, Analyzer creates new aliases for all group by expressions.
-    // Since conversion from attribute back SQL ignore expression IDs, the alias of attribute
-    // references are ignored in aliasMap
-    val aliasMap = AttributeMap(project.projectList.collect {
-      case a @ Alias(child, name) => (a.toAttribute, a)
-    })
-
     val groupByAttributes = plan.groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
     val groupByExprs =
       project.projectList.drop(project.child.output.length).map(_.asInstanceOf[Alias].child)
     val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
     val groupingExprs = groupByAttrMap.values.toArray
+
     val groupingSQL = groupingExprs.map(_.sql).mkString(", ")
 
-    val groupingSet = expand.projections.map(_.dropRight(1).filter {
-      case e: Expression if plan.groupingExpressions.exists(_.semanticEquals(e)) => true
-      case _ => false
-    }.map {
-      case a: AttributeReference if aliasMap.contains(a) => aliasMap(a).child
-      case o => o
-    })
+    val groupingSet = expand.projections.map { project =>
+      project.dropRight(1).collect {
+        case attr: Attribute if groupByAttrMap.contains(attr) => groupByAttrMap(attr)
+      }
+    }
+    val groupingSetSQL =
+      "GROUPING SETS(" +
+        groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
 
     val aggExprs = plan.aggregateExpressions.map { case expr =>
       expr.transformDown {
@@ -262,17 +257,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           } else {
             throw new UnsupportedOperationException(s"unsupported operator $a")
           }
-        case a @ Alias(child: AttributeReference, _) if aliasMap.contains(child) =>
-          aliasMap(child).child
-        case ar: AttributeReference if aliasMap.contains(ar) =>
-          aliasMap(ar).child
+        case a @ Alias(child: AttributeReference, _) if groupByAttrMap.contains(child) =>
+          groupByAttrMap(child)
+        case ar: AttributeReference if groupByAttrMap.contains(ar) =>
+          groupByAttrMap(ar)
         case o => o
       }
     }
-
-    val groupingSetSQL =
-      "GROUPING SETS(" +
-        groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
 
     build(
       "SELECT",
