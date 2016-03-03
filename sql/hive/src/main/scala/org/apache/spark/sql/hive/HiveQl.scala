@@ -583,11 +583,11 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
       val (output, schemaLess) = outputClause match {
         case Token("TOK_ALIASLIST", aliases) :: Nil =>
-          (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
-            false)
+          (aliases.map { case Token(name, Nil) =>
+            AttributeReference(cleanIdentifier(name), StringType)() }, false)
         case Token("TOK_TABCOLLIST", attributes) :: Nil =>
           (attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
-            AttributeReference(name, nodeToDataType(dataType))() }, false)
+            AttributeReference(cleanIdentifier(name), nodeToDataType(dataType))() }, false)
         case Nil =>
           (List(AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()), true)

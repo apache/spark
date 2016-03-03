@@ -616,10 +616,10 @@ def log(arg1, arg2=None):
 
     If there is only one argument, then this takes the natural logarithm of the argument.
 
-    >>> df.select(log(10.0, df.age).alias('ten')).map(lambda l: str(l.ten)[:7]).collect()
+    >>> df.select(log(10.0, df.age).alias('ten')).rdd.map(lambda l: str(l.ten)[:7]).collect()
     ['0.30102', '0.69897']
 
-    >>> df.select(log(df.age).alias('e')).map(lambda l: str(l.e)[:7]).collect()
+    >>> df.select(log(df.age).alias('e')).rdd.map(lambda l: str(l.e)[:7]).collect()
     ['0.69314', '1.60943']
     """
     sc = SparkContext._active_spark_context
