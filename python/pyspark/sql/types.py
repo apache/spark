@@ -726,7 +726,7 @@ def _ignore_brackets_split(s, separator):
             buf += c
 
     if len(buf) == 0:
-        raise ValueError("The %s cannot be the last char: %s" % (seperator, s))
+        raise ValueError("The %s cannot be the last char: %s" % (separator, s))
     parts.append(buf)
     return parts
 
