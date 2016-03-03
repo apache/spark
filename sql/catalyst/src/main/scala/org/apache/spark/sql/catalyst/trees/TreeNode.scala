@@ -73,7 +73,7 @@ object CurrentOrigin {
 }
 
 // scalastyle:off
-abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Serializable {
+abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 // scalastyle:on
   self: BaseType =>
 
@@ -442,6 +442,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product with Ser
   def simpleString: String = s"$nodeName $argString".trim
 
   override def toString: String = treeString
+
+  def toOriginString: String =
+    if (this.origin.callSite.isDefined && !this.isInstanceOf[BoundReference]) {
+      this.toString + " @ " + this.origin.callSite.get
+    } else {
+      this.toString
+    }
 
   /** Returns a string representation of the nodes in this tree */
   def treeString: String = generateTreeString(0, Nil, new StringBuilder).toString
