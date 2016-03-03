@@ -51,7 +51,7 @@ package object codegen {
       val classLoader =
         generatedClass
           .getClassLoader
-          .asInstanceOf[scala.tools.nsc.interpreter.AbstractFileClassLoader]
+          .asInstanceOf[scala.reflect.internal.util.AbstractFileClassLoader]
       val generatedBytes = classLoader.classBytes(generatedClass.getName)
 
       val packageDir = new java.io.File(dumpDirectory, generatedClass.getPackage.getName)

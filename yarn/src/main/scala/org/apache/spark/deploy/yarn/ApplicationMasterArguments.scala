@@ -87,7 +87,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       System.exit(-1)
     }
 
-    userArgs = userArgsBuffer.readOnly
+    userArgs = userArgsBuffer.toList
   }
 
   def printUsageAndExit(exitCode: Int, unknownParam: Any = null) {
