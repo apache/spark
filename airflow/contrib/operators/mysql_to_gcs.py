@@ -144,7 +144,10 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
             # See PEP 249 for details about the description tuple.
             field_name = field[0]
             field_type = self.type_map(field[1])
-            field_mode = 'NULLABLE' if field[6] else 'REQUIRED'
+            # Always allow TIMESTAMP to be nullable. MySQLdb returns None types
+            # for required fields because some MySQL timestamps can't be
+            # represented by Python's datetime (e.g. 0000-00-00 00:00:00).
+            field_mode = 'NULLABLE' if field[6] or field_type == 'TIMESTAMP' else 'REQUIRED'
             schema.append({
                 'name': field_name,
                 'type': field_type,
