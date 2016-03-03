@@ -67,7 +67,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
-      // LimitPushDown, // Disabled until we have whole-stage codegen for limit
+      LimitPushDown,
       ColumnPruning,
       // Operator combine
       CollapseRepartition,
