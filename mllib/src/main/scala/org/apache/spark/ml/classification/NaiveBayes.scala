@@ -291,7 +291,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: pi, theta
+      // Save model data: labels, pi, theta
       val data = Data(instance.labels, instance.pi, instance.theta)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
@@ -307,7 +307,7 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("pi", "theta").head()
+      val data = sqlContext.read.parquet(dataPath).select("labels", "pi", "theta").head()
       val labels = data.getAs[Vector](0)
       val pi = data.getAs[Vector](1)
       val theta = data.getAs[Matrix](2)
