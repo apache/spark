@@ -44,10 +44,10 @@ object GenerateMIMAIgnore {
 
 
   private def isDeveloperApi(sym: unv.Symbol) =
-    sym.annotations.exists(_.tree.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
+    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.DeveloperApi])
 
   private def isExperimental(sym: unv.Symbol) =
-    sym.annotations.exists(_.tree.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
+    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])
 
 
   private def isPackagePrivate(sym: unv.Symbol) =
