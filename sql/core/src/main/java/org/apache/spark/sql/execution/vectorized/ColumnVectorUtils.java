@@ -64,8 +64,9 @@ public class ColumnVectorUtils {
         col.putDoubles(0, capacity, row.getDouble(fieldIdx));
       } else if (t == DataTypes.StringType) {
         UTF8String v = row.getUTF8String(fieldIdx);
+        byte[] bytes = v.getBytes();
         for (int i = 0; i < capacity; i++) {
-          col.putByteArray(i, v.getBytes());
+          col.putByteArray(i, bytes);
         }
       } else if (t instanceof DecimalType) {
         DecimalType dt = (DecimalType)t;

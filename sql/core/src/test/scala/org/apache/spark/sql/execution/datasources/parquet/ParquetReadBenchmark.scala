@@ -95,7 +95,7 @@ object ParquetReadBenchmark {
 
         val files = SpecificParquetRecordReaderBase.listDirectory(dir).toArray
         // Driving the parquet reader directly without Spark.
-        parquetReaderBenchmark.addCase("ParquetReader") { num =>
+        parquetReaderBenchmark.addCase("ParquetReader Non-Vectorized") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -110,7 +110,7 @@ object ParquetReadBenchmark {
         }
 
         // Driving the parquet reader in batch mode directly.
-        parquetReaderBenchmark.addCase("ParquetReader(Batched)") { num =>
+        parquetReaderBenchmark.addCase("ParquetReader Vectorized") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -133,7 +133,7 @@ object ParquetReadBenchmark {
         }
 
         // Decoding in vectorized but having the reader return rows.
-        parquetReaderBenchmark.addCase("ParquetReader(Batch -> Row)") { num =>
+        parquetReaderBenchmark.addCase("ParquetReader Vectorized -> Row") { num =>
           var sum = 0L
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new UnsafeRowParquetRecordReader
@@ -167,7 +167,7 @@ object ParquetReadBenchmark {
         Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
         Parquet Reader Single Int Column    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
         -------------------------------------------------------------------------------------------
-        ParquetReader                             565 /  609         27.8          35.9       1.0X
+        ParquetReader (Non-vectorized)            565 /  609         27.8          35.9       1.0X
         ParquetReader(Batched)                    165 /  174         95.3          10.5       3.4X
         ParquetReader(Batch -> Row)               158 /  188         99.3          10.1       3.6X
         */
@@ -264,9 +264,46 @@ object ParquetReadBenchmark {
     }
   }
 
+  def partitionTableScanBenchmark(values: Int): Unit = {
+    withTempPath { dir =>
+      withTempTable("t1", "tempTable") {
+        sqlContext.range(values).registerTempTable("t1")
+        sqlContext.sql("select id % 2 as p, cast(id as INT) as id from t1")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        sqlContext.read.parquet(dir.getCanonicalPath).registerTempTable("tempTable")
+
+        val benchmark = new Benchmark("Partitioned Table", values)
+
+        benchmark.addCase("Read data column") { iter =>
+          sqlContext.sql("select sum(id) from tempTable").collect
+        }
+
+        benchmark.addCase("Read partition column") { iter =>
+          sqlContext.sql("select sum(p) from tempTable").collect
+        }
+
+        benchmark.addCase("Read both columns") { iter =>
+          sqlContext.sql("select sum(p), sum(id) from tempTable").collect
+        }
+
+        /*
+        Intel(R) Core(TM) i7-4870HQ CPU @ 2.50GHz
+        Partitioned Table:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+        -------------------------------------------------------------------------------------------
+        Read data column                          751 /  805         20.9          47.8       1.0X
+        Read partition column                     713 /  761         22.1          45.3       1.1X
+        Read both columns                        1004 / 1109         15.7          63.8       0.7X
+         */
+        benchmark.run()
+      }
+    }
+  }
+
   def main(args: Array[String]): Unit = {
-    intScanBenchmark(1024 * 1024 * 15)
-    intStringScanBenchmark(1024 * 1024 * 10)
-    stringDictionaryScanBenchmark(1024 * 1024 * 10)
+    //intScanBenchmark(1024 * 1024 * 15)
+    //intStringScanBenchmark(1024 * 1024 * 10)
+    //stringDictionaryScanBenchmark(1024 * 1024 * 10)
+    partitionTableScanBenchmark(1024 * 1024 * 15)
+
   }
 }

@@ -222,12 +222,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     sparkPlan
   }
 
-  // Creates a ColumnarBatch that contains the values for `requiredColumns`. These columns can
-  // either come from `input` (columns scanned from the data source) or from the partitioning
-  // values (data from `partitionValues`). This is done *once* per physical partition. When
-  // the column is from `input`, it just references the same underlying column. When using
-  // partition columns, the column is populated once.
-  // TODO: there's probably a cleaner way to do this.
+  /**
+   * Creates a ColumnarBatch that contains the values for `requiredColumns`. These columns can
+   * either come from `input` (columns scanned from the data source) or from the partitioning
+   * values (data from `partitionValues`). This is done *once* per physical partition. When
+   * the column is from `input`, it just references the same underlying column. When using
+   * partition columns, the column is populated once.
+   * TODO: there's probably a cleaner way to do this.
+   */
   private def projectedColumnBatch(
       input: ColumnarBatch,
       requiredColumns: Seq[Attribute],
@@ -288,6 +290,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // If we are returning batches directly, we need to augment them with the partitioning
         // columns. We want to do this without a row by row operation.
         var columnBatch: ColumnarBatch = null
+        var firstBatch: ColumnarBatch = null
 
         iterator.map { input => {
           if (input.isInstanceOf[InternalRow]) {
@@ -297,9 +300,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             require(input.isInstanceOf[ColumnarBatch])
             val inputBatch = input.asInstanceOf[ColumnarBatch]
             if (columnBatch == null) {
+              firstBatch = inputBatch
               columnBatch = projectedColumnBatch(inputBatch, requiredColumns,
                 dataColumns, partitionColumnSchema, partitionValues)
             }
+            require(firstBatch == inputBatch, "Reader must return the same batch object.")
             columnBatch.setNumRows(inputBatch.numRows())
             columnBatch
           }

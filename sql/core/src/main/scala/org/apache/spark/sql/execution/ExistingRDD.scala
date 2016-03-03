@@ -162,18 +162,21 @@ private[sql] case class PhysicalRDD(
     ctx.addNewFunction(scanBatches,
       s"""
       | private void $scanBatches($columnarBatchClz batch) throws java.io.IOException {
+      |  int batchIdx = 0;
       |  while (true) {
       |     int numRows = batch.numRows();
-      |     $numOutputRows.add(numRows);
-      |     for (int i = 0; i < numRows; i++) {
-      |       InternalRow $row = batch.getRow(i);
+      |     if (batchIdx == 0) $numOutputRows.add(numRows);
+      |
+      |     while (batchIdx < numRows) {
+      |       InternalRow $row = batch.getRow(batchIdx++);
       |       ${columns.map(_.code).mkString("\n").trim}
       |       ${consume(ctx, columns).trim}
+      |       if (shouldStop()) return;
       |     }
       |
-      |     if (shouldStop()) return;
       |     if (!$input.hasNext()) break;
       |     batch = ($columnarBatchClz)$input.next();
+      |     batchIdx = 0;
       |   }
       | }""".stripMargin)
 
