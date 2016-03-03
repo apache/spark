@@ -17,17 +17,32 @@
 
 package org.apache.spark.unsafe.array;
 
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.UnsafeMemoryAllocator;
 import org.junit.Assert;
 import org.junit.Test;
-
-import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class LongArraySuite {
 
   @Test
   public void basicTest() {
     long[] bytes = new long[2];
-    LongArray arr = new LongArray(MemoryBlock.fromLongArray(bytes));
+    LongArray arr = new LongArray(LongArrayMemoryBlock.fromLongArray(bytes));
+    arr.set(0, 1L);
+    arr.set(1, 2L);
+    arr.set(1, 3L);
+    Assert.assertEquals(2, arr.size());
+    Assert.assertEquals(1L, arr.get(0));
+    Assert.assertEquals(3L, arr.get(1));
+
+    arr.zeroOut();
+    Assert.assertEquals(0L, arr.get(0));
+    Assert.assertEquals(0L, arr.get(1));
+  }
+
+  @Test
+  public void offheapTest() {
+    LongArray arr = new LongArray( UnsafeMemoryAllocator.UNSAFE.allocate(2*8) );
     arr.set(0, 1L);
     arr.set(1, 2L);
     arr.set(1, 3L);

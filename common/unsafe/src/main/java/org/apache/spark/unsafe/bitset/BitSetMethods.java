@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.bitset;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Methods for working with fixed-size uncompressed bitsets.
@@ -37,7 +38,7 @@ public final class BitSetMethods {
   /**
    * Sets the bit at the specified index to {@code true}.
    */
-  public static void set(Object baseObject, long baseOffset, int index) {
+  public static void set(MemoryBlock baseObject, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
@@ -48,7 +49,7 @@ public final class BitSetMethods {
   /**
    * Sets the bit at the specified index to {@code false}.
    */
-  public static void unset(Object baseObject, long baseOffset, int index) {
+  public static void unset(MemoryBlock baseObject, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
@@ -59,7 +60,7 @@ public final class BitSetMethods {
   /**
    * Returns {@code true} if the bit is set at the specified index.
    */
-  public static boolean isSet(Object baseObject, long baseOffset, int index) {
+  public static boolean isSet(MemoryBlock baseObject, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
@@ -70,7 +71,7 @@ public final class BitSetMethods {
   /**
    * Returns {@code true} if any bit is set.
    */
-  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInWords) {
+  public static boolean anySet(MemoryBlock baseObject, long baseOffset, long bitSetWidthInWords) {
     long addr = baseOffset;
     for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
       if (Platform.getLong(baseObject, addr) != 0) {
@@ -98,7 +99,7 @@ public final class BitSetMethods {
    * @return the index of the next set bit, or -1 if there is no such bit
    */
   public static int nextSetBit(
-      Object baseObject,
+      MemoryBlock baseObject,
       long baseOffset,
       int fromIndex,
       int bitsetSizeInWords) {

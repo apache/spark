@@ -18,6 +18,8 @@
 package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class ByteArrayMethods {
 
@@ -45,7 +47,7 @@ public class ByteArrayMethods {
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEquals(
-      Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
+    MemoryBlock leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, final long length) {
     int i = 0;
     while (i <= length - 8) {
       if (Platform.getLong(leftBase, leftOffset + i) !=
@@ -62,5 +64,24 @@ public class ByteArrayMethods {
       i += 1;
     }
     return true;
+  }
+
+  public static boolean arrayEquals(
+          byte[] leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, final long length) {
+    ByteArrayMemoryBlock bleft = ByteArrayMemoryBlock.fromByteArray(leftBase);
+    return ByteArrayMethods.arrayEquals(bleft, leftOffset, rightBase, rightOffset, length);
+  }
+
+  public static boolean arrayEquals(
+          MemoryBlock leftBase, long leftOffset, byte[] rightBase, long rightOffset, final long length) {
+    ByteArrayMemoryBlock bright = ByteArrayMemoryBlock.fromByteArray(rightBase);
+    return ByteArrayMethods.arrayEquals(leftBase, leftOffset, bright, rightOffset, length);
+  }
+
+  public static boolean arrayEquals(
+          byte[] leftBase, long leftOffset, byte[] rightBase, long rightOffset, final long length) {
+    ByteArrayMemoryBlock bleft = ByteArrayMemoryBlock.fromByteArray(leftBase);
+    ByteArrayMemoryBlock bright = ByteArrayMemoryBlock.fromByteArray(rightBase);
+    return ByteArrayMethods.arrayEquals(bleft, leftOffset, bright, rightOffset, length);
   }
 }

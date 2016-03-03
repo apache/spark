@@ -19,6 +19,7 @@ package org.apache.spark.unsafe;
 
 import java.lang.reflect.Field;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import sun.misc.Unsafe;
 
 public final class Platform {
@@ -37,68 +38,92 @@ public final class Platform {
 
   public static final int DOUBLE_ARRAY_OFFSET;
 
-  public static int getInt(Object object, long offset) {
+  public static int getInt(MemoryBlock object, long offset) {
+    return _UNSAFE.getInt(object.getBaseObject(), offset);
+  }
+
+  public static int getInt(byte[] object, long offset) {
     return _UNSAFE.getInt(object, offset);
   }
 
-  public static void putInt(Object object, long offset, int value) {
+  public static void putInt(MemoryBlock object, long offset, int value) {
+    _UNSAFE.putInt(object.getBaseObject(), offset, value);
+  }
+
+  public static void putInt(byte[] object, long offset, int value) {
     _UNSAFE.putInt(object, offset, value);
   }
 
-  public static boolean getBoolean(Object object, long offset) {
-    return _UNSAFE.getBoolean(object, offset);
+  public static boolean getBoolean(MemoryBlock object, long offset) {
+    return _UNSAFE.getBoolean(object.getBaseObject(), offset);
   }
 
-  public static void putBoolean(Object object, long offset, boolean value) {
-    _UNSAFE.putBoolean(object, offset, value);
+  public static void putBoolean(MemoryBlock object, long offset, boolean value) {
+    _UNSAFE.putBoolean(object.getBaseObject(), offset, value);
   }
 
-  public static byte getByte(Object object, long offset) {
+  public static byte getByte(MemoryBlock object, long offset) {
+    return _UNSAFE.getByte(object.getBaseObject(), offset);
+  }
+
+  public static byte getByte(byte[] object, long offset) {
     return _UNSAFE.getByte(object, offset);
   }
 
-  public static void putByte(Object object, long offset, byte value) {
-    _UNSAFE.putByte(object, offset, value);
+  public static void putByte(MemoryBlock object, long offset, byte value) {
+    _UNSAFE.putByte(object.getBaseObject(), offset, value);
   }
 
-  public static short getShort(Object object, long offset) {
-    return _UNSAFE.getShort(object, offset);
+  public static short getShort(MemoryBlock object, long offset) {
+    return _UNSAFE.getShort(object.getBaseObject(), offset);
   }
 
-  public static void putShort(Object object, long offset, short value) {
-    _UNSAFE.putShort(object, offset, value);
+  public static void putShort(MemoryBlock object, long offset, short value) {
+    _UNSAFE.putShort(object.getBaseObject(), offset, value);
   }
 
-  public static long getLong(Object object, long offset) {
+  public static long getLong(MemoryBlock object, long offset) {
+    return _UNSAFE.getLong(object.getBaseObject(), offset);
+  }
+
+  public static long getLong(byte[] object, long offset) {
     return _UNSAFE.getLong(object, offset);
   }
 
-  public static void putLong(Object object, long offset, long value) {
-    _UNSAFE.putLong(object, offset, value);
+  public static void putLong(MemoryBlock object, long offset, long value) {
+    _UNSAFE.putLong(object.getBaseObject(), offset, value);
   }
 
-  public static float getFloat(Object object, long offset) {
+  public static float getFloat(MemoryBlock object, long offset) {
+    return _UNSAFE.getFloat(object.getBaseObject(), offset);
+  }
+
+  public static float getFloat(byte[] object, long offset) {
     return _UNSAFE.getFloat(object, offset);
   }
 
-  public static void putFloat(Object object, long offset, float value) {
-    _UNSAFE.putFloat(object, offset, value);
+  public static void putFloat(MemoryBlock object, long offset, float value) {
+    _UNSAFE.putFloat(object.getBaseObject(), offset, value);
   }
 
-  public static double getDouble(Object object, long offset) {
+  public static double getDouble(MemoryBlock object, long offset) {
+    return _UNSAFE.getDouble(object.getBaseObject(), offset);
+  }
+
+  public static double getDouble(byte[] object, long offset) {
     return _UNSAFE.getDouble(object, offset);
   }
 
-  public static void putDouble(Object object, long offset, double value) {
-    _UNSAFE.putDouble(object, offset, value);
+  public static void putDouble(MemoryBlock object, long offset, double value) {
+    _UNSAFE.putDouble(object.getBaseObject(), offset, value);
   }
 
-  public static Object getObjectVolatile(Object object, long offset) {
-    return _UNSAFE.getObjectVolatile(object, offset);
+  public static Object getObjectVolatile(MemoryBlock object, long offset) {
+    return _UNSAFE.getObjectVolatile(object.getBaseObject(), offset);
   }
 
-  public static void putObjectVolatile(Object object, long offset, Object value) {
-    _UNSAFE.putObjectVolatile(object, offset, value);
+  public static void putObjectVolatile(MemoryBlock object, long offset, Object value) {
+    _UNSAFE.putObjectVolatile(object.getBaseObject(), offset, value);
   }
 
   public static long allocateMemory(long size) {
@@ -111,7 +136,7 @@ public final class Platform {
 
   public static long reallocateMemory(long address, long oldSize, long newSize) {
     long newMemory = _UNSAFE.allocateMemory(newSize);
-    copyMemory(null, address, null, newMemory, oldSize);
+    copyMemory0(null, address, null, newMemory, oldSize);
     freeMemory(address);
     return newMemory;
   }
@@ -120,8 +145,8 @@ public final class Platform {
     _UNSAFE.setMemory(address, size, value);
   }
 
-  public static void copyMemory(
-    Object src, long srcOffset, Object dst, long dstOffset, long length) {
+  static void copyMemory0(
+          Object src, long srcOffset, Object dst, long dstOffset, long length) {
     // Check if dstOffset is before or after srcOffset to determine if we should copy
     // forward or backwards. This is necessary in case src and dst overlap.
     if (dstOffset < srcOffset) {
@@ -144,6 +169,76 @@ public final class Platform {
       }
 
     }
+  }
+
+  public static void copyMemory(
+          MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src.getBaseObject(), srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          short[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          int[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          long[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          float[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          double[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+          MemoryBlock src, long srcOffset, byte[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, byte[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, short[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, int[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, long[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, float[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+          byte[] src, long srcOffset, double[] dst, long dstOffset, long length) {
+    Platform.copyMemory0(src, srcOffset, dst, dstOffset, length);
   }
 
   /**
