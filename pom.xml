@@ -114,6 +114,8 @@
     <module>launcher</module>
     <module>external/kafka</module>
     <module>external/kafka-assembly</module>
+    <module>external/kafka-beta</module>
+    <module>external/kafka-beta-assembly</module>
   </modules>
 
   <properties>

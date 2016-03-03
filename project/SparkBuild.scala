@@ -40,10 +40,10 @@ object BuildCommons {
 
   val streamingProjects@Seq(
     streaming, streamingFlumeSink, streamingFlume, streamingAkka, streamingKafka, streamingMqtt,
-    streamingTwitter, streamingZeromq
+    streamingTwitter, streamingZeromq, streamingKafkaBeta 
   ) = Seq(
     "streaming", "streaming-flume-sink", "streaming-flume", "streaming-akka", "streaming-kafka",
-    "streaming-mqtt", "streaming-twitter", "streaming-zeromq"
+    "streaming-mqtt", "streaming-twitter", "streaming-zeromq", "streaming-kafka-beta"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -58,8 +58,8 @@ object BuildCommons {
     Seq("yarn", "java8-tests", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingMqttAssembly, streamingKinesisAslAssembly) =
-    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-mqtt-assembly", "streaming-kinesis-asl-assembly")
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafkaBetaAssembly, streamingMqttAssembly, streamingKinesisAslAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-kafka-beta-assembly", "streaming-mqtt-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
@@ -531,7 +531,7 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-mqtt-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kafka-beta-assembly") || mName.contains("streaming-mqtt-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
         // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
