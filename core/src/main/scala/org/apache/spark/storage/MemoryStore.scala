@@ -142,18 +142,18 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val res = {
+        val size = {
           if (level.deserialized) {
             val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
             tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)
-            PutResult(sizeEstimate)
+            sizeEstimate
           } else {
             val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
             tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-            PutResult(bytes.limit())
+            bytes.limit()
           }
         }
-        Right(res.size)
+        Right(size)
       case Right(iteratorValues) =>
         // Not enough space to unroll this block; drop to disk if applicable
         if (level.useDisk && allowPersistToDisk) {
