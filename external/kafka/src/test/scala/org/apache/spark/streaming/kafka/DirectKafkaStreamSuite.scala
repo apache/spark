@@ -93,8 +93,6 @@ class DirectKafkaStreamSuite
     basicDirectStreamTest(createStream(topics), topics)
   }
 
-  // TODO: Renable when we move to Kafka 0.9.0.1. This test wouldn't pass until KAFKA-3029
-  // (Make class org.apache.kafka.common.TopicPartition Serializable) is resolved.
   test("basic stream receiving with multiple topics and smallest starting offset, using new Kafka" +
     " consumer API") {
     val random = Random.nextInt
@@ -379,8 +377,6 @@ class DirectKafkaStreamSuite
     basicOffsetRecoveryTest(kafkaStream, topic, getOffsetRanges[String, String])
   }
 
-  // TODO: Renable when we move to Kafka 0.9.0.1. This test wouldn't pass until KAFKA-3029
-  // (Make class org.apache.kafka.common.TopicPartition Serializable) is resolved.
   test("offset recovery with new Kafka consumer API") {
     val kafkaParams: Map[String, String] = populateNewParams()
     val topic = s"recovery-${Random.nextInt}"
@@ -488,8 +484,6 @@ class DirectKafkaStreamSuite
     basicReportInfoTest(stream, topic)
   }
 
-  // TODO: Renable when we move to Kafka 0.9.0.1. This test wouldn't pass until KAFKA-3029
-  // (Make class org.apache.kafka.common.TopicPartition Serializable) is resolved.
   test("Direct Kafka stream report input information with new Kafka consumer API") {
     val topic = s"report-test-${Random.nextInt}"
     ssc = new StreamingContext(sparkConf, Milliseconds(200))
@@ -565,8 +559,6 @@ class DirectKafkaStreamSuite
 
   }
 
-  // TODO: Renable when we move to Kafka 0.9.0.1. This test wouldn't pass until KAFKA-3029
-  // (Make class org.apache.kafka.common.TopicPartition Serializable) is resolved.
   test("using rate controller using new Kafka consumer API") {
     val topic = s"backpressure-${Random.nextInt}"
     val kafkaParams: Map[String, String] = populateNewParams()

@@ -125,8 +125,6 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     (messages, offsetRanges, kafkaParams)
   }
 
-  // TODO: Renable when we move to Kafka 0.9.0.1. This test wouldn't pass until KAFKA-3029
-  // (Make class org.apache.kafka.common.TopicPartition Serializable) is resolved.
   test("basic usage with new Kafka consumer API") {
     val topic = s"topicbasic-${Random.nextInt}"
     val (messages: Array[String], offsetRanges: Array[OffsetRange], kafkaParams: Map[String,
