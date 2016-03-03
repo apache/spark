@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
 import org.apache.spark.sql.types._
 
 /**
@@ -360,15 +359,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   private def create(
       expressions: Seq[Expression],
       subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val validExpr = expressions.filter {
-      case NoOp => false
-      case _ => true
-    }
     val ctx = newCodeGenContext()
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
-    val callSite =
-      if (validExpr.isEmpty) "unknown" else validExpr(0).origin.callSite.getOrElse("unknown")
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificUnsafeProjection(references);
@@ -391,14 +384,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         public UnsafeRow apply(InternalRow ${ctx.INPUT_ROW}) {
-          try {
-            ${eval.code.trim}
-            return ${eval.value};
-          } catch (final Throwable e) {
-            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
-            logger.error("The method apply() is generated for ${callSite}");
-            throw e;
-          }
+          ${eval.code.trim}
+          return ${eval.value};
         }
       }
       """

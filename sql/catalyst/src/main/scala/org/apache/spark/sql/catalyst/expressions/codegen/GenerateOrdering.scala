@@ -113,8 +113,6 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
   protected def create(ordering: Seq[SortOrder]): BaseOrdering = {
     val ctx = newCodeGenContext()
     val comparisons = genComparisons(ctx, ordering)
-    val callSite =
-      if (validExpr.isEmpty) "unknown" else validExpr(0).origin.callSite.getOrElse("unknown")
     val codeBody = s"""
       public SpecificOrdering generate(Object[] references) {
         return new SpecificOrdering(references);
@@ -132,15 +130,9 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         }
 
         public int compare(InternalRow a, InternalRow b) {
-          try {
-            InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
-            $comparisons
-            return 0;
-          } catch (final Throwable e) {
-            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
-            logger.error("The method compare() is generated for ${callSite}");
-            throw e;
-          }
+          InternalRow ${ctx.INPUT_ROW} = null;  // Holds current row being evaluated.
+          $comparisons
+          return 0;
         }
       }"""
 
