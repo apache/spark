@@ -27,8 +27,7 @@ import org.apache.spark.sql.SQLContext
 
 object Main extends Logging {
 
-  // Force log initialization to pick up the repl-specific settings.
-  logTrace("Initializing Spark REPL...")
+  initializeLogIfNecessary(true)
 
   val conf = new SparkConf()
   val rootDir = conf.getOption("spark.repl.classdir").getOrElse(Utils.getLocalDir(conf))
@@ -40,8 +39,6 @@ object Main extends Logging {
   var interp: SparkILoop = _
 
   private var hasErrors = false
-
-  override protected def isInterpreter: Boolean = true
 
   private def scalaOptionError(msg: String): Unit = {
     hasErrors = true
