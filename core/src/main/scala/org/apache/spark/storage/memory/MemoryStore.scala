@@ -148,9 +148,8 @@ private[spark] class MemoryStore(
     }
     if (entry == null) {
       None
-    } else if (entry.deserialized) {
-      Some(blockManager.dataSerialize(blockId, entry.value.asInstanceOf[Array[Any]].iterator))
     } else {
+      require(!entry.deserialized, "should only call getBytes on blocks stored in serialized form")
       Some(entry.value.asInstanceOf[ByteBuffer].duplicate()) // Doesn't actually copy the data
     }
   }
@@ -161,11 +160,9 @@ private[spark] class MemoryStore(
     }
     if (entry == null) {
       None
-    } else if (entry.deserialized) {
-      Some(entry.value.asInstanceOf[Array[Any]].iterator)
     } else {
-      val buffer = entry.value.asInstanceOf[ByteBuffer].duplicate() // Doesn't actually copy data
-      Some(blockManager.dataDeserialize(blockId, buffer))
+      require(entry.deserialized, "should only call getValues on deserialized blocks")
+      Some(entry.value.asInstanceOf[Array[Any]].iterator)
     }
   }
 

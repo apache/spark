@@ -463,12 +463,23 @@ private[spark] class BlockManager(
     if (level.useMemory) {
       logDebug(s"Getting block $blockId from memory")
       val result = if (asBlockResult) {
-        memoryStore.getValues(blockId).map { iter =>
+        val maybeIter = if (level.deserialized) {
+          memoryStore.getValues(blockId)
+        } else {
+          memoryStore.getBytes(blockId).map { bytes =>
+            dataDeserialize(blockId, bytes)
+          }
+        }
+        maybeIter.map { iter =>
           val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
           new BlockResult(ci, DataReadMethod.Memory, info.size)
         }
       } else {
-        memoryStore.getBytes(blockId)
+        if (level.deserialized) {
+          memoryStore.getValues(blockId).map(iter => dataSerialize(blockId, iter))
+        } else {
+          memoryStore.getBytes(blockId)
+        }
       }
       result match {
         case Some(values) =>

@@ -613,7 +613,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a3", a3, storageLevel)
     assert(accessMethod("a2").isDefined, "a2 was not in store")
     assert(accessMethod("a3").isDefined, "a3 was not in store")
-    assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
     assert(accessMethod("a1").isDefined, "a1 was not in store")
     val dataShouldHaveBeenCachedBackIntoMemory = {
       if (storageLevel.deserialized) !getAsBytes
@@ -734,7 +733,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a1", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
     assert(store.getSingleAndReleaseLock("a1") === None, "a1 was in store")
     store.putSingle("a2", new Array[Byte](10000), StorageLevel.MEMORY_AND_DISK)
-    assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
+    assert(!store.memoryStore.contains("a2"), "a2 was in memory store")
     assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
   }
 
