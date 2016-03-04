@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.reflect.Modifier
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
@@ -181,8 +182,8 @@ class Analyzer(
       case Aggregate(groups, aggs, child) if child.resolved && hasUnresolvedAlias(aggs) =>
         Aggregate(groups, assignAliases(aggs), child)
 
-      case g: GroupingAnalytics if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
-        g.withNewAggs(assignAliases(g.aggregations))
+      case g: GroupingSets if g.child.resolved && hasUnresolvedAlias(g.aggregations) =>
+        g.copy(aggregations = assignAliases(g.aggregations))
 
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child)
         if child.resolved && hasUnresolvedAlias(groupByExprs) =>
@@ -250,13 +251,9 @@ class Analyzer(
 
         val nonNullBitmask = x.bitmasks.reduce(_ & _)
 
-        val attributeMap = groupByAliases.zipWithIndex.map { case (a, idx) =>
-          if ((nonNullBitmask & 1 << idx) == 0) {
-            (a -> a.toAttribute.withNullability(true))
-          } else {
-            (a -> a.toAttribute)
-          }
-        }.toMap
+        val groupByAttributes = groupByAliases.zipWithIndex.map { case (a, idx) =>
+          a.toAttribute.withNullability((nonNullBitmask & 1 << idx) == 0)
+        }
 
         val aggregations: Seq[NamedExpression] = x.aggregations.map { case expr =>
           // collect all the found AggregateExpression, so we can check an expression is part of
@@ -292,12 +289,16 @@ class Analyzer(
                   s"in grouping columns ${x.groupByExprs.mkString(",")}")
               }
             case e =>
-              groupByAliases.find(_.child.semanticEquals(e)).map(attributeMap(_)).getOrElse(e)
+              val index = groupByAliases.indexWhere(_.child.semanticEquals(e))
+              if (index == -1) {
+                e
+              } else {
+                groupByAttributes(index)
+              }
           }.asInstanceOf[NamedExpression]
         }
 
         val child = Project(x.child.output ++ groupByAliases, x.child)
-        val groupByAttributes = groupByAliases.map(attributeMap(_))
 
         Aggregate(
           groupByAttributes :+ VirtualColumn.groupingIdAttribute,
@@ -689,6 +690,7 @@ class Analyzer(
       * Resolve the expression on a specified logical plan and it's child (recursively), until
       * the expression is resolved or meet a non-unary node or Subquery.
       */
+    @tailrec
     private def resolveExpressionRecursively(expr: Expression, plan: LogicalPlan): Expression = {
       val resolved = resolveExpression(expr, plan)
       if (resolved.resolved) {

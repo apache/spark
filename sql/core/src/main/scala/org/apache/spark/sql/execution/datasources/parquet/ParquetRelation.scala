@@ -148,6 +148,19 @@ private[sql] class ParquetRelation(
     .get(ParquetRelation.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
 
+  private val compressionCodec: Option[String] = parameters
+    .get("compression")
+    .map { codecName =>
+      // Validate if given compression codec is supported or not.
+      val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
+      if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
+        val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+        throw new IllegalArgumentException(s"Codec [$codecName] " +
+          s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      }
+      codecName.toLowerCase
+    }
+
   private lazy val metadataCache: MetadataCache = {
     val meta = new MetadataCache
     meta.refresh()
@@ -286,7 +299,8 @@ private[sql] class ParquetRelation(
       ParquetRelation
         .shortParquetCompressionCodecNames
         .getOrElse(
-          sqlContext.conf.parquetCompressionCodec.toUpperCase,
+          compressionCodec
+            .getOrElse(sqlContext.conf.parquetCompressionCodec.toLowerCase),
           CompressionCodecName.UNCOMPRESSED).name())
 
     new BucketedOutputWriterFactory {
@@ -905,9 +919,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE" -> CompressionCodecName.UNCOMPRESSED,
-    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY" -> CompressionCodecName.SNAPPY,
-    "GZIP" -> CompressionCodecName.GZIP,
-    "LZO" -> CompressionCodecName.LZO)
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
 }

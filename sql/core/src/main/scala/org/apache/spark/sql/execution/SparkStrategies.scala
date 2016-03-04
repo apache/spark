@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
+import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTempTableUsing, DescribeCommand => LogicalDescribeCommand, _}
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.internal.SQLConf
@@ -71,9 +71,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         joins.LeftSemiJoinHash(
           leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
-      // no predicate can be evaluated by matching hash keys
-      case logical.Join(left, right, LeftSemi, condition) =>
-        joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
     }
   }

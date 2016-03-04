@@ -24,10 +24,10 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRDD
 import org.apache.spark.sql.sources._
@@ -171,6 +171,27 @@ class JDBCSuite extends SparkFunSuite
          |OPTIONS (url '$url', dbtable 'TEST.NULLTYPES', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement(
+      "create table test.emp(name TEXT(32) NOT NULL," +
+        " theid INTEGER, \"Dept\" INTEGER)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('fred', 1, 10)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('mary', 2, null)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('joe ''foo'' \"bar\"', 3, 30)").executeUpdate()
+    conn.prepareStatement(
+      "insert into test.emp values ('kathy', null, null)").executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+         |CREATE TEMPORARY TABLE nullparts
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$url', dbtable 'TEST.EMP', user 'testUser', password 'testPass',
+         |partitionColumn '"Dept"', lowerBound '1', upperBound '4', numPartitions '4')
+      """.stripMargin.replaceAll("\n", " "))
+
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
@@ -189,8 +210,8 @@ class JDBCSuite extends SparkFunSuite
       // the plan only has PhysicalRDD to scan JDBCRelation.
       assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
       val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
-      assert(node.plan.isInstanceOf[org.apache.spark.sql.execution.PhysicalRDD])
-      assert(node.plan.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
+      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.PhysicalRDD])
+      assert(node.child.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
       df
     }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
@@ -227,7 +248,7 @@ class JDBCSuite extends SparkFunSuite
       // cannot compile given predicates.
       assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
       val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
-      assert(node.plan.isInstanceOf[org.apache.spark.sql.execution.Filter])
+      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.Filter])
       df
     }
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
@@ -336,6 +357,23 @@ class JDBCSuite extends SparkFunSuite
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     assert(sqlContext.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties)
       .collect().length === 3)
+  }
+
+  test("Partioning on column that might have null values.") {
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", "theid", 0, 4, 3, new Properties)
+        .collect().length === 4)
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", "THEID", 0, 4, 3, new Properties)
+        .collect().length === 4)
+    // partitioning on a nullable quoted column
+    assert(
+      sqlContext.read.jdbc(urlWithUserAndPass, "TEST.EMP", """"Dept"""", 0, 4, 3, new Properties)
+        .collect().length === 4)
+  }
+
+  test("SELECT * on partitioned table with a nullable partioncolumn") {
+    assert(sql("SELECT * FROM nullparts").collect().size == 4)
   }
 
   test("H2 integral types") {
