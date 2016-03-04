@@ -40,6 +40,7 @@ import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.serializer.{Serializer, SerializerInstance}
 import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.storage.memory._
 import org.apache.spark.util._
 
 private[spark] sealed trait BlockValues
