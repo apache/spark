@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # Evaluate clustering
     cost = clusters.computeCost(parsedData)
-    print("Bisecting K-means cost = " + str(cost))
+    print("Bisecting K-means Cost = " + str(cost))
 
     # Save and load model
     clusters.save(sc, "target/org/apache/spark/PythonBisectingKMeansExample/BisectingKMeansModel")
