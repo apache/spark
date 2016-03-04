@@ -58,5 +58,6 @@ if __name__ == "__main__":
     print("Cluster Centers: ")
     for center in centers:
         print(center)
+    # $example off$
 
     sc.stop()
