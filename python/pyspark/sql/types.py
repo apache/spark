@@ -1093,8 +1093,11 @@ _acceptable_types = {
 
 def _verify_type(obj, dataType):
     """
-    Verify the type of obj against dataType, raise an exception if
-    they do not match.
+    Verify the type of obj against dataType, raise a TypeError if they do not match.
+
+    Also verify the value of obj against datatype, raise a ValueError if it's not within the allowed
+    range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
+    will become infinity when cast to Java float if it overflows.
 
     >>> _verify_type(None, StructType([]))
     >>> _verify_type("", StringType())
@@ -1108,6 +1111,12 @@ def _verify_type(obj, dataType):
     >>> _verify_type((), StructType([]))
     >>> _verify_type([], StructType([]))
     >>> _verify_type([1], StructType([])) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
+    >>> # Check if numeric values are within the allowed range.
+    >>> _verify_type(12, ByteType())
+    >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
@@ -1137,7 +1146,19 @@ def _verify_type(obj, dataType):
         if type(obj) not in _acceptable_types[_type]:
             raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
 
-    if isinstance(dataType, ArrayType):
+    if isinstance(dataType, ByteType):
+        if obj < -128 or obj > 127:
+            raise ValueError("object of ByteType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ShortType):
+        if obj < -32768 or obj > 32767:
+            raise ValueError("object of ShortType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, IntegerType):
+        if obj < -2147483648 or obj > 2147483647:
+            raise ValueError("object of IntegerType out of range, got: %s" % obj)
+
+    elif isinstance(dataType, ArrayType):
         for i in obj:
             _verify_type(i, dataType.elementType)
 
