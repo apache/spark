@@ -35,17 +35,17 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]]
 
   // Attempts to re-order the individual conjunctive predicates in an expression to short circuit
   // the evaluation of relatively cheaper checks (e.g., checking for nullability) before others.
-  protected def getReorderedExpression(expr: Expression): Expression = {
+  protected def reorderPredicates(expr: Expression): Expression = {
     splitConjunctivePredicates(expr)
       .sortWith((x, _) => x.isInstanceOf[IsNotNull])
       .reduce(And)
   }
 
-  // Wrapper around getReorderedExpression(expr: Expression) to reorder optional conditions in joins
-  protected def getReorderedExpression(exprOpt: Option[Expression]): Option[Expression] = {
+  // Wrapper around reorderPredicates(expr: Expression) to reorder optional conditions in joins
+  protected def reorderPredicates(exprOpt: Option[Expression]): Option[Expression] = {
     exprOpt match {
       case Some(expr) =>
-        Option(getReorderedExpression(expr))
+        Option(reorderPredicates(expr))
       case None =>
         exprOpt
     }
