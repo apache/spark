@@ -90,7 +90,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     Right(length)
   }
 
-  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): ByteBuffer = {
     val file = diskManager.getFile(blockId.name)
     val channel = new RandomAccessFile(file, "r").getChannel
     Utils.tryWithSafeFinally {
@@ -105,9 +105,9 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
           }
         }
         buf.flip()
-        Some(buf)
+        buf
       } else {
-        Some(channel.map(MapMode.READ_ONLY, 0, file.length))
+        channel.map(MapMode.READ_ONLY, 0, file.length)
       }
     } {
       channel.close()

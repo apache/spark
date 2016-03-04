@@ -475,13 +475,7 @@ private[spark] class BlockManager(
     // Look for block on disk, potentially storing it back in memory if required
     if (level.useDisk) {
       logDebug(s"Getting block $blockId from disk")
-      val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
-        case Some(b) => b
-        case None =>
-          releaseLock(blockId)
-          throw new BlockException(
-            blockId, s"Block $blockId not found on disk, though it should be")
-      }
+      val bytes: ByteBuffer = diskStore.getBytes(blockId)
       assert(0 == bytes.position())
 
       if (!level.useMemory) {
