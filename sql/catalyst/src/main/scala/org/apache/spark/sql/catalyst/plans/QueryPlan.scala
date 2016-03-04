@@ -276,15 +276,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       // to erase that for equality testing.
       val cleanedExprId =
         Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
-      BindReferences.bindReference(cleanedExprId.canonicalized, allAttributes, allowFailures = true)
+      BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
     case other =>
-      BindReferences.bindReference(other.canonicalized, allAttributes, allowFailures = true)
+      BindReferences.bindReference(other, allAttributes, allowFailures = true)
   }
 
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     def cleanArg(arg: Any): Any = arg match {
-      case e: Expression => cleanExpression(e)
+      case e: Expression => cleanExpression(e).canonicalized
       case other => other
     }
 
