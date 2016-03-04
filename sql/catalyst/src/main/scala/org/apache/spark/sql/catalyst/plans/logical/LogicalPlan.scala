@@ -155,7 +155,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
     productIterator.map {
       // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
+      case tn: TreeNode[_] if isOneOfChildren(tn) => null
       case e: Expression => cleanExpression(e)
       case s: Option[_] => s.map {
         case e: Expression => cleanExpression(e)

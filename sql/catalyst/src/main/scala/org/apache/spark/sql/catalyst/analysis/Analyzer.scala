@@ -510,17 +510,6 @@ class Analyzer(
           ordering.map(order => resolveExpression(order, child).asInstanceOf[SortOrder])
         Sort(newOrdering, global, child)
 
-      // A special case for Generate, because the output of Generate should not be resolved by
-      // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, join, outer, qualifier, output, child)
-        if child.resolved && !generator.resolved =>
-        val newG = resolveExpression(generator, child, throws = true)
-        if (newG.fastEquals(generator)) {
-          g
-        } else {
-          Generate(newG.asInstanceOf[Generator], join, outer, qualifier, output, child)
-        }
-
       // A special case for ObjectOperator, because the deserializer expressions in ObjectOperator
       // should be resolved by their corresponding attributes instead of children's output.
       case o: ObjectOperator if containsUnresolvedDeserializer(o.deserializers.map(_._1)) =>

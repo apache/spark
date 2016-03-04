@@ -19,23 +19,30 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, Filter, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.util._
 
 /**
  * Provides helper methods for comparing plans.
  */
 abstract class PlanTest extends SparkFunSuite {
+
+  private def clearExprId(a: Attribute): Attribute = {
+    AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
+  }
+
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
    */
   protected def normalizeExprIds(plan: LogicalPlan) = {
-    plan transformAllExpressions {
-      case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
-      case a: Alias =>
-        Alias(a.child, a.name)(exprId = ExprId(0))
+    plan.transform {
+      // A special case for Generate, its `generatorOutput` is not part of its expressions, thus is
+      // not reachable in `transformAllExpressions`, we should handle it separately.
+      case g: Generate => g.copy(generatorOutput = g.generatorOutput.map(clearExprId))
+    }.transformAllExpressions {
+      case a: AttributeReference => clearExprId(a)
+      case a: Alias => Alias(a.child, a.name)(exprId = ExprId(0))
     }
   }
 
