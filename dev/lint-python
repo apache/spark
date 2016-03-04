@@ -122,7 +122,7 @@ fi
 
 # for to_be_checked in "$PATHS_TO_CHECK"
 # do
-#     pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
+#     pylint --rcfile="$SPARK_ROOT_DIR/python/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
 # done
 
 # if [ "${PIPESTATUS[0]}" -ne 0 ]; then
