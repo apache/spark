@@ -313,33 +313,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     blockId.asRDDId.map(_.rddId)
   }
 
-  /**
-   * Try to put in a set of values, if we can free up enough space. The value should either be
-   * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
-   * must also be passed by the caller.
-   *
-   * `value` will be lazily created. If it cannot be put into MemoryStore or disk, `value` won't be
-   * created to avoid OOM since it may be a big ByteBuffer.
-   *
-   * Synchronize on `memoryManager` to ensure that all the put requests and its associated block
-   * dropping is done by only on thread at a time. Otherwise while one thread is dropping
-   * blocks to free memory for one block, another thread may use up the freed space for
-   * another block.
-   *
-   * @return whether put was successful.
-   */
-  private def tryToPut(
-      blockId: BlockId,
-      value: () => Any,
-      size: Long,
-      deserialized: Boolean): Boolean = {
-
-    /* TODO: Its possible to optimize the locking by locking entries only when selecting blocks
-     * to be dropped. Once the to-be-dropped blocks have been selected, and lock on entries has
-     * been released, it must be ensured that those to-be-dropped blocks are not double counted
-     * for freeing up more space for another block that needs to be put. Only then the actually
-     * dropping of blocks (and writing to disk if necessary) can proceed in parallel. */
-
+  private def acquireStorageMemory(blockId: BlockId, size: Long): Boolean = {
+    // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
+    // task.
     memoryManager.synchronized {
       // Note: if we have previously unrolled this block successfully, then pending unroll
       // memory should be non-zero. This is the amount that we already reserved during the
@@ -348,27 +324,34 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       // happen atomically. This relies on the assumption that all memory acquisitions are
       // synchronized on the same lock.
       releasePendingUnrollMemoryForThisTask()
-      val enoughMemory = memoryManager.acquireStorageMemory(blockId, size)
-      if (enoughMemory) {
-        // We acquired enough memory for the block, so go ahead and put it
-        val entry = new MemoryEntry(value(), size, deserialized)
-        entries.synchronized {
-          entries.put(blockId, entry)
-        }
-        val valuesOrBytes = if (deserialized) "values" else "bytes"
-        logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
-          blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
-      } else {
-        // Tell the block manager that we couldn't put it in memory so that it can drop it to
-        // disk if the block allows disk storage.
-        lazy val data = if (deserialized) {
-          Left(value().asInstanceOf[Array[Any]])
-        } else {
-          Right(value().asInstanceOf[ByteBuffer].duplicate())
-        }
-        blockManager.dropFromMemory(blockId, () => data)
+      memoryManager.acquireStorageMemory(blockId, size)
+    }
+  }
+
+  /**
+   * Try to put in a set of values, if we can free up enough space. The value should either be
+   * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
+   * must also be passed by the caller.
+   *
+   * @return whether put was successful.
+   */
+  private def tryToPut(
+      blockId: BlockId,
+      value: () => Any,
+      size: Long,
+      deserialized: Boolean): Boolean = {
+    if (acquireStorageMemory(blockId, size)) {
+      // We acquired enough memory for the block, so go ahead and put it
+      val entry = new MemoryEntry(value(), size, deserialized)
+      entries.synchronized {
+        entries.put(blockId, entry)
       }
-      enoughMemory
+      val valuesOrBytes = if (deserialized) "values" else "bytes"
+      logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
+        blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+      true
+    } else {
+      false
     }
   }
 
