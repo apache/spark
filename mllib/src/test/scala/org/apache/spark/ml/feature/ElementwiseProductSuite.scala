@@ -15,25 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx
+package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class EdgeSuite extends SparkFunSuite {
-  test ("compare") {
-    // descending order
-    val testEdges: Array[Edge[Int]] = Array(
-      Edge(0x7FEDCBA987654321L, -0x7FEDCBA987654321L, 1),
-      Edge(0x2345L, 0x1234L, 1),
-      Edge(0x1234L, 0x5678L, 1),
-      Edge(0x1234L, 0x2345L, 1),
-      Edge(-0x7FEDCBA987654321L, 0x7FEDCBA987654321L, 1)
-    )
-    // to ascending order
-    val sortedEdges = testEdges.sorted(Edge.lexicographicOrdering[Int])
+class ElementwiseProductSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-    for (i <- 0 until testEdges.length) {
-      assert(sortedEdges(i) == testEdges(testEdges.length - i - 1))
-    }
+  test("read/write") {
+    val ep = new ElementwiseProduct()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setScalingVec(Vectors.dense(0.1, 0.2))
+    testDefaultReadWrite(ep)
   }
 }

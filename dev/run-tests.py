@@ -563,7 +563,7 @@ def main():
 
     # backwards compatibility checks
     if build_tool == "sbt":
-        # Note: compatiblity tests only supported in sbt for now
+        # Note: compatibility tests only supported in sbt for now
         detect_binary_inop_with_mima()
 
     # run the test suites
