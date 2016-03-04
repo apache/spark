@@ -102,6 +102,8 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
     sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
   protected val enableVectorizedParquetReader: Boolean =
     sqlContext.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key).toBoolean
+  protected val enableWholestageCodegen: Boolean =
+    sqlContext.getConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key).toBoolean
 
   override def getPartitions: Array[SparkPartition] = {
     val conf = getConf(isDriverSide = true)
@@ -179,7 +181,11 @@ private[spark] class SqlNewHadoopRDD[V: ClassTag](
           parquetReader.close()
         } else {
           reader = parquetReader.asInstanceOf[RecordReader[Void, V]]
-          if (enableVectorizedParquetReader) parquetReader.resultBatch()
+          if (enableVectorizedParquetReader) {
+            parquetReader.resultBatch()
+            // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
+            if (enableWholestageCodegen) parquetReader.enableReturningBatches();
+          }
         }
       }
 

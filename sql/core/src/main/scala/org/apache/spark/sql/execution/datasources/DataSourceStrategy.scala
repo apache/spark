@@ -23,8 +23,9 @@ import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
@@ -33,8 +34,9 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.ExecutedCommand
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVectorUtils}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
@@ -220,6 +222,44 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     sparkPlan
   }
 
+  /**
+   * Creates a ColumnarBatch that contains the values for `requiredColumns`. These columns can
+   * either come from `input` (columns scanned from the data source) or from the partitioning
+   * values (data from `partitionValues`). This is done *once* per physical partition. When
+   * the column is from `input`, it just references the same underlying column. When using
+   * partition columns, the column is populated once.
+   * TODO: there's probably a cleaner way to do this.
+   */
+  private def projectedColumnBatch(
+      input: ColumnarBatch,
+      requiredColumns: Seq[Attribute],
+      dataColumns: Seq[Attribute],
+      partitionColumnSchema: StructType,
+      partitionValues: InternalRow) : ColumnarBatch = {
+    val result = ColumnarBatch.allocate(StructType.fromAttributes(requiredColumns))
+    var resultIdx = 0
+    var inputIdx = 0
+
+    while (resultIdx < requiredColumns.length) {
+      val attr = requiredColumns(resultIdx)
+      if (inputIdx < dataColumns.length && requiredColumns(resultIdx) == dataColumns(inputIdx)) {
+        result.setColumn(resultIdx, input.column(inputIdx))
+        inputIdx += 1
+      } else {
+        require(partitionColumnSchema.fields.filter(_.name.equals(attr.name)).length == 1)
+        var partitionIdx = 0
+        partitionColumnSchema.fields.foreach { f => {
+          if (f.name.equals(attr.name)) {
+            ColumnVectorUtils.populate(result.column(resultIdx), partitionValues, partitionIdx)
+          }
+          partitionIdx += 1
+        }}
+      }
+      resultIdx += 1
+    }
+    result
+  }
+
   private def mergeWithPartitionValues(
       requiredColumns: Seq[Attribute],
       dataColumns: Seq[Attribute],
@@ -239,7 +279,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         }
       }
 
-      val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
+      val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[Object]) => {
         // Note that we can't use an `UnsafeRowJoiner` to replace the following `JoinedRow` and
         // `UnsafeProjection`.  Because the projection may also adjust column order.
         val mutableJoinedRow = new JoinedRow()
@@ -247,9 +287,27 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val unsafeProjection =
           UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
 
-        iterator.map { unsafeDataRow =>
-          unsafeProjection(mutableJoinedRow(unsafeDataRow, unsafePartitionValues))
-        }
+        // If we are returning batches directly, we need to augment them with the partitioning
+        // columns. We want to do this without a row by row operation.
+        var columnBatch: ColumnarBatch = null
+        var mergedBatch: ColumnarBatch = null
+
+        iterator.map { input => {
+          if (input.isInstanceOf[InternalRow]) {
+            unsafeProjection(mutableJoinedRow(
+              input.asInstanceOf[InternalRow], unsafePartitionValues))
+          } else {
+            require(input.isInstanceOf[ColumnarBatch])
+            val inputBatch = input.asInstanceOf[ColumnarBatch]
+            if (inputBatch != mergedBatch) {
+              mergedBatch = inputBatch
+              columnBatch = projectedColumnBatch(inputBatch, requiredColumns,
+                dataColumns, partitionColumnSchema, partitionValues)
+            }
+            columnBatch.setNumRows(inputBatch.numRows())
+            columnBatch
+          }
+        }}
       }
 
       // This is an internal RDD whose call site the user should not be concerned with
@@ -257,7 +315,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // the call site may add up.
       Utils.withDummyCallSite(dataRows.sparkContext) {
         new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
-      }
+      }.asInstanceOf[RDD[InternalRow]]
     } else {
       dataRows
     }

@@ -37,7 +37,7 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -683,7 +683,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
           while (reader.nextKeyValue()) {
-            val row = reader.getCurrentValue
+            val row = reader.getCurrentValue.asInstanceOf[InternalRow]
             val v = (row.getInt(0), row.getString(1))
             result += v
           }
@@ -700,7 +700,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
           while (reader.nextKeyValue()) {
-            val row = reader.getCurrentValue
+            val row = reader.getCurrentValue.asInstanceOf[InternalRow]
             result += row.getString(0)
           }
           assert(data.map(_._2) == result)
@@ -716,7 +716,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
           while (reader.nextKeyValue()) {
-            val row = reader.getCurrentValue
+            val row = reader.getCurrentValue.asInstanceOf[InternalRow]
             val v = (row.getString(0), row.getInt(1))
             result += v
           }
