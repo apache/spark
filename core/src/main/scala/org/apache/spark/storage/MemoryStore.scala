@@ -116,14 +116,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  def putIterator(
-      blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel): Either[Iterator[Any], Long] = {
-    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    putIterator(blockId, values, level, allowPersistToDisk = true)
-  }
-
   /**
    * Attempt to put the given block in memory store.
    *
@@ -140,7 +132,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      allowPersistToDisk: Boolean): Either[Iterator[Any], Long] = {
+      allowPersistToDisk: Boolean = true): Either[Iterator[Any], Long] = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
