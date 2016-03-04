@@ -87,14 +87,19 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Unit = {
+  /**
+   * Attempt to put the given block into the memory store.
+   *
+   * @return true if the put() succeeded, false otherwise.
+   */
+  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
     if (level.deserialized) {
       val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level)
+      putIterator(blockId, values, level).isRight
     } else {
       tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
     }
@@ -119,20 +124,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   /**
    * Attempt to put the given block in memory store.
    *
-   * There may not be enough space to fully unroll the iterator in memory, in which case we
-   * optionally drop the values to disk if
-   *   (1) the block's storage level specifies useDisk, and
-   *   (2) `allowPersistToDisk` is true.
-   *
-   * One scenario in which `allowPersistToDisk` is false is when the BlockManager reads a block
-   * back from disk and attempts to cache it in memory. In this case, we should not persist the
-   * block back on disk again, as it is already in disk store.
+   * @return the estimated size of the stored data if the put() succeeded, or an iterator
+   *         in case the put() failed (the returned iterator lets callers fall back to the disk
+   *         store if desired).
    */
   private[storage] def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
-      level: StorageLevel,
-      allowPersistToDisk: Boolean = true): Either[Iterator[Any], Long] = {
+      level: StorageLevel): Either[Iterator[Any], Long] = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
@@ -151,16 +150,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         }
         Right(size)
       case Right(iteratorValues) =>
-        // Not enough space to unroll this block; drop to disk if applicable
-        if (level.useDisk && allowPersistToDisk) {
-          logWarning(s"Persisting block $blockId to disk instead.")
-          blockManager.diskStore.put(blockId) { fileOutputStream =>
-            blockManager.dataSerializeStream(blockId, fileOutputStream, iteratorValues)
-          }
-          Right(blockManager.diskStore.getSize(blockId))
-        } else {
-          Left(iteratorValues)
-        }
+        Left(iteratorValues)
     }
   }
 
