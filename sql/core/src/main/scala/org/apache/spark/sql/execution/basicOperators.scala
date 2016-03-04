@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
 import org.apache.spark.sql.types.LongType
-import org.apache.spark.util.random.PoissonSampler
+import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryNode with CodegenSupport {
@@ -127,7 +127,7 @@ case class Sample(
     upperBound: Double,
     withReplacement: Boolean,
     seed: Long,
-    child: SparkPlan) extends UnaryNode {
+    child: SparkPlan) extends UnaryNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -142,6 +142,99 @@ case class Sample(
     } else {
       child.execute().randomSampleWithRange(lowerBound, upperBound, seed)
     }
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  private var rowBuffer: String = _
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    val needToProduce = ctx.freshName("needToProduce")
+    ctx.addMutableState("boolean", needToProduce, s"$needToProduce = true;")
+
+    rowBuffer = ctx.freshName("rowBuffer")
+    ctx.addMutableState("scala.collection.mutable.ArrayBuffer<UnsafeRow>", rowBuffer,
+      s"$rowBuffer = new scala.collection.mutable.ArrayBuffer<UnsafeRow>();")
+
+    val addToBuffer = ctx.freshName("addToBuffer")
+    ctx.addNewFunction(addToBuffer,
+      s"""
+        | private void $addToBuffer() throws java.io.IOException {
+        |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
+        | }
+      """.stripMargin.trim)
+
+    val sampledIterator = ctx.freshName("sampledIterator")
+    ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sampledIterator, "")
+
+    val outputRow = ctx.freshName("outputRow")
+
+    val sampleCodes = if (withReplacement) {
+      val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
+      val classTag = ctx.freshName("classTag")
+      val classTagClass = "scala.reflect.ClassTag<UnsafeRow>"
+      ctx.addMutableState(classTagClass, classTag,
+        s"$classTag = ($classTagClass)scala.reflect.ClassTag$$.MODULE$$.apply(UnsafeRow.class);")
+
+      val sampler = ctx.freshName("sampler")
+      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
+        s"$sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false, $classTag);")
+
+      val random = ctx.freshName("random")
+      val randomSeed = ctx.freshName("randomSeed")
+      val loopCount = ctx.freshName("loopCount")
+      s"""
+         | java.util.Random $random = new java.util.Random(${seed}L);
+         | long $randomSeed = $random.nextLong();
+         | int $loopCount = 0;
+         | while ($loopCount < partitionIndex) {
+         |   $randomSeed = $random.nextLong();
+         |   $loopCount += 1;
+         | }
+         | $sampler.setSeed($randomSeed);
+         | $sampledIterator = $sampler.sample($rowBuffer.toIterator());
+       """.stripMargin
+    } else {
+      val samplerClass = classOf[BernoulliCellSampler[UnsafeRow]].getName
+      val sampler = ctx.freshName("sampler")
+      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
+        s"$sampler = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);")
+
+      s"""
+         | $sampler.setSeed(${seed}L + partitionIndex);
+         | $sampledIterator = $sampler.sample($rowBuffer.toIterator());
+       """.stripMargin
+    }
+
+    s"""
+       | if ($needToProduce) {
+       |   $addToBuffer();
+       |   $sampleCodes
+       |   $needToProduce = false;
+       | }
+       |
+       | while ($sampledIterator != null && $sampledIterator.hasNext()) {
+       |   UnsafeRow $outputRow = (UnsafeRow)$sampledIterator.next();
+       |   ${consume(ctx, null, outputRow)}
+       | }
+     """.stripMargin
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val colExprs = child.output.zipWithIndex.map { case (attr, i) =>
+      BoundReference(i, attr.dataType, attr.nullable)
+    }
+
+    ctx.currentVars = input
+    val code = GenerateUnsafeProjection.createCode(ctx, colExprs)
+
+    s"""
+       | // Convert the input attributes to an UnsafeRow and add it to the iterator.
+       | ${code.code}
+       | $rowBuffer.$$plus$$eq(${code.value}.copy());
+     """.stripMargin.trim
   }
 }
 
@@ -221,8 +314,8 @@ case class Range(
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   if ($input.hasNext()) {
-      |     initRange(((InternalRow) $input.next()).getInt(0));
+      |   if (partitionIndex != -1) {
+      |     initRange(partitionIndex);
       |   } else {
       |     return;
       |   }

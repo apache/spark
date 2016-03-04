@@ -35,6 +35,8 @@ public abstract class BufferedRowIterator {
   // used when there is no column in output
   protected UnsafeRow unsafeRow = new UnsafeRow(0);
 
+  protected int partitionIndex = -1;
+
   public boolean hasNext() throws IOException {
     if (currentRows.isEmpty()) {
       processNext();
@@ -50,6 +52,14 @@ public abstract class BufferedRowIterator {
    * Initializes from array of iterators of InternalRow.
    */
   public abstract void init(Iterator<InternalRow> iters[]);
+
+  /**
+   * Initializes from array of iterators of InternalRow.
+   */
+  public void init(int index, Iterator<InternalRow> iters[]) {
+    partitionIndex = index;
+    init(iters);
+  }
 
   /**
    * Append a row to currentRows.

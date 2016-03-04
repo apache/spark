@@ -297,10 +297,10 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     val rdds = plan.upstreams()
     assert(rdds.size <= 2, "Up to two upstream RDDs can be supported")
     if (rdds.length == 1) {
-      rdds.head.mapPartitions { iter =>
+      rdds.head.mapPartitionsWithIndex { (index, iter) =>
         val clazz = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-        buffer.init(Array(iter))
+        buffer.init(index, Array(iter))
         new Iterator[InternalRow] {
           override def hasNext: Boolean = buffer.hasNext
           override def next: InternalRow = buffer.next()
