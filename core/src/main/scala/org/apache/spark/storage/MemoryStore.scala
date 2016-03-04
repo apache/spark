@@ -88,30 +88,14 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   /**
-   * Attempt to put the given block into the memory store.
-   *
-   * @return true if the put() succeeded, false otherwise.
-   */
-  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Boolean = {
-    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    // Work on a duplicate - since the original input might be used elsewhere.
-    val bytes = _bytes.duplicate()
-    bytes.rewind()
-    if (level.deserialized) {
-      val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level).isRight
-    } else {
-      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-    }
-  }
-
-  /**
    * Use `size` to test if there is enough space in MemoryStore. If so, create the ByteBuffer and
    * put it into MemoryStore. Otherwise, the ByteBuffer won't be created.
    *
    * The caller should guarantee that `size` is correct.
+   *
+   * @return true if the put() succeeded, false otherwise.
    */
-  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Unit = {
+  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
@@ -119,6 +103,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     if (putSuccess) {
       assert(bytes.limit == size)
     }
+    putSuccess
   }
 
   /**

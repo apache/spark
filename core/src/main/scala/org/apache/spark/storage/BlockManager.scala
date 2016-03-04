@@ -845,7 +845,12 @@ private[spark] class BlockManager(
             case ByteBufferValues(bytes) =>
               bytes.rewind()
               size = bytes.limit()
-              val putSucceeded = memoryStore.putBytes(blockId, bytes, putLevel)
+              val putSucceeded = if (level.deserialized) {
+                val values = dataDeserialize(blockId, bytes.duplicate())
+                memoryStore.putIterator(blockId, values, level).isRight
+              } else {
+                memoryStore.putBytes(blockId, size, () => bytes)
+              }
               if (!putSucceeded && level.useDisk) {
                 logWarning(s"Persisting block $blockId to disk instead.")
                 diskStore.putBytes(blockId, bytes)
