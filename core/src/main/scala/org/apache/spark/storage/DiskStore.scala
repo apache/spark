@@ -59,7 +59,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
   def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
-      level: StorageLevel): Right[Iterator[Any], Long] = {
+      level: StorageLevel): Long = {
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
@@ -87,7 +87,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     logDebug("Block %s stored as %s file on disk in %d ms".format(
       file.getName, Utils.bytesToString(length), timeTaken))
 
-    Right(length)
+    length
   }
 
   def getBytes(blockId: BlockId): ByteBuffer = {

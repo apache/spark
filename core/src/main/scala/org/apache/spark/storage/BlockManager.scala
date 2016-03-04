@@ -836,11 +836,7 @@ private[spark] class BlockManager(
         } else if (putLevel.useDisk) {
           data match {
             case IteratorValues(iterator) =>
-              diskStore.putIterator(blockId, iterator(), putLevel) match {
-                case Right(s) =>
-                  size = s
-                // putIterator() will never return Left (see its return type).
-              }
+              size = diskStore.putIterator(blockId, iterator(), putLevel)
             case ByteBufferValues(bytes) =>
               bytes.rewind()
               size = bytes.limit()
