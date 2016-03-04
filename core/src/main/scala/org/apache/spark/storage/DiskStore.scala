@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, FileOutputStream, IOException, RandomAccessFile}
+import java.io.{FileOutputStream, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
@@ -90,36 +90,28 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     Right(length)
   }
 
-  private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+    val file = diskManager.getFile(blockId.name)
     val channel = new RandomAccessFile(file, "r").getChannel
     Utils.tryWithSafeFinally {
       // For small files, directly read rather than memory map
-      if (length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(length.toInt)
-        channel.position(offset)
+      if (file.length < minMemoryMapBytes) {
+        val buf = ByteBuffer.allocate(file.length.toInt)
+        channel.position(0)
         while (buf.remaining() != 0) {
           if (channel.read(buf) == -1) {
             throw new IOException("Reached EOF before filling buffer\n" +
-              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
+              s"offset=0\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
           }
         }
         buf.flip()
         Some(buf)
       } else {
-        Some(channel.map(MapMode.READ_ONLY, offset, length))
+        Some(channel.map(MapMode.READ_ONLY, 0, file.length))
       }
     } {
       channel.close()
     }
-  }
-
-  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
-    val file = diskManager.getFile(blockId.name)
-    getBytes(file, 0, file.length)
-  }
-
-  def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
 
   def remove(blockId: BlockId): Boolean = {
