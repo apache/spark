@@ -665,7 +665,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
   val DECIMAL = "[+-]?((\\d+(\\.\\d*)?)|(\\.\\d+))".r
 
   /**
-   * Flattens the right deep tree with the specified pattern into a list.
+   * Flattens the left deep tree with the specified pattern into a list.
    */
   private def flattenLeftDeepTree(node: ASTNode, pattern: Regex): Seq[ASTNode] = {
     val collected = ArrayBuffer[ASTNode]()
