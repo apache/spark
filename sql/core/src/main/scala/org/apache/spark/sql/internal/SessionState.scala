@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{PreInsertCastAndRename, ResolveDataSource}
-import org.apache.spark.sql.execution.exchange.{ReuseExchange, EnsureRequirements}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
