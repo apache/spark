@@ -18,7 +18,7 @@
 import warnings
 
 from pyspark import since
-from pyspark.ml.util import keyword_only
+from pyspark.ml.util import * 
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
@@ -37,7 +37,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel', 'DecisionTreeClassif
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol):
+                         HasWeightCol, MLWritable, MLReadable):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -68,6 +68,18 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+    >>> lr_path = temp_path + "/lr"
+    >>> lr.save(lr_path)
+    >>> lr2 = LogisticRegression.load(lr_path)
+    >>> lr2.getMaxIter()
+    5
+    >>> model_path = temp_path + "/lr_model"
+    >>> model.save(model_path)
+    >>> model2 = LogisticRegressionModel.load(model_path)
+    >>> model.coefficients == model2.coefficients
+    True
+    >>> model.intercept == model2.intercept
+    True
 
     .. versionadded:: 1.3.0
     """
@@ -185,7 +197,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel):
+class LogisticRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -817,6 +829,9 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS)
     sc.stop()
