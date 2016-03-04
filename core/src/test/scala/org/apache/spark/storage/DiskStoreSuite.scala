@@ -20,8 +20,6 @@ package org.apache.spark.storage
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 
-import org.mockito.Mockito.{mock, RETURNS_SMART_NULLS}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class DiskStoreSuite extends SparkFunSuite {
@@ -34,8 +32,7 @@ class DiskStoreSuite extends SparkFunSuite {
     val byteBuffer = ByteBuffer.wrap(bytes)
 
     val blockId = BlockId("rdd_1_2")
-    val blockManager = mock(classOf[BlockManager], RETURNS_SMART_NULLS)
-    val diskBlockManager = new DiskBlockManager(blockManager, new SparkConf())
+    val diskBlockManager = new DiskBlockManager(new SparkConf(), deleteFilesOnStop = true)
 
     val diskStoreMapped = new DiskStore(new SparkConf().set(confKey, "0"), diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer)
