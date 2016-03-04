@@ -16,7 +16,6 @@ flask-cache
 flask-login
 flower
 future
-google-api-python-client
 gunicorn
 hive-thrift-py
 ipython
