@@ -378,6 +378,19 @@ abstract class OutputWriter {
   }
 }
 
+/**
+ * Acts as a container for all of the metadata required to read from a datasource. All discovery,
+ * resolution and merging logic for schemas and partitions has been removed.
+ *
+ * @param location A [[FileCatalog]] that can enumerate the locations of all the files that comprise
+ *                 this relation.
+ * @param partitionSchema The schmea of the columns (if any) that are used to partition the relation
+ * @param dataSchema The schema of any remaining columns.  Note that if any partition columns are
+ *                   present in the actual data files as well, they are removed.
+ * @param bucketSpec Describes the bucketing (hash-partitioning of the files by some column values).
+ * @param fileFormat A file format that can be used to read and write the data in files.
+ * @param options Configuration used when reading / writing data.
+ */
 case class HadoopFsRelation(
     sqlContext: SQLContext,
     location: FileCatalog,
@@ -388,12 +401,7 @@ case class HadoopFsRelation(
     options: Map[String, String]) extends BaseRelation with FileRelation {
 
   /**
-   * Schema of this relation.  It consists of columns appearing in [[dataSchema]] and all partition
-   * columns not appearing in [[dataSchema]].
    *
-   * TODO... this is kind of weird since we don't read partition columns from data when possible
-   *
-   * @since 1.4.0
    */
   val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
@@ -416,12 +424,25 @@ case class HadoopFsRelation(
     location.allFiles().map(_.getPath.toUri.toString).toArray
 }
 
+/**
+ * Used to read a write data in files to [[InternalRow]] format.
+ */
 trait FileFormat {
+  /**
+   * When possible, this schema should return the schema of the given [[Files]].  When the format
+   * does not support inference, or no valid files are given should return None.  In these cases
+   * Spark will require that user specify the schema manually.
+   */
   def inferSchema(
       sqlContext: SQLContext,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType]
 
+  /**
+   * Prepares a write job and returns an [[OutputWriterFactory]].  Client side job preparation can
+   * be put here.  For example, user defined output committer can be configured here
+   * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
+   */
   def prepareWrite(
       sqlContext: SQLContext,
       job: Job,
@@ -439,6 +460,10 @@ trait FileFormat {
       options: Map[String, String]): RDD[InternalRow]
 }
 
+/**
+ * An interface for objects capable of enumerating the files that comprise a relation as well
+ * as the partitioning characteristics of those files.
+ */
 trait FileCatalog {
   def paths: Seq[Path]
 
@@ -451,6 +476,10 @@ trait FileCatalog {
   def refresh(): Unit
 }
 
+/**
+ * A file catalog that caches metadata gathered by scanning all the files present in `paths`
+ * recursively.
+ */
 class HDFSFileCatalog(
     val sqlContext: SQLContext,
     val parameters: Map[String, String],
@@ -584,6 +613,9 @@ class HDFSFileCatalog(
   override def hashCode(): Int = paths.toSet.hashCode()
 }
 
+/**
+ * Helper methods for gathering metadata from HDFS.
+ */
 private[sql] object HadoopFsRelation extends Logging {
   // We don't filter files/directories whose name start with "_" except "_temporary" here, as
   // specific data sources may take advantages over them (e.g. Parquet _metadata and

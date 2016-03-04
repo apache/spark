@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource, ParquetRelation}
+import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
@@ -175,7 +175,7 @@ private[sql] object PhysicalRDD {
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
 
     val outputUnsafeRows = relation match {
-      case r: HadoopFsRelation if r.fileFormat.isInstanceOf[DefaultSource] =>
+      case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
         !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
       case _: HadoopFsRelation => true
       case _ => false
