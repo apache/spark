@@ -87,13 +87,6 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     }
   }
 
-  def putIterator(blockId: BlockId, values: Iterator[Any]): Long = {
-    put(blockId) { fileOutputStream =>
-      blockManager.dataSerializeStream(blockId, fileOutputStream, values)
-    }
-    getSize(blockId)
-  }
-
   def getBytes(blockId: BlockId): ByteBuffer = {
     val file = diskManager.getFile(blockId.name)
     val channel = new RandomAccessFile(file, "r").getChannel

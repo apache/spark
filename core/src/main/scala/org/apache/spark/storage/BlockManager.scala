@@ -836,7 +836,10 @@ private[spark] class BlockManager(
         } else if (putLevel.useDisk) {
           data match {
             case IteratorValues(iterator) =>
-              size = diskStore.putIterator(blockId, iterator())
+              diskStore.put(blockId) { fileOutputStream =>
+                dataSerializeStream(blockId, fileOutputStream, iterator())
+              }
+              size = diskStore.getSize(blockId)
             case ByteBufferValues(bytes) =>
               bytes.rewind()
               size = bytes.limit()
@@ -1067,7 +1070,9 @@ private[spark] class BlockManager(
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
-          diskStore.putIterator(blockId, elements.toIterator)
+          diskStore.put(blockId) { fileOutputStream =>
+            dataSerializeStream(blockId, fileOutputStream, elements.toIterator)
+          }
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
       }
