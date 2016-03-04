@@ -88,7 +88,7 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-    * Generate the Java source code to process, should be overrided by subclass to support codegen.
+    * Generate the Java source code to process, should be overridden by subclass to support codegen.
     *
     * doProduce() usually generate the framework, for example, aggregation could generate this:
     *
@@ -100,8 +100,9 @@ trait CodegenSupport extends SparkPlan {
     *   while (hashmap.hasNext()) {
     *     row = hashmap.next();
     *     # build the aggregation results
-    *     # create varialbles for results
-    *     # call consume(), wich will call parent.doConsume()
+    *     # create variables for results
+    *     # call consume(), which will call parent.doConsume()
+   *      if (shouldStop()) return;
     *   }
     */
   protected def doProduce(ctx: CodegenContext): String
@@ -150,8 +151,12 @@ trait CodegenSupport extends SparkPlan {
   def usedInputs: AttributeSet = references
 
   /**
-    * Consume the columns generated from it's child, call doConsume() or emit the rows.
-    */
+   * Consume the columns generated from it's child, call doConsume() or emit the rows.
+   *
+   * An operator could generate variables for the output, or a row, either one could be null.
+   *
+   * If the row is not null, we create variables to access the columns before calling doConsume().
+   */
   def consumeChild(
       ctx: CodegenContext,
       child: SparkPlan,
@@ -184,9 +189,8 @@ trait CodegenSupport extends SparkPlan {
     * For example, Filter will generate the code like this:
     *
     *   # code to evaluate the predicate expression, result is isNull1 and value2
-    *   if (isNull1 || value2) {
-    *     # call consume(), which will call parent.doConsume()
-    *   }
+    *   if (isNull1 || !value2) continue;
+    *   # call consume(), which will call parent.doConsume()
     */
   protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     throw new UnsupportedOperationException
