@@ -761,12 +761,28 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.dynamicAllocation.enabled", "true")) === true)
     assert(Utils.isDynamicAllocationEnabled(
-      conf.set("spark.executor.instances", "1")) === false)
+      conf.set("spark.executor.instances", "1")) === true)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
   }
+
+  test("getDynamicAllocationInitialExecutors") {
+    val conf = new SparkConf()
+    assert(Utils.getDynamicAllocationInitialExecutors(conf) === 0)
+    assert(Utils.getDynamicAllocationInitialExecutors(
+      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use minExecutors
+      conf.set("spark.executor.instances", "2")) === 3)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+      conf.set("spark.executor.instances", "4")) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use executor.instances
+      conf.set("spark.dynamicAllocation.initialExecutors", "3")) === 4)
+    assert(Utils.getDynamicAllocationInitialExecutors( // should use initialExecutors
+      conf.set("spark.dynamicAllocation.initialExecutors", "5")) === 5)
+  }
+
 
   test("encodeFileNameToURIRawPath") {
     assert(Utils.encodeFileNameToURIRawPath("abc") === "abc")
