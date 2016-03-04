@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.PhysicalRDD
+import org.apache.spark.sql.execution.PhysicalScan
 import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.datasources.{InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -197,7 +197,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       }.isEmpty)
     assert(
       sql("SELECT * FROM normal_parquet").queryExecution.sparkPlan.collect {
-        case _: PhysicalRDD => true
+        case _: PhysicalScan => true
       }.nonEmpty)
   }
 

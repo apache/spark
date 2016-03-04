@@ -101,14 +101,68 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String,
-    override val metadata: Map[String, String] = Map.empty,
-    isUnsafeRow: Boolean = false,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
-  extends LeafNode with CodegenSupport {
+    override val nodeName: String) extends LeafNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val numOutputRows = longMetric("numOutputRows")
+    rdd.mapPartitionsInternal { iter =>
+      val proj = UnsafeProjection.create(schema)
+      iter.map { r =>
+        numOutputRows += 1
+        proj(r)
+      }
+    }
+  }
+
+  override def simpleString: String = {
+    s"RDD $nodeName${output.mkString("[", ",", "]")}"
+  }
+}
+
+/** Physical plan node for scanning data from a relation. */
+private[sql] case class PhysicalScan(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow],
+    @transient relation: BaseRelation,
+    override val metadata: Map[String, String] = Map.empty)
+  extends LeafNode with CodegenSupport {
+
+  override val nodeName: String = relation.toString
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  val isUnsafeRow = if (relation.isInstanceOf[ParquetRelation]) {
+    // The vectorized parquet reader does not produce unsafe rows.
+    !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+  } else {
+    // All HadoopFsRelations output UnsafeRows
+    relation.isInstanceOf[HadoopFsRelation]
+  }
+
+  override val outputPartitioning = {
+    val bucketSpec = relation match {
+      case r: HadoopFsRelation => r.getBucketSpec
+      case _ => None
+    }
+
+    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
+      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
+        s"(${output.map(_.name).mkString(", ")})")
+    }
+
+    if (bucketSpec.isDefined) {
+      val spec = bucketSpec.get
+      val numBuckets = spec.numBuckets
+      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+      HashPartitioning(bucketColumns, numBuckets)
+    } else {
+      UnknownPartitioning(0)
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val unsafeRow = if (isUnsafeRow) {
@@ -163,41 +217,8 @@ private[sql] case class PhysicalRDD(
   }
 }
 
-private[sql] object PhysicalRDD {
+private[sql] object PhysicalScan {
   // Metadata keys
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
-
-  def createFromDataSource(
-      output: Seq[Attribute],
-      rdd: RDD[InternalRow],
-      relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
-    val outputUnsafeRows = if (relation.isInstanceOf[ParquetRelation]) {
-      // The vectorized parquet reader does not produce unsafe rows.
-      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
-    } else {
-      // All HadoopFsRelations output UnsafeRows
-      relation.isInstanceOf[HadoopFsRelation]
-    }
-
-    val bucketSpec = relation match {
-      case r: HadoopFsRelation => r.getBucketSpec
-      case _ => None
-    }
-
-    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-        s"(${output.map(_.name).mkString(", ")})")
-    }
-
-    bucketSpec.map { spec =>
-      val numBuckets = spec.numBuckets
-      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-      val partitioning = HashPartitioning(bucketColumns, numBuckets)
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
-    }.getOrElse {
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
-    }
-  }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{execution, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, PredicateHelper}
-import org.apache.spark.sql.execution.{LogicalRDD, PhysicalRDD}
+import org.apache.spark.sql.execution.{LogicalRDD, PhysicalScan}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -159,7 +159,7 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       val sparkPlan = queryExecution.sparkPlan
 
       val rawScan = sparkPlan.collect {
-        case p: PhysicalRDD => p
+        case p: PhysicalScan => p
       } match {
         case Seq(scan) => scan
         case _ => fail(s"More than one PhysicalRDD found\n$queryExecution")
