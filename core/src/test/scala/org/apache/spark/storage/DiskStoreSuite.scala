@@ -25,22 +25,17 @@ import org.mockito.Mockito.{mock, RETURNS_SMART_NULLS}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class DiskStoreSuite extends SparkFunSuite {
+
   test("reads of memory-mapped and non memory-mapped files are equivalent") {
     val confKey = "spark.storage.memoryMapThreshold"
 
     // Create a non-trivial (not all zeros) byte array
-    var counter = 0.toByte
-    def incr: Byte = {counter = (counter + 1).toByte; counter;}
-    val bytes = Array.fill[Byte](1000)(incr)
+    val bytes = Array.tabulate[Byte](1000)(_.toByte)
     val byteBuffer = ByteBuffer.wrap(bytes)
 
     val blockId = BlockId("rdd_1_2")
     val blockManager = mock(classOf[BlockManager], RETURNS_SMART_NULLS)
     val diskBlockManager = new DiskBlockManager(blockManager, new SparkConf())
-
-    // This sequence of mocks makes these tests fairly brittle. It would
-    // be nice to refactor classes involved in disk storage in a way that
-    // allows for easier testing.
 
     val diskStoreMapped = new DiskStore(new SparkConf().set(confKey, "0"), diskBlockManager)
     diskStoreMapped.putBytes(blockId, byteBuffer)
