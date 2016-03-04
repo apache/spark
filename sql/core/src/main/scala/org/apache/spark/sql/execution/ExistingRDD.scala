@@ -201,17 +201,15 @@ private[sql] case class PhysicalRDD(
        | }""".stripMargin)
 
     s"""
-       | if ($batch != null || $input.hasNext()) {
-       |   if ($batch == null) {
-       |     Object value = $input.next();
-       |     if (value instanceof $columnarBatchClz) {
-       |       $batch = ($columnarBatchClz)value;
-       |       $scanBatches();
-       |     } else {
-       |       $scanRows((InternalRow)value);
-       |     }
-       |   } else {
+       | if ($batch != null) {
+       |   $scanBatches();
+       | } else if ($input.hasNext()) {
+       |   Object value = $input.next();
+       |   if (value instanceof $columnarBatchClz) {
+       |     $batch = ($columnarBatchClz)value;
        |     $scanBatches();
+       |   } else {
+       |     $scanRows((InternalRow)value);
        |   }
        | }
      """.stripMargin
