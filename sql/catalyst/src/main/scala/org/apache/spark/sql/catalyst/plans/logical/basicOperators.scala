@@ -473,22 +473,17 @@ private[sql] object Expand {
    * multiple output rows for a input row.
    *
    * @param bitmasks The bitmask set represents the grouping sets
+   * @param groupByAliases The aliased original group by expressions
    * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
-   * @param project The child project operator
+   * @param child Child operator
    */
   def apply(
     bitmasks: Seq[Int],
+    groupByAliases: Seq[Alias],
     groupByAttrs: Seq[Attribute],
     gid: Attribute,
-    project: Project): Expand = {
-
-    val originalOutput = project.child.output
-    assert(project.output.length == (originalOutput ++ groupByAttrs).length)
-    assert(project.output.zip(originalOutput ++ groupByAttrs).forall {
-      case (attr1, attr2) => attr1 semanticEquals attr2
-    })
-
+    child: LogicalPlan): Expand = {
     // Create an array of Projections for the child projection, and replace the projections'
     // expressions which equal GroupBy expressions with Literal(null), if those expressions
     // are not set for this grouping set (according to the bit mask).
@@ -496,7 +491,7 @@ private[sql] object Expand {
       // get the non selected grouping attributes according to the bit mask
       val nonSelectedGroupAttrSet = buildNonSelectAttrSet(bitmask, groupByAttrs)
 
-      originalOutput ++ groupByAttrs.map { attr =>
+      child.output ++ groupByAttrs.map { attr =>
         if (nonSelectedGroupAttrSet.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
@@ -504,13 +499,11 @@ private[sql] object Expand {
         } else {
           attr
         }
-      } :+ {
-        // use the bit mask as the concrete value for the groupingId
-        Literal.create(bitmask, IntegerType)
-      }
+      // groupingId is the last output, here we use the bit mask as the concrete value for it.
+      } :+ Literal.create(bitmask, IntegerType)
     }
-    val output = originalOutput ++ groupByAttrs :+ gid
-    Expand(projections, output, project)
+    val output = child.output ++ groupByAttrs :+ gid
+    Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
 }
 
