@@ -43,8 +43,8 @@ if __name__ == "__main__":
     print("Bisecting K-means cost = " + str(cost))
 
     # Save and load model
-    clusters.save(sc, "target/org/apache/spark/PythonKMeansExample/BisectingKMeansModel")
-    sameModel = BisectingKMeansModel.load(sc, "target/org/apache/spark/PythonKMeansExample/BisectingKMeansModel")
+    clusters.save(sc, "target/org/apache/spark/PythonBisectingKMeansExample/BisectingKMeansModel")
+    sameModel = BisectingKMeansModel.load(sc, "target/org/apache/spark/PythonBisectingKMeansExample/BisectingKMeansModel")
     # $example off$
 
     sc.stop()
