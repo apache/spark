@@ -141,6 +141,11 @@ private[sql] class ParquetRelation(
       .map(_.toBoolean)
       .getOrElse(sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
+  // When merging schemas is enabled and the column of the given filter does not exist,
+  // Parquet emits an exception which is an issue of Parquet (PARQUET-389).
+  private val safeParquetFilterPushDown =
+    sqlContext.conf.parquetFilterPushDown && !shouldMergeSchemas
+
   private val mergeRespectSummaries =
     sqlContext.conf.getConf(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
@@ -314,13 +319,26 @@ private[sql] class ParquetRelation(
     }
   }
 
+  override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
+    // The unsafe row RecordReader does not support row by row filtering so for this case
+    // it should wrap this with Spark-side filtering.
+    val enableUnsafeRowParquetReader =
+      sqlContext.getConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key).toBoolean
+    val shouldHandleFilters = safeParquetFilterPushDown && !enableUnsafeRowParquetReader
+    if (shouldHandleFilters) {
+      filters.filter(ParquetFilters.createFilter(dataSchema, _).isEmpty)
+    } else {
+      filters
+    }
+  }
+
   override def buildInternalScan(
       requiredColumns: Array[String],
       filters: Array[Filter],
       inputFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration]): RDD[InternalRow] = {
     val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
-    val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
+    val parquetFilterPushDown = safeParquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
 
@@ -590,6 +608,15 @@ private[sql] object ParquetRelation extends Logging {
     conf.set(ParquetInputFormat.READ_SUPPORT_CLASS, classOf[CatalystReadSupport].getName)
 
     // Try to push down filters when filter push-down is enabled.
+    val safeRequiredColumns = if (parquetFilterPushDown) {
+      val referencedColumns = filters
+        // Collects all columns referenced in Parquet filter predicates.
+        .flatMap(filter => ParquetFilters.referencedColumns(dataSchema, filter))
+      (requiredColumns ++ referencedColumns).distinct
+    } else {
+      requiredColumns
+    }
+
     if (parquetFilterPushDown) {
       filters
         // Collects all converted Parquet filter predicates. Notice that not all predicates can be
@@ -601,7 +628,7 @@ private[sql] object ParquetRelation extends Logging {
     }
 
     conf.set(CatalystReadSupport.SPARK_ROW_REQUESTED_SCHEMA, {
-      val requestedSchema = StructType(requiredColumns.map(dataSchema(_)))
+      val requestedSchema = StructType(safeRequiredColumns.map(dataSchema(_)))
       CatalystSchemaConverter.checkFieldNames(requestedSchema).json
     })
 

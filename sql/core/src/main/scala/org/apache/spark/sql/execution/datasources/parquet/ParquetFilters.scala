@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.Serializable
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
@@ -223,9 +225,25 @@ private[sql] object ParquetFilters {
   }
 
   /**
+   *  Returns referenced columns in [[sources.Filter]].
+   */
+  def referencedColumns(schema: StructType, predicate: sources.Filter): Array[String] = {
+    val referencedCols = ArrayBuffer.empty[String]
+    createParquetFilter(schema, predicate, referencedCols)
+    referencedCols.distinct.toArray
+  }
+
+  /**
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
+    createParquetFilter(schema, predicate)
+  }
+
+  private def createParquetFilter(
+      schema: StructType,
+      predicate: sources.Filter,
+      referencedCols: ArrayBuffer[String] = ArrayBuffer.empty[String]): Option[FilterPredicate] = {
     val dataTypeOf = getFieldMap(schema).toMap
 
     relaxParquetValidTypeMap
@@ -247,31 +265,42 @@ private[sql] object ParquetFilters {
 
     predicate match {
       case sources.IsNull(name) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeEq.lift(dataTypeOf(name)).map(_(name, null))
       case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
 
       case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
       case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeEq.lift(dataTypeOf(name)).map(_(name, value))
       case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeLt.lift(dataTypeOf(name)).map(_(name, value))
       case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeGt.lift(dataTypeOf(name)).map(_(name, value))
       case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
+        referencedCols += name
         makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
 
       case sources.In(name, valueSet) =>
+        referencedCols += name
         makeInSet.lift(dataTypeOf(name)).map(_(name, valueSet.toSet))
 
       case sources.And(lhs, rhs) =>
@@ -283,18 +312,18 @@ private[sql] object ParquetFilters {
         // Pushing one side of AND down is only safe to do at the top level.
         // You can see ParquetRelation's initializeLocalJobFunc method as an example.
         for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
+          lhsFilter <- createParquetFilter(schema, lhs, referencedCols)
+          rhsFilter <- createParquetFilter(schema, rhs, referencedCols)
         } yield FilterApi.and(lhsFilter, rhsFilter)
 
       case sources.Or(lhs, rhs) =>
         for {
-          lhsFilter <- createFilter(schema, lhs)
-          rhsFilter <- createFilter(schema, rhs)
+          lhsFilter <- createParquetFilter(schema, lhs, referencedCols)
+          rhsFilter <- createParquetFilter(schema, rhs, referencedCols)
         } yield FilterApi.or(lhsFilter, rhsFilter)
 
       case sources.Not(pred) =>
-        createFilter(schema, pred).map(FilterApi.not)
+        createParquetFilter(schema, pred, referencedCols).map(FilterApi.not)
 
       case _ => None
     }

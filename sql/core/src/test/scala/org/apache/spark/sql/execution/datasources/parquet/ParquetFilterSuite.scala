@@ -25,6 +25,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.execution.{PhysicalRDD, WholeStageCodegen}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -79,7 +80,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             assert(f.getClass === filterClass)
           }
         }
-        checker(stripSparkFilter(query), expected)
+        checkPlan(query)
+        checker(query, expected)
       }
     }
   }
@@ -106,6 +108,14 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
 
     checkFilterPredicate(df, predicate, filterClass, checkBinaryAnswer _, expected)
+  }
+
+  private def checkPlan(df: DataFrame): Unit = {
+    val executedPlan = df.queryExecution.executedPlan
+    assert(executedPlan.isInstanceOf[WholeStageCodegen])
+    // Check if SparkPlan Filter is removed and this plan only has `PhysicalRDD`.
+    val childPlan = executedPlan.asInstanceOf[WholeStageCodegen].plan
+    assert(childPlan.isInstanceOf[PhysicalRDD])
   }
 
   private def checkBinaryFilterPredicate
@@ -444,6 +454,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
     import testImplicits._
+
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
         withTempPath { dir =>
@@ -451,11 +462,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
           val df = sqlContext.read.parquet(path).filter("a = 2")
 
+          // Check if SparkPlan Filter is removed and this plan only has `PhysicalRDD`.
+          checkPlan(df)
           // The result should be single row.
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          assert(stripSparkFilter(df).count == 1)
+          assert(df.count == 1)
         }
       }
     }
@@ -518,30 +531,31 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("SPARK-11164: test the parquet filter in") {
     import testImplicits._
-    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withSQLConf(SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
-        withTempPath { dir =>
-          val path = s"${dir.getCanonicalPath}/table1"
-          (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
+    withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_UNSAFE_ROW_RECORD_READER_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        (1 to 5).map(i => (i.toFloat, i%3)).toDF("a", "b").write.parquet(path)
 
-          // When a filter is pushed to Parquet, Parquet can apply it to every row.
-          // So, we can check the number of rows returned from the Parquet
-          // to make sure our filter pushdown work.
-          val df = sqlContext.read.parquet(path).where("b in (0,2)")
-          assert(stripSparkFilter(df).count == 3)
+        val df = sqlContext.read.parquet(path).where("b in (0,2)")
+        checkPlan(df)
+        assert(df.count == 3)
 
-          val df1 = sqlContext.read.parquet(path).where("not (b in (1))")
-          assert(stripSparkFilter(df1).count == 3)
+        val df1 = sqlContext.read.parquet(path).where("not (b in (1))")
+        checkPlan(df1)
+        assert(df1.count == 3)
 
-          val df2 = sqlContext.read.parquet(path).where("not (b in (1,3) or a <= 2)")
-          assert(stripSparkFilter(df2).count == 2)
+        val df2 = sqlContext.read.parquet(path).where("not (b in (1,3) or a <= 2)")
+        checkPlan(df2)
+        assert(df2.count == 2)
 
-          val df3 = sqlContext.read.parquet(path).where("not (b in (1,3) and a <= 2)")
-          assert(stripSparkFilter(df3).count == 4)
+        val df3 = sqlContext.read.parquet(path).where("not (b in (1,3) and a <= 2)")
+        checkPlan(df3)
+        assert(df3.count == 4)
 
-          val df4 = sqlContext.read.parquet(path).where("not (a <= 2)")
-          assert(stripSparkFilter(df4).count == 3)
-        }
+        val df4 = sqlContext.read.parquet(path).where("not (a <= 2)")
+        checkPlan(df4)
+        assert(df4.count == 3)
       }
     }
   }
