@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{File, IOException}
-
-import org.apache.spark.sql.sources.HadoopFsRelation
+import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,9 +27,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -405,21 +403,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  ignore("SPARK-5286 Fail to drop an invalid table when using the data source API") {
-    withTable("jsonTable") {
-      // TODO: This create statement isnt' valid...
-      sql(
-        s"""CREATE TABLE jsonTable
-           |USING org.apache.spark.sql.json.DefaultSource
-           |OPTIONS (
-           |  path 'it is not a path at all!'
-           |)
-         """.stripMargin)
-
-      sql("DROP TABLE jsonTable")
-    }
-  }
-
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
@@ -549,15 +532,19 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  ignore("path required error") {
+  test("path required error") {
     assert(
       intercept[RuntimeException] {
         createExternalTable(
           "createdJsonTable",
           "org.apache.spark.sql.json",
           Map.empty[String, String])
+
+        table("createdJsonTable")
       }.getMessage.contains("'path' is not specified"),
       "We should complain that path is not specified.")
+
+    sql("DROP TABLE createdJsonTable")
   }
 
   test("scan a parquet table created through a CTAS statement") {

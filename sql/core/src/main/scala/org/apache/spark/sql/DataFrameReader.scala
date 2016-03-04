@@ -19,21 +19,16 @@ package org.apache.spark.sql
 
 import java.util.Properties
 
-import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.datasources.json.{JacksonParser, JSONOptions, InferSchema}
-
 import scala.collection.JavaConverters._
-
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
+import org.apache.spark.sql.execution.datasources.json.{JacksonParser, JSONOptions, InferSchema}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 

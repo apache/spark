@@ -875,7 +875,6 @@ abstract class ParquetPartitioningTest extends QueryTest with SQLTestUtils with 
     }
 
     test(s"SPARK-5775 read array from $table") {
-      sql(s"SELECT arrayField, p FROM $table WHERE p = 1").explain()
       checkAnswer(
         sql(s"SELECT arrayField, p FROM $table WHERE p = 1"),
         (1 to 10).map(i => Row(1 to i, 1)))

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.orc
 
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}

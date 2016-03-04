@@ -174,7 +174,6 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
           BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
-        println(s"Loaded bucket: $bucketSpec")
 
         val options = table.storage.serdeProperties
         val resolvedRelation =
@@ -219,8 +218,6 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       provider: String,
       options: Map[String, String],
       isExternal: Boolean): Unit = {
-    println(s"createDataSourceTable: $bucketSpec")
-
     val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
 
     val tableProperties = new mutable.HashMap[String, String]
@@ -249,7 +246,6 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
-      println("setting table props")
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
       tableProperties.put("spark.sql.sources.schema.numBucketCols",
@@ -749,6 +745,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
   }
 }
 
+/**
+ * An override of the standard HDFS listing based catalog, that overrides the partition spec with
+ * the information from the metastore.
+ */
 class HiveFileCatalog(
     hive: HiveContext,
     paths: Seq[Path],

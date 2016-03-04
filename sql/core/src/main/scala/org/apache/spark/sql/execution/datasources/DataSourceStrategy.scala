@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.rules.Rule
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.rdd.{CoalescedRDDPartition, MapPartitionsRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.expressions._
@@ -35,33 +32,43 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
+/**
+ * Replaces generic operations with specific variants that are designed to work with Spark
+ * SQL Data Sources.
+ */
 private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ logical.InsertIntoTable(
            l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
         if query.resolved && t.schema.asNullable == query.schema.asNullable =>
-      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
 
+      // Sanity checks
+      if (t.location.paths.size != 1) {
+        throw new AnalysisException(
+          "Can only write data to relations with a single path.")
+      }
+
+      val outputPath = t.location.paths.head
       val inputPaths = query.collect {
         case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.paths
       }.flatten
 
-      val outputPath = t.location.paths.head
+      val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
       if (overwrite && inputPaths.contains(outputPath)) {
         throw new AnalysisException(
           "Cannot overwrite a path that is also being read from.")
       }
 
       InsertIntoHadoopFsRelation(
-        outputPath, // TODO: Check only one...
+        outputPath,
         t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
         t.bucketSpec,
         t.fileFormat,
@@ -157,6 +164,9 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           execution.Project(projects, execution.Filter(cf, scan))
         }
       ).getOrElse(scan) :: Nil
+
+    // TODO: The code for planning bucketed/unbucketed/partitioned/unpartitioned tables contains
+    // a lot of duplication and produces overly complicated RDDs.
 
     // Scanning non-partitioned HadoopFsRelation
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: HadoopFsRelation, _, _)) =>

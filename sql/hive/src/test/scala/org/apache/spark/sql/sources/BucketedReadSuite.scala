@@ -99,6 +99,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
         if (matchedBuckets.get(index % numBuckets) && iter.nonEmpty) Iterator(index) else Iterator()
       }
+      // TODO: These tests are not testing the right columns.
 //      // checking if all the pruned buckets are empty
 //      val invalidBuckets = checkedResult.collect().toList
 //      if (invalidBuckets.nonEmpty) {

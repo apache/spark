@@ -226,26 +226,10 @@ case class CreateMetastoreDataSourceAsSelect(
             bucketSpec = bucketSpec,
             provider = provider,
             options = optionsWithPath)
-          val createdRelation = LogicalRelation(resolved.relation)
+          // TODO: Check that options from the resolved relation match the relation that we are
+          // inserting into (i.e. using the same compression).
           EliminateSubqueryAliases(sqlContext.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
-//              if (l.relation != createdRelation.relation) {
-//                val errorDescription =
-//                  s"Cannot append to table $tableName because the resolved relation does not " +
-//                  s"match the existing relation of $tableName. " +
-//                  s"You can use insertInto($tableName, false) to append this DataFrame to the " +
-//                  s"table $tableName and using its data source and options."
-//                val errorMessage =
-//                  s"""
-//                     |$errorDescription
-//                     |== Relations ==
-//                     |${sideBySide(
-//                        s"== Expected Relation ==" :: l.toString :: Nil,
-//                        s"== Actual Relation ==" :: createdRelation.toString :: Nil
-//                      ).mkString("\n")}
-//                   """.stripMargin
-//                throw new AnalysisException(errorMessage)
-//              }
               existingSchema = Some(l.schema)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")

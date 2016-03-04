@@ -19,19 +19,17 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
-import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
@@ -39,6 +37,11 @@ import org.apache.spark.util.Utils
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
+/**
+ * Responsible for taking a description of a datasource (either from
+ * [[org.apache.spark.sql.DataFrameReader]], or a metastore) and converting it into a logical
+ * relation that can be used in a query plan.
+ */
 object ResolvedDataSource extends Logging {
 
   /** A map to maintain backward compatibility in case we move data sources around. */
@@ -222,7 +225,6 @@ object ResolvedDataSource extends Logging {
                 .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
           })
         }.getOrElse(fileCatalog.partitionSpec(None).partitionColumns)
-
 
         HadoopFsRelation(
           sqlContext,

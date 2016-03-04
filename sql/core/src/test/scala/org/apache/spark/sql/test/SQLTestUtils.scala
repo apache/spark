@@ -20,8 +20,6 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.util.UUID
 
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -30,6 +28,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.util.Utils

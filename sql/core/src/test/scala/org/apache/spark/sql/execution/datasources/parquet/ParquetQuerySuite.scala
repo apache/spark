@@ -33,22 +33,6 @@ import org.apache.spark.util.Utils
 /**
  * A test suite that tests various Parquet queries.
  */
-class ParquetDataFrameSuite extends QueryTest with SharedSQLContext {
-  import testImplicits._
-
-  test("parquet") {
-    val df = Seq(1, 2, 3).toDS().toDF()
-    val file = "test" + System.currentTimeMillis()
-    df.write.format("parquet").save(file)
-    checkAnswer(
-      sqlContext.read.format("parquet").load(file).as[Int],
-      1, 2, 3)
-  }
-}
-
-/**
- * A test suite that tests various Parquet queries.
- */
 class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext {
   import testImplicits._
 

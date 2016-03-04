@@ -36,6 +36,7 @@ import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWrite
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
+/** A container for all the details required when writing to a table. */
 case class WriteRelation(
     sqlContext: SQLContext,
     dataSchema: StructType,
@@ -317,8 +318,6 @@ private[sql] class DynamicPartitionWriterContainer(
     spec => spec.bucketColumnNames.map(c => inputSchema.find(_.name == c).get)
   }
 
-  println(s"bucketColumns: $bucketColumns")
-
   private val sortColumns: Seq[Attribute] = bucketSpec.toSeq.flatMap {
     spec => spec.sortColumnNames.map(c => inputSchema.find(_.name == c).get)
   }
@@ -354,10 +353,10 @@ private[sql] class DynamicPartitionWriterContainer(
    * If bucket id is specified, we will append it to the end of the file name, but before the
    * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
    */
-    private def newOutputWriter(
+  private def newOutputWriter(
         key: InternalRow,
         getPartitionString: UnsafeProjection): OutputWriter = {
-      val configuration = taskAttemptContext.getConfiguration
+    val configuration = taskAttemptContext.getConfiguration
     val path = if (partitionColumns.nonEmpty) {
       val partitionPath = getPartitionString(key).getString(0)
       configuration.set(
