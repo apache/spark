@@ -80,7 +80,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) sys.error("Text doesn't support bucketing")
+        if (bucketId.isDefined) {
+          throw new AnalysisException("Text doesn't support bucketing")
+        }
         new TextOutputWriter(path, dataSchema, context)
       }
     }

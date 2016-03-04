@@ -263,8 +263,12 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
         assert(joined.queryExecution.executedPlan.isInstanceOf[SortMergeJoin])
         val joinOperator = joined.queryExecution.executedPlan.asInstanceOf[SortMergeJoin]
 
-        assert(joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft)
-        assert(joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight)
+        assert(
+          joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft,
+          s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
+        assert(
+          joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight,
+          s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
       }
     }
   }
@@ -341,7 +345,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
-  test("fallback to non-bucketing mode if there exists any malformed bucket files") {
+  test("error if there exists any malformed bucket files") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
       val tableDir = new File(hiveContext.warehousePath, "bucketed_table")
@@ -349,9 +353,11 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       df1.write.parquet(tableDir.getAbsolutePath)
 
       val agged = hiveContext.table("bucketed_table").groupBy("i").count()
-      // make sure we fall back to non-bucketing mode and can't avoid shuffle
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isDefined)
-      checkAnswer(agged.sort("i"), df1.groupBy("i").count().sort("i"))
+      val error = intercept[RuntimeException] {
+        agged.count()
+      }
+
+      assert(error.toString contains "Invalid bucket file")
     }
   }
 }

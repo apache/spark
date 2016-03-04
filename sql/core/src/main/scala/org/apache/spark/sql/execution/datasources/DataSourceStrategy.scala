@@ -165,22 +165,65 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val sharedHadoopConf = SparkHadoopUtil.get.conf
       val confBroadcast =
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
-      // Prune the buckets based on the filters
-      val bucketSet = getBuckets(filters, t.bucketSpec)
-      pruneFilterProject(
-        l,
-        projects,
-        filters,
-        (a, f) =>
-          t.fileFormat.buildInternalScan(
-            t.sqlContext,
-            t.dataSchema,
-            a.map(_.name).toArray,
-            f,
-            bucketSet,
-            t.location.allFiles().toArray,
-            confBroadcast,
-            t.options)) :: Nil
+
+      t.bucketSpec match {
+        case Some(spec) if t.sqlContext.conf.bucketingEnabled() =>
+          val scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow] = {
+            (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
+              val bucketed =
+                t.location
+                  .allFiles()
+                  .filterNot(_.getPath.getName startsWith "_")
+                  .groupBy { f =>
+                    BucketingUtils
+                      .getBucketId(f.getPath.getName)
+                      .getOrElse(sys.error(s"Invalid bucket file ${f.getPath}"))
+                  }
+
+              val bucketedDataMap = bucketed.mapValues { bucketFiles =>
+                t.fileFormat.buildInternalScan(
+                  t.sqlContext,
+                  t.dataSchema,
+                  requiredColumns.map(_.name).toArray,
+                  filters,
+                  None,
+                  bucketFiles.toArray,
+                  confBroadcast,
+                  t.options).coalesce(1)
+              }
+
+              val bucketedRDD = new UnionRDD(t.sqlContext.sparkContext,
+                (0 until spec.numBuckets).map { bucketId =>
+                  bucketedDataMap.get(bucketId).getOrElse {
+                    t.sqlContext.emptyResult: RDD[InternalRow]
+                  }
+                })
+              bucketedRDD
+            }
+          }
+
+          pruneFilterProject(
+            l,
+            projects,
+            filters,
+            scanBuilder) :: Nil
+
+        case _ =>
+          pruneFilterProject(
+            l,
+            projects,
+            filters,
+            (a, f) =>
+              t.fileFormat.buildInternalScan(
+                t.sqlContext,
+                t.dataSchema,
+                a.map(_.name).toArray,
+                f,
+                None,
+                t.location.allFiles().toArray,
+                confBroadcast,
+                t.options)) :: Nil
+      }
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -216,7 +259,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
 
         relation.bucketSpec match {
-          case Some(spec) =>
+          case Some(spec) if relation.sqlContext.conf.bucketingEnabled() =>
             val requiredDataColumns =
               requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 
@@ -224,7 +267,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             val perPartitionRows: Seq[(Int, RDD[InternalRow])] = partitions.flatMap {
               case Partition(partitionValues, dir) =>
                 val files = relation.location.getStatus(dir)
-                val bucketed = files.groupBy(f => BucketingUtils.getBucketId(f.getPath.getName).get)
+                val bucketed = files.groupBy { f =>
+                  BucketingUtils
+                    .getBucketId(f.getPath.getName)
+                    .getOrElse(sys.error(s"Invalid bucket file ${f.getPath}"))
+                }
 
                 bucketed.map { bucketFiles =>
                   // Don't scan any partition columns to save I/O.  Here we are being optimistic and
@@ -253,14 +300,15 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
             val bucketedDataMap: Map[Int, Seq[RDD[InternalRow]]] =
               perPartitionRows.groupBy(_._1).mapValues(_.map(_._2))
 
-            new UnionRDD(relation.sqlContext.sparkContext,
+            val bucketed = new UnionRDD(relation.sqlContext.sparkContext,
               (0 until spec.numBuckets).map { bucketId =>
                 bucketedDataMap.get(bucketId).map(i => i.reduce(_ ++ _).coalesce(1)).getOrElse {
                   relation.sqlContext.emptyResult: RDD[InternalRow]
                 }
               })
+            bucketed
 
-          case None =>
+          case _ =>
             val requiredDataColumns =
               requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 
@@ -285,7 +333,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
                   partitionValues,
                   dataRows)
             }
-
             new UnionRDD(relation.sqlContext.sparkContext, perPartitionRows)
         }
       }

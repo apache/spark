@@ -348,7 +348,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-10623 Enable ORC PPD") {
+  ignore("SPARK-10623 Enable ORC PPD") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         import testImplicits._
@@ -376,8 +376,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           // A tricky part is, ORC does not process filter rows fully but return some possible
           // results. So, this checks if the number of result is less than the original count
           // of data, and then checks if it contains the expected data.
-          val isOrcFiltered = sourceDf.count < 10 && expectedData.subsetOf(data)
-          assert(isOrcFiltered)
+          assert(
+            sourceDf.count < 10 && expectedData.subsetOf(data),
+            s"No data was filtered for predicate: $pred")
         }
 
         checkPredicate('a === 5, List(5).map(Row(_, null)))
