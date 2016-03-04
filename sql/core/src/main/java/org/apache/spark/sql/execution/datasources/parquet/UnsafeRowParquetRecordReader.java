@@ -37,7 +37,6 @@ import org.apache.parquet.schema.PrimitiveType;
 import org.apache.parquet.schema.Type;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
@@ -57,10 +56,14 @@ import static org.apache.parquet.column.ValuesType.*;
  *
  * TODO: handle complex types, decimal requiring more than 8 bytes, INT96. Schema mismatch.
  * All of these can be handled efficiently and easily with codegen.
+ *
+ * This class can either return InternalRows or ColumnarBatches. With whole stage codegen
+ * enabled, this class returns ColumnarBatches which offers significant performance gains.
+ * TODO: make this always return ColumnarBatches.
  */
-public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBase<InternalRow> {
+public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBase<Object> {
   /**
-   * Batch of unsafe rows that we assemble and the current index we've returned. Everytime this
+   * Batch of unsafe rows that we assemble and the current index we've returned. Every time this
    * batch is used up (batchIdx == numBatched), we populated the batch.
    */
   private UnsafeRow[] rows = new UnsafeRow[64];
@@ -115,10 +118,14 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
    * code between the path that uses the MR decoders and the vectorized ones.
    *
    * TODOs:
-   *  - Implement all the encodings to support vectorized.
    *  - Implement v2 page formats (just make sure we create the correct decoders).
    */
   private ColumnarBatch columnarBatch;
+
+  /**
+   * If true, this class returns batches instead of rows.
+   */
+  private boolean returnColumnarBatch;
 
   /**
    * The default config on whether columnarBatch should be offheap.
@@ -169,6 +176,8 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
 
   @Override
   public boolean nextKeyValue() throws IOException, InterruptedException {
+    if (returnColumnarBatch) return nextBatch();
+
     if (batchIdx >= numBatched) {
       if (vectorizedDecode()) {
         if (!nextBatch()) return false;
@@ -181,7 +190,9 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
   }
 
   @Override
-  public InternalRow getCurrentValue() throws IOException, InterruptedException {
+  public Object getCurrentValue() throws IOException, InterruptedException {
+    if (returnColumnarBatch) return columnarBatch;
+
     if (vectorizedDecode()) {
       return columnarBatch.getRow(batchIdx - 1);
     } else {
@@ -208,6 +219,14 @@ public class UnsafeRowParquetRecordReader extends SpecificParquetRecordReaderBas
       columnarBatch = ColumnarBatch.allocate(sparkSchema, memMode);
     }
     return columnarBatch;
+  }
+
+  /**
+   * Can be called before any rows are returned to enable returning columnar batches directly.
+   */
+  public void enableReturningBatches() {
+    assert(vectorizedDecode());
+    returnColumnarBatch = true;
   }
 
   /**

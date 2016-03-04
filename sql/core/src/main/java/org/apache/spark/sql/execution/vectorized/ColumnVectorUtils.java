@@ -26,9 +26,11 @@ import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Utilities to help manipulate data associate with ColumnVectors. These should be used mostly
@@ -36,6 +38,61 @@ import org.apache.spark.unsafe.types.CalendarInterval;
  * These utilities are mostly used to convert ColumnVectors into other formats.
  */
 public class ColumnVectorUtils {
+  /**
+   * Populates the entire `col` with `row[fieldIdx]`
+   */
+  public static void populate(ColumnVector col, InternalRow row, int fieldIdx) {
+    int capacity = col.capacity;
+    DataType t = col.dataType();
+
+    if (row.isNullAt(fieldIdx)) {
+      col.putNulls(0, capacity);
+    } else {
+      if (t == DataTypes.BooleanType) {
+        col.putBooleans(0, capacity, row.getBoolean(fieldIdx));
+      } else if (t == DataTypes.ByteType) {
+        col.putBytes(0, capacity, row.getByte(fieldIdx));
+      } else if (t == DataTypes.ShortType) {
+        col.putShorts(0, capacity, row.getShort(fieldIdx));
+      } else if (t == DataTypes.IntegerType) {
+        col.putInts(0, capacity, row.getInt(fieldIdx));
+      } else if (t == DataTypes.LongType) {
+        col.putLongs(0, capacity, row.getLong(fieldIdx));
+      } else if (t == DataTypes.FloatType) {
+        col.putFloats(0, capacity, row.getFloat(fieldIdx));
+      } else if (t == DataTypes.DoubleType) {
+        col.putDoubles(0, capacity, row.getDouble(fieldIdx));
+      } else if (t == DataTypes.StringType) {
+        UTF8String v = row.getUTF8String(fieldIdx);
+        byte[] bytes = v.getBytes();
+        for (int i = 0; i < capacity; i++) {
+          col.putByteArray(i, bytes);
+        }
+      } else if (t instanceof DecimalType) {
+        DecimalType dt = (DecimalType)t;
+        Decimal d = row.getDecimal(fieldIdx, dt.precision(), dt.scale());
+        if (dt.precision() <= Decimal.MAX_INT_DIGITS()) {
+          col.putInts(0, capacity, (int)d.toUnscaledLong());
+        } else if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+          col.putLongs(0, capacity, d.toUnscaledLong());
+        } else {
+          final BigInteger integer = d.toJavaBigDecimal().unscaledValue();
+          byte[] bytes = integer.toByteArray();
+          for (int i = 0; i < capacity; i++) {
+            col.putByteArray(i, bytes, 0, bytes.length);
+          }
+        }
+      } else if (t instanceof CalendarIntervalType) {
+        CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
+        col.getChildColumn(0).putInts(0, capacity, c.months);
+        col.getChildColumn(1).putLongs(0, capacity, c.microseconds);
+      } else if (t instanceof DateType) {
+        Date date = (Date)row.get(fieldIdx, t);
+        col.putInts(0, capacity, DateTimeUtils.fromJavaDate(date));
+      }
+    }
+  }
+
   /**
    * Returns the array data as the java primitive array.
    * For example, an array of IntegerType will return an int[].
