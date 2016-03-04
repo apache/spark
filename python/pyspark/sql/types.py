@@ -1093,8 +1093,11 @@ _acceptable_types = {
 
 def _verify_type(obj, dataType):
     """
-    Verify the type of obj against dataType, raise an exception if
-    they do not match.
+    Verify the type of obj against dataType, raise a TypeError if they do not match.
+
+    Also verify the value of obj against datatype, raise a ValueError if it's not within the allowed
+    range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
+    will become infinity when cast to Java float if it overflows.
 
     >>> _verify_type(None, StructType([]))
     >>> _verify_type("", StringType())
@@ -1114,11 +1117,6 @@ def _verify_type(obj, dataType):
     >>> # Check if numeric values are within the allowed range.
     >>> _verify_type(12, ByteType())
     >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
-    Traceback (most recent call last):
-        ...
-    ValueError:...
-    >>> _verify_type(12.34, FloatType())
-    >>> _verify_type(1.23456789e+50, FloatType()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
@@ -1159,15 +1157,6 @@ def _verify_type(obj, dataType):
     elif isinstance(dataType, IntegerType):
         if obj < -2147483648 or obj > 2147483647:
             raise ValueError("object of IntegerType out of range, got: %s" % obj)
-
-    elif isinstance(dataType, FloatType):
-        from math import isinf
-        from struct import pack, unpack
-
-        if not isinf(obj):
-            f = unpack("f", pack("f", obj))[0]
-            if isinf(f):
-                raise ValueError("object of FloatType can not fit in a java float, got: %s" % obj)
 
     elif isinstance(dataType, ArrayType):
         for i in obj:
