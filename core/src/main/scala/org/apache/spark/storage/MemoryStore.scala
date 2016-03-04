@@ -23,7 +23,7 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -35,7 +35,7 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
  * serialized ByteBuffers.
  */
 private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: MemoryManager)
-  extends BlockStore(blockManager) {
+  extends Logging {
 
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
   // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
@@ -81,13 +81,13 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     memoryUsed - currentUnrollMemory
   }
 
-  override def getSize(blockId: BlockId): Long = {
+  def getSize(blockId: BlockId): Long = {
     entries.synchronized {
       entries.get(blockId).size
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Unit = {
+  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Unit = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
@@ -116,7 +116,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def putIterator(
+  def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel): Either[Iterator[Any], Long] = {
@@ -169,7 +169,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -182,7 +182,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
+  def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -196,7 +196,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
+  def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
@@ -210,7 +210,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def clear(): Unit = memoryManager.synchronized {
+  def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
       entries.clear()
     }
@@ -455,7 +455,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def contains(blockId: BlockId): Boolean = {
+  def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }
   }
 
