@@ -1562,16 +1562,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       e.message.contains("Cannot save interval data type into external storage")
     })
 
-    def checkIntervalParseError(s: String): Unit = {
-      val e = intercept[AnalysisException] {
-        sql(s)
-      }
-      e.message.contains("at least one time unit should be given for interval literal")
+    val e1 = intercept[AnalysisException] {
+      sql("select interval")
     }
-
-    checkIntervalParseError("select interval")
+    assert(e1.message.contains("at least one time unit should be given for interval literal"))
     // Currently we don't yet support nanosecond
-    checkIntervalParseError("select interval 23 nanosecond")
+    val e2 = intercept[AnalysisException] {
+      sql("select interval 23 nanosecond")
+    }
+    assert(e2.message.contains("cannot recognize input near"))
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {

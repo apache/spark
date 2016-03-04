@@ -24,16 +24,14 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
-import scala.io.Source
 import scala.language.postfixOps
 
 import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
-import org.mockito.Mockito.{doReturn, mock, spy, verify, when}
+import org.mockito.Mockito.{mock, spy, verify}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
@@ -44,8 +42,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
-
-  import FsHistoryProvider._
 
   private var testDir: File = null
 
