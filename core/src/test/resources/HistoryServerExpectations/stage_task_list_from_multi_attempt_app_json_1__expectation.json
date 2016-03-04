@@ -16,6 +16,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 14,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,
@@ -40,6 +41,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 14,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,
@@ -64,6 +66,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 13,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,
@@ -88,6 +91,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 13,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,
@@ -112,6 +116,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 12,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 1,
@@ -136,6 +141,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 12,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,
@@ -160,6 +166,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 12,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,
@@ -184,6 +191,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 12,
     "executorRunTime" : 15,
+    "executorCpuTime" : 0,
     "resultSize" : 697,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 2,

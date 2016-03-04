@@ -11,6 +11,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 4,
     "executorRunTime" : 14,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -39,6 +40,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
     "executorRunTime" : 16,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 1,
@@ -67,6 +69,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 16,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -95,6 +98,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 16,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -123,6 +127,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
     "executorRunTime" : 16,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -151,6 +156,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 16,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -179,6 +185,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
     "executorRunTime" : 16,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -207,6 +214,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -235,6 +243,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -263,6 +272,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 12,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -291,6 +301,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -319,6 +330,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 20,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
@@ -347,6 +359,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -375,6 +388,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -403,6 +417,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 10,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -431,6 +446,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 2,
     "executorRunTime" : 17,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -459,6 +475,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 4,
     "executorRunTime" : 18,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -487,6 +504,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 6,
     "executorRunTime" : 18,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -515,6 +533,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 3,
     "executorRunTime" : 18,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 0,
     "resultSerializationTime" : 0,
@@ -543,6 +562,7 @@
   "taskMetrics" : {
     "executorDeserializeTime" : 13,
     "executorRunTime" : 18,
+    "executorCpuTime" : 0,
     "resultSize" : 2065,
     "jvmGcTime" : 5,
     "resultSerializationTime" : 0,
