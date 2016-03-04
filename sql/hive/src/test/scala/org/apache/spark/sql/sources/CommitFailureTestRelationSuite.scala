@@ -51,7 +51,7 @@ class CommitFailureTestRelationSuite extends SQLTestUtils with TestHiveSingleton
     withTempPath { file =>
       // fail the job in the middle of writing
       val divideByZero = udf((x: Int) => { x / (x - 1)})
-      val df = sqlContext.range(0, 10).select(divideByZero(col("id")))
+      val df = sqlContext.range(0, 10).coalesce(1).select(divideByZero(col("id")))
 
       SimpleTextRelation.callbackCalled = false
       intercept[SparkException] {
@@ -67,7 +67,8 @@ class CommitFailureTestRelationSuite extends SQLTestUtils with TestHiveSingleton
   test("call failure callbacks before close writer - partitioned") {
     SimpleTextRelation.failCommitter = false
     withTempPath { file =>
-      val df = sqlContext.range(0, 10).select(col("id").mod(2).as("key"), col("id"))
+      // fail the job in the middle of writing
+      val df = sqlContext.range(0, 10).coalesce(1).select(col("id").mod(2).as("key"), col("id"))
 
       SimpleTextRelation.callbackCalled = false
       SimpleTextRelation.failWriter = true
