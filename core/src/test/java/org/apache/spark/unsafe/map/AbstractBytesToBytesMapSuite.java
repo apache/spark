@@ -131,8 +131,8 @@ public abstract class AbstractBytesToBytesMapSuite {
     Utils.deleteRecursively(tempDir);
     tempDir = null;
 
-    Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
     if (taskMemoryManager != null) {
+      Assert.assertEquals(0L, taskMemoryManager.cleanUpAllAllocatedMemory());
       long leakedMemory = taskMemoryManager.getMemoryConsumptionForThisTask();
       taskMemoryManager = null;
       Assert.assertEquals(0L, leakedMemory);
