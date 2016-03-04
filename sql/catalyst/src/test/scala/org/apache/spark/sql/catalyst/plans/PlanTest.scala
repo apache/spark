@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, Filter, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, Generate, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.util._
 
 /**

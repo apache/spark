@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.{TreeNodeRef, TreeNode}
+import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeRef}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
