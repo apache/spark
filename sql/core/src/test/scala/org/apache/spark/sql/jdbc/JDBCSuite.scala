@@ -210,8 +210,8 @@ class JDBCSuite extends SparkFunSuite
       // the plan only has PhysicalRDD to scan JDBCRelation.
       assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
       val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
-      assert(node.plan.isInstanceOf[org.apache.spark.sql.execution.PhysicalRDD])
-      assert(node.plan.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
+      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.PhysicalRDD])
+      assert(node.child.asInstanceOf[PhysicalRDD].nodeName.contains("JDBCRelation"))
       df
     }
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE THEID < 1")).collect().size == 0)
@@ -248,7 +248,7 @@ class JDBCSuite extends SparkFunSuite
       // cannot compile given predicates.
       assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen])
       val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegen]
-      assert(node.plan.isInstanceOf[org.apache.spark.sql.execution.Filter])
+      assert(node.child.isInstanceOf[org.apache.spark.sql.execution.Filter])
       df
     }
     assert(checkNotPushdown(sql("SELECT * FROM foobar WHERE (THEID + 1) < 2")).collect().size == 0)
