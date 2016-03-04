@@ -134,7 +134,7 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      serverInfo = Some(startJettyServer(Option(conf.getenv("SPARK_PUBLIC_DNS"))
+      serverInfo = Some(startJettyServer(Option(conf.getenv("SPARK_LOCAL_IP"))
         .getOrElse("0.0.0.0"), port, sslOptions, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
     } catch {
