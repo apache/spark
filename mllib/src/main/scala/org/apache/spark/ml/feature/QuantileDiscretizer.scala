@@ -118,7 +118,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
     require(totalSamples > 0,
       "QuantileDiscretizer requires non-empty input dataset but was given an empty input.")
     val requiredSamples = math.max(numBins * numBins, minSamplesRequired)
-    val fraction = math.min(requiredSamples.toDouble / dataset.count(), 1.0)
+    val fraction = math.min(requiredSamples.toDouble / totalSamples, 1.0)
     dataset.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt()).collect()
   }
 
@@ -166,7 +166,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
    * needed, and adding a default split value of 0 if no good candidates are found.
    */
   private[feature] def getSplits(candidates: Array[Double]): Array[Double] = {
-    val effectiveValues = if (candidates.size != 0) {
+    val effectiveValues = if (candidates.nonEmpty) {
       if (candidates.head == Double.NegativeInfinity
         && candidates.last == Double.PositiveInfinity) {
         candidates.drop(1).dropRight(1)
@@ -181,7 +181,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
       candidates
     }
 
-    if (effectiveValues.size == 0) {
+    if (effectiveValues.isEmpty) {
       Array(Double.NegativeInfinity, 0, Double.PositiveInfinity)
     } else {
       Array(Double.NegativeInfinity) ++ effectiveValues ++ Array(Double.PositiveInfinity)

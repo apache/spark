@@ -228,7 +228,7 @@ class MyJavaLogisticRegressionModel
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
    * <p>
-   * This is used for the defaul implementation of [[transform()]].
+   * This is used for the default implementation of [[transform()]].
    *
    * In Java, we have to make this method public since Java does not understand Scala's protected
    * modifier.

@@ -21,8 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.spark.Partitioner
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD, RDD}
+import org.apache.spark.rdd.{CoGroupedRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Interval, Time}
 
@@ -129,7 +128,7 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
     val numNewValues = newRDDs.size
 
     val mergeValues = (arrayOfValues: Array[Iterable[V]]) => {
-      if (arrayOfValues.size != 1 + numOldValues + numNewValues) {
+      if (arrayOfValues.length != 1 + numOldValues + numNewValues) {
         throw new Exception("Unexpected number of sequences of reduced values")
       }
       // Getting reduced values "old time steps" that will be removed from current window

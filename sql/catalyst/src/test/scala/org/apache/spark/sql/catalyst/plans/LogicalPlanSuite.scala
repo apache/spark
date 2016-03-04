@@ -18,9 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util._
 
 /**
  * This suite is used to test [[LogicalPlan]]'s `resolveOperators` and make sure it can correctly

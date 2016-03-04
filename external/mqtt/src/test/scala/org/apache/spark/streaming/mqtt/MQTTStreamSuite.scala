@@ -23,7 +23,7 @@ import scala.language.postfixOps
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 

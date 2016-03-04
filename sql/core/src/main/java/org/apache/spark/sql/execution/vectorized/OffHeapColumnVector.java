@@ -18,25 +18,11 @@ package org.apache.spark.sql.execution.vectorized;
 
 import java.nio.ByteOrder;
 
+import org.apache.commons.lang.NotImplementedException;
+
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.execution.vectorized.ColumnVector.Array;
-import org.apache.spark.sql.types.BooleanType;
-import org.apache.spark.sql.types.ByteType;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DateType;
-import org.apache.spark.sql.types.DecimalType;
-import org.apache.spark.sql.types.DoubleType;
-import org.apache.spark.sql.types.FloatType;
-import org.apache.spark.sql.types.IntegerType;
-import org.apache.spark.sql.types.LongType;
-import org.apache.spark.sql.types.ShortType;
+import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.UTF8String;
-
-
-import org.apache.commons.lang.NotImplementedException;
-
-import org.apache.commons.lang.NotImplementedException;
 
 /**
  * Column data backed using offheap memory.
@@ -171,7 +157,11 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final byte getByte(int rowId) {
-    return Platform.getByte(null, data + rowId);
+    if (dictionary == null) {
+      return Platform.getByte(null, data + rowId);
+    } else {
+      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -199,7 +189,11 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final short getShort(int rowId) {
-    return Platform.getShort(null, data + 2 * rowId);
+    if (dictionary == null) {
+      return Platform.getShort(null, data + 2 * rowId);
+    } else {
+      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -233,7 +227,11 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final int getInt(int rowId) {
-    return Platform.getInt(null, data + 4 * rowId);
+    if (dictionary == null) {
+      return Platform.getInt(null, data + 4 * rowId);
+    } else {
+      return dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -267,7 +265,11 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final long getLong(int rowId) {
-    return Platform.getLong(null, data + 8 * rowId);
+    if (dictionary == null) {
+      return Platform.getLong(null, data + 8 * rowId);
+    } else {
+      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -301,7 +303,11 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final float getFloat(int rowId) {
-    return Platform.getFloat(null, data + rowId * 4);
+    if (dictionary == null) {
+      return Platform.getFloat(null, data + rowId * 4);
+    } else {
+      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
+    }
   }
 
 
@@ -336,7 +342,11 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public final double getDouble(int rowId) {
-    return Platform.getDouble(null, data + rowId * 8);
+    if (dictionary == null) {
+      return Platform.getDouble(null, data + rowId * 8);
+    } else {
+      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
+    }
   }
 
   //
@@ -394,7 +404,7 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else if (type instanceof ShortType) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 2, newCapacity * 2);
     } else if (type instanceof IntegerType || type instanceof FloatType ||
-        type instanceof DateType) {
+        type instanceof DateType || DecimalType.is32BitDecimalType(type)) {
       this.data = Platform.reallocateMemory(data, elementsAppended * 4, newCapacity * 4);
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type)) {
