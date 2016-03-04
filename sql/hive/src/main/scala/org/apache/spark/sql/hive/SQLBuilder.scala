@@ -24,13 +24,22 @@ import scala.util.control.NonFatal
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, NamedExpression, NonSQLExpression,
-  SortOrder}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.types.{DataType, NullType}
+
+/**
+ * A place holder for generated SQL for subquery expression.
+ */
+case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable {
+  override def dataType: DataType = NullType
+  override def nullable: Boolean = true
+  override def sql: String = s"($query)"
+}
 
 /**
  * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this
@@ -46,7 +55,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
     try {
-      canonicalizedPlan.transformAllExpressions {
+      val replaced = canonicalizedPlan.transformAllExpressions {
+        case e: SubqueryExpression =>
+          SubqueryHolder(new SQLBuilder(e.query, sqlContext).toSQL)
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -54,14 +65,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case e => e
       }
 
-      val generatedSQL = toSQL(canonicalizedPlan, true)
+      val generatedSQL = toSQL(replaced, true)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
            |
            |# Original logical plan:
            |${logicalPlan.treeString}
            |# Canonicalized logical plan:
-           |${canonicalizedPlan.treeString}
+           |${replaced.treeString}
            |# Generated SQL:
            |$generatedSQL
          """.stripMargin)

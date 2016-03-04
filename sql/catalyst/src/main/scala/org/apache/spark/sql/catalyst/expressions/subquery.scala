@@ -76,6 +76,4 @@ case class ScalarSubquery(
   override def withNewPlan(plan: LogicalPlan): ScalarSubquery = ScalarSubquery(plan, exprId)
 
   override def toString: String = s"subquery#${exprId.id}"
-
-  // TODO: support sql()
 }
