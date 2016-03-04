@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.ServiceLoader
 
-
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}

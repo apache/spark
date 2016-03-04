@@ -375,10 +375,10 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     }
   }
 
-  def collectHadoopFsRelation (df: DataFrame): HadoopFsRelation  = {
+  def collectHadoopFsRelation(df: DataFrame): HadoopFsRelation = {
     val plan = df.queryExecution.analyzed
     plan.collectFirst {
-      case LogicalRelation(r:  HadoopFsRelation, _, _) => r
+      case LogicalRelation(r: HadoopFsRelation, _, _) => r
     }.getOrElse {
       fail(s"Expecting a HadoopFsRelation 2, but got:\n$plan")
     }
@@ -429,7 +429,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       // Converted test_parquet should be cached.
       catalog.cachedDataSourceTables.getIfPresent(tableIdentifier) match {
         case null => fail("Converted test_parquet should be cached in the cache.")
-        case logical @ LogicalRelation(parquetRelation:  HadoopFsRelation, _, _) => // OK
+        case logical @ LogicalRelation(parquetRelation: HadoopFsRelation, _, _) => // OK
         case other =>
           fail(
             "The cached test_parquet should be a Parquet Relation. " +

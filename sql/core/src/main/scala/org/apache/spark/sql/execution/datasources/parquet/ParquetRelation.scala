@@ -21,13 +21,10 @@ import java.net.URI
 import java.util.{List => JList}
 import java.util.logging.{Logger => JLogger}
 
-import org.apache.spark.util.collection.BitSet
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.{Failure, Try}
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Writable
@@ -53,6 +50,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.collection.BitSet
+
 
 private[sql] class DefaultSource extends FileFormat with DataSourceRegister with Logging {
 

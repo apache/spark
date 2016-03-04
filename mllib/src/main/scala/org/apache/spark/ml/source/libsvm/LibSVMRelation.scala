@@ -29,9 +29,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
@@ -73,7 +73,6 @@ private[libsvm] class LibSVMOutputWriter(
     recordWriter.close(context)
   }
 }
-
 
 /**
  * `libsvm` package implements Spark SQL data source API for loading LIBSVM data as [[DataFrame]].
@@ -161,7 +160,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val path = if (dataFiles.length == 1) dataFiles(0).getPath.toUri.toString
     else if (dataFiles.isEmpty) throw new IOException("No input path specified for libsvm data")
-    else throw new IOException(s"Multiple input paths are not supported for libsvm data: ${dataFiles.map(_.getPath).mkString(",")}")
+    else throw new IOException("Multiple input paths are not supported for libsvm data.")
 
     val numFeatures = options.getOrElse("numFeatures", "-1").toInt
     val vectorType = options.getOrElse("vectorType", "sparse")
