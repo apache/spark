@@ -731,7 +731,7 @@ def _ignore_brackets_split(s, separator):
     return parts
 
 
-def _parse_struct_type_string(s):
+def _parse_struct_fields_string(s):
     parts = _ignore_brackets_split(s, ",")
     fields = []
     for part in parts:
@@ -797,9 +797,9 @@ def _parse_datatype_string(s):
     elif s.startswith("struct<"):
         if s[-1] != ">":
             raise ValueError("'>' should be the last char, but got: %s" % s)
-        return _parse_struct_type_string(s[7:-1])
+        return _parse_struct_fields_string(s[7:-1])
     elif ":" in s:
-        return _parse_struct_type_string(s)
+        return _parse_struct_fields_string(s)
     else:
         return _parse_basic_datatype_string(s)
 

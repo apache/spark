@@ -59,7 +59,11 @@ def _monkey_patch_RDD(sqlContext):
         its only field, and the field name will be "value", each record will also be wrapped into a
         tuple, which can be converted to row later.
 
-        :param schema: a :class:`DataType` or a datatype string or list of names of columns
+        :param schema: a :class:`DataType` or a datatype string or list of names of columns.
+                       The data type string format equals to `DataType.simpleString`, except that
+                       top level struct type can omit the `struct<>` and numeric types use
+                       `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
+                       ByteType. We can also use `int` as a short name for IntegerType.
         :param samplingRatio: the sample ratio of rows used for inferring
         :return: a DataFrame
 
@@ -67,13 +71,13 @@ def _monkey_patch_RDD(sqlContext):
            The schema parameter can be a DataType or a datatype string after 2.0. If it's not a
            StructType, it will be wrapped into a StructType and each record will also be wrapped
            into a tuple.
-           The data type string format equals to `DataType.simpleString`, except that top level
-           struct type can omit the `struct<>` and numeric types use `typeName()` as their format,
-           e.g. use `byte` instead of `tinyint` for ByteType. We can also use `int` as a short name
-           for IntegerType.
 
-        >>> rdd.toDF().collect()
+        >>> rdd.toDF().collect()      # will scan the data and infer the real schema.
         [Row(name=u'Alice', age=1)]
+        >>> rdd.toDF(["name", "age"]) # will scan the data and infer the real schema.
+        [Row(name=u'Alice', age=1)]
+        >>> rdd.toDF(["a", "b"])      # will scan the data and infer the real schema.
+        [Row(a=u'Alice', b=1)]
         >>> rdd.toDF("a: string, b: int").collect()
         [Row(a=u'Alice', b=1)]
         >>> rdd.map(lambda row: row.age).toDF("int").collect()
