@@ -202,13 +202,13 @@ object SimpleTextRelation {
   var pushedFilters: Set[Filter] = Set.empty
 
   // Used to test failed committer
-  var failCommitter = false
+  @volatile var failCommitter = false
 
   // Used to test failed writer
-  var failWriter = false
+  @volatile var failWriter = false
 
   // Used to test failure callback
-  var callbackCalled = false
+  @volatile var callbackCalled = false
 }
 
 /**
