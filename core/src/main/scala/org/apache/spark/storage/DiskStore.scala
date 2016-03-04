@@ -21,6 +21,8 @@ import java.io.{FileOutputStream, IOException, RandomAccessFile}
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel.MapMode
 
+import com.google.common.io.Closeables
+
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 
@@ -36,55 +38,60 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     diskManager.getFile(blockId.name).length
   }
 
+  /**
+   * Invokes the provided callback function to write the specific block.
+   *
+   * @throws IllegalStateException if the block already exists in the disk store.
+   */
+  def put(blockId: BlockId)(writeFunc: FileOutputStream => Unit): Unit = {
+    if (contains(blockId)) {
+      throw new IllegalStateException(s"Block $blockId is already present in the disk store")
+    }
+    logDebug(s"Attempting to put block $blockId")
+    val startTime = System.currentTimeMillis
+    val file = diskManager.getFile(blockId)
+    val fileOutputStream = new FileOutputStream(file)
+    var threwException: Boolean = true
+    try {
+      writeFunc(fileOutputStream)
+      threwException = false
+    } finally {
+      try {
+        Closeables.close(fileOutputStream, threwException)
+      } finally {
+         if (threwException) {
+          remove(blockId)
+        }
+      }
+    }
+    val finishTime = System.currentTimeMillis
+    logDebug("Block %s stored as %s file on disk in %d ms".format(
+      file.getName,
+      Utils.bytesToString(file.length()),
+      finishTime - startTime))
+  }
+
   def putBytes(blockId: BlockId, _bytes: ByteBuffer): Unit = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
-    logDebug(s"Attempting to put block $blockId")
-    val startTime = System.currentTimeMillis
-    val file = diskManager.getFile(blockId)
-    val channel = new FileOutputStream(file).getChannel
-    Utils.tryWithSafeFinally {
-      while (bytes.remaining > 0) {
-        channel.write(bytes)
+    put(blockId) { fileOutputStream =>
+      val channel = fileOutputStream.getChannel
+      Utils.tryWithSafeFinally {
+        while (bytes.remaining > 0) {
+          channel.write(bytes)
+        }
+      } {
+        channel.close()
       }
-    } {
-      channel.close()
     }
-    val finishTime = System.currentTimeMillis
-    logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
   }
 
   def putIterator(blockId: BlockId, values: Iterator[Any]): Long = {
-    logDebug(s"Attempting to write values for block $blockId")
-    val startTime = System.currentTimeMillis
-    val file = diskManager.getFile(blockId)
-    val outputStream = new FileOutputStream(file)
-    try {
-      Utils.tryWithSafeFinally {
-        blockManager.dataSerializeStream(blockId, outputStream, values)
-      } {
-        // Close outputStream here because it should be closed before file is deleted.
-        outputStream.close()
-      }
-    } catch {
-      case e: Throwable =>
-        if (file.exists()) {
-          if (!file.delete()) {
-            logWarning(s"Error deleting ${file}")
-          }
-        }
-        throw e
+    put(blockId) { fileOutputStream =>
+      blockManager.dataSerializeStream(blockId, fileOutputStream, values)
     }
-
-    val length = file.length
-
-    val timeTaken = System.currentTimeMillis - startTime
-    logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(length), timeTaken))
-
-    length
+    getSize(blockId)
   }
 
   def getBytes(blockId: BlockId): ByteBuffer = {

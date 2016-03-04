@@ -851,6 +851,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     diskStoreMapped.putBytes(blockId, byteBuffer)
     val mapped = diskStoreMapped.getBytes(blockId)
 
+    assert(diskStoreMapped.remove(blockId))
+
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, "1m"))
     val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer)
