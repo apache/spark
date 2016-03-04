@@ -290,7 +290,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // If we are returning batches directly, we need to augment them with the partitioning
         // columns. We want to do this without a row by row operation.
         var columnBatch: ColumnarBatch = null
-        var firstBatch: ColumnarBatch = null
+        var mergedBatch: ColumnarBatch = null
 
         iterator.map { input => {
           if (input.isInstanceOf[InternalRow]) {
@@ -299,12 +299,11 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           } else {
             require(input.isInstanceOf[ColumnarBatch])
             val inputBatch = input.asInstanceOf[ColumnarBatch]
-            if (columnBatch == null) {
-              firstBatch = inputBatch
+            if (inputBatch != mergedBatch) {
+              mergedBatch = inputBatch
               columnBatch = projectedColumnBatch(inputBatch, requiredColumns,
                 dataColumns, partitionColumnSchema, partitionValues)
             }
-            require(firstBatch == inputBatch, "Reader must return the same batch object.")
             columnBatch.setNumRows(inputBatch.numRows())
             columnBatch
           }
