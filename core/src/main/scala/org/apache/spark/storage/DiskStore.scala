@@ -36,7 +36,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
     diskManager.getFile(blockId.name).length
   }
 
-  def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Unit = {
+  def putBytes(blockId: BlockId, _bytes: ByteBuffer): Unit = {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -56,10 +56,7 @@ private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBloc
       file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
   }
 
-  def putIterator(
-      blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel): Long = {
+  def putIterator(blockId: BlockId, values: Iterator[Any]): Long = {
     logDebug(s"Attempting to write values for block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)

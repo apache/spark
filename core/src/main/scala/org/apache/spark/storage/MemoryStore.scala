@@ -154,7 +154,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
         // Not enough space to unroll this block; drop to disk if applicable
         if (level.useDisk && allowPersistToDisk) {
           logWarning(s"Persisting block $blockId to disk instead.")
-          Right(blockManager.diskStore.putIterator(blockId, iteratorValues, level))
+          Right(blockManager.diskStore.putIterator(blockId, iteratorValues))
         } else {
           Left(iteratorValues)
         }

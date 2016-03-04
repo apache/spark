@@ -848,12 +848,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val diskBlockManager = new DiskBlockManager(blockManager, conf)
 
     val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
-    diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
+    diskStoreMapped.putBytes(blockId, byteBuffer)
     val mapped = diskStoreMapped.getBytes(blockId)
 
     when(blockManager.conf).thenReturn(conf.clone.set(confKey, "1m"))
     val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
-    diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
+    diskStoreNotMapped.putBytes(blockId, byteBuffer)
     val notMapped = diskStoreNotMapped.getBytes(blockId)
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer

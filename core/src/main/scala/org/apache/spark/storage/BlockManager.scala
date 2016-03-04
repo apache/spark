@@ -836,11 +836,11 @@ private[spark] class BlockManager(
         } else if (putLevel.useDisk) {
           data match {
             case IteratorValues(iterator) =>
-              size = diskStore.putIterator(blockId, iterator(), putLevel)
+              size = diskStore.putIterator(blockId, iterator())
             case ByteBufferValues(bytes) =>
               bytes.rewind()
               size = bytes.limit()
-              diskStore.putBytes(blockId, bytes, putLevel)
+              diskStore.putBytes(blockId, bytes)
           }
         } else {
           assert(putLevel == StorageLevel.NONE)
@@ -1067,9 +1067,9 @@ private[spark] class BlockManager(
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
-          diskStore.putIterator(blockId, elements.toIterator, level)
+          diskStore.putIterator(blockId, elements.toIterator)
         case Right(bytes) =>
-          diskStore.putBytes(blockId, bytes, level)
+          diskStore.putBytes(blockId, bytes)
       }
       blockIsUpdated = true
     }
