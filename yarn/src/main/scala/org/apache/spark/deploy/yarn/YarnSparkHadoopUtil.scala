@@ -509,10 +509,10 @@ object YarnSparkHadoopUtil {
       conf: SparkConf,
       numExecutors: Int = DEFAULT_NUMBER_EXECUTORS): Int = {
     if (Utils.isDynamicAllocationEnabled(conf)) {
-      val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
+      val minNumExecutors = Utils.getDynamicAllocationMinExecutors(conf)
       val initialNumExecutors =
         conf.getInt("spark.dynamicAllocation.initialExecutors", minNumExecutors)
-      val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors", Int.MaxValue)
+      val maxNumExecutors = Utils.getDynamicAllocationMaxExecutors(conf)
       require(initialNumExecutors >= minNumExecutors && initialNumExecutors <= maxNumExecutors,
         s"initial executor number $initialNumExecutors must between min executor number" +
           s"$minNumExecutors and max executor number $maxNumExecutors")

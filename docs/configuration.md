@@ -1164,11 +1164,23 @@ Apart from these, the following properties are also available, and may be useful
     For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
+    This property is incompatible with <code>spark.executor.instances</code>, which statically sets
+    the number of executors. When both properties are set, static resource allocation will be used.
+    To change the default behavior, use <code>spark.dynamicAllocation.overrideNumInstances</code>.
+    <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.
     The following configurations are also relevant:
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
     <code>spark.dynamicAllocation.initialExecutors</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.overrideNumInstances</code></td>
+  <td>
+    Whether to use dynamic resource allocation when dynamic allocation is enabled, but a static
+    number of executor instances, <code>spark.executor.instances</code>, is set. By default, a
+    statically configured number of executor instances will turn off dynamic resource allocation.
   </td>
 </tr>
 <tr>
