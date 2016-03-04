@@ -19,7 +19,15 @@ package org.apache.spark.repl
 
 import scala.collection.mutable.Set
 
-object Main {
+import org.apache.spark.Logging
+
+object Main extends Logging {
+
+  // Force log initialization to pick up the repl-specific settings.
+  logTrace("Initializing Spark REPL...")
+
+  override protected def isInterpreter: Boolean = true
+
   private var _interp: SparkILoop = _
 
   def interp = _interp

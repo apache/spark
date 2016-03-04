@@ -208,6 +208,7 @@ class HiveContext private[hive](
     logInfo(s"Initializing execution hive, version $hiveExecutionVersion")
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
+      sparkConf = sc.conf,
       execJars = Seq(),
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
@@ -276,6 +277,7 @@ class HiveContext private[hive](
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion using Spark classes.")
       new IsolatedClientLoader(
         version = metaVersion,
+        sparkConf = sc.conf,
         execJars = jars.toSeq,
         config = allConfig,
         isolationOn = true,
@@ -288,6 +290,7 @@ class HiveContext private[hive](
       IsolatedClientLoader.forVersion(
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
+        sparkConf = sc.conf,
         config = allConfig,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -315,6 +318,7 @@ class HiveContext private[hive](
           s"using ${jars.mkString(":")}")
       new IsolatedClientLoader(
         version = metaVersion,
+        sparkConf = sc.conf,
         execJars = jars.toSeq,
         config = allConfig,
         isolationOn = true,
