@@ -394,6 +394,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
           var mapIdx = 0
           while (mapIdx < statuses.length) {
             val status = statuses(mapIdx)
+            // status may be null here if we are called between registerShuffle, which creates an
+            // array with null entries for each output, and registerMapOutputs, which populates it
+            // with valid status entries. This is possible if one thread schedules a job which
+            // depends on an RDD which is currently being computed by another thread.
             if (status != null) {
               val blockSize = status.getSizeForBlock(reducerId)
               if (blockSize > 0) {
