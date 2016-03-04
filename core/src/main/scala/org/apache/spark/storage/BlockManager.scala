@@ -87,7 +87,7 @@ private[spark] class BlockManager(
 
   // Actual storage of where blocks are kept
   private[spark] val memoryStore = new MemoryStore(this, memoryManager)
-  private[spark] val diskStore = new DiskStore(this, diskBlockManager)
+  private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
 
   // Note: depending on the memory manager, `maxStorageMemory` may actually vary over time.

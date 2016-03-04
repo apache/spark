@@ -23,16 +23,15 @@ import java.nio.channels.FileChannel.MapMode
 
 import com.google.common.io.Closeables
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
  * Stores BlockManager blocks on disk.
  */
-private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
-  extends Logging {
+private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) extends Logging {
 
-  val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+  private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
   def getSize(blockId: BlockId): Long = {
     diskManager.getFile(blockId.name).length
