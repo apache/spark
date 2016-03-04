@@ -368,6 +368,8 @@ private[sql] class DynamicPartitionWriterContainer(
           currentWriter.writeInternal(getOutputRow(inputRow))
         }
       }
+      // current writer is included in outputWriters
+      currentWriter = null
 
       // If the sorter is not null that means that we reached the maxFiles above and need to finish
       // using external sort.
@@ -381,12 +383,11 @@ private[sql] class DynamicPartitionWriterContainer(
 
         val sortedIterator = sorter.sortedIterator()
         var currentKey: InternalRow = null
-        var currentWriter: OutputWriter = null
         while (sortedIterator.next()) {
           if (currentKey != sortedIterator.getKey) {
             if (currentWriter != null) {
               currentWriter.close()
-              currentWriter = null;
+              currentWriter = null
             }
             currentKey = sortedIterator.getKey.copy()
             logDebug(s"Writing partition: $currentKey")
@@ -402,7 +403,7 @@ private[sql] class DynamicPartitionWriterContainer(
         }
         if (currentWriter != null) {
           currentWriter.close()
-          currentWriter = null;
+          currentWriter = null
         }
       }
 
