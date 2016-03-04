@@ -53,7 +53,7 @@ doc = [
 ]
 docker = ['docker-py>=1.6.0']
 druid = ['pydruid>=0.2.1']
-gcp = [
+gcloud = [
     'gcloud>=1.1.0',
 ]
 gcp_api = [
@@ -136,7 +136,7 @@ setup(
         'doc': doc,
         'docker': docker,
         'druid': druid,
-        'gcp': gcp,
+        'gcloud': gcloud,
         'gcp_api': gcp_api,
         'hdfs': hdfs,
         'hive': hive,
