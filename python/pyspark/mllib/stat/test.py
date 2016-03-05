@@ -87,7 +87,6 @@ class KolmogorovSmirnovTestResult(TestResult):
     """
 
 
-@since('2.0.0')
 class BinarySample(namedtuple("BinarySample", ["isExperiment", "value"])):
     """
     Represents a (isExperiment, value) tuple.
@@ -99,7 +98,6 @@ class BinarySample(namedtuple("BinarySample", ["isExperiment", "value"])):
         return BinarySample, (bool(self.isExperiment), float(self.value))
 
 
-@since('2.0.0')
 class StreamingTestResult(namedtuple("StreamingTestResult",
                                      ["pValue", "degreesOfFreedom", "statistic", "method",
                                       "nullHypothesis"])):
@@ -115,7 +113,6 @@ class StreamingTestResult(namedtuple("StreamingTestResult",
                                      str(self.method), str(self.nullHypothesis))
 
 
-@since('2.0.0')
 class StreamingTest(object):
     """
     .. note:: Experimental
