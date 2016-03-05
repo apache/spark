@@ -151,9 +151,6 @@ private[sql] case class PhysicalRDD(
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    val columns = exprs.map(_.gen(ctx))
 
     // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
     // by looking at the first value of the RDD and then calling the function which will process
@@ -161,7 +158,9 @@ private[sql] case class PhysicalRDD(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns1 = exprs.map(_.gen(ctx))
     val scanBatches = ctx.freshName("processBatches")
     ctx.addNewFunction(scanBatches,
       s"""
@@ -170,11 +169,11 @@ private[sql] case class PhysicalRDD(
       |     int numRows = $batch.numRows();
       |     if ($idx == 0) $numOutputRows.add(numRows);
       |
-      |     while ($idx < numRows) {
+      |     while (!shouldStop() && $idx < numRows) {
       |       InternalRow $row = $batch.getRow($idx++);
-      |       ${consume(ctx, columns).trim}
-      |       if (shouldStop()) return;
+      |       ${consume(ctx, columns1).trim}
       |     }
+      |     if (shouldStop()) return;
       |
       |     if (!$input.hasNext()) {
       |       $batch = null;
@@ -185,16 +184,23 @@ private[sql] case class PhysicalRDD(
       |   }
       | }""".stripMargin)
 
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns2 = exprs.map(_.gen(ctx))
+    val inputRow = if (isUnsafeRow) row else null
     val scanRows = ctx.freshName("processRows")
     ctx.addNewFunction(scanRows,
       s"""
        | private void $scanRows(InternalRow $row) throws java.io.IOException {
-       |   while (true) {
+       |   boolean firstRow = true;
+       |   while (!shouldStop() && (firstRow || $input.hasNext())) {
+       |     if (firstRow) {
+       |       firstRow = false;
+       |     } else {
+       |       $row = (InternalRow) $input.next();
+       |     }
        |     $numOutputRows.add(1);
-       |     ${consume(ctx, columns).trim}
-       |     if (shouldStop()) return;
-       |     if (!$input.hasNext()) break;
-       |     $row = (InternalRow)$input.next();
+       |     ${consume(ctx, columns2, inputRow).trim}
        |   }
        | }""".stripMargin)
 

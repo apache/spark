@@ -40,8 +40,13 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def usedInputs: AttributeSet = {
-    // filter out the expressions that just pass the input to next operator.
-    AttributeSet(projectList.filterNot(inputSet.contains).flatMap(_.references))
+    // only the attributes those are used at least twice should be evaluated before this plan,
+    // otherwise we could defer the evaluation until output attribute is actually used.
+    val usedExprIds = projectList.flatMap(_.collect {
+      case a: Attribute => a.exprId
+    })
+    val usedMoreThanOnce = usedExprIds.groupBy(id => id).filter(_._2.size > 1).keySet
+    references.filter(a => usedMoreThanOnce.contains(a.exprId))
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
@@ -50,7 +55,7 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     ctx.currentVars = input
     val resultVars = exprs.map(_.gen(ctx))
     // Evaluation of non-deterministic expressions can't be deferred.
-    val nonDeterministicAttrs = projectList.zip(output).filter(!_._1.deterministic).unzip._2
+    val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
        |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
        |${consume(ctx, resultVars)}

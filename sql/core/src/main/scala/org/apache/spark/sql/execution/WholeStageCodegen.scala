@@ -97,12 +97,11 @@ trait CodegenSupport extends SparkPlan {
     *     # call child.produce()
     *     initialized = true;
     *   }
-    *   while (hashmap.hasNext()) {
+    *   while (!shouldStop() && hashmap.hasNext()) {
     *     row = hashmap.next();
     *     # build the aggregation results
     *     # create variables for results
     *     # call consume(), which will call parent.doConsume()
-   *      if (shouldStop()) return;
     *   }
     */
   protected def doProduce(ctx: CodegenContext): String
