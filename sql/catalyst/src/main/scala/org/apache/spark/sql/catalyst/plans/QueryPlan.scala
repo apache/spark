@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -230,8 +229,12 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   override def simpleString: String = statePrefix + super.simpleString
 
-  override def treeChildren: Seq[PlanType] = {
-    val subqueries = expressions.flatMap(_.collect {case e: SubqueryExpression => e})
-    children ++ subqueries.map(e => e.plan.asInstanceOf[PlanType])
+  /**
+   * All the subqueries of current plan.
+   */
+  def subqueries: Seq[PlanType] = {
+    expressions.flatMap(_.collect {case e: SubqueryExpression => e.plan.asInstanceOf[PlanType]})
   }
+
+  override def innerChildren: Seq[PlanType] = subqueries
 }
