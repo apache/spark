@@ -607,7 +607,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def sortWithinPartitions(sortCol: String, sortCols: String*): DataFrame = {
+  def sortWithinPartitions(sortCol: String, sortCols: String*): Dataset[T] = {
     sortWithinPartitions((sortCol +: sortCols).map(Column(_)) : _*)
   }
 
@@ -620,7 +620,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def sortWithinPartitions(sortExprs: Column*): DataFrame = {
+  def sortWithinPartitions(sortExprs: Column*): Dataset[T] = {
     sortInternal(global = false, sortExprs)
   }
 
@@ -636,7 +636,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def sort(sortCol: String, sortCols: String*): DataFrame = {
+  def sort(sortCol: String, sortCols: String*): Dataset[T] = {
     sort((sortCol +: sortCols).map(apply) : _*)
   }
 
@@ -649,7 +649,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def sort(sortExprs: Column*): DataFrame = {
+  def sort(sortExprs: Column*): Dataset[T] = {
     sortInternal(global = true, sortExprs)
   }
 
@@ -660,7 +660,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortCol: String, sortCols: String*): DataFrame = sort(sortCol, sortCols : _*)
+  def orderBy(sortCol: String, sortCols: String*): Dataset[T] = sort(sortCol, sortCols : _*)
 
   /**
    * Returns a new [[DataFrame]] sorted by the given expressions.
@@ -669,7 +669,7 @@ class Dataset[T] private[sql](
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def orderBy(sortExprs: Column*): DataFrame = sort(sortExprs : _*)
+  def orderBy(sortExprs: Column*): Dataset[T] = sort(sortExprs : _*)
 
   /**
    * Selects column based on the column name and return it as a [[Column]].
@@ -698,7 +698,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def as(alias: String): DataFrame = withPlan {
+  def as(alias: String): Dataset[T] = withTypedPlan {
     SubqueryAlias(alias, logicalPlan)
   }
 
@@ -707,21 +707,21 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def as(alias: Symbol): DataFrame = as(alias.name)
+  def as(alias: Symbol): Dataset[T] = as(alias.name)
 
   /**
    * Returns a new [[DataFrame]] with an alias set. Same as `as`.
    * @group dfops
    * @since 1.6.0
    */
-  def alias(alias: String): DataFrame = as(alias)
+  def alias(alias: String): Dataset[T] = as(alias)
 
   /**
    * (Scala-specific) Returns a new [[DataFrame]] with an alias set. Same as `as`.
    * @group dfops
    * @since 1.6.0
    */
-  def alias(alias: Symbol): DataFrame = as(alias)
+  def alias(alias: Symbol): Dataset[T] = as(alias)
 
   /**
    * Selects a set of column based expressions.
@@ -780,7 +780,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def filter(condition: Column): DataFrame = withPlan {
+  def filter(condition: Column): Dataset[T] = withTypedPlan {
     Filter(condition.expr, logicalPlan)
   }
 
@@ -792,7 +792,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def filter(conditionExpr: String): DataFrame = {
+  def filter(conditionExpr: String): Dataset[T] = {
     filter(Column(sqlContext.sqlParser.parseExpression(conditionExpr)))
   }
 
@@ -806,7 +806,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def where(condition: Column): DataFrame = filter(condition)
+  def where(condition: Column): Dataset[T] = filter(condition)
 
   /**
    * Filters rows using the given SQL expression.
@@ -816,7 +816,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.5.0
    */
-  def where(conditionExpr: String): DataFrame = {
+  def where(conditionExpr: String): Dataset[T] = {
     filter(Column(sqlContext.sqlParser.parseExpression(conditionExpr)))
   }
 
@@ -1033,7 +1033,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def unionAll(other: DataFrame): DataFrame = withPlan {
+  def unionAll(other: Dataset[T]): Dataset[T] = withTypedPlan {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
     CombineUnions(Union(logicalPlan, other.logicalPlan))
@@ -1045,7 +1045,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def intersect(other: DataFrame): DataFrame = withPlan {
+  def intersect(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Intersect(logicalPlan, other.logicalPlan)
   }
 
@@ -1055,7 +1055,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def except(other: DataFrame): DataFrame = withPlan {
+  def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Except(logicalPlan, other.logicalPlan)
   }
 
@@ -1068,7 +1068,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = withPlan {
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): Dataset[T] = withTypedPlan {
     Sample(0.0, fraction, withReplacement, seed, logicalPlan)()
   }
 
@@ -1080,7 +1080,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
+  def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
     sample(withReplacement, fraction, Utils.random.nextLong)
   }
 
@@ -1324,7 +1324,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.4.0
    */
-  def dropDuplicates(): DataFrame = dropDuplicates(this.columns)
+  def dropDuplicates(): Dataset[T] = dropDuplicates(this.columns)
 
   /**
    * (Scala-specific) Returns a new [[DataFrame]] with duplicate rows removed, considering only
@@ -1333,7 +1333,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.4.0
    */
-  def dropDuplicates(colNames: Seq[String]): DataFrame = withPlan {
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withTypedPlan {
     val groupCols = colNames.map(resolve)
     val groupColExprIds = groupCols.map(_.exprId)
     val aggCols = logicalPlan.output.map { attr =>
@@ -1353,7 +1353,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.4.0
    */
-  def dropDuplicates(colNames: Array[String]): DataFrame = dropDuplicates(colNames.toSeq)
+  def dropDuplicates(colNames: Array[String]): Dataset[T] = dropDuplicates(colNames.toSeq)
 
   /**
    * Computes statistics for numeric columns, including count, mean, stddev, min, and max.
@@ -1598,7 +1598,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def distinct(): DataFrame = dropDuplicates()
+  def distinct(): Dataset[T] = dropDuplicates()
 
   /**
    * Persist this [[DataFrame]] with the default storage level (`MEMORY_AND_DISK`).
@@ -1797,7 +1797,7 @@ class Dataset[T] private[sql](
     }
   }
 
-  private def sortInternal(global: Boolean, sortExprs: Seq[Column]): DataFrame = {
+  private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
     val sortOrder: Seq[SortOrder] = sortExprs.map { col =>
       col.expr match {
         case expr: SortOrder =>
@@ -1806,7 +1806,7 @@ class Dataset[T] private[sql](
           SortOrder(expr, Ascending)
       }
     }
-    withPlan {
+    withTypedPlan {
       Sort(sortOrder, global = global, logicalPlan)
     }
   }
