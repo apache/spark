@@ -107,6 +107,7 @@ public final class JavaSqlNetworkWordCount {
 
     ssc.start();
     ssc.awaitTermination();
+    ssc.close();
   }
 }
 

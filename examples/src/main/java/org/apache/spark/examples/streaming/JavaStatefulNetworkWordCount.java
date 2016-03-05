@@ -106,5 +106,6 @@ public class JavaStatefulNetworkWordCount {
     stateDstream.print();
     ssc.start();
     ssc.awaitTermination();
+    ssc.close();
   }
 }

@@ -64,7 +64,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;
-  private final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
+  private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
   final LinkedList<File> spillFilesCreated = new LinkedList<File>();
   File tempDir;

@@ -140,5 +140,6 @@ public class JavaActorWordCount {
 
     jssc.start();
     jssc.awaitTermination();
+    jssc.close();
   }
 }

@@ -109,5 +109,6 @@ public final class JavaDirectKafkaWordCount {
     // Start the computation
     jssc.start();
     jssc.awaitTermination();
+    jssc.close();
   }
 }
