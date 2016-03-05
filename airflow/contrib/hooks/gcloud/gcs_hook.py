@@ -192,3 +192,33 @@ class GCSHook(BaseHook):
             raise ValueError(
                 'Blob does not exist: {bucket}/{blob}'.format(**locals()))
         return gcs_blob.download_to_filename(filename)
+
+    def download(
+            self,
+            bucket,
+            object,
+            filename=False):
+        """
+        This method is provided for compatibility with
+        contrib/GoogleCloudStorageHook.
+        """
+        if filename:
+            return self.download_to_filename(
+                filename=filename, blob=object, bucket=bucket)
+        else:
+            return self.download_as_string(blob=object, bucket=bucket)
+
+    def upload(
+            self,
+            bucket,
+            object,
+            filename,
+            mime_type='application/octet-stream'):
+        """
+        This method is provided for compatibility with
+        contrib/GoogleCloudStorageHook.
+
+        Warning: acts as if replace == True!
+        """
+        self.upload_from_filename(
+                filename=filename, blob=object, bucket=bucket, replace=True)
