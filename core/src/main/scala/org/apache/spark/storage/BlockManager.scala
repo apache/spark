@@ -652,12 +652,16 @@ private[spark] class BlockManager(
       case DoPutSucceeded =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
-        val blockResult = get(blockId).getOrElse {
+        val blockResult = getLocalValues(blockId).getOrElse {
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
           releaseLock(blockId)
           throw new SparkException(s"get() failed for block $blockId even though we held a lock")
         }
+        // We already hold a read lock on the block from the doPut() call and getLocalValues()
+        // acquires the lock again, so we need to call releaseLock() here so that the net number
+        // of lock acquisitions is 1 (since the caller will only call release() once).
+        releaseLock(blockId)
         Left(blockResult)
       case DoPutIteratorFailed(iter) =>
         // The put failed, likely because the data was too large to fit in memory and could not be
