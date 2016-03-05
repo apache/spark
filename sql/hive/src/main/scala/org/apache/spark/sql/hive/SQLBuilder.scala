@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.types.{DataType, NullType}
+import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 
 /**
  * A place holder for generated SQL for subquery expression.
@@ -117,6 +117,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case p: Project =>
       projectToSQL(p, isDistinct = false)
+
+    case a @ Aggregate(_, _, e @ Expand(_, _, p: Project)) if isGroupingSet(a, e, p) =>
+      groupingSetToSQL(a, e, p)
 
     case p: Aggregate =>
       aggregateToSQL(p)
@@ -241,6 +244,77 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       toSQL(plan.child),
       if (groupingSQL.isEmpty) "" else "GROUP BY",
       groupingSQL
+    )
+  }
+
+  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
+    output1.size == output2.size &&
+      output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
+
+  private def isGroupingSet(a: Aggregate, e: Expand, p: Project): Boolean = {
+    assert(a.child == e && e.child == p)
+    a.groupingExpressions.forall(_.isInstanceOf[Attribute]) &&
+      sameOutput(e.output, p.child.output ++ a.groupingExpressions.map(_.asInstanceOf[Attribute]))
+  }
+
+  private def groupingSetToSQL(
+      agg: Aggregate,
+      expand: Expand,
+      project: Project): String = {
+    assert(agg.groupingExpressions.length > 1)
+
+    // The last column of Expand is always grouping ID
+    val gid = expand.output.last
+
+    val numOriginalOutput = project.child.output.length
+    // Assumption: Aggregate's groupingExpressions is composed of
+    // 1) the attributes of aliased group by expressions
+    // 2) gid, which is always the last one
+    val groupByAttributes = agg.groupingExpressions.dropRight(1).map(_.asInstanceOf[Attribute])
+    // Assumption: Project's projectList is composed of
+    // 1) the original output (Project's child.output),
+    // 2) the aliased group by expressions.
+    val groupByExprs = project.projectList.drop(numOriginalOutput).map(_.asInstanceOf[Alias].child)
+    val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
+
+    // a map from group by attributes to the original group by expressions.
+    val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
+
+    val groupingSet: Seq[Seq[Expression]] = expand.projections.map { project =>
+      // Assumption: expand.projections is composed of
+      // 1) the original output (Project's child.output),
+      // 2) group by attributes(or null literal)
+      // 3) gid, which is always the last one in each project in Expand
+      project.drop(numOriginalOutput).dropRight(1).collect {
+        case attr: Attribute if groupByAttrMap.contains(attr) => groupByAttrMap(attr)
+      }
+    }
+    val groupingSetSQL =
+      "GROUPING SETS(" +
+        groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
+
+    val aggExprs = agg.aggregateExpressions.map { case expr =>
+      expr.transformDown {
+        // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
+        case ar: AttributeReference if ar == gid => GroupingID(Nil)
+        case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
+        case a @ Cast(BitwiseAnd(
+            ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
+            Literal(1, IntegerType)), ByteType) if ar == gid =>
+          // for converting an expression to its original SQL format grouping(col)
+          val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
+          groupByExprs.lift(idx).map(Grouping).getOrElse(a)
+      }
+    }
+
+    build(
+      "SELECT",
+      aggExprs.map(_.sql).mkString(", "),
+      if (agg.child == OneRowRelation) "" else "FROM",
+      toSQL(project.child),
+      "GROUP BY",
+      groupingSQL,
+      groupingSetSQL
     )
   }
 
