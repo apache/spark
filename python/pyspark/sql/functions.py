@@ -348,13 +348,13 @@ def grouping_id(*cols):
     grouping columns).
 
     >>> df.cube("name").agg(grouping_id(), sum("age")).orderBy("name").show()
-    +-----+------------+--------+
-    | name|groupingid()|sum(age)|
-    +-----+------------+--------+
-    | null|           1|       7|
-    |Alice|           0|       2|
-    |  Bob|           0|       5|
-    +-----+------------+--------+
+    +-----+-------------+--------+
+    | name|grouping_id()|sum(age)|
+    +-----+-------------+--------+
+    | null|            1|       7|
+    |Alice|            0|       2|
+    |  Bob|            0|       5|
+    +-----+-------------+--------+
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.grouping_id(_to_seq(sc, cols, _to_java_column))
