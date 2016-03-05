@@ -157,7 +157,7 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       (3, split("e e e e e"), Vectors.sparse(4, Seq())))
     ).toDF("id", "words", "expected")
 
-    // minTF: count
+    // minTF: set frequency
     val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
@@ -175,7 +175,6 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
       (2, split("a"), Vectors.sparse(4, Seq((0, 1.0))))
     )).toDF("id", "words", "expected")
 
-    // minTF: count
     val cv = new CountVectorizerModel(Array("a", "b", "c", "d"))
       .setInputCol("words")
       .setOutputCol("features")
