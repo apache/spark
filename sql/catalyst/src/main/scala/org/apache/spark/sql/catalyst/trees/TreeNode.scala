@@ -81,7 +81,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   def children: Seq[BaseType]
 
-  lazy val containsChild: Set[TreeNode[_]] = children.toSet
+  protected lazy val childrenRefs = children.map(new TreeNodeRef(_)).toSet
+
+  protected def isOneOfChildren(node: TreeNode[_]): Boolean = {
+    childrenRefs.contains(new TreeNodeRef(node))
+  }
+
+  protected def isSubsetOfChildren(nodes: Seq[_]): Boolean = nodes.forall {
+    case tn: TreeNode[_] => isOneOfChildren(tn)
+    case _ => false
+  }
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
@@ -168,7 +177,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def mapChildren(f: BaseType => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if containsChild(arg) =>
+      case arg: TreeNode[_] if isOneOfChildren(arg) =>
         val newChild = f(arg.asInstanceOf[BaseType])
         if (newChild fastEquals arg) {
           arg
@@ -195,7 +204,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case arg: TreeNode[_] if isOneOfChildren(arg) =>
           val newChild = remainingNewChildren.remove(0)
           val oldChild = remainingOldChildren.remove(0)
           if (newChild fastEquals oldChild) {
@@ -208,7 +217,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case null => null
       }
       case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case arg: TreeNode[_] if isOneOfChildren(arg) =>
           val newChild = remainingNewChildren.remove(0)
           val oldChild = remainingOldChildren.remove(0)
           if (newChild fastEquals oldChild) {
@@ -220,7 +229,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         case nonChild: AnyRef => nonChild
         case null => null
       }.view.force // `mapValues` is lazy and we need to force it to materialize
-      case arg: TreeNode[_] if containsChild(arg) =>
+      case arg: TreeNode[_] if isOneOfChildren(arg) =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
         if (newChild fastEquals oldChild) {
@@ -297,7 +306,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if containsChild(arg) =>
+      case arg: TreeNode[_] if isOneOfChildren(arg) =>
         val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
           changed = true
@@ -305,7 +314,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         } else {
           arg
         }
-      case Some(arg: TreeNode[_]) if containsChild(arg) =>
+      case Some(arg: TreeNode[_]) if isOneOfChildren(arg) =>
         val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
           changed = true
@@ -314,7 +323,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
           Some(arg)
         }
       case m: Map[_, _] => m.mapValues {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case arg: TreeNode[_] if isOneOfChildren(arg) =>
           val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
           if (!(newChild fastEquals arg)) {
             changed = true
@@ -326,7 +335,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }.view.force // `mapValues` is lazy and we need to force it to materialize
       case d: DataType => d // Avoid unpacking Structs
       case args: Traversable[_] => args.map {
-        case arg: TreeNode[_] if containsChild(arg) =>
+        case arg: TreeNode[_] if isOneOfChildren(arg) =>
           val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
           if (!(newChild fastEquals arg)) {
             changed = true
@@ -405,9 +414,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
-    case tn: TreeNode[_] if containsChild(tn) => Nil
+    case tn: TreeNode[_] if isOneOfChildren(tn) => Nil
     case tn: TreeNode[_] => s"${tn.simpleString}" :: Nil
-    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
+    case seq: Seq[_] if isSubsetOfChildren(seq) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
     case set: Set[_] => set.mkString("{", ",", "}") :: Nil
     case other => other :: Nil
@@ -423,7 +432,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
-   * The numbers can be used with [[trees.TreeNode.apply apply]] to easily access specific subtrees.
+   * The numbers can be used with [[TreeNode.apply apply]] to easily access specific subtrees.
    */
   def numberedTreeString: String =
     treeString.split("\n").zipWithIndex.map { case (line, i) => f"$i%02d $line" }.mkString("\n")
@@ -571,9 +580,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     fieldNames.zip(fieldValues).map {
       // If the field value is a child, then use an int to encode it, represents the index of
       // this child in all children.
-      case (name, value: TreeNode[_]) if containsChild(value) =>
+      case (name, value: TreeNode[_]) if isOneOfChildren(value) =>
         name -> JInt(children.indexOf(value))
-      case (name, value: Seq[BaseType]) if value.toSet.subsetOf(containsChild) =>
+      case (name, value: Seq[_]) if isSubsetOfChildren(value) =>
         name -> JArray(
           value.map(v => JInt(children.indexOf(v.asInstanceOf[TreeNode[_]]))).toList
         )

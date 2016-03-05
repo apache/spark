@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{TreeNode, TreeNodeRef}
 import org.apache.spark.sql.types.{DataType, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
@@ -107,8 +107,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    */
   def missingInput: AttributeSet = references -- inputSet -- producedAttributes
 
+  private lazy val expressionRefs = expressions.map(new TreeNodeRef(_)).toSet
+
+  protected def isOneOfExpressions(e: Expression): Boolean = {
+    expressionRefs.contains(new TreeNodeRef(e))
+  }
+
   /**
-   * Runs [[transform]] with `rule` on all expressions present in this query operator.
+   * Runs [[transform]] with `rule` on all expressions returned by [[expressions]] of this plan.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    *
@@ -137,8 +143,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionDown(e)
-      case Some(e: Expression) => Some(transformExpressionDown(e))
+      case e: Expression if isOneOfExpressions(e) => transformExpressionDown(e)
+      case Some(e: Expression) if isOneOfExpressions(e) => Some(transformExpressionDown(e))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)
@@ -171,8 +177,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionUp(e)
-      case Some(e: Expression) => Some(transformExpressionUp(e))
+      case e: Expression if isOneOfExpressions(e) => transformExpressionUp(e)
+      case Some(e: Expression) if isOneOfExpressions(e) => Some(transformExpressionUp(e))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)
