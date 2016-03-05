@@ -425,7 +425,11 @@ class HiveServer2Hook(BaseHook):
         db = self.get_connection(self.hiveserver2_conn_id)
         auth_mechanism = db.extra_dejson.get('authMechanism', 'NOSASL')
         if configuration.get('core', 'security') == 'kerberos':
-            auth_mechanism = db.extra_dejson.get('authMechanism', 'KERBEROS')
+            auth_mechanism = db.extra_dejson.get('authMechanism', 'GSSAPI')
+
+        # impyla uses GSSAPI instead of KERBEROS as a auth_mechanism identifier
+        if auth_mechanism == 'KERBEROS':
+            auth_mechanism = 'GSSAPI'
 
         return impala.dbapi.connect(
             host=db.host,
