@@ -25,7 +25,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  /* test("Word2Phrase Read/Write") {
+  /*test("Word2Phrase Read/Write") {
 
     val wordDataFrame = sqlContext.createDataFrame(Seq(
       (0, "Hi I heard about Spark"),
@@ -37,7 +37,7 @@ class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     
     val newInstance = testDefaultReadWrite(t)
     assert(newInstance === t)
-  } */
+  }*/
 
   test("Word2PhraseModel Read/Write") {
 

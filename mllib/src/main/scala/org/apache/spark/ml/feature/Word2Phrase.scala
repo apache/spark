@@ -35,6 +35,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Column}
 import org.apache.spark.sql.{functions => f}
 import scala.util.Try
+import scala.util.matching.Regex
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
@@ -144,16 +145,19 @@ class Word2Phrase(override val uid: String)
     // counts the number of bigrams (w1 w2, w2 w3, etc.)
     var biGramCount = ngramDataFrame.select("ngrams").rdd.flatMap(line => line(0).asInstanceOf[Seq[String]]).map(word => (word, 1)).reduceByKey(_ + _).toDF("biGram", "count")
     biGramCount.registerTempTable("biGramCount")
+    sqlContext.sql("select * from biGramCount").show(20)
 
     val minCountA = $(minCount)
     val minWordsA = $(minWords)
     // calculated the score for each bigram ***************************** minCount and threshold should probably be used in the below formula
     sqlContext.sql(s"select biGram, (bigram_count - $minCountA)/(word1_count * word2_count) as score from (select biGrams.biGram as biGram, biGrams.count as bigram_count, wc1.word as word1, wc1.count as word1_count, wc2.word as word2, wc2.count as word2_count from (Select biGram, count, split(biGram,' ')[0] as word1, split(biGram,' ')[1] as word2 from biGramCount) biGrams inner join wordCount as wc1 on (wc1.word = biGrams.word1) inner join wordCount as wc2 on (wc2.word = biGrams.word2) ) biGramsStats where word2_count > $minWordsA and word1_count > $minWordsA order by score desc").registerTempTable("bi_gram_scores")
-    
+    sqlContext.sql("select * from bi_gram_scores").show(20)
+
     val thresholdA = $(threshold)
     // Scores > threshold
-    var biGrams = sqlContext.sql(s"select translate(biGram, ' ', '_') as source, biGram target from bi_gram_scores where score > $thresholdA").collect()
-    var bigram_list = biGrams.map(row => (row(0).toString, row(1).toString))
+    var biGrams = sqlContext.sql(s"select biGram from bi_gram_scores where score > $thresholdA").collect()
+    var bigram_list = biGrams.map(row => (row.toString))
+    println(bigram_list.deep.mkString("\n"))
 
     copyValues(new Word2PhraseModel(uid, bigram_list).setParent(this))
   }
@@ -179,7 +183,7 @@ object Word2Phrase extends DefaultParamsReadable[Word2Phrase] {
 @Experimental
 class Word2PhraseModel private[ml] (
     override val uid: String,
-    val bigram_list: Array[(String, String)])
+    val bigram_list: Array[String])
   extends Model[Word2PhraseModel] with Word2PhraseParams with MLWritable {
 
   import Word2PhraseModel._
@@ -192,7 +196,7 @@ class Word2PhraseModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
 
-    var mapBiGrams = udf((t: String) => bigram_list.foldLeft(t){case (z, (s, r)) => z.replaceAll(r, s)})
+    var mapBiGrams = udf((t: String) => bigram_list.foldLeft(t){case (z, r) => z.replaceAll("(?i)"+r, r.split(" ").mkString("_"))})
     dataset.withColumn($(outputCol), mapBiGrams(dataset($(inputCol))))
   }
 
@@ -221,7 +225,7 @@ object Word2PhraseModel extends MLReadable[Word2PhraseModel] {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       //val data = new Data(instance.bigram_list)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(instance.bigram_list).write.parquet(dataPath)
+      sqlContext.createDataFrame((instance.bigram_list).toSeq).write.parquet(dataPath)
     }
   }
 
@@ -236,7 +240,7 @@ object Word2PhraseModel extends MLReadable[Word2PhraseModel] {
       //var holder = Array(("ok", "ok"), ("ok", "ok"), ("o", "oO"))
            // val model = new Word2PhraseModel(metadata.uid, data.map((bigram:String, bigram_broken:String) => (bigram, bigram_broken)).collect())
 
-      val model = new Word2PhraseModel(metadata.uid, data.map(row => (row(0).toString, row(1).toString)).collect())
+      val model = new Word2PhraseModel(metadata.uid, data.map(row => (row(0).toString)).collect())
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
