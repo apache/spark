@@ -237,7 +237,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set(newName, "4")
     assert(conf.get(newName) === "4")
 
-    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    val count = conf.getAll.count { case (k, v) => k.startsWith("spark.history.") }
     assert(count === 4)
 
     conf.set("spark.yarn.applicationMaster.waitTries", "42")

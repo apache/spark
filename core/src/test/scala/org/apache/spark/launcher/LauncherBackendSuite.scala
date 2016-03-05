@@ -26,7 +26,6 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
-import org.apache.spark.launcher._
 
 class LauncherBackendSuite extends SparkFunSuite with Matchers {
 

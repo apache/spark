@@ -90,9 +90,9 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     } else {
       lit(1.0)
     }
-    dataset.select(col($(labelCol)), f, w)
-      .map { case Row(label: Double, feature: Double, weight: Double) =>
-      (label, feature, weight)
+    dataset.select(col($(labelCol)), f, w).rdd.map {
+      case Row(label: Double, feature: Double, weight: Double) =>
+        (label, feature, weight)
     }
   }
 
