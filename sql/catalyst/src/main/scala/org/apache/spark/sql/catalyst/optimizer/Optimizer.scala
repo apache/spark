@@ -770,7 +770,8 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove all the deterministic conditions in a [[Filter]] that are contained in the Child.
+ * Remove all the deterministic conditions in a [[Filter]] that are guaranteed to be true
+ * given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -784,8 +785,8 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
       } else if (remainingPredicates.isEmpty) {
         p
       } else {
-        val newCond = remainingPredicates.reduceOption(And).getOrElse(Literal(true))
-        Filter(newCond, p: LogicalPlan)
+        val newCond = remainingPredicates.reduce(And)
+        Filter(newCond, p)
       }
   }
 }
