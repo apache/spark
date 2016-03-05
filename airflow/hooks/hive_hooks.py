@@ -7,9 +7,9 @@ import re
 import subprocess
 from tempfile import NamedTemporaryFile
 
-
 from thrift.transport import TSocket, TTransport
 from thrift.protocol import TBinaryProtocol
+
 from hive_service import ThriftHive
 import pyhs2
 
@@ -258,8 +258,29 @@ class HiveMetastoreHook(BaseHook):
         Returns a Hive thrift client.
         '''
         ms = self.metastore_conn
-        transport = TSocket.TSocket(ms.host, ms.port)
-        transport = TTransport.TBufferedTransport(transport)
+        auth_mechanism = ms.extra_dejson.get('authMechanism', 'NOSASL')
+        if configuration.get('core', 'security') == 'kerberos':
+            auth_mechanism = ms.extra_dejson.get('authMechanism', 'GSSAPI')
+            kerberos_service_name = ms.extra_dejson.get('kerberos_service_name', 'hive')
+
+        socket = TSocket.TSocket(ms.host, ms.port)
+        if configuration.get('core', 'security') == 'kerberos' and auth_mechanism == 'GSSAPI':
+            try:
+                import saslwrapper as sasl
+            except ImportError:
+                import sasl
+
+            def sasl_factory():
+                sasl_client = sasl.Client()
+                sasl_client.setAttr("host", ms.host)
+                sasl_client("service", kerberos_service_name)
+                sasl_client.init()
+
+            from thrift_sasl import TSaslClientTransport
+            transport = TSaslClientTransport(sasl_factory, "GSSAPI", socket)
+        else:
+            transport = TTransport.TBufferedTransport(socket)
+
         protocol = TBinaryProtocol.TBinaryProtocol(transport)
         return ThriftHive.Client(protocol)
 

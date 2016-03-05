@@ -75,7 +75,7 @@ slack = ['slackclient>=0.15']
 statsd = ['statsd>=3.0.1, <4.0']
 vertica = ['vertica-python>=0.5.1']
 ldap = ['ldap3>=0.9.9.1']
-kerberos = ['pykerberos>=1.1.8']
+kerberos = ['pykerberos>=1.1.8','thrift_sasl>=0.2.0']
 password = [
     'bcrypt>=2.0.0',
     'flask-bcrypt>=0.7.1',
