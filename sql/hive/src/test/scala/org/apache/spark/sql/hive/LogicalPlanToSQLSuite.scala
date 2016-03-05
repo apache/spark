@@ -300,6 +300,42 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT a, b, grouping(a) FROM parquet_t2 GROUP BY cube(a, b)")
   }
 
+  test("rollup/cube #8") {
+    // grouping_id() is part of another expression
+    checkHiveQl(
+      s"""
+         |SELECT hkey AS k1, value - 5 AS k2, hash(grouping_id()) AS hgid
+         |FROM (SELECT hash(key) as hkey, key as value FROM parquet_t1) t GROUP BY hkey, value-5
+         |WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+         |SELECT hkey AS k1, value - 5 AS k2, hash(grouping_id()) AS hgid
+         |FROM (SELECT hash(key) as hkey, key as value FROM parquet_t1) t GROUP BY hkey, value-5
+         |WITH CUBE
+      """.stripMargin)
+  }
+
+  test("rollup/cube #9") {
+    // self join is used as the child node of ROLLUP/CUBE with replaced quantifiers
+    checkHiveQl(
+      s"""
+         |SELECT t.key - 5, cnt, SUM(cnt)
+         |FROM (SELECT x.key, COUNT(*) as cnt
+         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key GROUP BY x.key) t
+         |GROUP BY cnt, t.key - 5
+         |WITH ROLLUP
+      """.stripMargin)
+    checkHiveQl(
+      s"""
+         |SELECT t.key - 5, cnt, SUM(cnt)
+         |FROM (SELECT x.key, COUNT(*) as cnt
+         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key GROUP BY x.key) t
+         |GROUP BY cnt, t.key - 5
+         |WITH CUBE
+      """.stripMargin)
+  }
+
   test("grouping sets #1") {
     checkHiveQl(
       s"""

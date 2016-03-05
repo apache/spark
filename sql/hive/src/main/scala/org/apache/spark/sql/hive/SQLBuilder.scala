@@ -269,7 +269,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     // a map from group by attributes to the original group by expressions.
     val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
 
-    val groupingSet = expand.projections.map { project =>
+    val groupingSet: Seq[Seq[Expression]] = expand.projections.map { project =>
       // Assumption: expand.projections is composed of
       // 1) the original output (Project's child.output),
       // 2) group by attributes(or null literal)
@@ -288,16 +288,11 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case ar: AttributeReference if ar == gid => GroupingID(Nil)
         case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
         case a @ Cast(BitwiseAnd(
-            ShiftRight(ar: AttributeReference, _ @ Literal(value: Any, IntegerType)),
+            ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
             Literal(1, IntegerType)), ByteType) if ar == gid =>
           // for converting an expression to its original SQL format grouping(col)
           val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
-          val groupingCol = groupByExprs.lift(idx)
-          if (groupingCol.isDefined) {
-            Grouping(groupingCol.get)
-          } else {
-            throw new UnsupportedOperationException(s"unsupported operator $a")
-          }
+          groupByExprs.lift(idx).map(Grouping).getOrElse(a)
       }
     }
 
