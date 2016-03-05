@@ -69,6 +69,10 @@ class GCSHook(BaseHook):
             scope=None,
             *args,
             **kwargs):
+            
+        # compatibility with GoogleCloudStorageHook
+        if 'google_cloud_storage_conn_id' in kwargs and not gcp_conn_id:
+            gcp_conn_id = kwargs.pop('google_cloud_storage_conn_id')
 
         self.gcp_conn_id = gcp_conn_id
         self.project = project
