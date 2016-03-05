@@ -430,6 +430,8 @@ class HiveServer2Hook(BaseHook):
 
         # impyla uses GSSAPI instead of KERBEROS as a auth_mechanism identifier
         if auth_mechanism == 'KERBEROS':
+            logging.warning("Detected deprecated 'KERBEROS' for authMechanism for %s. Please use 'GSSAPI' instead",
+                            self.hiveserver2_conn_id)
             auth_mechanism = 'GSSAPI'
 
         return impala.dbapi.connect(
