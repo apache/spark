@@ -6,6 +6,7 @@ from airflow.hooks import BaseHook
 from airflow.utils import AirflowException
 
 import gcloud.storage as gcs
+import gcloud
 
 def parse_gcs_url(gsurl):
     """
@@ -27,36 +28,68 @@ class GCSHook(BaseHook):
     """
     A hook for working wth Google Cloud Storage via the gcloud library.
 
-    GCS Connections can contain three optional fields in "extras":
+    A GCP connection ID can be provided. If it is provided, its "extra" values
+    will OVERRIDE any argments passed to GCSHook. The following precendance is
+    observed:
+        GCP connection "extra"
+        GCSHook initialization arguments
+        host environment
+
+    Extras should be JSON and take the form:
     {
         "project": "<google cloud project id>",
         "key_path": "<path to service account keyfile, either JSON or P12>"
         "service_account": "<google service account email, required for P12>"
+        "scope": "<google service scopes>"
     }
 
-    If the project field is missing, the project will be inferred from the host
-    environment (if possible). To set a default project, use:
+    service_account is only required if the key_path points to a P12 file.
+
+    scope is only used if key_path is provided. Scopes can include:
+        https://www.googleapis.com/auth/devstorage.full_control
+        https://www.googleapis.com/auth/devstorage.read_only
+        https://www.googleapis.com/auth/devstorage.read_write
+
+    If fields are not provided, either as arguments or extras, they can be set
+    in the host environment.
+
+    To set a default project, use:
         gcloud config set project <project-id>
 
-    If the key_path is missing, the host authorization credentials will be
-    used (if possible). To log in, use:
+    To log in:
         gcloud auth
 
-    The service_account is only required if the key_path points to a P12 file.
     """
-    def __init__(self, gcs_conn_id=None):
-        self.gcs_conn_id = gcs_conn_id
+    def __init__(
+            self,
+            gcp_conn_id=None,
+            project=None,
+            key_path=None,
+            service_account=None,
+            scope=None,
+            *args,
+            **kwargs):
+
+        self.gcp_conn_id = gcp_conn_id
+        self.project = project
+        self.key_path = key_path
+        self.service_account = service_account
+        self.scope = scope
+
         self.gcs_conn = self.get_conn()
 
     def get_conn(self):
-        project, key_path = None, None
-        if self.gcs_conn_id:
-            conn = self.get_connection(self.gcs_conn_id)
-            extras = conn.extra_dejson
-            project = extras.get('project', None)
-            key_path = extras.get('key_path', None)
-            service_account = extras.get('service_account', None)
+        # parse arguments and connection extras
+        if self.gcp_conn_id:
+            extras = self.get_connection(self.gcp_conn_id).extra_dejson
+        else:
+            extras = {}
+        project = extras.get('project', self.project)
+        key_path = extras.get('key_path', self.key_path)
+        service_account = extras.get('service_account', self.service_account)
+        scope = extras.get('scope', self.scope)
 
+        # guess project, if possible
         if not project:
             project = gcloud._helpers._determine_default_project()
             # workaround for
@@ -64,18 +97,22 @@ class GCSHook(BaseHook):
             if isinstance(project, bytes):
                 project = project.decode()
 
+        # load credentials/scope
         if key_path:
             if key_path.endswith('.json') or key_path.endswith('.JSON'):
-                client = gcs.Client.from_service_account_json(
+                credentials = gcloud.credentials.get_for_service_account_json(
                     json_credentials_path=key_path,
-                    project=project)
+                    scope=scope)
             elif key_path.endswith('.p12') or key_path.endswith('.P12'):
-                client = gcs.Client.from_service_account_p12(
+                credentials = gcloud.credentials.get_for_service_account_p12(
                     client_email=service_account,
                     private_key_path=key_path,
-                    project=project)
+                    scope=scope)
             else:
                 raise ValueError('Unrecognized keyfile: {}'.format(key_path))
+            client = gcs.Client(
+                credentials=credentials,
+                project=project)
         else:
             client = gcs.Client(project=project)
 
