@@ -761,7 +761,7 @@ private[spark] class BlockManager(
    *                     returns.
    * @return [[DoPutSucceeded]] if the block was already present or if the put succeeded, or
    *        [[DoPutBytesFailed]] if the put failed and we were storing bytes, or
-   *        [[DoPutIteratorFailed]] if the put succeeded and we were storing an iterator.
+   *        [[DoPutIteratorFailed]] if the put failed and we were storing an iterator.
    */
   private def doPut(
       blockId: BlockId,
