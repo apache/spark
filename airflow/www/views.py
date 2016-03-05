@@ -2096,6 +2096,7 @@ class ConnectionModelView(wwwutils.SuperUserMixin, AirflowModelView):
             ('datastore', 'Google Datastore'),
             ('ftp', 'FTP',),
             ('google_cloud_storage', 'Google Cloud Storage'),
+            ('gcp', 'Google Cloud Platform'),
             ('hdfs', 'HDFS',),
             ('http', 'HTTP',),
             ('hive_cli', 'Hive Client Wrapper',),
