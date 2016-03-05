@@ -291,13 +291,9 @@ private[spark] class BlockManager(
     if (blockId.isShuffle) {
       shuffleManager.shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
-      val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
-        .asInstanceOf[Option[ByteBuffer]]
-      if (blockBytesOpt.isDefined) {
-        val buffer = blockBytesOpt.get
-        new BlockManagerManagedBuffer(this, blockId, buffer)
-      } else {
-        throw new BlockNotFoundException(blockId.toString)
+      getLocalBytes(blockId) match {
+        case Some(buffer) => new BlockManagerManagedBuffer(this, blockId, buffer)
+        case None => throw new BlockNotFoundException(blockId.toString)
       }
     }
   }
@@ -413,11 +409,49 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Get block from local block manager.
+   * Get block from local block manager as an iterator of Java objects.
    */
-  def getLocal(blockId: BlockId): Option[BlockResult] = {
+  def getLocalValues(blockId: BlockId): Option[BlockResult] = {
     logDebug(s"Getting local block $blockId")
-    doGetLocal(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
+    blockInfoManager.lockForReading(blockId) match {
+      case None =>
+        logDebug(s"Block $blockId was not found")
+        None
+      case Some(info) =>
+        val level = info.level
+        logDebug(s"Level for block $blockId is $level")
+        if (level.useMemory && memoryStore.contains(blockId)) {
+          val iter: Iterator[Any] = if (level.deserialized) {
+            memoryStore.getValues(blockId).get
+          } else {
+            dataDeserialize(blockId, memoryStore.getBytes(blockId).get)
+          }
+          val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
+          Some(new BlockResult(ci, DataReadMethod.Memory, info.size))
+        } else if (level.useDisk && diskStore.contains(blockId)) {
+          val valuesFromDisk = dataDeserialize(blockId, diskStore.getBytes(blockId))
+          val iterToReturn: Iterator[Any] = {
+            if (level.deserialized) {
+              // Cache the values before returning them
+              memoryStore.putIterator(blockId, valuesFromDisk, level) match {
+                case Left(iter) =>
+                  // The memory store put() failed, so it returned the iterator back to us:
+                  iter
+                case Right(_) =>
+                  // The put() succeeded, so we can read the values back:
+                  memoryStore.getValues(blockId).get
+              }
+            } else {
+              valuesFromDisk
+            }
+          }
+          val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
+          Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
+        } else {
+          releaseLock(blockId)
+          throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+        }
+    }
   }
 
   /**
@@ -434,82 +468,38 @@ private[spark] class BlockManager(
       Option(
         shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
     } else {
-      doGetLocal(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      blockInfoManager.lockForReading(blockId) match {
+        case None =>
+          logDebug(s"Block $blockId was not found")
+          None
+        case Some(info) =>
+          Some(doGetLocalBytes(blockId, info))
+      }
     }
   }
 
-  private def doGetLocal(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
-    blockInfoManager.lockForReading(blockId) match {
-      case None =>
-        logDebug(s"Block $blockId was not found")
-        None
-      case Some(info) =>
-        doGetLocal(blockId, info, asBlockResult)
-    }
-  }
-
-  /**
-   * Get a local block from the block manager.
-   * Assumes that the caller holds a read lock on the block.
-   */
-  private def doGetLocal(
-      blockId: BlockId,
-      info: BlockInfo,
-      asBlockResult: Boolean): Option[Any] = {
+  private def doGetLocalBytes(blockId: BlockId, info: BlockInfo): ByteBuffer = {
     val level = info.level
     logDebug(s"Level for block $blockId is $level")
-
-    // Look for the block in memory
-    if (level.useMemory) {
-      logDebug(s"Getting block $blockId from memory")
-      val result = if (asBlockResult) {
-        val maybeIter = if (level.deserialized) {
-          memoryStore.getValues(blockId)
-        } else {
-          memoryStore.getBytes(blockId).map { bytes =>
-            dataDeserialize(blockId, bytes)
-          }
-        }
-        maybeIter.map { iter =>
-          val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
-          new BlockResult(ci, DataReadMethod.Memory, info.size)
-        }
+    if (level.deserialized) {
+      // Try to avoid expensive serialization by reading a pre-serialized copy from disk:
+      if (level.useDisk && diskStore.contains(blockId)) {
+        diskStore.getBytes(blockId)
+      } else if (level.useMemory && memoryStore.contains(blockId)) {
+        // The block was not found on disk, so serialize an in-memory copy:
+        dataSerialize(blockId, memoryStore.getValues(blockId).get)
       } else {
-        if (level.deserialized) {
-          memoryStore.getValues(blockId).map(iter => dataSerialize(blockId, iter))
-        } else {
-          memoryStore.getBytes(blockId)
-        }
+        releaseLock(blockId)
+        throw new SparkException(s"Block $blockId was not found even though it's read-locked")
       }
-      result match {
-        case Some(values) =>
-          return result
-        case None =>
-          logDebug(s"Block $blockId not found in memory")
-      }
-    }
-
-    // Look for block on disk, potentially storing it back in memory if required
-    if (level.useDisk) {
-      logDebug(s"Getting block $blockId from disk")
-      val bytes: ByteBuffer = diskStore.getBytes(blockId)
-      assert(0 == bytes.position())
-
-      if (!level.useMemory) {
-        // If the block shouldn't be stored in memory, we can just return it
-        if (asBlockResult) {
-          val iter = CompletionIterator[Any, Iterator[Any]](
-            dataDeserialize(blockId, bytes), releaseLock(blockId))
-          return Some(new BlockResult(iter, DataReadMethod.Disk, info.size))
-        } else {
-          return Some(bytes)
-        }
-      } else {
-        // Otherwise, we also have to store something in the memory store
-        if (!level.deserialized && !asBlockResult) {
-          /* We'll store the bytes in memory if the block's storage level includes
-           * "memory serialized" and we requested its serialized bytes. */
-          memoryStore.putBytes(blockId, bytes.limit, () => {
+    } else {  // storage level is serialized
+      if (level.useMemory && memoryStore.contains(blockId)) {
+        memoryStore.getBytes(blockId).get
+      } else if (level.useDisk && diskStore.contains(blockId)) {
+        val bytes = diskStore.getBytes(blockId)
+        if (level.useMemory) {
+          // Cache the bytes back into memory to speed up subsequent reads.
+          memoryStore.putBytes(blockId, bytes.limit(), () => {
             // https://issues.apache.org/jira/browse/SPARK-6076
             // If the file size is bigger than the free memory, OOM will happen. So if we cannot
             // put it into MemoryStore, copyForMemory should not be created. That's why this
@@ -519,37 +509,11 @@ private[spark] class BlockManager(
           })
           bytes.rewind()
         }
-        if (!asBlockResult) {
-          return Some(bytes)
-        } else {
-          val values = dataDeserialize(blockId, bytes)
-          val valuesToReturn: Iterator[Any] = {
-            if (level.deserialized) {
-              // Cache the values before returning them
-              memoryStore.putIterator(blockId, values, level) match {
-                case Left(iter) =>
-                  // The memory store put() failed, so it returned the iterator back to us:
-                  iter
-                case Right(_) =>
-                  // The put() succeeded, so we can read the values back:
-                  memoryStore.getValues(blockId).get
-              }
-            } else {
-              values
-            }
-          }
-          val ci = CompletionIterator[Any, Iterator[Any]](valuesToReturn, releaseLock(blockId))
-          return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
-        }
+        bytes
+      } else {
+        releaseLock(blockId)
+        throw new SparkException(s"Block $blockId was not found even though it's read-locked")
       }
-    } else {
-      // This branch represents a case where the BlockInfoManager contained an entry for
-      // the block but the block could not be found in any of the block stores. This case
-      // should never occur, but for completeness's sake we address it here.
-      logError(
-        s"Block $blockId is supposedly stored locally but was not found in any block store")
-      releaseLock(blockId)
-      None
     }
   }
 
@@ -629,7 +593,7 @@ private[spark] class BlockManager(
    * automatically be freed once the result's `data` iterator is fully consumed.
    */
   def get(blockId: BlockId): Option[BlockResult] = {
-    val local = getLocal(blockId)
+    val local = getLocalValues(blockId)
     if (local.isDefined) {
       logInfo(s"Found block $blockId locally")
       return local
@@ -919,13 +883,7 @@ private[spark] class BlockManager(
       Await.ready(replicationFuture, Duration.Inf)
     } else if (putLevel.replication > 1 && blockWasSuccessfullyStored) {
       val remoteStartTime = System.currentTimeMillis
-      val bytesToReplicate: ByteBuffer = {
-        doGetLocal(blockId, putBlockInfo, asBlockResult = false)
-          .map(_.asInstanceOf[ByteBuffer])
-          .getOrElse {
-            throw new SparkException(s"Block $blockId was not found even though it was just stored")
-          }
-      }
+      val bytesToReplicate = doGetLocalBytes(blockId, putBlockInfo)
       try {
         replicate(blockId, bytesToReplicate, putLevel)
       } finally {
