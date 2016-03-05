@@ -82,10 +82,10 @@ class GCSHook(BaseHook):
         return client
 
     def bucket_exists(self, bucket):
-        return self.get_conn().bucket(bucket).exists()
+        return self.gcs_conn.bucket(bucket).exists()
 
     def get_bucket(self, bucket):
-        return self.get_conn().get_bucket(bucket)
+        return self.gcs_conn.get_bucket(bucket)
 
     def list_blobs(
             self,
@@ -94,7 +94,7 @@ class GCSHook(BaseHook):
             page_token=None,
             prefix=None,
             delimiter=None):
-        return self.get_conn().bucket(bucket).list_blobs(
+        return self.gcs_conn.bucket(bucket).list_blobs(
             max_results=max_results,
             page_token=page_token,
             prefix=prefix,
@@ -106,12 +106,12 @@ class GCSHook(BaseHook):
         """
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        return self.get_conn().bucket(bucket).get_blob(blob)
+        return self.gcs_conn.bucket(bucket).get_blob(blob)
 
     def blob_exists(self, blob, bucket=None):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        return self.get_conn().bucket(bucket).blob(blob).exists()
+        return self.gcs_conn.bucket(bucket).blob(blob).exists()
 
     def upload_from_file(
             self,
@@ -121,7 +121,7 @@ class GCSHook(BaseHook):
             replace=False):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        gcs_blob = self.get_conn().bucket(bucket).blob(blob)
+        gcs_blob = self.gcs_conn.bucket(bucket).blob(blob)
         if gcs_blob.exists() and not replace:
             raise ValueError(
                 'The blob {bucket}/{blob} already exists.'.format(**locals()))
@@ -135,7 +135,7 @@ class GCSHook(BaseHook):
             replace=False):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        gcs_blob = self.get_conn().bucket(bucket).blob(blob)
+        gcs_blob = self.gcs_conn.bucket(bucket).blob(blob)
         if gcs_blob.exists() and not replace:
             raise ValueError(
                 'The blob {bucket}/{blob} already exists.'.format(**locals()))
@@ -149,7 +149,7 @@ class GCSHook(BaseHook):
             replace=False):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        gcs_blob = self.get_conn().bucket(bucket).blob(blob)
+        gcs_blob = self.gcs_conn.bucket(bucket).blob(blob)
         if gcs_blob.exists() and not replace:
             raise ValueError(
                 'The blob {bucket}/{blob} already exists.'.format(**locals()))
@@ -161,7 +161,7 @@ class GCSHook(BaseHook):
             bucket=None):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        gcs_blob = self.get_conn().bucket(bucket).get_blob(blob)
+        gcs_blob = self.gcs_conn.bucket(bucket).get_blob(blob)
         if not gcs_blob:
             raise ValueError(
                 'Blob does not exist: {bucket}/{blob}'.format(**locals()))
@@ -174,7 +174,7 @@ class GCSHook(BaseHook):
             bucket=None):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        gcs_blob = self.get_conn().bucket(bucket).get_blob(blob)
+        gcs_blob = self.gcs_conn.bucket(bucket).get_blob(blob)
         if not gcs_blob:
             raise ValueError(
                 'Blob does not exist: {bucket}/{blob}'.format(**locals()))
@@ -187,7 +187,7 @@ class GCSHook(BaseHook):
             bucket=None):
         if not bucket:
             bucket, blob = parse_gcs_url(blob)
-        gcs_blob = self.get_conn().bucket(bucket).get_blob(blob)
+        gcs_blob = self.gcs_conn.bucket(bucket).get_blob(blob)
         if not gcs_blob:
             raise ValueError(
                 'Blob does not exist: {bucket}/{blob}'.format(**locals()))
