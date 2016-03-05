@@ -33,7 +33,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.Metadata
 
-class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
+class OneVsOneSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var dataset: DataFrame = _
   @transient var rdd: RDD[LabeledPoint] = _
@@ -57,28 +57,28 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("params") {
-    ParamsSuite.checkParams(new OneVsRest)
+    ParamsSuite.checkParams(new OneVsOne)
     val lrModel = new LogisticRegressionModel("lr", Vectors.dense(0.0), 0.0)
-    val model = new OneVsRestModel("ovr", Metadata.empty, Array(lrModel))
+    val model = new OneVsOneModel("ovo", Metadata.empty, Array(lrModel), Array((0, 1)))
     ParamsSuite.checkParams(model)
   }
 
-  test("one-vs-rest: default params") {
+  test("one-vs-one: default params") {
     val numClasses = 3
-    val ova = new OneVsRest()
+    val ovo = new OneVsOne()
       .setClassifier(new LogisticRegression)
-    assert(ova.getLabelCol === "label")
-    assert(ova.getPredictionCol === "prediction")
-    val ovaModel = ova.fit(dataset)
+    assert(ovo.getLabelCol === "label")
+    assert(ovo.getPredictionCol === "prediction")
+    val ovoModel = ovo.fit(dataset)
 
     // copied model must have the same parent.
-    MLTestingUtils.checkCopy(ovaModel)
+    MLTestingUtils.checkCopy(ovoModel)
 
-    assert(ovaModel.models.size === numClasses)
-    val transformedDataset = ovaModel.transform(dataset)
+    assert(ovoModel.models.size === numClasses)
+    val transformedDataset = ovoModel.transform(dataset)
 
     // check for label metadata in prediction col
-    val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)
+    val predictionColSchema = transformedDataset.schema(ovoModel.getPredictionCol)
     assert(MetadataUtils.getNumClasses(predictionColSchema) === Some(3))
 
     val ovaResults = transformedDataset.select("prediction", "label").rdd.map {
@@ -93,20 +93,20 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
     // determine the #confusion matrix in each class.
     // bound how much error we allow compared to multinomial logistic regression.
     val expectedMetrics = new MulticlassMetrics(results)
-    val ovaMetrics = new MulticlassMetrics(ovaResults)
-    assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
+    val ovoMetrics = new MulticlassMetrics(ovaResults)
+    assert(expectedMetrics.confusionMatrix ~== ovoMetrics.confusionMatrix absTol 400)
   }
 
-  test("one-vs-rest: pass label metadata correctly during train") {
+  test("one-vs-one: pass label metadata correctly during train") {
     val numClasses = 3
-    val ova = new OneVsRest()
-    ova.setClassifier(new MockLogisticRegression)
+    val ovo = new OneVsOne()
+    ovo.setClassifier(new MockLogisticRegression)
 
     val labelMetadata = NominalAttribute.defaultAttr.withName("label").withNumValues(numClasses)
     val labelWithMetadata = dataset("label").as("label", labelMetadata.toMetadata())
     val features = dataset("features").as("features")
     val datasetWithLabelMetadata = dataset.select(labelWithMetadata, features)
-    ova.fit(datasetWithLabelMetadata)
+    ovo.fit(datasetWithLabelMetadata)
   }
 
   test("SPARK-8092: ensure label features and prediction cols are configurable") {
@@ -120,58 +120,44 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext {
       .drop("label")
       .withColumnRenamed("features", "f")
 
-    val ova = new OneVsRest()
-    ova.setClassifier(new LogisticRegression())
+    val ovo = new OneVsOne()
+    ovo.setClassifier(new LogisticRegression())
       .setLabelCol(labelIndexer.getOutputCol)
       .setFeaturesCol("f")
       .setPredictionCol("p")
 
-    val ovaModel = ova.fit(indexedDataset)
-    val transformedDataset = ovaModel.transform(indexedDataset)
+    val ovoModel = ovo.fit(indexedDataset)
+    val transformedDataset = ovoModel.transform(indexedDataset)
     val outputFields = transformedDataset.schema.fieldNames.toSet
     assert(outputFields.contains("p"))
   }
 
-  test("SPARK-8049: OneVsRest shouldn't output temp columns") {
+  test("SPARK-8049: OneVsOne shouldn't output temp columns") {
     val logReg = new LogisticRegression()
       .setMaxIter(1)
-    val ovr = new OneVsRest()
+    val ovo = new OneVsOne()
       .setClassifier(logReg)
-    val output = ovr.fit(dataset).transform(dataset)
+    val output = ovo.fit(dataset).transform(dataset)
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
   }
 
-  test("OneVsRest.copy and OneVsRestModel.copy") {
+  test("OneVsOne.copy and OneVsOneModel.copy") {
     val lr = new LogisticRegression()
       .setMaxIter(1)
 
-    val ovr = new OneVsRest()
+    val ovo = new OneVsOne()
     withClue("copy with classifier unset should work") {
-      ovr.copy(ParamMap(lr.maxIter -> 10))
+      ovo.copy(ParamMap(lr.maxIter -> 10))
     }
-    ovr.setClassifier(lr)
-    val ovr1 = ovr.copy(ParamMap(lr.maxIter -> 10))
-    assert(ovr.getClassifier.getOrDefault(lr.maxIter) === 1, "copy should have no side-effects")
-    assert(ovr1.getClassifier.getOrDefault(lr.maxIter) === 10,
+    ovo.setClassifier(lr)
+    val ovo1 = ovo.copy(ParamMap(lr.maxIter -> 10))
+    assert(ovo.getClassifier.getOrDefault(lr.maxIter) === 1, "copy should have no side-effects")
+    assert(ovo1.getClassifier.getOrDefault(lr.maxIter) === 10,
       "copy should handle extra classifier params")
 
-    val ovrModel = ovr1.fit(dataset).copy(ParamMap(lr.thresholds -> Array(0.9, 0.1)))
-    ovrModel.models.foreach { case m: LogisticRegressionModel =>
+    val ovoModel = ovo1.fit(dataset).copy(ParamMap(lr.thresholds -> Array(0.9, 0.1)))
+    ovoModel.models.foreach { case m: LogisticRegressionModel =>
       assert(m.getThreshold === 0.1, "copy should handle extra model params")
     }
-  }
-}
-
-private class MockLogisticRegression(uid: String) extends LogisticRegression(uid) {
-
-  def this() = this("mockLogReg")
-
-  setMaxIter(1)
-
-  override protected[spark] def train(dataset: DataFrame): LogisticRegressionModel = {
-    val labelSchema = dataset.schema($(labelCol))
-    // check for label attribute propagation.
-    assert(MetadataUtils.getNumClasses(labelSchema).forall(_ == 2))
-    super.train(dataset)
   }
 }

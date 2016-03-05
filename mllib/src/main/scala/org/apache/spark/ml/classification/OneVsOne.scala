@@ -80,6 +80,8 @@ final class OneVsOneModel private[ml] (
     @Since("2.0.0") val pairs: Array[(Int, Int)])
   extends Model[OneVsOneModel] with OneVsOneParams {
 
+  require(models.length == pairs.length)
+
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = false, getClassifier.featuresDataType)
