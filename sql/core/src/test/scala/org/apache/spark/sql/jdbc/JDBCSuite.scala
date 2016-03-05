@@ -645,4 +645,10 @@ class JDBCSuite extends SparkFunSuite
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
   }
+
+  test("SPARK 12941: The data type mapping for StringType to Oracle") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracleDialect.getJDBCType(StringType).
+      map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
+  }
 }

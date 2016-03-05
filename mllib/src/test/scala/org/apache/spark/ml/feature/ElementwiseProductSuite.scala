@@ -15,23 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.client;
+package org.apache.spark.ml.feature
 
-import java.nio.ByteBuffer;
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-/**
- * Callback for the result of a single RPC. This will be invoked once with either success or
- * failure.
- */
-public interface RpcResponseCallback {
-  /**
-   * Successful serialized result from server.
-   *
-   * After `onSuccess` returns, `response` will be recycled and its content will become invalid.
-   * Please copy the content of `response` if you want to use it after `onSuccess` returns.
-   */
-  void onSuccess(ByteBuffer response);
+class ElementwiseProductSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  /** Exception either propagated from server or raised on client side. */
-  void onFailure(Throwable e);
+  test("read/write") {
+    val ep = new ElementwiseProduct()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setScalingVec(Vectors.dense(0.1, 0.2))
+    testDefaultReadWrite(ep)
+  }
 }
