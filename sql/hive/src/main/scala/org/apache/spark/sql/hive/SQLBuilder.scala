@@ -93,18 +93,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   private def toSQL(node: LogicalPlan, topNode: Boolean): String = {
     if (topNode) {
       node match {
-        case d: Distinct => toSQL(node)
-        case p: Project => toSQL(node)
-        case a: Aggregate => toSQL(node)
-        case s: Sort => toSQL(node)
-        case r: RepartitionByExpression => toSQL(node)
-        case _ =>
+        case j: Join =>
           build(
             "SELECT",
             node.output.map(_.sql).mkString(", "),
             "FROM",
             toSQL(node)
           )
+        case _ => toSQL(node)
       }
     } else {
       toSQL(node)
