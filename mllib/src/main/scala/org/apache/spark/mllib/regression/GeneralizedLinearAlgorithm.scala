@@ -350,7 +350,7 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
           val partialWeightsArray = scaler.transform(
             Vectors.dense(weightsArray.slice(start, end))).toArray
 
-          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.size)
+          System.arraycopy(partialWeightsArray, 0, weightsArray, start, partialWeightsArray.length)
           i += 1
         }
         weights = Vectors.dense(weightsArray)

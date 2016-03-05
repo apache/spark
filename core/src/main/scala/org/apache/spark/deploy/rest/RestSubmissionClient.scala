@@ -382,7 +382,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       logWarning(s"Unable to connect to server ${masterUrl}.")
       lostMasters += masterUrl
     }
-    lostMasters.size >= masters.size
+    lostMasters.size >= masters.length
   }
 }
 
@@ -412,13 +412,13 @@ private[spark] object RestSubmissionClient {
   }
 
   def main(args: Array[String]): Unit = {
-    if (args.size < 2) {
+    if (args.length < 2) {
       sys.error("Usage: RestSubmissionClient [app resource] [main class] [app args*]")
       sys.exit(1)
     }
     val appResource = args(0)
     val mainClass = args(1)
-    val appArgs = args.slice(2, args.size)
+    val appArgs = args.slice(2, args.length)
     val conf = new SparkConf
     val env = filterSystemEnvironment(sys.env)
     run(appResource, mainClass, appArgs, conf, env)

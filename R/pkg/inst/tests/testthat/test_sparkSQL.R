@@ -1785,6 +1785,14 @@ test_that("sampleBy() on a DataFrame", {
   expect_identical(as.list(result[2, ]), list(key = "1", count = 7))
 })
 
+test_that("approxQuantile() on a DataFrame", {
+  l <- lapply(c(0:99), function(i) { i })
+  df <- createDataFrame(sqlContext, l, "key")
+  quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
+  expect_equal(quantiles[[1]], 50)
+  expect_equal(quantiles[[2]], 80)
+})
+
 test_that("SQL error message is returned from JVM", {
   retError <- tryCatch(sql(sqlContext, "select * from blah"), error = function(e) e)
   expect_equal(grepl("Table not found: blah", retError), TRUE)

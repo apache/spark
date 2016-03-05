@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -38,8 +39,9 @@ import org.apache.spark.util.random.XORShiftRandom
 /**
  * A class which implements a decision tree learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
+ *
  * @param strategy The configuration parameters for the tree algorithm which specify the type
- *                 of algorithm (classification, regression, etc.), feature type (continuous,
+ *                 of decision tree (classification or regression), feature type (continuous,
  *                 categorical), depth of the tree, quantile calculation strategy, etc.
  */
 @Since("1.0.0")
@@ -50,8 +52,8 @@ class DecisionTree @Since("1.0.0") (private val strategy: Strategy)
 
   /**
    * Method to train a decision tree model over an RDD
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @return DecisionTreeModel that can be used for prediction
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @return DecisionTreeModel that can be used for prediction.
    */
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
@@ -77,9 +79,9 @@ object DecisionTree extends Serializable with Logging {
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param strategy The configuration parameters for the tree algorithm which specify the type
-   *                 of algorithm (classification, regression, etc.), feature type (continuous,
+   *                 of decision tree (classification or regression), feature type (continuous,
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
-   * @return DecisionTreeModel that can be used for prediction
+   * @return DecisionTreeModel that can be used for prediction.
    */
  @Since("1.0.0")
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
@@ -97,11 +99,11 @@ object DecisionTree extends Serializable with Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
-   * @param algo algorithm, classification or regression
-   * @param impurity impurity criterion used for information gain calculation
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @return DecisionTreeModel that can be used for prediction
+   * @param algo Type of decision tree, either classification or regression.
+   * @param impurity Criterion used for information gain calculation.
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   * @return DecisionTreeModel that can be used for prediction.
    */
   @Since("1.0.0")
   def train(
@@ -124,12 +126,12 @@ object DecisionTree extends Serializable with Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
-   * @param algo algorithm, classification or regression
-   * @param impurity impurity criterion used for information gain calculation
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClasses number of classes for classification. Default value of 2.
-   * @return DecisionTreeModel that can be used for prediction
+   * @param algo Type of decision tree, either classification or regression.
+   * @param impurity Criterion used for information gain calculation.
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   * @param numClasses Number of classes for classification. Default value of 2.
+   * @return DecisionTreeModel that can be used for prediction.
    */
   @Since("1.2.0")
   def train(
@@ -153,17 +155,17 @@ object DecisionTree extends Serializable with Logging {
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
-   * @param algo classification or regression
-   * @param impurity criterion used for information gain calculation
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClasses number of classes for classification. Default value of 2.
-   * @param maxBins maximum number of bins used for splitting features
-   * @param quantileCalculationStrategy  algorithm for calculating quantiles
-   * @param categoricalFeaturesInfo Map storing arity of categorical features.
-   *                                E.g., an entry (n -> k) indicates that feature n is categorical
-   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
-   * @return DecisionTreeModel that can be used for prediction
+   * @param algo Type of decision tree, either classification or regression.
+   * @param impurity Criterion used for information gain calculation.
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   * @param numClasses Number of classes for classification. Default value of 2.
+   * @param maxBins Maximum number of bins used for splitting features.
+   * @param quantileCalculationStrategy  Algorithm for calculating quantiles.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   *                                indicates that feature n is categorical with k categories
+   *                                indexed from 0: {0, 1, ..., k-1}.
+   * @return DecisionTreeModel that can be used for prediction.
    */
   @Since("1.0.0")
   def train(
@@ -185,18 +187,18 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClasses number of classes for classification.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features.
-   *                                E.g., an entry (n -> k) indicates that feature n is categorical
-   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
+   * @param numClasses Number of classes for classification.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   *                                indicates that feature n is categorical with k categories
+   *                                indexed from 0: {0, 1, ..., k-1}.
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   *                  (suggested value: 5)
-   * @param maxBins maximum number of bins used for splitting features
-   *                 (suggested value: 32)
-   * @return DecisionTreeModel that can be used for prediction
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   *                 (suggested value: 5)
+   * @param maxBins Maximum number of bins used for splitting features.
+   *                (suggested value: 32)
+   * @return DecisionTreeModel that can be used for prediction.
    */
   @Since("1.1.0")
   def trainClassifier(
@@ -232,17 +234,17 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels are real numbers.
-   * @param categoricalFeaturesInfo Map storing arity of categorical features.
-   *                                E.g., an entry (n -> k) indicates that feature n is categorical
-   *                                with k categories indexed from 0: {0, 1, ..., k-1}.
+   * @param categoricalFeaturesInfo Map storing arity of categorical features. An entry (n -> k)
+   *                                indicates that feature n is categorical with k categories
+   *                                indexed from 0: {0, 1, ..., k-1}.
    * @param impurity Criterion used for information gain calculation.
-   *                 Supported values: "variance".
-   * @param maxDepth Maximum depth of the tree.
-   *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   *                  (suggested value: 5)
-   * @param maxBins maximum number of bins used for splitting features
-   *                 (suggested value: 32)
-   * @return DecisionTreeModel that can be used for prediction
+   *                 The only supported value for regression is "variance".
+   * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
+   *                 1 internal node + 2 leaf nodes).
+   *                 (suggested value: 5)
+   * @param maxBins Maximum number of bins used for splitting features.
+   *                (suggested value: 32)
+   * @return DecisionTreeModel that can be used for prediction.
    */
   @Since("1.1.0")
   def trainRegressor(
@@ -277,7 +279,7 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param node  Node in tree from which to classify the given data point.
    * @param binnedFeatures  Binned feature vector for data point.
-   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
+   * @param bins Possible bins for all features, indexed (numFeatures)(numBins).
    * @param unorderedFeatures  Set of indices of unordered features.
    * @return  Leaf index if the data point reaches a leaf.
    *          Otherwise, last node reachable in tree matching this example.
@@ -285,6 +287,7 @@ object DecisionTree extends Serializable with Logging {
    *                This index is different from the index used during training a particular
    *                group of nodes on one call to [[findBestSplits()]].
    */
+  @tailrec
   private def predictNodeIndex(
       node: Node,
       binnedFeatures: Array[Int],
@@ -333,12 +336,12 @@ object DecisionTree extends Serializable with Logging {
    * For unordered features, bins correspond to subsets of categories; either the left or right bin
    * for each subset is updated.
    *
-   * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
-   *             each (feature, bin).
-   * @param treePoint  Data point being aggregated.
-   * @param splits possible splits indexed (numFeatures)(numSplits)
-   * @param unorderedFeatures  Set of indices of unordered features.
-   * @param instanceWeight  Weight (importance) of instance in dataset.
+   * @param agg Array storing aggregate calculation, with a set of sufficient statistics for
+   *            each (feature, bin).
+   * @param treePoint Data point being aggregated.
+   * @param splits Possible splits indexed (numFeatures)(numSplits).
+   * @param unorderedFeatures Set of indices of unordered features.
+   * @param instanceWeight Weight (importance) of instance in dataset.
    */
   private def mixedBinSeqOp(
       agg: DTStatsAggregator,
@@ -349,7 +352,7 @@ object DecisionTree extends Serializable with Logging {
       featuresForNode: Option[Array[Int]]): Unit = {
     val numFeaturesPerNode = if (featuresForNode.nonEmpty) {
       // Use subsampled features
-      featuresForNode.get.size
+      featuresForNode.get.length
     } else {
       // Use all features
       agg.metadata.numFeatures
@@ -394,10 +397,10 @@ object DecisionTree extends Serializable with Logging {
    *
    * For each feature, the sufficient statistics of one bin are updated.
    *
-   * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
-   *             each (feature, bin).
-   * @param treePoint  Data point being aggregated.
-   * @param instanceWeight  Weight (importance) of instance in dataset.
+   * @param agg Array storing aggregate calculation, with a set of sufficient statistics for
+   *            each (feature, bin).
+   * @param treePoint Data point being aggregated.
+   * @param instanceWeight Weight (importance) of instance in dataset.
    */
   private def orderedBinSeqOp(
       agg: DTStatsAggregator,
@@ -410,7 +413,7 @@ object DecisionTree extends Serializable with Logging {
     if (featuresForNode.nonEmpty) {
       // Use subsampled features
       var featureIndexIdx = 0
-      while (featureIndexIdx < featuresForNode.get.size) {
+      while (featureIndexIdx < featuresForNode.get.length) {
         val binIndex = treePoint.binnedFeatures(featuresForNode.get.apply(featureIndexIdx))
         agg.update(featureIndexIdx, binIndex, label, instanceWeight)
         featureIndexIdx += 1
@@ -430,17 +433,17 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Given a group of nodes, this finds the best split for each node.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
-   * @param metadata Learning and dataset metadata
+   * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]].
+   * @param metadata Learning and dataset metadata.
    * @param topNodes Root node for each tree.  Used for matching instances with nodes.
-   * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree
+   * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree.
    * @param treeToNodeToIndexInfo Mapping: treeIndex --> nodeIndex --> nodeIndexInfo,
    *                              where nodeIndexInfo stores the index in the group and the
    *                              feature subsets (if using feature subsets).
-   * @param splits possible splits for all features, indexed (numFeatures)(numSplits)
-   * @param bins possible bins for all features, indexed (numFeatures)(numBins)
-   * @param nodeQueue  Queue of nodes to split, with values (treeIndex, node).
-   *                   Updated with new non-leaf nodes which are created.
+   * @param splits Possible splits for all features, indexed (numFeatures)(numSplits).
+   * @param bins Possible bins for all features, indexed (numFeatures)(numBins).
+   * @param nodeQueue Queue of nodes to split, with values (treeIndex, node).
+   *                  Updated with new non-leaf nodes which are created.
    * @param nodeIdCache Node Id cache containing an RDD of Array[Int] where
    *                    each value in the array is the data point's node Id
    *                    for a corresponding tree. This is used to prevent the need
@@ -482,7 +485,7 @@ object DecisionTree extends Serializable with Logging {
      */
 
     // numNodes:  Number of nodes in this group
-    val numNodes = nodesForGroup.values.map(_.size).sum
+    val numNodes = nodesForGroup.values.map(_.length).sum
     logDebug("numNodes = " + numNodes)
     logDebug("numFeatures = " + metadata.numFeatures)
     logDebug("numClasses = " + metadata.numClasses)
@@ -527,10 +530,10 @@ object DecisionTree extends Serializable with Logging {
      * Each data point contributes to one node. For each feature,
      * the aggregate sufficient statistics are updated for the relevant bins.
      *
-     * @param agg  Array storing aggregate calculation, with a set of sufficient statistics for
-     *             each (node, feature, bin).
-     * @param baggedPoint   Data point being aggregated.
-     * @return  agg
+     * @param agg Array storing aggregate calculation, with a set of sufficient statistics for
+     *            each (node, feature, bin).
+     * @param baggedPoint Data point being aggregated.
+     * @return Array of decision tree statistics.
      */
     def binSeqOp(
         agg: Array[DTStatsAggregator],
@@ -563,6 +566,7 @@ object DecisionTree extends Serializable with Logging {
     /**
      * Get node index in group --> features indices map,
      * which is a short cut to find feature indices for a node given node index in group
+     *
      * @param treeToNodeToIndexInfo
      * @return
      */
@@ -719,9 +723,10 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Calculate the information gain for a given (feature, split) based upon left/right aggregates.
-   * @param leftImpurityCalculator left node aggregates for this (feature, split)
-   * @param rightImpurityCalculator right node aggregate for this (feature, split)
-   * @return information gain and statistics for split
+   *
+   * @param leftImpurityCalculator Left node aggregates for this (feature, split).
+   * @param rightImpurityCalculator Right node aggregate for this (feature, split).
+   * @return Information gain and statistics for split.
    */
   private def calculateGainForSplit(
       leftImpurityCalculator: ImpurityCalculator,
@@ -771,9 +776,10 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Calculate predict value for current node, given stats of any split.
    * Note that this function is called only once for each node.
-   * @param leftImpurityCalculator left node aggregates for a split
-   * @param rightImpurityCalculator right node aggregates for a split
-   * @return predict value and impurity for current node
+   *
+   * @param leftImpurityCalculator Left node aggregates for a split.
+   * @param rightImpurityCalculator Right node aggregates for a split.
+   * @return Predict value and impurity for current node.
    */
   private def calculatePredictImpurity(
       leftImpurityCalculator: ImpurityCalculator,
@@ -788,8 +794,9 @@ object DecisionTree extends Serializable with Logging {
 
   /**
    * Find the best split for a node.
+   *
    * @param binAggregates Bin statistics.
-   * @return tuple for best split: (Split, information gain, prediction at node)
+   * @return Tuple for best split: (Split, information gain, prediction at node).
    */
   private[tree] def binsToBestSplit(
       binAggregates: DTStatsAggregator,
@@ -955,8 +962,8 @@ object DecisionTree extends Serializable with Logging {
    *       and for multiclass classification with a high-arity feature,
    *       there is one bin per category.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @param metadata Learning and dataset metadata
+   * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
+   * @param metadata Learning and dataset metadata.
    * @return A tuple of (splits, bins).
    *         Splits is an Array of [[org.apache.spark.mllib.tree.model.Split]]
    *          of size (numFeatures, numSplits).
@@ -1102,12 +1109,13 @@ object DecisionTree extends Serializable with Logging {
    * NOTE: Returned number of splits is set based on `featureSamples` and
    *       could be different from the specified `numSplits`.
    *       The `numSplits` attribute in the `DecisionTreeMetadata` class will be set accordingly.
-   * @param featureSamples feature values of each sample
-   * @param metadata decision tree metadata
+   *
+   * @param featureSamples Feature values of each sample.
+   * @param metadata Decision tree metadata.
    *                 NOTE: `metadata.numbins` will be changed accordingly
-   *                       if there are not enough splits to be found
-   * @param featureIndex feature index to find splits
-   * @return array of splits
+   *                       if there are not enough splits to be found.
+   * @param featureIndex Feature index to find splits.
+   * @return Array of splits.
    */
   private[tree] def findSplitsForContinuousFeature(
       featureSamples: Array[Double],

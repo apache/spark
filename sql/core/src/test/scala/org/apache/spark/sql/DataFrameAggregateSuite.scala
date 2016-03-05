@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.DecimalType
 
@@ -256,7 +257,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("count") {
-    assert(testData2.count() === testData2.map(_ => 1).count())
+    assert(testData2.count() === testData2.rdd.map(_ => 1).count())
 
     checkAnswer(
       testData2.agg(count('a), sumDistinct('a)), // non-partial

@@ -38,7 +38,7 @@ class RidgeRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]): Double = {
     predictions.zip(input).map { case (prediction, expected) =>
       (prediction - expected.label) * (prediction - expected.label)
-    }.reduceLeft(_ + _) / predictions.size
+    }.sum / predictions.size
   }
 
   test("ridge regression can help avoid overfitting") {

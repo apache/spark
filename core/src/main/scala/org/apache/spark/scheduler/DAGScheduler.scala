@@ -22,6 +22,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.Await
@@ -469,6 +470,7 @@ class DAGScheduler(
    * all of that stage's ancestors.
    */
   private def updateJobIdStageIdMaps(jobId: Int, stage: Stage): Unit = {
+    @tailrec
     def updateJobIdStageIdMapsList(stages: List[Stage]) {
       if (stages.nonEmpty) {
         val s = stages.head

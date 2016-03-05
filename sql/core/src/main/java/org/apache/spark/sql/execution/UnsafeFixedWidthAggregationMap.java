@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
-import org.apache.spark.unsafe.memory.MemoryLocation;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.

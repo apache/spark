@@ -18,8 +18,8 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SQLConf, SQLContext}
-
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
  * A special [[SQLContext]] prepared for testing.
@@ -31,16 +31,16 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
       new SparkConf().set("spark.sql.testkey", "true")))
   }
 
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
-
-    clear()
-
-    override def clear(): Unit = {
-      super.clear()
-
-      // Make sure we start with the default test configs even after clear
-      TestSQLContext.overrideConfs.map {
-        case (key, value) => setConfString(key, value)
+  @transient
+  protected[sql] override lazy val sessionState: SessionState = new SessionState(self) {
+    override lazy val conf: SQLConf = {
+      new SQLConf {
+        clear()
+        override def clear(): Unit = {
+          super.clear()
+          // Make sure we start with the default test configs even after clear
+          TestSQLContext.overrideConfs.foreach { case (key, value) => setConfString(key, value) }
+        }
       }
     }
   }

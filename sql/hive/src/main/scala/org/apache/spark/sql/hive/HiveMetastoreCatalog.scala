@@ -36,10 +36,10 @@ import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.DataTypeParser
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.util.DataTypeParser
 import org.apache.spark.sql.execution.{datasources, FileRelation}
 import org.apache.spark.sql.execution.datasources.{Partition => ParquetPartition, _}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
@@ -149,11 +149,10 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         def getColumnNames(colType: String): Seq[String] = {
           table.properties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
             numCols => (0 until numCols.toInt).map { index =>
-              table.properties.get(s"spark.sql.sources.schema.${colType}Col.$index").getOrElse {
+              table.properties.getOrElse(s"spark.sql.sources.schema.${colType}Col.$index",
                 throw new AnalysisException(
                   s"Could not read $colType columns from the metastore because it is corrupted " +
-                    s"(missing part $index of it, $numCols parts are expected).")
-              }
+                    s"(missing part $index of it, $numCols parts are expected)."))
             }
           }.getOrElse(Nil)
         }

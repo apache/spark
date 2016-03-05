@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -453,6 +453,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   format("json").save(path)
    * }}}
    *
+   * You can set the following JSON-specific option(s) for writing JSON files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
+   *
    * @since 1.4.0
    */
   def json(path: String): Unit = format("json").save(path)
@@ -464,6 +469,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   format("parquet").save(path)
    * }}}
    *
+   * You can set the following Parquet-specific option(s) for writing Parquet files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names(`none`, `snappy`, `gzip`, and `lzo`).
+   * This will overwrite `spark.sql.parquet.compression.codec`. </li>
+   *
    * @since 1.4.0
    */
   def parquet(path: String): Unit = format("parquet").save(path)
@@ -474,6 +484,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * {{{
    *   format("orc").save(path)
    * }}}
+   *
+   * You can set the following ORC-specific option(s) for writing ORC files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
+   * This will overwrite `orc.compress`. </li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used together with `HiveContext`.
@@ -492,9 +507,30 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *   df.write().text("/path/to/output")
    * }}}
    *
+   * You can set the following option(s) for writing text files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
+   *
    * @since 1.6.0
    */
   def text(path: String): Unit = format("text").save(path)
+
+  /**
+   * Saves the content of the [[DataFrame]] in CSV format at the specified path.
+   * This is equivalent to:
+   * {{{
+   *   format("csv").save(path)
+   * }}}
+   *
+   * You can set the following CSV-specific option(s) for writing CSV files:
+   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
+   * `snappy` and `deflate`). </li>
+   *
+   * @since 2.0.0
+   */
+  def csv(path: String): Unit = format("csv").save(path)
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options

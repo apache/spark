@@ -130,7 +130,7 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   def computeCost(dataset: DataFrame): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
     parentModel.computeCost(data)
   }
 
@@ -260,7 +260,7 @@ class KMeans @Since("1.5.0") (
 
   @Since("1.5.0")
   override def fit(dataset: DataFrame): KMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).map { case Row(point: Vector) => point }
+    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
     val algo = new MLlibKMeans()
       .setK($(k))
@@ -303,7 +303,7 @@ class KMeansSummary private[clustering] (
    * Size of each cluster.
    */
   @Since("2.0.0")
-  lazy val size: Array[Int] = cluster.map {
+  lazy val size: Array[Int] = cluster.rdd.map {
     case Row(clusterIdx: Int) => (clusterIdx, 1)
   }.reduceByKey(_ + _).collect().sortBy(_._1).map(_._2)
 }
