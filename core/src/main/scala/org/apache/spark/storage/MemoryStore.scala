@@ -88,6 +88,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
   }
 
   override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
+    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
@@ -107,6 +108,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * The caller should guarantee that `size` is correct.
    */
   def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): PutResult = {
+    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
     val putSuccess = tryToPut(blockId, () => bytes, size, deserialized = false)
@@ -125,6 +127,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
+    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     putIterator(blockId, values, level, returnValues, allowPersistToDisk = true)
   }
 
@@ -146,6 +149,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       level: StorageLevel,
       returnValues: Boolean,
       allowPersistToDisk: Boolean): PutResult = {
+    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
       case Left(arrayValues) =>
