@@ -52,6 +52,12 @@ private[spark] class BlockResult(
     val readMethod: DataReadMethod.Value,
     val bytes: Long)
 
+// Class for representing return value of doPut()
+private sealed trait DoPutResult
+private case object DoPutSucceeded extends DoPutResult
+private case object DoPutBytesFailed extends DoPutResult
+private case class DoPutIteratorFailed(iter: Iterator[Any]) extends DoPutResult
+
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
  * retrieving blocks both locally and remotely into various stores (memory, disk, and off-heap).
@@ -436,6 +442,10 @@ private[spark] class BlockManager(
     }
   }
 
+  /**
+   * Get a local block from the block manager.
+   * Assumes that the caller holds a read lock on the block.
+   */
   private def doGetLocal(
       blockId: BlockId,
       info: BlockInfo,
@@ -665,7 +675,7 @@ private[spark] class BlockManager(
       makeIterator: () => Iterator[Any]): Either[BlockResult, Iterator[Any]] = {
     // Initially we hold no locks on this block.
     doPut(blockId, IteratorValues(makeIterator), level, keepReadLock = true) match {
-      case None =>
+      case DoPutSucceeded =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
         val blockResult = get(blockId).getOrElse {
@@ -675,11 +685,13 @@ private[spark] class BlockManager(
           throw new SparkException(s"get() failed for block $blockId even though we held a lock")
         }
         Left(blockResult)
-      case Some(failedPutResult) =>
+      case DoPutIteratorFailed(iter) =>
         // The put failed, likely because the data was too large to fit in memory and could not be
         // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
         // that they can decide what to do with the values (e.g. process them without caching).
-       Right(failedPutResult.get)
+       Right(iter)
+      case DoPutBytesFailed =>
+        throw new SparkException("doPut returned an invalid failure response")
     }
   }
 
@@ -693,7 +705,13 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(values != null, "Values is null")
-    doPut(blockId, IteratorValues(() => values), level, tellMaster, effectiveStorageLevel).isEmpty
+    val result = doPut(
+      blockId,
+      IteratorValues(() => values),
+      level,
+      tellMaster,
+      effectiveStorageLevel)
+    result == DoPutSucceeded
   }
 
   /**
@@ -725,7 +743,8 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(bytes != null, "Bytes is null")
-    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel).isEmpty
+    val result = doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
+    result == DoPutSucceeded
   }
 
   /**
@@ -740,9 +759,9 @@ private[spark] class BlockManager(
    * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
    *                     block already exists). If false, this method will hold no locks when it
    *                     returns.
-   * @return `Some(Option[Iterator[Any])` if the block did not exist and could not be successfully
-   *          cached, or None if the block already existed or was successfully stored (fully
-   *          consuming the input data / input iterator).
+   * @return [[DoPutSucceeded]] if the block was already present or if the put succeeded, or
+   *        [[DoPutBytesFailed]] if the put failed and we were storing bytes, or
+   *        [[DoPutIteratorFailed]] if the put succeeded and we were storing an iterator.
    */
   private def doPut(
       blockId: BlockId,
@@ -750,7 +769,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None,
-      keepReadLock: Boolean = false): Option[Option[Iterator[Any]]] = {
+      keepReadLock: Boolean = false): DoPutResult = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -771,7 +790,7 @@ private[spark] class BlockManager(
           // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
           releaseLock(blockId)
         }
-        return None
+        return DoPutSucceeded
       }
     }
 
@@ -827,6 +846,7 @@ private[spark] class BlockManager(
               diskStore.putIterator(blockId, iterator(), putLevel) match {
                 case Right(s) =>
                   size = s
+                // putIterator() will never return Left (see its return type).
               }
             case ByteBufferValues(bytes) =>
               bytes.rewind()
@@ -872,9 +892,13 @@ private[spark] class BlockManager(
       Await.ready(replicationFuture, Duration.Inf)
     } else if (putLevel.replication > 1 && blockWasSuccessfullyStored) {
       val remoteStartTime = System.currentTimeMillis
-      val bytesToReplicate = doGetLocal(blockId, putBlockInfo, asBlockResult = false).getOrElse {
-        throw new SparkException(s"Block $blockId was not found even though it was just stored")
-      }.asInstanceOf[ByteBuffer]
+      val bytesToReplicate: ByteBuffer = {
+        doGetLocal(blockId, putBlockInfo, asBlockResult = false)
+          .map(_.asInstanceOf[ByteBuffer])
+          .getOrElse {
+            throw new SparkException(s"Block $blockId was not found even though it was just stored")
+          }
+      }
       try {
         replicate(blockId, bytesToReplicate, putLevel)
       } finally {
@@ -893,9 +917,11 @@ private[spark] class BlockManager(
     }
 
     if (blockWasSuccessfullyStored) {
-      None
+      DoPutSucceeded
+    } else if (iteratorFromFailedMemoryStorePut.isDefined) {
+      DoPutIteratorFailed(iteratorFromFailedMemoryStorePut.get)
     } else {
-      Some(iteratorFromFailedMemoryStorePut)
+      DoPutBytesFailed
     }
   }
 
