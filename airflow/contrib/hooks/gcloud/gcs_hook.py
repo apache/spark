@@ -27,31 +27,35 @@ class GCSHook(BaseHook):
     """
     A hook for working wth Google Cloud Storage via the gcloud library.
 
-    GCS Connections can contain two optional fields in "extras":
+    GCS Connections can contain three optional fields in "extras":
     {
         "project": "<google cloud project id>",
-        "keyfile_path": "<path to service account JSON keyfile>"
+        "key_path": "<path to service account keyfile, either JSON or P12>"
+        "service_account": "<google service account email, required for P12>"
     }
 
     If the project field is missing, the project will be inferred from the host
     environment (if possible). To set a default project, use:
         gcloud config set project <project-id>
 
-    If the keyfile_path is missing, the host authorization credentials will be
+    If the key_path is missing, the host authorization credentials will be
     used (if possible). To log in, use:
         gcloud auth
+
+    The service_account is only required if the key_path points to a P12 file.
     """
     def __init__(self, gcs_conn_id=None):
         self.gcs_conn_id = gcs_conn_id
         self.gcs_conn = self.get_conn()
 
     def get_conn(self):
-        project, keyfile_path = None, None
+        project, key_path = None, None
         if self.gcs_conn_id:
             conn = self.get_connection(self.gcs_conn_id)
             extras = conn.extra_dejson
             project = extras.get('project', None)
-            keyfile_path = extras.get('keyfile_path', None)
+            key_path = extras.get('key_path', None)
+            service_account = extras.get('service_account', None)
 
         if not project:
             project = gcloud._helpers._determine_default_project()
@@ -60,9 +64,18 @@ class GCSHook(BaseHook):
             if isinstance(project, bytes):
                 project = project.decode()
 
-        if keyfile_path:
-            client = gcs.Client.from_service_account_json(
-                keyfile_path, project=project)
+        if key_path:
+            if key_path.endswith('.json') or key_path.endswith('.JSON'):
+                client = gcs.Client.from_service_account_json(
+                    json_credentials_path=key_path,
+                    project=project)
+            elif key_path.endswith('.p12') or key_path.endswith('.P12'):
+                client = gcs.Client.from_service_account_p12(
+                    client_email=service_account,
+                    private_key_path=key_path,
+                    project=project)
+            else:
+                raise ValueError('Unrecognized keyfile: {}'.format(key_path))
         else:
             client = gcs.Client(project=project)
 
