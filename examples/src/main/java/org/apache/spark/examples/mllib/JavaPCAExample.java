@@ -42,7 +42,7 @@ public class JavaPCAExample {
 
     // $example on$
     double[][] array = {{1.12, 2.05, 3.12}, {5.56, 6.28, 8.94}, {10.2, 8.0, 20.5}};
-    LinkedList<Vector> rowsList = new LinkedList<Vector>();
+    LinkedList<Vector> rowsList = new LinkedList<>();
     for (int i = 0; i < array.length; i++) {
       Vector currentRow = Vectors.dense(array[i]);
       rowsList.add(currentRow);

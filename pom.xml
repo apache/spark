@@ -239,6 +239,11 @@
         <enabled>false</enabled>
       </snapshots>
     </pluginRepository>
+    <pluginRepository>
+      <id>sevntu-maven</id>
+      <name>sevntu-maven</name>
+      <url>http://sevntu-checkstyle.github.io/sevntu.checkstyle/maven2</url>
+    </pluginRepository>
   </pluginRepositories>
   <dependencies>
     <!--
@@ -2262,6 +2267,18 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>2.17</version>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>6.16.1</version>
+          </dependency>
+          <dependency>
+             <groupId>com.github.sevntu.checkstyle</groupId>
+             <artifactId>sevntu-checkstyle-maven-plugin</artifactId>
+             <version>1.15.0</version>
+          </dependency>
+        </dependencies>
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>false</failOnViolation>
@@ -2273,6 +2290,7 @@
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>
+          <packageNamesLocation>dev/packagenames.xml</packageNamesLocation>
         </configuration>
         <executions>
           <execution>
