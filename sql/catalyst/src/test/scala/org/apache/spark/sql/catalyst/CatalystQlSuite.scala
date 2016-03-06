@@ -20,13 +20,13 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ng.ParseDriver
+import org.apache.spark.sql.catalyst.parser.ng.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class CatalystQlSuite extends PlanTest {
-  val parser = ParseDriver
+  val parser = CatalystSqlParser
 
   test("test case insensitive") {
     val result = Project(UnresolvedAlias(Literal(1)):: Nil, OneRowRelation)
@@ -47,8 +47,10 @@ class CatalystQlSuite extends PlanTest {
   }
 
   test("test Union Distinct operator") {
-    val parsed1 = parser.parsePlan("SELECT * FROM t0 UNION SELECT * FROM t1")
-    val parsed2 = parser.parsePlan("SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1")
+    val parsed1 = parser.parsePlan(
+      "SELECT * FROM (SELECT * FROM t0 UNION SELECT * FROM t1) u_1")
+    val parsed2 = parser.parsePlan(
+      "SELECT * FROM (SELECT * FROM t0 UNION DISTINCT SELECT * FROM t1) u_1")
     val expected =
       Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
         SubqueryAlias("u_1",
@@ -63,7 +65,7 @@ class CatalystQlSuite extends PlanTest {
   }
 
   test("test Union All operator") {
-    val parsed = parser.parsePlan("SELECT * FROM t0 UNION ALL SELECT * FROM t1")
+    val parsed = parser.parsePlan("SELECT * FROM (SELECT * FROM t0 UNION ALL SELECT * FROM t1) u_1")
     val expected =
       Project(UnresolvedAlias(UnresolvedStar(None)) :: Nil,
         SubqueryAlias("u_1",

@@ -27,7 +27,10 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
-object ParseDriver extends ParserInterface with Logging {
+/**
+ * Base SQL parsing infrastructure.
+ */
+abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
@@ -41,10 +44,13 @@ object ParseDriver extends ParserInterface with Logging {
 
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    parser.statement()
+    parser.singleStatement()
   }
 
-  def parse[T](command: String)(toTree: SqlBaseParser => ParserRuleContext): T = {
+  /** Get the builder (visitor) which converts a ParseTree into a AST. */
+  protected def astBuilder: SqlBaseBaseVisitor[AnyRef]
+
+  protected def parse[T](command: String)(toTree: SqlBaseParser => ParserRuleContext): T = {
     logInfo(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
@@ -68,12 +74,21 @@ object ParseDriver extends ParserInterface with Logging {
         tokenStream.reset() // rewind input stream
         parser.reset()
 
+        // Try Again.
         parser.getInterpreter.setPredictionMode(PredictionMode.LL)
         toTree(parser)
     }
 
-    new AstBuilder().visit(tree).asInstanceOf[T]
+    // Convert the tree into a useful AST.
+    astBuilder.visit(tree).asInstanceOf[T]
   }
+}
+
+/**
+ * Concrete SQL parser for Catalyst-only SQL statements.
+ */
+object CatalystSqlParser extends AbstractSqlParser {
+  val astBuilder = new AstBuilder
 }
 
 /**
@@ -104,6 +119,9 @@ private[parser] class ANTLRNoCaseStringStream(input: String) extends ANTLRInputS
   }
 }
 
+/**
+ * The ParseErrorListener converts parse errors into AnalysisExceptions.
+ */
 case object ParseErrorListener extends BaseErrorListener {
   override def syntaxError(
       recognizer: Recognizer[_, _],
@@ -116,8 +134,12 @@ case object ParseErrorListener extends BaseErrorListener {
   }
 }
 
+/**
+ * The post-processor validates & cleans-up the parse tree during the parse process.
+ */
 case object PostProcessor extends SqlBaseBaseListener {
 
+  /** Fail when an identifier starts with a digit. */
   override def exitDigitIdentifier(ctx: DigitIdentifierContext): Unit = {
     val token = ctx.DIGIT_IDENTIFIER.getSymbol
     throw new AnalysisException(

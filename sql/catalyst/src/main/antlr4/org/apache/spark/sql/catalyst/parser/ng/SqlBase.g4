@@ -34,8 +34,7 @@ singleTableIdentifier
 
 statement
     : query                                                            #statementDefault
-    | USE schema=identifier                                            #use
-    | USE catalog=identifier '.' schema=identifier                     #use
+    | USE db=identifier                                                #use
     | CREATE TABLE qualifiedName
         (WITH tableProperties)? AS query
         (WITH (NO)? DATA)?                                             #createTableAsSelect
@@ -52,14 +51,16 @@ statement
     | CREATE (OR REPLACE)? VIEW qualifiedName AS query                 #createView
     | DROP VIEW (IF EXISTS)? qualifiedName                             #dropView
     | CALL qualifiedName '(' (callArgument (',' callArgument)*)? ')'   #call
-    | EXPLAIN ('(' explainOption (',' explainOption)* ')')? statement  #explain
-    | SHOW TABLES ((FROM | IN) qualifiedName)? (LIKE pattern=STRING)?  #showTables
+    | EXPLAIN explainOption* statement                                 #explain
+    | SHOW TABLES ((FROM | IN) db=identifier)?
+        (LIKE qualifiedName | pattern=STRING)?                         #showTables
     | SHOW SCHEMAS ((FROM | IN) identifier)?                           #showSchemas
     | SHOW CATALOGS                                                    #showCatalogs
     | SHOW COLUMNS (FROM | IN) qualifiedName                           #showColumns
     | DESCRIBE qualifiedName                                           #showColumns
     | DESC qualifiedName                                               #showColumns
-    | SHOW FUNCTIONS                                                   #showFunctions
+    | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
+    | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
     | SHOW SESSION                                                     #showSession
     | SET SESSION qualifiedName EQ expression                          #setSession
     | RESET SESSION qualifiedName                                      #resetSession
@@ -70,10 +71,15 @@ statement
         (WHERE booleanExpression)?
         (ORDER BY sortItem (',' sortItem)*)?
         (LIMIT limit=(INTEGER_VALUE | ALL))?                           #showPartitions
+    | REFRESH TABLE tableIdentifier                                    #refreshTable
+    | CACHE TABLE LAZY? tableIdentifier (AS? query)?                   #cacheTable
+    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
+    | CLEAR CACHE                                                      #clearCache
+    | SET .*?                                                          #setConfiguration
     ;
 
 query
-    :  ctes? insertInto? queryNoWith
+    : ctes? queryNoWith
     ;
 
 insertInto
@@ -92,6 +98,10 @@ ctes
     : WITH namedQuery (',' namedQuery)*
     ;
 
+namedQuery
+    : name=identifier AS? '(' queryNoWith ')'
+    ;
+
 tableElement
     : identifier dataType
     ;
@@ -101,12 +111,16 @@ tableProperties
     ;
 
 tableProperty
-    : identifier EQ expression
+    : key=STRING (EQ value=STRING)?
     ;
 
 queryNoWith
-    : queryTerm
-      (ORDER BY order+=sortItem (',' order+=sortItem)*)?
+    : insertInto? queryTerm queryOrganization                                              #singleInsertQuery
+    | fromClause multiInsertQueryBody+                                                     #multiInsertQuery
+    ;
+
+queryOrganization
+    : (ORDER BY order+=sortItem (',' order+=sortItem)*)?
       (CLUSTER BY clusterBy+=expression (',' clusterBy+=expression)*)?
       (DISTRIBUTE BY distributeBy+=expression (',' distributeBy+=expression)*)?
       (SORT BY sort+=sortItem (',' sort+=sortItem)*)?
@@ -114,16 +128,21 @@ queryNoWith
       (LIMIT limit=expression)?
     ;
 
+multiInsertQueryBody
+    : insertInto?
+      querySpecification
+      queryOrganization
+    ;
+
 queryTerm
-    : queryPrimary                                                             #queryTermDefault
-    | left=queryTerm operator=INTERSECT setQuantifier? right=queryTerm         #setOperation
-    | left=queryTerm operator=(UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
+    : queryPrimary                                                                         #queryTermDefault
+    | left=queryTerm operator=(INTERSECT | UNION | EXCEPT) setQuantifier? right=queryTerm  #setOperation
     ;
 
 queryPrimary
     : querySpecification                                                    #queryPrimaryDefault
     | TABLE tableIdentifier                                                 #table
-    | inlineTable                                                           #inlineTableDef1
+    | inlineTable                                                           #inlineTableDefault1
     | '(' queryNoWith  ')'                                                  #subquery
     ;
 
@@ -132,17 +151,28 @@ sortItem
     ;
 
 querySpecification
-    : SELECT setQuantifier? selectItem (',' selectItem)*
-      (FROM relation (',' relation)*)?
-      (WHERE where=booleanExpression)?
-      (lateralView)*
-      aggregation?
-      (HAVING having=booleanExpression)?
-      windows?
+    : ((SELECT kind=(TRANSFORM | MAP | REDUCE)) '(' selectItem (',' selectItem)* ')'
+       inRowFormat=rowFormat?
+       USING script=STRING
+       (AS (columnAliasList | colTypeList | ('(' (columnAliasList | colTypeList) ')')))?
+       outRowFormat=rowFormat?
+       (RECORDREADER outRecordReader=STRING)?
+       fromClause?
+       (WHERE where=booleanExpression)?)
+    | (kind=SELECT setQuantifier? selectItem (',' selectItem)*
+       fromClause?
+       lateralView*
+       (WHERE where=booleanExpression)?
+       (aggregation (HAVING having=booleanExpression)?)?
+       windows?)
+    ;
+
+fromClause
+    : FROM relation (',' relation)*
     ;
 
 aggregation
-    : GROUP BY expression (',' expression)* (
+    : GROUP BY groupingExpressions+=expression (',' groupingExpressions+=expression)* (
       WITH kind=ROLLUP
     | WITH kind=CUBE
     | kind=GROUPING SETS '(' groupingSet (',' groupingSet)* ')')?
@@ -155,10 +185,6 @@ groupingSet
 
 lateralView
     : LATERAL VIEW (OUTER)? qualifiedName '(' (expression (',' expression)*)? ')' tblName=identifier (AS? colName+=identifier (',' colName+=identifier)*)
-    ;
-
-namedQuery
-    : name=identifier AS? '(' query ')'
     ;
 
 setQuantifier
@@ -175,7 +201,7 @@ selectItem
 relation
     : left=relation
       ( CROSS JOIN right=sampledRelation
-      | joinType JOIN rightRelation=relation booleanExpression
+      | joinType JOIN rightRelation=relation ON? booleanExpression
       | NATURAL joinType JOIN right=sampledRelation
       )                                           #joinRelation
     | sampledRelation                             #relationDefault
@@ -200,18 +226,40 @@ sampledRelation
     ;
 
 columnAliases
-    : '(' identifier (',' identifier)* ')'
+    : '(' columnAliasList ')'
+    ;
+
+columnAliasList
+    : identifier (',' identifier)*
     ;
 
 relationPrimary
     : tableIdentifier (AS? identifier)?                             #tableName
-    | '(' query ')' (AS? identifier)?                               #aliasedQuery
+    | '(' queryNoWith ')' (AS? identifier)?                         #aliasedQuery
     | '(' relation ')'  (AS? identifier)?                           #aliasedRelation
-    | inlineTable                                                   #inlineTableDef2
+    | inlineTable                                                   #inlineTableDefault2
     ;
 
 inlineTable
     : VALUES expression (',' expression)*  (AS? identifier columnAliases?)?
+    ;
+
+rowFormat
+    : rowFormatSerde
+    | rowFormatDelimited
+    ;
+
+rowFormatSerde
+    : ROW FORMAT SERDE name=STRING (WITH SERDEPROPERTIES props=tableProperties)?
+    ;
+
+rowFormatDelimited
+    : ROW FORMAT DELIMITED
+      (FIELDS TERMINATED BY fieldsTerminatedBy=STRING)?
+      (COLLECTION ITEMS TERMINATED BY collectionItemsTerminatedBy=STRING)?
+      (MAP KEYS TERMINATED BY keysTerminatedBy=STRING)?
+      (ESCAPED BY escapedBy=STRING)?
+      (LINES SEPARATED BY linesSeparatedBy=STRING)?
     ;
 
 tableIdentifier
@@ -311,12 +359,16 @@ intervalValue
 dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
-    | complex=STRUCT '<' colType (',' colType)* '>'             #complexDataType
+    | complex=STRUCT '<' colTypeList '>'                        #complexDataType
     | identifier ('(' INTEGER_VALUE (',' typeParameter)* ')')?  #primitiveDatatype
     ;
 
+colTypeList
+    : colType (',' colType)*
+    ;
+
 colType
-    : identifier ':' dataType (COMMENT STRING)?
+    : identifier ':'? dataType (COMMENT STRING)?
     ;
 
 typeParameter
@@ -360,8 +412,7 @@ frameBound
 
 
 explainOption
-    : FORMAT value=(TEXT | GRAPHVIZ)         #explainFormat
-    | TYPE value=(LOGICAL | DISTRIBUTED)     #explainType
+    : LOGICAL | FORMATTED | EXTENDED
     ;
 
 transactionMode
@@ -387,9 +438,13 @@ qualifiedName
 
 identifier
     : IDENTIFIER             #unquotedIdentifier
-    | BACKQUOTED_IDENTIFIER  #quotedIdentifier
+    | quotedIdentifier       #quotedIdentifierAlternative
     | nonReserved            #unquotedIdentifier
     | DIGIT_IDENTIFIER       #digitIdentifier
+    ;
+
+quotedIdentifier
+    : BACKQUOTED_IDENTIFIER
     ;
 
 number
@@ -406,12 +461,13 @@ nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | SCHEMAS | CATALOGS | SESSION
     | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY
-    | LATERAL | WINDOW
+    | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
+    | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
+    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY
     | DATE | TIMESTAMP | INTERVAL
     | YEAR | WEEK| MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
-    | EXPLAIN | FORMAT | TYPE | TEXT | GRAPHVIZ | LOGICAL | DISTRIBUTED
+    | EXPLAIN | FORMAT | LOGICAL | FORMATTED
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
-    | RESCALED | APPROXIMATE | CONFIDENCE
     | SET | RESET
     | VIEW | REPLACE
     | IF
@@ -439,9 +495,7 @@ ROLLUP: 'ROLLUP';
 ORDER: 'ORDER';
 HAVING: 'HAVING';
 LIMIT: 'LIMIT';
-APPROXIMATE: 'APPROXIMATE';
 AT: 'AT';
-CONFIDENCE: 'CONFIDENCE';
 OR: 'OR';
 AND: 'AND';
 IN: 'IN';
@@ -512,11 +566,7 @@ CONSTRAINT: 'CONSTRAINT';
 DESCRIBE: 'DESCRIBE';
 EXPLAIN: 'EXPLAIN';
 FORMAT: 'FORMAT';
-TYPE: 'TYPE';
-TEXT: 'TEXT';
-GRAPHVIZ: 'GRAPHVIZ';
 LOGICAL: 'LOGICAL';
-DISTRIBUTED: 'DISTRIBUTED';
 CAST: 'CAST';
 SHOW: 'SHOW';
 TABLES: 'TABLES';
@@ -533,7 +583,6 @@ EXCEPT: 'EXCEPT';
 INTERSECT: 'INTERSECT';
 TO: 'TO';
 TABLESAMPLE: 'TABLESAMPLE';
-RESCALED: 'RESCALED';
 STRATIFY: 'STRATIFY';
 ALTER: 'ALTER';
 RENAME: 'RENAME';
@@ -591,6 +640,29 @@ SORT: 'SORT';
 CLUSTER: 'CLUSTER';
 DISTRIBUTE: 'DISTRIBUTE';
 OVERWRITE: 'OVERWRITE';
+TRANSFORM: 'TRANSFORM';
+REDUCE: 'REDUCE';
+USING: 'USING';
+SERDE: 'SERDE';
+SERDEPROPERTIES: 'SERDEPROPERTIES';
+RECORDREADER: 'RECORDREADER';
+DELIMITED: 'DELIMITED';
+FIELDS: 'FIELDS';
+TERMINATED: 'TERMINATED';
+COLLECTION: 'COLLECTION';
+ITEMS: 'ITEMS';
+KEYS: 'KEYS';
+ESCAPED: 'ESCAPED';
+LINES: 'LINES';
+SEPARATED: 'SEPARATED';
+FUNCTION: 'FUNCTION';
+EXTENDED: 'EXTENDED';
+REFRESH: 'REFRESH';
+CLEAR: 'CLEAR';
+CACHE: 'CACHE';
+UNCACHE: 'UNCACHE';
+LAZY: 'LAZY';
+FORMATTED: 'FORMATTED';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
