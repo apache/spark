@@ -40,7 +40,6 @@ if __name__ == "__main__":
         .load("spark//data/mllib/sample_linear_regression_data.txt")
     train, test = data.randomSplit([0.7, 0.3])
     lr = LinearRegression(maxIter=10, regParam=0.1)
-    pipeline = Pipeline(stages=[lr])
 
     # We use a ParamGridBuilder to construct a grid of parameters to search over.
     # TrainValidationSplit will try all combinations of values and determine best model using
@@ -52,7 +51,7 @@ if __name__ == "__main__":
 
     # In this case the estimator is simply the linear regression.
     # A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
-    tvs = TrainValidationSplit(estimator=pipeline,
+    tvs = TrainValidationSplit(estimator=lr,
                                estimatorParamMaps=paramGrid,
                                evaluator=RegressionEvaluator(),
                                # 80% of the data will be used for training, 20% for validation.
