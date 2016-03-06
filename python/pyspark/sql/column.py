@@ -339,7 +339,7 @@ class Column(object):
         else:
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
-
+    
     @ignore_unicode_prefix
     @since(1.3)
     def astype(self, dataType):
@@ -349,12 +349,11 @@ class Column(object):
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.astype(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
-
+    
         (Note : astype is alias for cast)
         """
         return self.cast(dataType)
 
-    @since(1.3)
     def between(self, lowerBound, upperBound):
         """
         A boolean expression that is evaluated to true if the value of this
