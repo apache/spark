@@ -424,6 +424,32 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
+  test("deadlock between dropFromMemory and removeBlock") {
+    store = makeBlockManager(2000)
+    val a1 = new Array[Byte](400)
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+    val t1 = new Thread {
+      override def run() = {
+        store.memoryManager.synchronized {
+          Thread.sleep(1000)
+          val status = store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+          assert(status == None, "this thread can not get block a1")
+        }
+      }
+    }
+
+    val t2 = new Thread {
+      override def run() = {
+        store.removeBlock("a1", tellMaster = false)
+      }
+    }
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+  }
+
   test("correct BlockResult returned from get() calls") {
     store = makeBlockManager(12000)
     val list1 = List(new Array[Byte](2000), new Array[Byte](2000))
