@@ -180,6 +180,10 @@ final class DecisionTreeClassificationModel private[ml] (
    *   - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *     where gain is scaled by the number of instances passing through node
    *   - Normalize importances for tree to sum to 1.
+   *
+   * Note: Feature importance for single decision trees can have high variance due to
+   *       correlated predictor variables. Consider using a [[RandomForestClassifier]]
+   *       to determine feature importance instead.
    */
   lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
 

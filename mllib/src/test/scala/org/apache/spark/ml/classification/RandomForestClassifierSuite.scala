@@ -174,6 +174,8 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     val importances = rf.fit(df).featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
   }
 
   /////////////////////////////////////////////////////////////////////////////
