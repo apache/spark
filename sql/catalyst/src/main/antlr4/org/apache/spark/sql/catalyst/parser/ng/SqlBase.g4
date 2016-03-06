@@ -125,7 +125,7 @@ tablePropertyKey
     ;
 
 tablePropertyKeyElement
-    : (identifier | FROM | TO)
+    : (identifier | FROM | TO) // Move keywords to a special list?
     ;
 
 queryNoWith
@@ -177,7 +177,8 @@ querySpecification
        fromClause?
        lateralView*
        (WHERE where=booleanExpression)?
-       (aggregation (HAVING having=booleanExpression)?)?
+       aggregation?
+       (HAVING having=booleanExpression)?
        windows?)
     ;
 
@@ -356,7 +357,7 @@ booleanValue
     ;
 
 interval
-    : INTERVAL intervalField+
+    : INTERVAL intervalField*
     ;
 
 intervalField
@@ -452,7 +453,6 @@ identifier
     : IDENTIFIER             #unquotedIdentifier
     | quotedIdentifier       #quotedIdentifierAlternative
     | nonReserved            #unquotedIdentifier
-    | DIGIT_IDENTIFIER       #digitIdentifier
     ;
 
 quotedIdentifier
@@ -472,11 +472,10 @@ number
 nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | SCHEMAS | CATALOGS | SESSION
     | ADD
-    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY
+    | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY | STRUCT
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
     | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | TEMPORARY | OPTIONS
-    | INTERVAL
     | GROUPING | CUBE | ROLLUP
     | EXPLAIN | FORMAT | LOGICAL | FORMATTED
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
@@ -487,6 +486,7 @@ nonReserved
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
     | SERIALIZABLE | REPEATABLE | COMMITTED | UNCOMMITTED | READ | WRITE | ONLY
     | CALL
+    | SORT | TABLE
     ;
 
 SELECT: 'SELECT';
@@ -699,11 +699,7 @@ DOUBLE_LITERAL
     ;
 
 IDENTIFIER
-    : (LETTER | '_') (LETTER | DIGIT | '_')*
-    ;
-
-DIGIT_IDENTIFIER
-    : DIGIT (LETTER | DIGIT | '_')+
+    : (LETTER | DIGIT | '_')+
     ;
 
 BACKQUOTED_IDENTIFIER

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder}
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 
 /**
@@ -61,7 +62,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       val value = remainder.substring(keyValueSeparatorIndex + 1).trim
       SetCommand(Some(key -> Option(value)))
     } else if (remainder.nonEmpty) {
-      SetCommand(Some(remainder -> None))
+      SetCommand(Some(remainder.trim -> None))
     } else {
       SetCommand(None)
     }
@@ -138,7 +139,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Determine if a plan should be explained at all.
    */
   protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
-    case _: DescribeCommand => false
+    case _: datasources.DescribeCommand => false
     case _ => true
   }
 
@@ -167,18 +168,18 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitCreateTable(
       ctx: CreateTableContext): (TableIdentifier, Boolean, Boolean) = withOrigin(ctx) {
     val temporary = ctx.TEMPORARY != null
-    val allowExisting = ctx.EXISTS == null
-    assert(!temporary || allowExisting,
-      "CREATE TEMPORARY TABLE cannot be combined with an IF NOT EXISTS clause.",
+    val ifNotExists = ctx.EXISTS != null
+    assert(!temporary || !ifNotExists,
+      "a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause.",
       ctx)
-    (visitTableIdentifier(ctx.tableIdentifier), temporary, allowExisting)
+    (visitTableIdentifier(ctx.tableIdentifier), temporary, ifNotExists)
   }
 
   /**
    * Create a [[CreateTableUsing]] logical plan.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
-    val (table, temporary, allowExisting) = visitCreateTable(ctx.createTable)
+    val (table, temporary, ifNotExists) = visitCreateTable(ctx.createTable)
     val options = Option(ctx.tableProperties)
       .map(visitTableProperties)
       .getOrElse(Map.empty)
@@ -188,7 +189,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       ctx.tableProvider.qualifiedName.getText,
       temporary,
       options,
-      allowExisting,
+      ifNotExists,
       managedIfNoPath = false)
   }
 
@@ -200,7 +201,7 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitCreateTableUsingAsSelect(
       ctx: CreateTableUsingAsSelectContext): LogicalPlan = withOrigin(ctx) {
     // Get basic configuration.
-    val (table, temporary, allowExisting) = visitCreateTable(ctx.createTable)
+    val (table, temporary, ifNotExists) = visitCreateTable(ctx.createTable)
     val options = Option(ctx.tableProperties)
       .map(visitTableProperties)
       .getOrElse(Map.empty)
@@ -209,7 +210,7 @@ class SparkSqlAstBuilder extends AstBuilder {
     val query = plan(ctx.query)
 
     // Determine the storage mode.
-    val mode = if (allowExisting) {
+    val mode = if (ifNotExists) {
       SaveMode.Ignore
     } else if (temporary) {
       SaveMode.Overwrite

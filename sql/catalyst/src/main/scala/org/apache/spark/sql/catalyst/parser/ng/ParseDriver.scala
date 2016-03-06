@@ -174,17 +174,6 @@ case object ParseErrorListener extends BaseErrorListener {
  */
 case object PostProcessor extends SqlBaseBaseListener {
 
-  /** Fail when an identifier starts with a digit. */
-  override def exitDigitIdentifier(ctx: DigitIdentifierContext): Unit = {
-    val token = ctx.DIGIT_IDENTIFIER.getSymbol
-    throw new AnalysisException(
-      s"Identifier cannot start with a digit; " +
-        s"please surround the identifier ${token.getText} with back ticks",
-      Some(token.getLine),
-      Some(token.getCharPositionInLine))
-
-  }
-
   /** Remove the backticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: QuotedIdentifierContext): Unit = {
     replaceTokenByIdentifier(ctx, 1) { token =>

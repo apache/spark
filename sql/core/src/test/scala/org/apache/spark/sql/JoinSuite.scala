@@ -331,14 +331,14 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("l")
-    upperCaseData.where('N >= 3).registerTempTable("r")
+    upperCaseData.where('N <= 4).registerTempTable("`left`")
+    upperCaseData.where('N >= 3).registerTempTable("`right`")
 
-    val left = UnresolvedRelation(TableIdentifier("l"), None)
-    val right = UnresolvedRelation(TableIdentifier("r"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"), None)
+    val right = UnresolvedRelation(TableIdentifier("right"), None)
 
     checkAnswer(
-      left.join(right, $"l.N" === $"r.N", "full"),
+      left.join(right, $"left.N" === $"right.N", "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", 3, "C") ::
@@ -347,7 +347,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"l.N" === $"r.N") && ($"l.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -357,7 +357,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"l.N" === $"r.N") && ($"l.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::

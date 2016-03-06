@@ -510,7 +510,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
     // Create a sampled plan if we need one.
     def sample(fraction: Double): Sample = {
-      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)
+      Sample(0.0, fraction, withReplacement = false, (math.random * 1000).toInt, relation)(true)
     }
 
     // Sample the relation if we have to.
@@ -816,6 +816,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case ("timestamp", Nil) => TimestampType
       case ("char" | "varchar" | "string", Nil) => StringType
       case ("char" | "varchar", _ :: Nil) => StringType
+      case ("binary", Nil) => BinaryType
       case ("decimal", Nil) => DecimalType.USER_DEFAULT
       case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
       case ("decimal", precision :: scale :: Nil) =>
@@ -1051,13 +1052,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val intervals = ctx.intervalField.asScala.map(visitIntervalField)
-    assert(intervals.nonEmpty, "Interval should contain at least one value and unit pair", ctx)
+    assert(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
     Literal(intervals.reduce(_.add(_)))
   }
 
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
-    val s = unquote(ctx.value.getText)
-    (ctx.unit.getText.toLowerCase, Option(ctx.to).map(_.getText.toLowerCase)) match {
+    val s = ctx.value.getText
+    val i = (ctx.unit.getText.toLowerCase, Option(ctx.to).map(_.getText.toLowerCase)) match {
+      case (unit, None) if unit.endsWith("s") =>
+        CalendarInterval.fromSingleUnitString(unit.substring(0, unit.length - 1), s)
       case (unit, None) =>
         CalendarInterval.fromSingleUnitString(unit, s)
       case ("year", Some("month")) =>
@@ -1067,6 +1070,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case (from, Some(to)) =>
         notSupported(s"Intervals FROM $from TO $to are not supported.", ctx)
     }
+    assert(i != null, "No interval can be constructed", ctx)
+    i
   }
 }
 
