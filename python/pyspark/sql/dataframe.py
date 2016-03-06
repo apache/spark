@@ -1012,6 +1012,35 @@ class DataFrame(object):
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(1.4)
+    def drop_duplicates(self, subset=None):
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only considering certain columns.
+
+        :func:`dropDuplicates` is an alias for :func:`drop_duplicates`.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([ \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df.drop_duplicates().show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        | 10|    80|Alice|
+        +---+------+-----+
+
+        >>> df.drop_duplicates(['name', 'height']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        +---+------+-----+
+        """
+        return self.cast(subset)
+
     @since("1.3.1")
     def dropna(self, how='any', thresh=None, subset=None):
         """Returns a new :class:`DataFrame` omitting rows with null values.
@@ -1401,8 +1430,6 @@ class DataFrame(object):
     ##########################################################################################
 
     groupby = groupBy
-    drop_duplicates = dropDuplicates
-
 
 def _to_scala_map(sc, jm):
     """

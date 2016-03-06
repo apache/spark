@@ -324,7 +324,10 @@ class Column(object):
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
+
+        (Note : cast is alias of astype)
         """
+
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
         elif isinstance(dataType, DataType):
@@ -337,7 +340,19 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = cast
+    @ignore_unicode_prefix
+    @since(1.3)
+    def astype(self, dataType):
+        """ Convert the column into type ``dataType``.
+
+        >>> df.select(df.age.astype("string").alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+        >>> df.select(df.age.astype(StringType()).alias('ages')).collect()
+        [Row(ages=u'2'), Row(ages=u'5')]
+
+        (Note : astype is alias for cast)
+        """
+        return self.cast(dataType)
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
