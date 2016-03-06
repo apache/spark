@@ -19,8 +19,6 @@ package org.apache.spark.sql.hive
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -54,33 +52,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     sql("DROP TABLE IF EXISTS parquet_t1")
     sql("DROP TABLE IF EXISTS parquet_t2")
     sql("DROP TABLE IF EXISTS t0")
-  }
-
-  private def checkPlan(plan: LogicalPlan, sqlContext: SQLContext, expected: String): Unit = {
-    val convertedSQL = try new SQLBuilder(plan, sqlContext).toSQL catch {
-      case NonFatal(e) =>
-        fail(
-          s"""Cannot convert the following logical query plan back to SQL query string:
-             |
-             |# Original logical query plan:
-             |${plan.treeString}
-           """.stripMargin, e)
-    }
-
-    try {
-      checkAnswer(sql(convertedSQL), DataFrame(sqlContext, plan))
-    } catch { case cause: Throwable =>
-      fail(
-        s"""Failed to execute converted SQL string or got wrong answer:
-           |
-           |# Converted SQL query string:
-           |$convertedSQL
-           |
-           |# Original logical query plan:
-           |${plan.treeString}
-         """.stripMargin,
-        cause)
-    }
   }
 
   private def checkHiveQl(hiveQl: String): Unit = {
@@ -184,18 +155,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   test("self join with group by") {
     checkHiveQl(
       "SELECT x.key, COUNT(*) FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key group by x.key")
-  }
-
-  test("join plan") {
-    val expectedSql = "SELECT x.key FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key"
-
-    val df1 = sqlContext.table("parquet_t1").as("x")
-    val df2 = sqlContext.table("parquet_t1").as("y")
-    val joinPlan = df1.join(df2).queryExecution.analyzed
-
-    // Make sure we have a plain Join operator without Project on top of it.
-    assert(joinPlan.isInstanceOf[Join])
-    checkPlan(joinPlan, sqlContext, expectedSql)
   }
 
   test("case") {
