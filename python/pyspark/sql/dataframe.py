@@ -857,6 +857,32 @@ class DataFrame(object):
         from pyspark.sql.group import GroupedData
         return GroupedData(jgd, self.sql_ctx)
 
+    @ignore_unicode_prefix
+    @since(1.3)
+    def groupby(self, *cols):
+        """Groups the :class:`DataFrame` using the specified columns,
+        so we can run aggregation on them. See :class:`GroupedData`
+        for all the available aggregate functions.
+
+        :func:`groupBy` is an alias for :func:`groupby`.
+
+        :param cols: list of columns to group by.
+            Each element should be a column name (string) or an expression (:class:`Column`).
+
+        >>> df.groupby().avg().collect()
+        [Row(avg(age)=3.5)]
+        >>> df.groupby('name').agg({'age': 'mean'}).collect()
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        >>> df.groupby(df.name).avg().collect()
+        [Row(name=u'Alice', avg(age)=2.0), Row(name=u'Bob', avg(age)=5.0)]
+        >>> df.groupby(['name', df.age]).count().collect()
+        [Row(name=u'Bob', age=5, count=1), Row(name=u'Alice', age=2, count=1)]
+        """
+        jgd = self._jdf.groupby(self._jcols(*cols))
+        from pyspark.sql.group import GroupedData
+        return GroupedData(jgd, self.sql_ctx)
+
+
     @since(1.4)
     def rollup(self, *cols):
         """
@@ -967,11 +993,48 @@ class DataFrame(object):
         +---+------+-----+
         |  5|    80|Alice|
         +---+------+-----+
-        """
+        
+	(Note: dropDuplicates is an alias for drop_duplicates)
+	"""
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since(1.4)
+    def drop_duplicates(self, subset=None):
+        """Return a new :class:`DataFrame` with duplicate rows removed,
+        optionally only considering certain columns.
+
+        :func:`dropDuplicates` is an alias for :func:`drop_duplicates`.
+
+        >>> from pyspark.sql import Row
+        >>> df = sc.parallelize([ \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=5, height=80), \
+            Row(name='Alice', age=10, height=80)]).toDF()
+        >>> df.drop_duplicates().show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        | 10|    80|Alice|
+        +---+------+-----+
+
+        >>> df.drop_duplicates(['name', 'height']).show()
+        +---+------+-----+
+        |age|height| name|
+        +---+------+-----+
+        |  5|    80|Alice|
+        +---+------+-----+
+        
+        (Note: drop_duplicates is an alias for dropDuplicates)
+        """
+        if subset is None:
+            jdf = self._jdf.drop_duplicates()
+        else:
+            jdf = self._jdf.drop_duplicates(self._jseq(subset))
         return DataFrame(jdf, self.sql_ctx)
 
     @since("1.3.1")
@@ -1363,8 +1426,11 @@ class DataFrame(object):
     ##########################################################################################
 
     groupby = groupBy
-    drop_duplicates = dropDuplicates
 
+# Having SchemaRDD for backward compatibility (for docs)
+class SchemaRDD(DataFrame):
+    """SchemaRDD is deprecated, please use :class:`DataFrame`.
+    """
 
 def _to_scala_map(sc, jm):
     """
