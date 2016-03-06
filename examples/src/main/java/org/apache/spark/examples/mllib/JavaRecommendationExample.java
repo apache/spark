@@ -94,6 +94,6 @@ public class JavaRecommendationExample {
       "target/tmp/myCollaborativeFilter");
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

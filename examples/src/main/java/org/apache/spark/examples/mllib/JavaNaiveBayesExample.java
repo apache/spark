@@ -61,6 +61,6 @@ public class JavaNaiveBayesExample {
     NaiveBayesModel sameModel = NaiveBayesModel.load(jsc.sc(), "target/tmp/myNaiveBayesModel");
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

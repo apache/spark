@@ -68,6 +68,6 @@ public class JavaSVDExample {
     System.out.println("Singular values are: " + s);
     System.out.println("V factor is:\n" + V);
 
-    jsc.close();
+    jsc.stop();
   }
 }

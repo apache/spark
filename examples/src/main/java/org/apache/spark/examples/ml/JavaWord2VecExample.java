@@ -64,6 +64,6 @@ public class JavaWord2VecExample {
     }
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

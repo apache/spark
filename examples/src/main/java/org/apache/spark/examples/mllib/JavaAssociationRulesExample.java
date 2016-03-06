@@ -53,6 +53,6 @@ public class JavaAssociationRulesExample {
     }
     // $example off$
 
-    sc.close();
+    sc.stop();
   }
 }

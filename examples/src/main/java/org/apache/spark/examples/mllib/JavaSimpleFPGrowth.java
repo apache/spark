@@ -68,6 +68,6 @@ public class JavaSimpleFPGrowth {
     }
     // $example off$
 
-    sc.close();
+    sc.stop();
   }
 }

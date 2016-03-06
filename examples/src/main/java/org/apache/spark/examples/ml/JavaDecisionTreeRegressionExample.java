@@ -84,6 +84,6 @@ public class JavaDecisionTreeRegressionExample {
     System.out.println("Learned regression tree model:\n" + treeModel.toDebugString());
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

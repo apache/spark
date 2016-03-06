@@ -86,6 +86,6 @@ public class JavaRandomForestClassificationExample {
       "target/tmp/myRandomForestClassificationModel");
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

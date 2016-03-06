@@ -56,6 +56,6 @@ public class JavaSQLTransformerExample {
     sqlTrans.transform(df).show();
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

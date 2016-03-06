@@ -75,6 +75,6 @@ public class JavaMultiLabelClassificationMetricsExample {
     System.out.format("Subset accuracy = %f\n", metrics.subsetAccuracy());
     // $example off$
 
-    sc.close();
+    sc.stop();
   }
 }

@@ -182,6 +182,6 @@ public class JavaRankingMetricsExample {
     System.out.format("R-squared = %f\n", regressionMetrics.r2());
     // $example off$
 
-    sc.close();
+    sc.stop();
   }
 }

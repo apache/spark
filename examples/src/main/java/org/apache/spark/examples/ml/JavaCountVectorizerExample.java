@@ -66,6 +66,6 @@ public class JavaCountVectorizerExample {
     cvModel.transform(df).show();
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

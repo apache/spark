@@ -88,7 +88,7 @@ public class JavaGradientBoostingClassificationExample {
       "target/tmp/myGradientBoostingClassificationModel");
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 
 }

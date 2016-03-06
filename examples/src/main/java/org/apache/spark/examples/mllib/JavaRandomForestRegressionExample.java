@@ -92,6 +92,6 @@ public class JavaRandomForestRegressionExample {
       "target/tmp/myRandomForestRegressionModel");
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

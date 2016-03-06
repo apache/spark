@@ -66,7 +66,6 @@ public class JavaPCAExample {
     result.show();
     // $example off$
     jsc.stop();
-    jsc.close();
   }
 }
 

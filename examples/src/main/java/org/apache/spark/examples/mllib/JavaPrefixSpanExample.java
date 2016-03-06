@@ -52,6 +52,6 @@ public class JavaPrefixSpanExample {
     }
     // $example off$
 
-    sc.close();
+    sc.stop();
   }
 }

@@ -89,6 +89,6 @@ public class JavaRegressionMetricsExample {
       "target/tmp/LogisticRegressionModel");
     // $example off$
 
-    sc.close();
+    sc.stop();
   }
 }

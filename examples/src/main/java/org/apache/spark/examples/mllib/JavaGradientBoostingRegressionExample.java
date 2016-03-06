@@ -93,6 +93,6 @@ public class JavaGradientBoostingRegressionExample {
       "target/tmp/myGradientBoostingRegressionModel");
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }

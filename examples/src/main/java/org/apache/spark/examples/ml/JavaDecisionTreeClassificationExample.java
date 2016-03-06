@@ -96,6 +96,6 @@ public class JavaDecisionTreeClassificationExample {
     System.out.println("Learned classification tree model:\n" + treeModel.toDebugString());
     // $example off$
 
-    jsc.close();
+    jsc.stop();
   }
 }
