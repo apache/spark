@@ -55,6 +55,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     override val jdbcPort: Int = 1521
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
+    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {

@@ -34,8 +34,7 @@ class Db2IntegrationSuite extends DockerJDBCIntegrationSuite {
     override val jdbcPort: Int = 50000
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;"
-    override def getStartupProcessName: Option[String] =
-      Some("db2start")
+    override def getStartupProcessName: Option[String] = Some("db2start")
   }
 
   override def dataPreparation(conn: Connection): Unit = {
