@@ -599,6 +599,62 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Joins this [[DS]] returning a [[Tuple2]] for each pair where `condition` evaluates to
+   * true.
+   *
+   * This is similar to the relation `join` function with one important difference in the
+   * result schema. Since `joinWith` preserves objects present on either side of the join, the
+   * result schema is similarly nested into a tuple under the column names `_1` and `_2`.
+   *
+   * This type of join can be useful both for preserving type-safety with the original object
+   * types as well as working with relational data where either side of the join has column
+   * names in common.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+    val left = this.logicalPlan
+    val right = other.logicalPlan
+
+    val joined = sqlContext.executePlan(Join(left, right, joinType =
+      JoinType(joinType), Some(condition.expr)))
+    val leftOutput = joined.analyzed.output.take(left.output.length)
+    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
+
+    val leftData = this.unresolvedTEncoder match {
+      case e if e.flat => Alias(leftOutput.head, "_1")()
+      case _ => Alias(CreateStruct(leftOutput), "_1")()
+    }
+    val rightData = other.unresolvedTEncoder match {
+      case e if e.flat => Alias(rightOutput.head, "_2")()
+      case _ => Alias(CreateStruct(rightOutput), "_2")()
+    }
+
+    implicit val tuple2Encoder: Encoder[(T, U)] =
+      ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
+    withTypedPlan[(T, U)](other, encoderFor[(T, U)]) { (left, right) =>
+      Project(
+        leftData :: rightData :: Nil,
+        joined.analyzed)
+    }
+  }
+
+  /**
+   * Using inner equi-join to join this [[DS]] returning a [[Tuple2]] for each pair
+   * where `condition` evaluates to true.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, condition, "inner")
+  }
+
+  /**
    * Returns a new [[DataFrame]] with each partition sorted by the given expressions.
    *
    * This is the same operation as "SORT BY" in SQL (Hive QL).
@@ -1852,4 +1908,9 @@ class Dataset[T] private[sql](
   @inline private def withTypedPlan(logicalPlan: => LogicalPlan): Dataset[T] = {
     new Dataset[T](sqlContext, logicalPlan, encoder)
   }
+
+  private[sql] def withTypedPlan[R](
+      other: Dataset[_], encoder: Encoder[R])(
+      f: (LogicalPlan, LogicalPlan) => LogicalPlan): Dataset[R] =
+    new Dataset[R](sqlContext, f(logicalPlan, other.logicalPlan), encoder)
 }
