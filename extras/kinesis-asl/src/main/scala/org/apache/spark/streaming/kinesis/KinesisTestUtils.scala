@@ -263,8 +263,8 @@ private[kinesis] object KinesisTestUtils {
             |
             |Credentialpool tests verify the ability to uses Kinesis stream, Dynamo DB and CloudWatch Metrics in
             |separate AWS accounts. This requires a separate set of AWS credentials to be stored in system with the profile
-            |names "dynamoDB" and "cloudWatch" along with the default credentials. The test assumes that the Kinesis stream 
-            |in the  In absence of this only the underlying API will be tested. 
+            |names "dynamoDB" and "cloudWatch" along with the default credentials.
+            |In absence of these credentials only the underlying API will be tested. 
             """)
         Try { new DefaultAWSCredentialsProviderChain().getCredentials() } match {
           case Success(cred) => cred
