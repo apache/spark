@@ -18,11 +18,11 @@
 import warnings
 
 from pyspark import since
-from pyspark.ml.util import * 
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
+from pyspark.ml.util import * 
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.mllib.common import inherit_doc
 
 
@@ -820,9 +820,10 @@ class MultilayerPerceptronClassificationModel(JavaModel):
 
 if __name__ == "__main__":
     import doctest
+    import pyspark.ml.classification
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
-    globs = globals().copy()
+    globs = pyspark.ml.classification.__dict__.copy() 
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.classification tests")
