@@ -16,7 +16,7 @@
 #
 
 # This example uses text8 file from http://mattmahoney.net/dc/text8.zip
-# The file was downloadded, unziped and split into multiple lines using
+# The file was downloaded, unzipped and split into multiple lines using
 #
 # wget http://mattmahoney.net/dc/text8.zip
 # unzip text8.zip

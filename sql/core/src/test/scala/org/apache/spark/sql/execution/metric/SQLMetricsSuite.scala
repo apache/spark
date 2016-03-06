@@ -29,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -153,6 +154,13 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     )
   }
 
+  test("Sort metrics") {
+    // Assume the execution plan is
+    // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
+    val df = sqlContext.range(10).sort('id)
+    testSparkPlanMetrics(df, 2, Map.empty)
+  }
+
   test("SortMergeJoin metrics") {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
@@ -164,7 +172,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = sqlContext.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
-        1L -> ("SortMergeJoin", Map(
+        0L -> ("SortMergeJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
           "number of output rows" -> 4L)))
       )
@@ -182,7 +190,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = sqlContext.sql(
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
-        1L -> ("SortMergeOuterJoin", Map(
+        0L -> ("SortMergeOuterJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
           "number of output rows" -> 8L)))
       )
@@ -190,7 +198,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df2 = sqlContext.sql(
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
-        1L -> ("SortMergeOuterJoin", Map(
+        0L -> ("SortMergeOuterJoin", Map(
           // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
           "number of output rows" -> 8L)))
       )
@@ -290,7 +298,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       val df = sqlContext.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin")
       testSparkPlanMetrics(df, 1, Map(
-        1L -> ("CartesianProduct", Map(
+        0L -> ("CartesianProduct", Map(
           "number of output rows" -> 12L)))
       )
     }

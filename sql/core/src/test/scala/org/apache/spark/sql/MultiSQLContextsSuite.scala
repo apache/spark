@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
+import org.apache.spark.sql.internal.SQLConf
 
 class MultiSQLContextsSuite extends SparkFunSuite with BeforeAndAfterAll {
 

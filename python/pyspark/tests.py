@@ -228,6 +228,12 @@ class SerializationTestCase(unittest.TestCase):
         getter2 = ser.loads(ser.dumps(getter))
         self.assertEqual(getter(d), getter2(d))
 
+    def test_function_module_name(self):
+        ser = CloudPickleSerializer()
+        func = lambda x: x
+        func2 = ser.loads(ser.dumps(func))
+        self.assertEqual(func.__module__, func2.__module__)
+
     def test_attrgetter(self):
         from operator import attrgetter
         ser = CloudPickleSerializer()

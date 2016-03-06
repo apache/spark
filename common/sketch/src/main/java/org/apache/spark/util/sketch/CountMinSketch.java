@@ -50,7 +50,7 @@ import java.io.OutputStream;
  *
  * This implementation is largely based on the {@code CountMinSketch} class from stream-lib.
  */
-abstract public class CountMinSketch {
+public abstract class CountMinSketch {
 
   public enum Version {
     /**

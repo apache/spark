@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.parser.CatalystQl
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -1972,7 +1973,7 @@ object functions extends LegacyFunctions {
   def crc32(e: Column): Column = withExpr { Crc32(e.expr) }
 
   /**
-   * Calculates the hash code of given columns, and returns the result as a int column.
+   * Calculates the hash code of given columns, and returns the result as an int column.
    *
    * @group misc_funcs
    * @since 2.0

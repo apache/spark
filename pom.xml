@@ -87,19 +87,19 @@
 
   <modules>
     <module>common/sketch</module>
-    <module>tags</module>
+    <module>common/network-common</module>
+    <module>common/network-shuffle</module>
+    <module>common/unsafe</module>
+    <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
-    <module>network/common</module>
-    <module>network/shuffle</module>
     <module>streaming</module>
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>docker-integration-tests</module>
-    <module>unsafe</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>
@@ -147,7 +147,7 @@
     <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
-    <chill.version>0.5.0</chill.version>
+    <chill.version>0.7.4</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.2</codahale.metrics.version>
@@ -1328,6 +1328,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1398,6 +1402,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1493,6 +1501,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1537,6 +1549,10 @@
           <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1585,6 +1601,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1815,6 +1835,7 @@
                         io.netty:netty and io.netty:netty-all.
                       -->
                       <exclude>org.jboss.netty</exclude>
+                      <exclude>org.codehaus.groovy</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
@@ -2448,7 +2469,7 @@
       <id>yarn</id>
       <modules>
         <module>yarn</module>
-        <module>network/yarn</module>
+        <module>common/network-yarn</module>
       </modules>
     </profile>
 
