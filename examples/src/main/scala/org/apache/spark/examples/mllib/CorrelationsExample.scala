@@ -22,25 +22,25 @@ import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.stat.Statistics
-// $example off$
 import org.apache.spark.rdd.RDD
+// $example off$
 
 object CorrelationsExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("CorrelationsExample")
     val sc = new SparkContext(conf)
 
     // $example on$
-    val seriesX: RDD[Double] = sc.parallelize(Array(1, 2, 3, 3, 5)) // a series
+    val seriesX: RDD[Double] = sc.parallelize(Array(1, 2, 3, 3, 5))  // a series
     val seriesY: RDD[Double] = sc.parallelize(Array(11, 22, 33, 33, 555))
     // must have the same number of partitions and cardinality as seriesX
 
     // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method. If a
     // method is not specified, Pearson's method will be used by default.
     val correlation: Double = Statistics.corr(seriesX, seriesY, "pearson")
-    println(correlation)
+    println(s"Correlation is: $correlation")
 
     val data: RDD[Vector] = sc.parallelize(
       Seq(

@@ -41,30 +41,34 @@ object HypothesisTestingExample {
     // compute the goodness of fit. If a second vector to test against is not supplied
     // as a parameter, the test runs against a uniform distribution.
     val goodnessOfFitTestResult = Statistics.chiSqTest(vec)
-    println(goodnessOfFitTestResult) // summary of the test including the p-value,
-    // degrees of freedom, test statistic, the method used, and the null hypothesis.
+    // summary of the test including the p-value, degrees of freedom, test statistic, the method
+    // used, and the null hypothesis.
+    println(goodnessOfFitTestResult)
+    println()
 
     // a contingency matrix. Create a dense matrix ((1.0, 2.0), (3.0, 4.0), (5.0, 6.0))
     val mat: Matrix = Matrices.dense(3, 2, Array(1.0, 3.0, 5.0, 2.0, 4.0, 6.0))
 
     // conduct Pearson's independence test on the input contingency matrix
     val independenceTestResult = Statistics.chiSqTest(mat)
-    println(independenceTestResult) // summary of the test including the p-value, degrees of freedom
+    // summary of the test including the p-value, degrees of freedom
+    println(independenceTestResult)
+    println()
 
     val p1 = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))
     val p2 = LabeledPoint(1.0, Vectors.dense(1.0, 2.0, 0.0))
     val p3 = LabeledPoint(-1.0, Vectors.dense(-1.0, 0.0, -0.5))
-    val obs: RDD[LabeledPoint] = sc.parallelize(Seq(p1, p2, p3)) // (feature, label) pairs.
+    val obs: RDD[LabeledPoint] = sc.parallelize(Seq(p1, p2, p3))  // (feature, label) pairs.
 
     // The contingency table is constructed from the raw (feature, label) pairs and used to conduct
     // the independence test. Returns an array containing the ChiSquaredTestResult for every feature
     // against the label.
     val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)
-    var i = 1
-    featureTestResults.foreach { result =>
-      println(s"Column $i:\n$result")
-      i += 1
-    } // summary of the test
+    featureTestResults.zipWithIndex.foreach { result =>
+      println(s"Column " + (result._2 + 1).toString + ":")
+      println(result._1)
+      println()
+    }  // summary of the test
     // $example off$
 
     sc.stop()

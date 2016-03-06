@@ -18,13 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-// $example on$
 import org.apache.spark.{SparkConf, SparkContext}
-// $example off$
 
 object StratifiedSamplingExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("StratifiedSamplingExample")
     val sc = new SparkContext(conf)
@@ -40,10 +38,10 @@ object StratifiedSamplingExample {
     // Get an exact sample from each stratum
     val approxSample = data.sampleByKey(withReplacement = false, fractions)
     val exactSample = data.sampleByKeyExact(withReplacement = false, fractions)
-
     // $example off$
 
     approxSample.foreach(println)
+    println()
     exactSample.foreach(println)
 
     sc.stop()

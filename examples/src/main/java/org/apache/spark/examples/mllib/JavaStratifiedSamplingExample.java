@@ -17,22 +17,20 @@
 
 package org.apache.spark.examples.mllib;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.HashMap;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+
 // $example on$
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-// $example off$
 
 import scala.Tuple2;
 
-import org.apache.spark.api.java.function.VoidFunction;
-// $example on$
-
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.function.VoidFunction;
 // $example off$
-import org.apache.spark.SparkConf;
 
 public class JavaStratifiedSamplingExample {
   public static void main(String[] args) {
@@ -60,8 +58,10 @@ public class JavaStratifiedSamplingExample {
     fractions.put(3, 0.3);
 
     // Get an exact sample from each stratum
-    JavaPairRDD<Integer, Character> approxSample = data.sampleByKey(false, fractions); // JavaPairRDD<K, V>
-    JavaPairRDD<Integer, Character> exactSample = data.sampleByKeyExact(false, fractions); // JavaPairRDD<K, V>
+    JavaPairRDD<Integer, Character> approxSample =
+      data.sampleByKey(false, fractions); // JavaPairRDD<K, V>
+    JavaPairRDD<Integer, Character> exactSample =
+      data.sampleByKeyExact(false, fractions); // JavaPairRDD<K, V>
     // $example off$
 
     approxSample.foreach(new VoidFunction<Tuple2<Integer, Character>>() {
@@ -69,7 +69,7 @@ public class JavaStratifiedSamplingExample {
         System.out.println(t._1() + " " + t._2());
       }
     });
-
+    System.out.println();
     exactSample.foreach(new VoidFunction<Tuple2<Integer, Character>>() {
       public void call(Tuple2<Integer, Character> t) throws Exception {
         System.out.println(t._1() + " " + t._2());

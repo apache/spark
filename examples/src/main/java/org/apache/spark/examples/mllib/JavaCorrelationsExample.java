@@ -17,13 +17,13 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import java.util.Arrays;
 
-import org.apache.spark.SparkConf;
-// $example on$
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -38,16 +38,16 @@ public class JavaCorrelationsExample {
 
     // $example on$
     JavaDoubleRDD seriesX = jsc.parallelizeDoubles(
-      Arrays.asList(new Double[]{1.0, 2.0, 3.0, 3.0, 5.0})); // a series
+      Arrays.asList(1.0, 2.0, 3.0, 3.0, 5.0));  // a series
 
     // must have the same number of partitions and cardinality as seriesX
     JavaDoubleRDD seriesY = jsc.parallelizeDoubles(
-      Arrays.asList(new Double[]{11.0, 22.0, 33.0, 33.0, 555.0}));
+      Arrays.asList(11.0, 22.0, 33.0, 33.0, 555.0));
 
     // compute the correlation using Pearson's method. Enter "spearman" for Spearman's method.
     // If a method is not specified, Pearson's method will be used by default.
     Double correlation = Statistics.corr(seriesX.srdd(), seriesY.srdd(), "pearson");
-    System.out.println("correlation is: " + correlation);
+    System.out.println("Correlation is: " + correlation);
 
     Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
     Vector v2 = Vectors.dense(2.0, 20.0, 200.0);

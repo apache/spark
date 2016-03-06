@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 
 object KernelDensityEstimationExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("KernelDensityEstimationExample")
     val sc = new SparkContext(conf)
@@ -45,7 +45,7 @@ object KernelDensityEstimationExample {
     val densities = kd.estimate(Array(-1.0, 2.0, 5.0))
     // $example off$
 
-    densities.foreach(print)
+    densities.foreach(println)
 
     sc.stop()
   }

@@ -277,7 +277,18 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Scala docs](api/scala/index.html#org.apache.spark.mllib.random.RandomRDDs) for details on the API.
 
-{% include_example scala/org/apache/spark/examples/mllib/RandomDataGenerationExample.scala %}
+-{% highlight scala %}
+-import org.apache.spark.SparkContext
+-import org.apache.spark.mllib.random.RandomRDDs._
+-
+-val sc: SparkContext = ...
+-
+-// Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+-// standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+-val u = normalRDD(sc, 1000000L, 10)
+-// Apply a transform to get a random double RDD following `N(1, 4)`.
+-val v = u.map(x => 1.0 + 2.0 * x)
+-{% endhighlight %}
 </div>
 
 <div data-lang="java" markdown="1">
@@ -288,7 +299,24 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Java docs](api/java/org/apache/spark/mllib/random/RandomRDDs) for details on the API.
 
-{% include_example java/org/apache/spark/examples/mllib/JavaRandomDataGenerationExample.java %}
+-{% highlight java %}
+ -import org.apache.spark.SparkContext;
+ -import org.apache.spark.api.JavaDoubleRDD;
+ -import static org.apache.spark.mllib.random.RandomRDDs.*;
+ -
+ -JavaSparkContext jsc = ...
+ -
+ -// Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+ -// standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+ -JavaDoubleRDD u = normalJavaRDD(jsc, 1000000L, 10);
+ -// Apply a transform to get a random double RDD following `N(1, 4)`.
+ -JavaDoubleRDD v = u.map(
+ -  new Function<Double, Double>() {
+ -    public Double call(Double x) {
+ -      return 1.0 + 2.0 * x;
+ -    }
+ -  });
+ -{% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
@@ -299,7 +327,17 @@ distribution `N(0, 1)`, and then map it to `N(1, 4)`.
 
 Refer to the [`RandomRDDs` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.random.RandomRDDs) for more details on the API.
 
-{% include_example python/mllib/random_data_generation_example.py %}
+-{% highlight python %}
+ -from pyspark.mllib.random import RandomRDDs
+ -
+ -sc = ... # SparkContext
+ -
+ -# Generate a random double RDD that contains 1 million i.i.d. values drawn from the
+ -# standard normal distribution `N(0, 1)`, evenly distributed in 10 partitions.
+ -u = RandomRDDs.normalRDD(sc, 1000000L, 10)
+ -# Apply a transform to get a random double RDD following `N(1, 4)`.
+ -v = u.map(lambda x: 1.0 + 2.0 * x)
+ -{% endhighlight %}
 </div>
 </div>
 

@@ -26,7 +26,7 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 
 object SummaryStatisticsExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("SummaryStatisticsExample")
     val sc = new SparkContext(conf)
@@ -40,9 +40,9 @@ object SummaryStatisticsExample {
 
     // Compute column summary statistics.
     val summary: MultivariateStatisticalSummary = Statistics.colStats(observations)
-    println(summary.mean) // a dense vector containing the mean value for each column
-    println(summary.variance) // column-wise variance
-    println(summary.numNonzeros) // number of nonzeros in each column
+    println(summary.mean)  // a dense vector containing the mean value for each column
+    println(summary.variance)  // column-wise variance
+    println(summary.numNonzeros)  // number of nonzeros in each column
     // $example off$
 
     sc.stop()

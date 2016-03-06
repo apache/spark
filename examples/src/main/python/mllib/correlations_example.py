@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     # Compute the correlation using Pearson's method. Enter "spearman" for Spearman's method.
     # If a method is not specified, Pearson's method will be used by default.
-    print(Statistics.corr(seriesX, seriesY, method="pearson"))
+    print("Correlation is: " + str(Statistics.corr(seriesX, seriesY, method="pearson")))
 
     v1 = np.array([1.0, 10.0, 100.0])
     v2 = np.array([2.0, 20.0, 200.0])

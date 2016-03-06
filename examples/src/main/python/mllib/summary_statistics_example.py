@@ -17,10 +17,10 @@
 
 from __future__ import print_function
 
-import numpy as np
-
 from pyspark import SparkContext
 # $example on$
+import numpy as np
+
 from pyspark.mllib.stat import Statistics
 # $example off$
 
@@ -28,9 +28,9 @@ if __name__ == "__main__":
     sc = SparkContext(appName="SummaryStatisticsExample")  # SparkContext
 
     # $example on$
-    v1 = np.array([1.0, 2.0, 3.0])
-    v2 = np.array([10.0, 20.0, 30.0])
-    v3 = np.array([100.0, 200.0, 300.0])
+    v1 = np.array([1.0, 10.0, 100.0])
+    v2 = np.array([2.0, 20.0, 200.0])
+    v3 = np.array([3.0, 30.0, 300.0])
     mat = sc.parallelize([v1, v2, v3])  # an RDD of Vectors
 
     # Compute column summary statistics.

@@ -17,17 +17,17 @@
 
 package org.apache.spark.examples.mllib;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import java.util.Arrays;
 
-// $example on$
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.stat.MultivariateStatisticalSummary;
 import org.apache.spark.mllib.stat.Statistics;
 // $example off$
-import org.apache.spark.SparkConf;
 
 public class JavaSummaryStatisticsExample {
   public static void main(String[] args) {
@@ -44,9 +44,9 @@ public class JavaSummaryStatisticsExample {
 
     // Compute column summary statistics.
     MultivariateStatisticalSummary summary = Statistics.colStats(mat.rdd());
-    System.out.println(summary.mean()); // a dense vector containing the mean value for each column
-    System.out.println(summary.variance()); // column-wise variance
-    System.out.println(summary.numNonzeros()); // number of nonzeros in each column
+    System.out.println(summary.mean());  // a dense vector containing the mean value for each column
+    System.out.println(summary.variance());  // column-wise variance
+    System.out.println(summary.numNonzeros());  // number of nonzeros in each column
     // $example off$
 
     jsc.stop();

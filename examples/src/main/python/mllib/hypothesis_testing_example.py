@@ -19,7 +19,7 @@ from __future__ import print_function
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.linalg import Vectors, Matrices
+from pyspark.mllib.linalg import Matrices, Vectors
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
 # $example off$
@@ -35,17 +35,19 @@ if __name__ == "__main__":
     goodnessOfFitTestResult = Statistics.chiSqTest(vec)
     print(goodnessOfFitTestResult)  # summary of the test including the p-value, degrees of freedom,
     # test statistic, the method used, and the null hypothesis.
+    print()
 
     mat = Matrices.dense(3, 2, [1.0, 3.0, 5.0, 2.0, 4.0, 6.0])  # a contingency matrix
 
     # conduct Pearson's independence test on the input contingency matrix
     independenceTestResult = Statistics.chiSqTest(mat)
     print(independenceTestResult)  # summary of the test including the p-value, degrees of freedom
+    print()
 
     p1 = LabeledPoint(1.0, [1.0, 0.0, 3.0])
     p2 = LabeledPoint(1.0, [1.0, 2.0, 0.0])
     p3 = LabeledPoint(1.0, [-1.0, 0.0, -0.5])
-    obs = sc.parallelize([p1, p2, p3])  # LabeledPoint(feature, label) .
+    obs = sc.parallelize([p1, p2, p3])  # LabeledPoint(feature, label)
 
     # The contingency table is constructed from an RDD of LabeledPoint and used to conduct
     # the independence test. Returns an array containing the ChiSquaredTestResult for every feature
@@ -55,6 +57,7 @@ if __name__ == "__main__":
     for i, result in enumerate(featureTestResults):
         print("Column: " + str(i + 1))
         print(result)
+        print()
     # $example off$
 
     sc.stop()
