@@ -45,7 +45,9 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family="gaussian", data, lambda = 0, solver = "irls") {
+          function(formula, family = c("gaussian", "binomial", "poisson", "gamma"), data,
+              lambda = 0, solver = "irls") {
+            family <- match.arg(family)
             formula <- paste(deparse(formula), collapse="")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitGLM", formula, data@sdf, family, lambda, solver)
