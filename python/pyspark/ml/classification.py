@@ -367,7 +367,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel):
 @inherit_doc
 class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasSeed,
                              HasRawPredictionCol, HasProbabilityCol,
-                             RandomForestParams, TreeClassifierParams, HasCheckpointInterval, , MLWritable, MLReadable):
+                             RandomForestParams, TreeClassifierParams, HasCheckpointInterval):
     """
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for classification.
@@ -399,13 +399,6 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
-
-    >>> rf_path = temp_path + "/rf"
-    >>> rf.save(rf_path)
-    >>> rf2 = RandomForestClassifier.load(rf_path)
-    >>> model_path = temp_path + "/rf_model"
-    >>> model.save(model_path)
-    >>> model2 = RandomForestClassificationModel.load(model_path)
 
     .. versionadded:: 1.4.0
     """
@@ -454,7 +447,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModels, MLWritable, MLReadable):
+class RandomForestClassificationModel(TreeEnsembleModels):
     """
     Model fitted by RandomForestClassifier.
 
