@@ -35,32 +35,28 @@ singleTableIdentifier
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
-    | CREATE TABLE qualifiedName
-        (WITH tableProperties)? AS query
-        (WITH (NO)? DATA)?                                             #createTableAsSelect
-    | CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        '(' tableElement (',' tableElement)* ')'
-        (WITH tableProperties)?                                        #createTable
+    | createTable ('(' colTypeList ')')? tableProvider tableProperties #createTableUsing
+    | createTable tableProvider tableProperties? AS? query             #createTableUsingAsSelect
     | DROP TABLE (IF EXISTS)? qualifiedName                            #dropTable
     | DELETE FROM qualifiedName (WHERE booleanExpression)?             #delete
     | ALTER TABLE from=qualifiedName RENAME TO to=qualifiedName        #renameTable
     | ALTER TABLE tableName=qualifiedName
         RENAME COLUMN from=identifier TO to=identifier                 #renameColumn
     | ALTER TABLE tableName=qualifiedName
-        ADD COLUMN column=tableElement                                 #addColumn
+        ADD COLUMN column=colType                                      #addColumn
     | CREATE (OR REPLACE)? VIEW qualifiedName AS query                 #createView
     | DROP VIEW (IF EXISTS)? qualifiedName                             #dropView
     | CALL qualifiedName '(' (callArgument (',' callArgument)*)? ')'   #call
     | EXPLAIN explainOption* statement                                 #explain
     | SHOW TABLES ((FROM | IN) db=identifier)?
-        (LIKE qualifiedName | pattern=STRING)?                         #showTables
+        (LIKE (qualifiedName | pattern=STRING))?                       #showTables
     | SHOW SCHEMAS ((FROM | IN) identifier)?                           #showSchemas
     | SHOW CATALOGS                                                    #showCatalogs
     | SHOW COLUMNS (FROM | IN) qualifiedName                           #showColumns
-    | DESCRIBE qualifiedName                                           #showColumns
-    | DESC qualifiedName                                               #showColumns
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | (DESC | DESCRIBE) FUNCTION EXTENDED? qualifiedName               #describeFunction
+    | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
+        tableIdentifier partitionSpec? describeColName?                #describeTable
     | SHOW SESSION                                                     #showSession
     | SET SESSION qualifiedName EQ expression                          #setSession
     | RESET SESSION qualifiedName                                      #resetSession
@@ -72,10 +68,14 @@ statement
         (ORDER BY sortItem (',' sortItem)*)?
         (LIMIT limit=(INTEGER_VALUE | ALL))?                           #showPartitions
     | REFRESH TABLE tableIdentifier                                    #refreshTable
-    | CACHE TABLE LAZY? tableIdentifier (AS? query)?                   #cacheTable
-    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
+    | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
+    | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | SET .*?                                                          #setConfiguration
+    ;
+
+createTable
+    : CREATE TEMPORARY? TABLE (IF NOT EXISTS)? tableIdentifier
     ;
 
 query
@@ -94,6 +94,11 @@ partitionSpec
 partitionVal
     : identifier (EQ constant)?
     ;
+
+describeColName
+    : identifier ('.' (identifier | STRING))*
+    ;
+
 ctes
     : WITH namedQuery (',' namedQuery)*
     ;
@@ -102,16 +107,25 @@ namedQuery
     : name=identifier AS? '(' queryNoWith ')'
     ;
 
-tableElement
-    : identifier dataType
+tableProvider
+    : USING qualifiedName
     ;
 
 tableProperties
-    : '(' tableProperty (',' tableProperty)* ')'
+    :(OPTIONS | WITH) '(' tableProperty (',' tableProperty)* ')'
     ;
 
 tableProperty
-    : key=STRING (EQ value=STRING)?
+    : key=tablePropertyKey (EQ? value=STRING)?
+    ;
+
+tablePropertyKey
+    : tablePropertyKeyElement ('.' tablePropertyKeyElement)*
+    | STRING
+    ;
+
+tablePropertyKeyElement
+    : (identifier | FROM | TO)
     ;
 
 queryNoWith
@@ -201,7 +215,7 @@ selectItem
 relation
     : left=relation
       ( CROSS JOIN right=sampledRelation
-      | joinType JOIN rightRelation=relation ON? booleanExpression
+      | joinType JOIN rightRelation=relation (ON booleanExpression)?
       | NATURAL joinType JOIN right=sampledRelation
       )                                           #joinRelation
     | sampledRelation                             #relationDefault
@@ -311,7 +325,7 @@ valueExpression
 primaryExpression
     : constant                                                                                 #constantDefault
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
-    | qualifiedName '(' (setQuantifier? ASTERISK) ')' (OVER windowSpec)?                       #functionCall
+    | qualifiedName '(' (ASTERISK) ')' (OVER windowSpec)?                                      #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
     | '(' query ')'                                                                            #subqueryExpression
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
@@ -342,13 +356,11 @@ booleanValue
     ;
 
 interval
-    : INTERVAL value=intervalValue YEAR TO MONTH   #ytmIntervalLiteral
-    | INTERVAL value=intervalValue DAY TO SECOND   #dtsIntervalLiteral
-    | INTERVAL intervalField+                      #composedIntervalLiteral
+    : INTERVAL intervalField+
     ;
 
 intervalField
-    : value=intervalValue unit=(YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND)
+    : value=intervalValue unit=identifier (TO to=identifier)?
     ;
 
 intervalValue
@@ -463,9 +475,9 @@ nonReserved
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
-    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY
-    | DATE | TIMESTAMP | INTERVAL
-    | YEAR | WEEK| MONTH | DAY | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    | EXTENDED | REFRESH | CLEAR | CACHE | UNCACHE | LAZY | TEMPORARY | OPTIONS
+    | INTERVAL
+    | GROUPING | CUBE | ROLLUP
     | EXPLAIN | FORMAT | LOGICAL | FORMATTED
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
     | SET | RESET
@@ -482,8 +494,6 @@ FROM: 'FROM';
 ADD: 'ADD';
 AS: 'AS';
 ALL: 'ALL';
-SOME: 'SOME';
-ANY: 'ANY';
 DISTINCT: 'DISTINCT';
 WHERE: 'WHERE';
 GROUP: 'GROUP';
@@ -510,23 +520,10 @@ NULL: 'NULL';
 TRUE: 'TRUE';
 FALSE: 'FALSE';
 NULLS: 'NULLS';
-FIRST: 'FIRST';
-LAST: 'LAST';
 ASC: 'ASC';
 DESC: 'DESC';
 FOR: 'FOR';
-DATE: 'DATE';
-TIMESTAMP: 'TIMESTAMP';
 INTERVAL: 'INTERVAL';
-YEAR: 'YEAR';
-MONTH: 'MONTH';
-WEEK: 'WEEK';
-DAY: 'DAY';
-HOUR: 'HOUR';
-MINUTE: 'MINUTE';
-SECOND: 'SECOND';
-MILLISECOND: 'MILLISECOND';
-MICROSECOND: 'MICROSECOND';
 CASE: 'CASE';
 WHEN: 'WHEN';
 THEN: 'THEN';
@@ -562,7 +559,6 @@ REPLACE: 'REPLACE';
 INSERT: 'INSERT';
 DELETE: 'DELETE';
 INTO: 'INTO';
-CONSTRAINT: 'CONSTRAINT';
 DESCRIBE: 'DESCRIBE';
 EXPLAIN: 'EXPLAIN';
 FORMAT: 'FORMAT';
@@ -663,6 +659,8 @@ CACHE: 'CACHE';
 UNCACHE: 'UNCACHE';
 LAZY: 'LAZY';
 FORMATTED: 'FORMATTED';
+TEMPORARY: 'TEMPORARY' | 'TEMP';
+OPTIONS: 'OPTIONS';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

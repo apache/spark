@@ -20,10 +20,13 @@ import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.misc.Interval
 
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.parser.ng.{AbstractSqlParser, AstBuilder}
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
-import org.apache.spark.sql.execution.datasources.RefreshTable
+import org.apache.spark.sql.execution.datasources._
 
 /**
  * Concrete parser for Spark SQL statements.
@@ -34,10 +37,6 @@ object SparkSqlParser extends AbstractSqlParser{
 
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
- *
- * TODO:
- * DESC TABLE
- * CREATE TABLE USING
  */
 class SparkSqlAstBuilder extends AstBuilder {
   import AstBuilder._
@@ -80,7 +79,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.LIKE != null) {
-      logWarning("SHOW TABLES ... LIKE ... is not supported, ignoring the LIKE pattern.")
+      logWarning("SHOW TABLES LIKE option is ignored.")
     }
     ShowTablesCommand(Option(ctx.db).map(_.getText))
   }
@@ -96,17 +95,15 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Create a [[CacheTableCommand]] logical plan.
    */
   override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    val id = visitTableIdentifier(ctx.tableIdentifier)
     val query = Option(ctx.query).map(plan)
-    CacheTableCommand(id.table, query, ctx.LAZY != null)
+    CacheTableCommand(ctx.identifier.getText, query, ctx.LAZY != null)
   }
 
   /**
    * Create an [[UncacheTableCommand]] logical plan.
    */
   override def visitUncacheTable(ctx: UncacheTableContext): LogicalPlan = withOrigin(ctx) {
-    val id = visitTableIdentifier(ctx.tableIdentifier)
-    UncacheTableCommand(id.table)
+    UncacheTableCommand(ctx.identifier.getText)
   }
 
   /**
@@ -122,15 +119,15 @@ class SparkSqlAstBuilder extends AstBuilder {
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
     val options = ctx.explainOption.asScala
     if (options.exists(_.FORMATTED != null)) {
-      logWarning("EXPLAIN ... FORMATTED ... is not supported, ignoring FORMATTED option.")
+      logWarning("EXPLAIN FORMATTED option is ignored.")
     }
     if (options.exists(_.LOGICAL != null)) {
-      logWarning("EXPLAIN ... LOGICAL ... is not supported, ignoring LOGICAL option.")
+      logWarning("EXPLAIN LOGICAL option is ignored.")
     }
 
     // Create the explain comment.
     val statement = plan(ctx.statement)
-    if (isExplainStatement(statement)) {
+    if (isExplainableStatement(statement)) {
       ExplainCommand(statement, extended = options.exists(_.EXTENDED != null))
     } else {
       ExplainCommand(OneRowRelation)
@@ -140,8 +137,113 @@ class SparkSqlAstBuilder extends AstBuilder {
   /**
    * Determine if a plan should be explained at all.
    */
-  protected def isExplainStatement(plan: LogicalPlan): Boolean = plan match {
+  protected def isExplainableStatement(plan: LogicalPlan): Boolean = plan match {
     case _: DescribeCommand => false
     case _ => true
+  }
+
+  /**
+   * Create a [[DescribeCommand]] logical plan.
+   */
+  override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
+    // FORMATTED and columns are not supported. Return null and let the parser decide what to do
+    // with this (create an exception or pass it on to a different system).
+    if (ctx.describeColName != null || ctx.FORMATTED != null) {
+      null
+    } else {
+      // Partitioning clause is ignored.
+      if (ctx.partitionSpec != null) {
+        logWarning("DESCRIBE PARTITIONING option is ignored.")
+      }
+      datasources.DescribeCommand(
+        UnresolvedRelation(visitTableIdentifier(ctx.tableIdentifier), None),
+        ctx.EXTENDED != null)
+    }
+  }
+
+  /**
+   * Validate a create table statement and return the [[TableIdentifier]].
+   */
+  override def visitCreateTable(
+      ctx: CreateTableContext): (TableIdentifier, Boolean, Boolean) = withOrigin(ctx) {
+    val temporary = ctx.TEMPORARY != null
+    val allowExisting = ctx.EXISTS == null
+    assert(!temporary || allowExisting,
+      "CREATE TEMPORARY TABLE cannot be combined with an IF NOT EXISTS clause.",
+      ctx)
+    (visitTableIdentifier(ctx.tableIdentifier), temporary, allowExisting)
+  }
+
+  /**
+   * Create a [[CreateTableUsing]] logical plan.
+   */
+  override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
+    val (table, temporary, allowExisting) = visitCreateTable(ctx.createTable)
+    val options = Option(ctx.tableProperties)
+      .map(visitTableProperties)
+      .getOrElse(Map.empty)
+    CreateTableUsing(
+      table,
+      Option(ctx.colTypeList).map(visitColTypeList),
+      ctx.tableProvider.qualifiedName.getText,
+      temporary,
+      options,
+      allowExisting,
+      managedIfNoPath = false)
+  }
+
+  /**
+   * Create a [[CreateTableUsingAsSelect]] logical plan.
+   *
+   * TODO add bucketing and partitioning.
+   */
+  override def visitCreateTableUsingAsSelect(
+      ctx: CreateTableUsingAsSelectContext): LogicalPlan = withOrigin(ctx) {
+    // Get basic configuration.
+    val (table, temporary, allowExisting) = visitCreateTable(ctx.createTable)
+    val options = Option(ctx.tableProperties)
+      .map(visitTableProperties)
+      .getOrElse(Map.empty)
+
+    // Get the backing query.
+    val query = plan(ctx.query)
+
+    // Determine the storage mode.
+    val mode = if (allowExisting) {
+      SaveMode.Ignore
+    } else if (temporary) {
+      SaveMode.Overwrite
+    } else {
+      SaveMode.ErrorIfExists
+    }
+
+    CreateTableUsingAsSelect(
+      table,
+      ctx.tableProvider.qualifiedName.getText,
+      temporary,
+      Array.empty,
+      None,
+      mode,
+      options,
+      query
+    )
+  }
+
+  /**
+   * Convert TableProperties into a key-value map.
+   */
+  override def visitTableProperties(
+      ctx: TablePropertiesContext): Map[String, String] = withOrigin(ctx) {
+    ctx.tableProperty.asScala.map { property =>
+      // A key can either be a String or a collection of dot separated elements. We need to treat
+      // these differently.
+      val key = if (property.key.STRING != null) {
+        unquote(property.key.STRING.getText)
+      } else {
+        property.key.getText
+      }
+      val value = Option(property.value).map(t => unquote(t.getText)).getOrElse("")
+      key -> value
+    }.toMap
   }
 }

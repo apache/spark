@@ -40,9 +40,6 @@ import org.apache.spark.util.random.RandomSampler
 /**
  * The AstBuilder converts an ANTLR4 ParseTree into a catalyst Expression, LogicalPlan or
  * TableIdentifier.
- *
- * Expression TODO's
- * -Hive Hintlist???
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import AstBuilder._
@@ -148,7 +145,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val inserts = ctx.multiInsertQueryBody.asScala.map {
       body =>
         assert(body.querySpecification.fromClause == null,
-          "Multi-Insert queries cannot have a FROM clause in their indivual SELECT statements")
+          "Multi-Insert queries cannot have a FROM clause in their individual SELECT statements",
+          body)
 
         withQuerySpecification(body.querySpecification, from).
           // Add organization statements.
@@ -260,6 +258,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * Add a query specification to a logical plan. The query specification is the core of the logical
    * plan, this is where sourcing (FROM clause), transforming (SELECT TRANSFORM/MAP/REDUCE),
    * projection (SELECT), aggregation (GROUP BY ... HAVING ...) and filtering (WHERE) takes place.
+   *
+   * Note that query hints are ignored (both by the parser and the builder).
    */
   private def withQuerySpecification(
       ctx: QuerySpecificationContext,
@@ -284,17 +284,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Create the attributes.
         val attributes = if (colTypeList != null) {
           // Typed return columns.
-          colTypeList.colType().asScala.map { colType =>
-            val f = visitColType(colType)
-            AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
-          }
+          visitColTypeList(colTypeList).toAttributes
         } else if (columnAliasList != null) {
           // Untyped return columns.
           visitColumnAliasList(columnAliasList).map { name =>
             AttributeReference(name, StringType, nullable = true)()
           }
         } else {
-          Nil
+          Seq.empty
         }
 
         // Create the transform.
@@ -494,7 +491,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     } else {
       plan(ctx.rightRelation)
     }
-
+    assert(left != null, "Left side should not be null", ctx)
+    assert(right != null, "Right side should not be null", ctx)
     Join(left, right, joinType, Option(ctx.booleanExpression).map(expression))
   }
 
@@ -585,7 +583,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
     val rows = expressions.map {
       case expression =>
-        assert(expression.foldable, "All expressions in an inline table must be constants.")
+        assert(expression.foldable, "All expressions in an inline table must be constants.", ctx)
         val safe = Cast(structConstructor(expression), structType)
         safe.eval().asInstanceOf[InternalRow]
     }
@@ -595,7 +593,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val attributes = if (ctx.columnAliases != null) {
       val aliases = visitColumnAliases(ctx.columnAliases)
       assert(aliases.size == baseAttributes.size,
-        "Number of aliases must match the number of fields in an inline table.")
+        "Number of aliases must match the number of fields in an inline table.", ctx)
       baseAttributes.zip(aliases).map(p => p._1.withName(p._2))
     } else {
       baseAttributes
@@ -833,8 +831,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.MAP =>
         MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
       case SqlBaseParser.STRUCT =>
-        StructType(ctx.colTypeList.colType.asScala.map(visitColType))
+        visitColTypeList(ctx.colTypeList)
     }
+  }
+
+  override def visitColTypeList(ctx: ColTypeListContext): StructType = withOrigin(ctx) {
+    StructType(ctx.colType().asScala.map(visitColType))
   }
 
   override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
@@ -855,7 +857,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     val arguments = if (ctx.ASTERISK != null) {
-      Seq(UnresolvedStar(None))
+      Seq(Literal(1))
     } else {
       ctx.expression().asScala.map(expression)
     }
@@ -908,7 +910,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     def value: Int = {
       val e = expression(ctx.expression)
       assert(e.foldable && e.dataType == IntegerType,
-        "Frame bound value must be a constant integer.")
+        "Frame bound value must be a constant integer.",
+        ctx)
       e.eval().asInstanceOf[Int]
     }
 
@@ -971,6 +974,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
   override def visitSubscript(ctx: SubscriptContext): Expression = withOrigin(ctx) {
     UnresolvedExtractValue(expression(ctx.value), expression(ctx.index))
+  }
+
+
+  override def visitParenthesizedExpression(
+     ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
+    expression(ctx.expression)
   }
 
   override def visitSortItem(ctx: SortItemContext): SortOrder = withOrigin(ctx) {
@@ -1040,37 +1049,31 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     Literal(ctx.STRING().asScala.map(s => unquote(s.getText)).mkString)
   }
 
-  override def visitDtsIntervalLiteral(ctx: DtsIntervalLiteralContext): Literal = withOrigin(ctx) {
-   Literal(CalendarInterval.fromDayTimeString(unquote(ctx.value.getText)))
-  }
-
-  override def visitYtmIntervalLiteral(ctx: YtmIntervalLiteralContext): Literal = withOrigin(ctx) {
-    Literal(CalendarInterval.fromYearMonthString(unquote(ctx.value.getText)))
-  }
-
-  override def visitComposedIntervalLiteral(
-      ctx: ComposedIntervalLiteralContext): Literal = withOrigin(ctx) {
-    val intervals = ctx.intervalField().asScala.map { pCtx =>
-      CalendarInterval.fromSingleUnitString(pCtx.unit.getText, unquote(pCtx.value.getText))
-    }
-    assert(intervals.nonEmpty, "Interval should contain at least one or more value and unit pairs")
+  override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
+    val intervals = ctx.intervalField.asScala.map(visitIntervalField)
+    assert(intervals.nonEmpty, "Interval should contain at least one value and unit pair", ctx)
     Literal(intervals.reduce(_.add(_)))
+  }
+
+  override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
+    val s = unquote(ctx.value.getText)
+    (ctx.unit.getText.toLowerCase, Option(ctx.to).map(_.getText.toLowerCase)) match {
+      case (unit, None) =>
+        CalendarInterval.fromSingleUnitString(unit, s)
+      case ("year", Some("month")) =>
+        CalendarInterval.fromYearMonthString(s)
+      case ("day", Some("second")) =>
+        CalendarInterval.fromDayTimeString(s)
+      case (from, Some(to)) =>
+        notSupported(s"Intervals FROM $from TO $to are not supported.", ctx)
+    }
   }
 }
 
 private[spark] object AstBuilder extends Logging {
 
   def unquote(raw: String): String = {
-    var unquoted = raw
-    val lastIndex = raw.length - 1
-    if (lastIndex >= 1) {
-      val first = raw(0)
-      if ((first == '\'' || first == '"') && raw(lastIndex) == first) {
-        unquoted = unquoted.substring(1, lastIndex)
-      }
-      unquoted = ParseUtils.unescapeSQLString(raw)
-    }
-    unquoted
+    ParseUtils.unescapeSQLString(raw)
   }
 
   def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
@@ -1090,6 +1093,12 @@ private[spark] object AstBuilder extends Logging {
       message + s"\n$ctx",
       Some(token.getLine),
       Some(token.getCharPositionInLine))
+  }
+
+  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
+    if (!f) {
+      notSupported(message, ctx)
+    }
   }
 
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {

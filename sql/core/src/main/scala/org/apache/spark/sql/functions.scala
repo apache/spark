@@ -22,12 +22,13 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{CatalystQl, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
+import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -1179,7 +1180,7 @@ object functions extends LegacyFunctions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    val parser = SQLContext.getActive().map(_.sqlParser).getOrElse(new CatalystQl())
+    val parser = SparkSqlParser
     Column(parser.parseExpression(expr))
   }
 
@@ -1952,7 +1953,6 @@ object functions extends LegacyFunctions {
    *
    * @param e column to compute SHA-2 on.
    * @param numBits one of 224, 256, 384, or 512.
-   *
    * @group misc_funcs
    * @since 1.5.0
    */
@@ -2117,6 +2117,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Computes the Levenshtein distance of the two given string columns.
+   *
    * @group string_funcs
    * @since 1.5.0
    */
@@ -2351,6 +2352,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Returns the date that is `days` days after `start`
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2358,6 +2360,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Returns the date that is `days` days before `start`
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2365,6 +2368,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Returns the number of days from `start` to `end`.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2372,6 +2376,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2379,6 +2384,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the quarter as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2386,6 +2392,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the month as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2393,6 +2400,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2400,6 +2408,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2407,6 +2416,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the hours as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2424,6 +2434,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the minutes as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2457,6 +2468,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2464,6 +2476,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Extracts the week number as an integer from a given date/timestamp/string.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2473,6 +2486,7 @@ object functions extends LegacyFunctions {
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2484,6 +2498,7 @@ object functions extends LegacyFunctions {
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2493,6 +2508,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Gets current Unix timestamp in seconds.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2503,6 +2519,7 @@ object functions extends LegacyFunctions {
   /**
    * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
    * using the default timezone and the default locale, return null if fail.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2514,6 +2531,7 @@ object functions extends LegacyFunctions {
    * Convert time string with given pattern
    * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
    * to Unix time stamp (in seconds), return null if fail.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2532,7 +2550,6 @@ object functions extends LegacyFunctions {
    *
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
    *               or 'month', 'mon', 'mm' for truncate by month
-   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2542,6 +2559,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Assumes given timestamp is UTC and converts to given timezone.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2551,6 +2569,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Assumes given timestamp is in given timezone and converts to UTC.
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2564,6 +2583,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Returns true if the array contain the value
+   *
    * @group collection_funcs
    * @since 1.5.0
    */
@@ -2795,7 +2815,6 @@ object functions extends LegacyFunctions {
    *
    * @param f  A closure in Scala
    * @param dataType  The output data type of the UDF
-   *
    * @group udf_funcs
    * @since 2.0.0
    */

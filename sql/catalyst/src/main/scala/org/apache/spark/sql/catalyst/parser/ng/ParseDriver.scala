@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.{ParserInterface, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.ng.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.util.Utils
 
 /**
  * Base SQL parsing infrastructure.
@@ -34,23 +35,31 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 
   /** Creates Expression for a given SQL string. */
   override def parseExpression(sqlText: String): Expression = parse(sqlText) { parser =>
-    parser.singleExpression()
+    astBuilder.visitSingleExpression(parser.singleExpression())
   }
 
   /** Creates TableIdentifier for a given SQL string. */
   override def parseTableIdentifier(sqlText: String): TableIdentifier = parse(sqlText) { parser =>
-    parser.singleTableIdentifier()
+    astBuilder.visitSingleTableIdentifier(parser.singleTableIdentifier())
   }
 
   /** Creates LogicalPlan for a given SQL string. */
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
-    parser.singleStatement()
+    astBuilder.visitSingleStatement(parser.singleStatement()) match {
+      case plan: LogicalPlan => plan
+      case _ => nativeCommand(sqlText)
+    }
   }
 
   /** Get the builder (visitor) which converts a ParseTree into a AST. */
-  protected def astBuilder: SqlBaseBaseVisitor[AnyRef]
+  protected def astBuilder: AstBuilder
 
-  protected def parse[T](command: String)(toTree: SqlBaseParser => ParserRuleContext): T = {
+  /** Create a native command, or fail when this is not supported. */
+  protected def nativeCommand(sqlText: String): LogicalPlan = {
+    throw new AnalysisException(s"Unsupported SQL statement:\n$sqlText")
+  }
+
+  protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logInfo(s"Parsing command: $command")
 
     val lexer = new SqlBaseLexer(new ANTLRNoCaseStringStream(command))
@@ -63,24 +72,49 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
 
-    val tree = try {
-      // first, try parsing with potentially faster SLL mode
-      parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
-      toTree(parser)
+    try {
+      try {
+        // first, try parsing with potentially faster SLL mode
+        parser.getInterpreter.setPredictionMode(PredictionMode.SLL)
+        toResult(parser)
+      }
+      catch {
+        case e: ParseCancellationException =>
+          // if we fail, parse with LL mode
+          tokenStream.reset() // rewind input stream
+          parser.reset()
+
+          // Try Again.
+          parser.getInterpreter.setPredictionMode(PredictionMode.LL)
+          toResult(parser)
+      }
     }
     catch {
-      case e: ParseCancellationException =>
-        // if we fail, parse with LL mode
-        tokenStream.reset() // rewind input stream
-        parser.reset()
-
-        // Try Again.
-        parser.getInterpreter.setPredictionMode(PredictionMode.LL)
-        toTree(parser)
+      case e: AnalysisException =>
+        (e.line, e.startPosition) match {
+          case (Some(line), Some(position)) =>
+            val lines = command.split("\n").toBuffer
+            val marker = (0 until position).map(_ => "-").mkString("") + "^"
+            val elements = e.getStackTrace.takeWhile { element =>
+              val clazz = Utils.classForName(element.getClassName)
+              classOf[AbstractSqlParser].isAssignableFrom(clazz)
+            }
+            val message =
+              s"""
+                 |Error during parsing
+                 |== SQL ==
+                 |${lines.iterator.take(line).mkString("\n")}
+                 |$marker
+                 |${lines.iterator.drop(line).mkString("\n")}
+                 |== Error ==
+                 |${e.message}
+                 |== Stacktrace ==
+                 |${elements.mkString("\n")}
+               """.stripMargin
+            throw new AnalysisException(message, Some(line), Some(position))
+          case _ => throw e
+        }
     }
-
-    // Convert the tree into a useful AST.
-    astBuilder.visit(tree).asInstanceOf[T]
   }
 }
 
