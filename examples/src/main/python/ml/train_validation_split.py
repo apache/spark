@@ -24,7 +24,7 @@ from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
 # $example off$
 
 """
-This example demonstrats applying TrainValidationSplit to split data 
+This example demonstrats applying TrainValidationSplit to split data
 and preform model selection, as well as applying Pipelines.
 Run with:
 
@@ -39,11 +39,9 @@ if __name__ == "__main__":
     data = sqlContext.read.format("libsvm")\
         .load("spark//data/mllib/sample_linear_regression_data.txt")
     train, test = data.randomSplit([0.7, 0.3])
-    
     lr = LinearRegression(maxIter=10, regParam=0.1)
-    
     pipeline = Pipeline(stages=[lr])
-    
+
     # We use a ParamGridBuilder to construct a grid of parameters to search over.
     # TrainValidationSplit will try all combinations of values and determine best model using
     # the evaluator.
@@ -51,22 +49,21 @@ if __name__ == "__main__":
         .addGrid(lr.regParam, [0.1, 0.01]) \
         .addGrid(lr.elasticNetParam, [0.0, 0.5, 1.0])\
         .build()
-    
+
     # In this case the estimator is simply the linear regression.
     # A TrainValidationSplit requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
     tvs = TrainValidationSplit(estimator=pipeline,
-                              estimatorParamMaps=paramGrid,
-                              evaluator=RegressionEvaluator(),
-                              # 80% of the data will be used for training and the remaining 20% for validation.
-                              trainRatio = .8) 
-    
+                               estimatorParamMaps=paramGrid,
+                               evaluator=RegressionEvaluator(),
+                               # 80% of the data will be used for training, 20% for validation.
+                               trainRatio=0.8)
+
     # Run TrainValidationSplit, chosing the set of parameters that optimizes the evaluator.
     model = tvs.fit(train)
-    
     # Make predictions on test data. model is the model with combination of parameters
     # that performed best.
     prediction = model.transform(test)
     for row in prediction.take(5):
         print(row)
     # $example off$
-    sc.stop()g
+    sc.stop()
