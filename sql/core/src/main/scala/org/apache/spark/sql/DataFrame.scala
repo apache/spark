@@ -193,7 +193,7 @@ class Dataset[T] private[sql](
    */
   override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
-    val takeResult = take(numRows + 1)
+    val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
@@ -1023,7 +1023,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def limit(n: Int): DataFrame = withPlan {
+  def limit(n: Int): Dataset[T] = withTypedPlan {
     Limit(Literal(n), logicalPlan)
   }
 
@@ -1423,7 +1423,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def head(n: Int): Array[Row] = withCallback("head", limit(n)) { df =>
+  def head(n: Int): Array[T] = withTypedCallback("head", limit(n)) { df =>
     df.collect(needCallback = false)
   }
 
@@ -1432,14 +1432,14 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def head(): Row = head(1).head
+  def head(): T = head(1).head
 
   /**
    * Returns the first row. Alias for head().
    * @group action
    * @since 1.3.0
    */
-  def first(): Row = head()
+  def first(): T = head()
 
   /**
    * Concise syntax for chaining custom transformations.
@@ -1481,7 +1481,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def take(n: Int): Array[Row] = head(n)
+  def take(n: Int): Array[T] = head(n)
 
   /**
    * Returns the first `n` rows in the [[DataFrame]] as a list.
@@ -1492,7 +1492,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def takeAsList(n: Int): java.util.List[Row] = java.util.Arrays.asList(take(n) : _*)
+  def takeAsList(n: Int): java.util.List[T] = java.util.Arrays.asList(take(n) : _*)
 
   /**
    * Returns an array that contains all of [[Row]]s in this [[DataFrame]].
@@ -1505,7 +1505,9 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collect(): Array[Row] = collect(needCallback = true)
+  def collect(): Array[T] = collect(needCallback = true)
+
+  def collectRows(): Array[Row] = collectRows(needCallback = true)
 
   /**
    * Returns a Java list that contains all of [[Row]]s in this [[DataFrame]].
@@ -1516,13 +1518,26 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.3.0
    */
-  def collectAsList(): java.util.List[Row] = withCallback("collectAsList", toDF()) { _ =>
+  def collectAsList(): java.util.List[T] = withCallback("collectAsList", toDF()) { _ =>
     withNewExecutionId {
-      java.util.Arrays.asList(rdd.collect() : _*)
+      val values = queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+      java.util.Arrays.asList(values : _*)
     }
   }
 
-  private def collect(needCallback: Boolean): Array[Row] = {
+  private def collect(needCallback: Boolean): Array[T] = {
+    def execute(): Array[T] = withNewExecutionId {
+      queryExecution.toRdd.map(_.copy()).collect().map(boundTEncoder.fromRow)
+    }
+
+    if (needCallback) {
+      withCallback("collect", toDF())(_ => execute())
+    } else {
+      execute()
+    }
+  }
+
+  private def collectRows(needCallback: Boolean): Array[Row] = {
     def execute(): Array[Row] = withNewExecutionId {
       queryExecution.executedPlan.executeCollectPublic()
     }
@@ -1548,7 +1563,7 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def repartition(numPartitions: Int): DataFrame = withPlan {
+  def repartition(numPartitions: Int): Dataset[T] = withTypedPlan {
     Repartition(numPartitions, shuffle = true, logicalPlan)
   }
 
@@ -1562,7 +1577,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def repartition(numPartitions: Int, partitionExprs: Column*): DataFrame = withPlan {
+  def repartition(numPartitions: Int, partitionExprs: Column*): Dataset[T] = withTypedPlan {
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, Some(numPartitions))
   }
 
@@ -1576,7 +1591,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def repartition(partitionExprs: Column*): DataFrame = withPlan {
+  def repartition(partitionExprs: Column*): Dataset[T] = withTypedPlan {
     RepartitionByExpression(partitionExprs.map(_.expr), logicalPlan, numPartitions = None)
   }
 
@@ -1588,7 +1603,7 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.4.0
    */
-  def coalesce(numPartitions: Int): DataFrame = withPlan {
+  def coalesce(numPartitions: Int): Dataset[T] = withTypedPlan {
     Repartition(numPartitions, shuffle = false, logicalPlan)
   }
 
@@ -1793,6 +1808,23 @@ class Dataset[T] private[sql](
     } catch {
       case e: Exception =>
         sqlContext.listenerManager.onFailure(name, df.queryExecution, e)
+        throw e
+    }
+  }
+
+  private def withTypedCallback[A, B](name: String, ds: Dataset[A])(action: Dataset[A] => B) = {
+    try {
+      ds.queryExecution.executedPlan.foreach { plan =>
+        plan.resetMetrics()
+      }
+      val start = System.nanoTime()
+      val result = action(ds)
+      val end = System.nanoTime()
+      sqlContext.listenerManager.onSuccess(name, ds.queryExecution, end - start)
+      result
+    } catch {
+      case e: Exception =>
+        sqlContext.listenerManager.onFailure(name, ds.queryExecution, e)
         throw e
     }
   }

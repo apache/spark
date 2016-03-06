@@ -65,7 +65,7 @@ public class JavaDataFrameSuite {
   @Test
   public void testExecution() {
     Dataset<Row> df = context.table("testData").filter("key = 1");
-    Assert.assertEquals(1, df.select("key").collect()[0].get(0));
+    Assert.assertEquals(1, df.select("key").collectRows()[0].get(0));
   }
 
   @Test
@@ -208,7 +208,7 @@ public class JavaDataFrameSuite {
     StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
     List<Row> rows = Arrays.asList(RowFactory.create(0));
     Dataset<Row> df = context.createDataFrame(rows, schema);
-    Row[] result = df.collect();
+    Row[] result = df.collectRows();
     Assert.assertEquals(1, result.length);
   }
 
@@ -241,7 +241,7 @@ public class JavaDataFrameSuite {
     Assert.assertEquals("a_b", columnNames[0]);
     Assert.assertEquals("2", columnNames[1]);
     Assert.assertEquals("1", columnNames[2]);
-    Row[] rows = crosstab.collect();
+    Row[] rows = crosstab.collectRows();
     Arrays.sort(rows, crosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
@@ -257,7 +257,7 @@ public class JavaDataFrameSuite {
     Dataset<Row> df = context.table("testData2");
     String[] cols = {"a"};
     Dataset<Row> results = df.stat().freqItems(cols, 0.2);
-    Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+    Assert.assertTrue(results.collectRows()[0].getSeq(0).contains(1));
   }
 
   @Test
@@ -278,7 +278,7 @@ public class JavaDataFrameSuite {
   public void testSampleBy() {
     Dataset<Row> df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
     Dataset<Row> sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
-    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collectRows();
     Assert.assertEquals(0, actual[0].getLong(0));
     Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
     Assert.assertEquals(1, actual[1].getLong(0));
@@ -290,7 +290,7 @@ public class JavaDataFrameSuite {
     Dataset<Row> df = context.table("courseSales");
     Row[] actual = df.groupBy("year")
       .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
-      .agg(sum("earnings")).orderBy("year").collect();
+      .agg(sum("earnings")).orderBy("year").collectRows();
 
     Assert.assertEquals(2012, actual[0].getInt(0));
     Assert.assertEquals(15000.0, actual[0].getDouble(1), 0.01);

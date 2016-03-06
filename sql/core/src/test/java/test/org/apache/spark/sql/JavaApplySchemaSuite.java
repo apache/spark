@@ -109,7 +109,7 @@ public class JavaApplySchemaSuite implements Serializable {
 
     Dataset<Row> df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
-    Row[] actual = sqlContext.sql("SELECT * FROM people").collect();
+    Row[] actual = sqlContext.sql("SELECT * FROM people").collectRows();
 
     List<Row> expected = new ArrayList<>(2);
     expected.add(RowFactory.create("Michael", 29));
