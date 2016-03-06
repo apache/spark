@@ -208,26 +208,29 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         Instance(label, weight, features)
       }
 
-    if (familyObj == Gaussian && linkObj == Identity) {
+    val model = if (familyObj == Gaussian && linkObj == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         standardizeFeatures = true, standardizeLabel = true)
       val wlsModel = optimizer.fit(instances)
-      val model = copyValues(
+      copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
-      return model
+    }
+    else {
+      // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
+      val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
+      val optimizer = new IterativelyReweightedLeastSquares(initialModel,
+        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
+      val irlsModel = optimizer.fit(instances)
+      copyValues(
+        new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
+          .setParent(this))
     }
 
-    // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
-    val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
-    val optimizer = new IterativelyReweightedLeastSquares(initialModel, familyAndLink.reweightFunc,
-      $(fitIntercept), $(regParam), $(maxIter), $(tol))
-    val irlsModel = optimizer.fit(instances)
-
-    val model = copyValues(
-      new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
-        .setParent(this))
+    val summary = new GeneralizedLinearRegressionSummary(model.transform(dataset),
+      $(predictionCol), $(labelCol), $(featuresCol))
+    model.setSummary(summary)
     model
   }
 
@@ -569,9 +572,46 @@ class GeneralizedLinearRegressionModel private[ml] (
     familyAndLink.fitted(eta)
   }
 
+  private var trainingSummary: Option[GeneralizedLinearRegressionSummary] = None
+
+  private[regression] def setSummary(summary: GeneralizedLinearRegressionSummary): this.type = {
+    this.trainingSummary = Some(summary)
+    this
+  }
+
+  /**
+    * Gets summary of model on training set. An exception is
+    * thrown if `trainingSummary == None`.
+    */
+  @Since("2.0.0")
+  def summary: GeneralizedLinearRegressionSummary = trainingSummary match {
+    case Some(summ) => summ
+    case None =>
+      throw new SparkException(
+        "No training summary available for this GeneralizedLinearRegressionModel",
+        new NullPointerException())
+  }
+
   @Since("2.0.0")
   override def copy(extra: ParamMap): GeneralizedLinearRegressionModel = {
     copyValues(new GeneralizedLinearRegressionModel(uid, coefficients, intercept), extra)
       .setParent(parent)
   }
 }
+
+/**
+ * :: Experimental ::
+ * GeneralizedLinearRegressionModel results evaluated on a dataset.
+ *
+ * @param predictions dataframe outputted by the model's `transform` method.
+ * @param predictionCol field in "predictions" which gives the prediction of each instance.
+ * @param labelCol field in "predictions" which gives the true label of each instance.
+ * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
+ */
+@Experimental
+@Since("2.0.0")
+class GeneralizedLinearRegressionSummary private[regression] (
+    @Since("2.0.0") @transient val predictions: DataFrame,
+    @Since("2.0.0") val predictionCol: String,
+    @Since("2.0.0") val labelCol: String,
+    @Since("2.0.0") val featuresCol: String) extends Serializable

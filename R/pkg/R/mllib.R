@@ -29,15 +29,9 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' @param formula A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
-#' @param family Error distribution. "gaussian" -> linear regression, "binomial" -> logistic reg.
+#' @param family a description of the error distribution and link function to be used in the model..
 #' @param lambda Regularization parameter
-#' @param alpha Elastic-net mixing parameter (see glmnet's documentation for details)
-#' @param standardize Whether to standardize features before training
-#' @param solver The solver algorithm used for optimization, this can be "l-bfgs", "normal" and
-#'               "auto". "l-bfgs" denotes Limited-memory BFGS which is a limited-memory
-#'               quasi-Newton optimization method. "normal" denotes using Normal Equation as an
-#'               analytical solution to the linear regression problem. The default value is "auto"
-#'               which means that the solver algorithm is selected automatically.
+#' @param solver Currently only support "irls" which is also the default solver.
 #' @return a fitted MLlib model
 #' @rdname glm
 #' @export
@@ -51,13 +45,10 @@ setClass("PipelineModel", representation(model = "jobj"))
 #' summary(model)
 #'}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFrame"),
-          function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
-            standardize = TRUE, solver = "auto") {
-            family <- match.arg(family)
+          function(formula, family="gaussian", data, lambda = 0, solver = "irls") {
             formula <- paste(deparse(formula), collapse="")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
-                                 "fitRModelFormula", formula, data@sdf, family, lambda,
-                                 alpha, standardize, solver)
+                                 "fitGLM", formula, data@sdf, family, lambda, solver)
             return(new("PipelineModel", model = model))
           })
 
@@ -124,6 +115,11 @@ setMethod("summary", signature(object = "PipelineModel"),
               colnames(coefficients) <- c("Estimate")
               rownames(coefficients) <- unlist(features)
               return(list(coefficients = coefficients))
+            } else if (modelName == "GeneralizedLinearRegressionModel") {
+                coefficients <- as.matrix(unlist(coefficients))
+                colnames(coefficients) <- c("Estimate")
+                rownames(coefficients) <- unlist(features)
+                return(list(coefficients = coefficients))
             } else if (modelName == "KMeansModel") {
               modelSize <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                        "getKMeansModelSize", object@model)
