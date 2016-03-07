@@ -732,8 +732,34 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       conf.set("spark.executor.instances", "1")) === false)
     assert(Utils.isDynamicAllocationEnabled(
       conf.set("spark.executor.instances", "0")) === true)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.executor.instances", "1")
+      .set("spark.dynamicAllocation.overrideNumInstances", "true")) === true)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.executor.instances", "0")
+      .set("spark.dynamicAllocation.overrideNumInstances", "true")) === true)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.executor.instances", "1")
+      .set("spark.dynamicAllocation.overrideNumInstances", "false")) === false)
+    assert(Utils.isDynamicAllocationEnabled(conf.set("spark.executor.instances", "0")
+      .set("spark.dynamicAllocation.overrideNumInstances", "false")) === true)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.master", "local")) === false)
     assert(Utils.isDynamicAllocationEnabled(conf.set("spark.dynamicAllocation.testing", "true")))
+  }
+
+  test("getDynamicAllocationMinExecutors") {
+    val conf = new SparkConf()
+    assert(Utils.getDynamicAllocationMinExecutors(conf) === 0)
+    assert(Utils.getDynamicAllocationMinExecutors(
+      conf.set("spark.dynamicAllocation.minExecutors", "3")) === 3)
+    assert(Utils.getDynamicAllocationMinExecutors( // should use minExecutors
+      conf.set("spark.executor.instances", "2")) === 3)
+    assert(Utils.getDynamicAllocationMinExecutors( // should use executor.instances
+      conf.set("spark.executor.instances", "4")) === 4)
+  }
+
+  test("getDynamicAllocationMaxExecutors") {
+    val conf = new SparkConf()
+    assert(Utils.getDynamicAllocationMaxExecutors(conf) === Integer.MAX_VALUE)
+    assert(Utils.getDynamicAllocationMaxExecutors(
+      conf.set("spark.dynamicAllocation.maxExecutors", "500")) === 500)
   }
 
   test("encodeFileNameToURIRawPath") {

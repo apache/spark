@@ -26,7 +26,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
+import org.apache.spark.util.{Utils, Clock, SystemClock, ThreadUtils}
 
 /**
  * An agent that dynamically allocates and removes executors based on the workload.
@@ -86,9 +86,8 @@ private[spark] class ExecutorAllocationManager(
   import ExecutorAllocationManager._
 
   // Lower and upper bounds on the number of executors.
-  private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", 0)
-  private val maxNumExecutors = conf.getInt("spark.dynamicAllocation.maxExecutors",
-    Integer.MAX_VALUE)
+  private val minNumExecutors = Utils.getDynamicAllocationMinExecutors(conf)
+  private val maxNumExecutors = Utils.getDynamicAllocationMaxExecutors(conf)
   private val initialNumExecutors = conf.getInt("spark.dynamicAllocation.initialExecutors",
     minNumExecutors)
 

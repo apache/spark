@@ -2253,11 +2253,36 @@ private[spark] object Utils extends Logging {
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
     val numExecutor = conf.getInt("spark.executor.instances", 0)
     val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    val overrideExecutors = conf.getBoolean("spark.dynamicAllocation.overrideNumInstances", false)
     if (numExecutor != 0 && dynamicAllocationEnabled) {
-      logWarning("Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+      if (overrideExecutors) {
+        logWarning(
+          "Dynamic Allocation and num executors both set, spark.executor.instances will override " +
+          "spark.dynamicAllocation.minExecutors.")
+      } else {
+        logWarning(
+          "Dynamic Allocation and num executors both set, thus dynamic allocation disabled.")
+      }
     }
-    numExecutor == 0 && dynamicAllocationEnabled &&
+    dynamicAllocationEnabled && (numExecutor == 0 || overrideExecutors) &&
       (!isLocalMaster(conf) || conf.getBoolean("spark.dynamicAllocation.testing", false))
+  }
+
+  /**
+   * Return the minimum number of executors for dynamic allocation.
+   *
+   * If spark.executor.instances is set and larger than spark.dynamicAllocation.minExecutors, the
+   * it will be returned as the dynamic allocation minimum. This assumes that it was overridden by
+   * spark.dynamicAllocation.overrideNumInstances (or else this method would not be called).
+   */
+  def getDynamicAllocationMinExecutors(conf: SparkConf): Int = {
+    math.max(
+      conf.getInt("spark.dynamicAllocation.minExecutors", 0),
+      conf.getInt("spark.executor.instances", 0))
+  }
+
+  def getDynamicAllocationMaxExecutors(conf: SparkConf): Int = {
+    conf.getInt("spark.dynamicAllocation.maxExecutors", Integer.MAX_VALUE)
   }
 
   def tryWithResource[R <: Closeable, T](createResource: => R)(f: R => T): T = {
