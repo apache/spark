@@ -806,7 +806,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   override def visitPrimitiveDatatype(ctx: PrimitiveDatatypeContext): DataType = withOrigin(ctx) {
-    (ctx.identifier.getText.toLowerCase, ctx.typeParameter().asScala.toList) match {
+    (ctx.identifier.getText.toLowerCase, ctx.INTEGER_VALUE().asScala.toList) match {
       case ("boolean", Nil) => BooleanType
       case ("tinyint" | "byte", Nil) => ByteType
       case ("smallint" | "short", Nil) => ShortType
@@ -823,7 +823,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
       case ("decimal", precision :: scale :: Nil) =>
         DecimalType(precision.getText.toInt, scale.getText.toInt)
-      case other => notSupported(s"DataType '$other' is not supported.", ctx)
+      case (dt, params) =>
+        notSupported(s"DataType $dt${params.mkString("(", ",", ")")} is not supported.", ctx)
     }
   }
 

@@ -2533,6 +2533,7 @@ object functions extends LegacyFunctions {
    *
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
    *               or 'month', 'mon', 'mm' for truncate by month
+   *
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2574,6 +2575,7 @@ object functions extends LegacyFunctions {
 
   /**
    * Creates a new row for each element in the given array or map column.
+   *
    * @group collection_funcs
    * @since 1.3.0
    */

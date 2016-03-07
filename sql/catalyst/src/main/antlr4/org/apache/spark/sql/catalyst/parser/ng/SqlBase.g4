@@ -365,7 +365,7 @@ dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT '<' colTypeList '>'                        #complexDataType
-    | identifier ('(' INTEGER_VALUE (',' typeParameter)* ')')?  #primitiveDatatype
+    | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDatatype
     ;
 
 colTypeList
@@ -374,10 +374,6 @@ colTypeList
 
 colType
     : identifier ':'? dataType (COMMENT STRING)?
-    ;
-
-typeParameter
-    : INTEGER_VALUE | dataType
     ;
 
 whenClause
