@@ -901,7 +901,7 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
       // Predicates that reference attributes produced by the `Generate` operator cannot
       // be pushed below the operator.
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
-        cond.references subsetOf g.child.outputSet
+        cond.references.subsetOf(g.child.outputSet) && cond.deterministic
       }
       if (pushDown.nonEmpty) {
         val pushDownPredicate = pushDown.reduce(And)
