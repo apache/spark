@@ -38,7 +38,7 @@ if __name__ == "__main__":
     # $example on$
     # Prepare training and test data.
     data = sqlContext.read.format("libsvm")\
-        .load("spark//data/mllib/sample_linear_regression_data.txt")
+        .load("data/mllib/sample_linear_regression_data.txt")
     train, test = data.randomSplit([0.7, 0.3])
     lr = LinearRegression(maxIter=10, regParam=0.1)
 
