@@ -120,7 +120,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum(_._2)),
+      ds.groupByKey(_._1).agg(sum(_._2)),
       ("a", 30), ("b", 3), ("c", 1))
   }
 
@@ -128,7 +128,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(
+      ds.groupByKey(_._1).agg(
         sum(_._2),
         expr("sum(_2)").as[Long],
         count("*")),
@@ -139,7 +139,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(
+      ds.groupByKey(_._1).agg(
         expr("avg(_2)").as[Double],
         TypedAverage.toColumn),
       ("a", 2.0, 2.0), ("b", 3.0, 3.0))
@@ -149,7 +149,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(
+      ds.groupByKey(_._1).agg(
         expr("avg(_2)").as[Double],
         ComplexResultAgg.toColumn),
       ("a", 2.0, (2L, 4L)), ("b", 3.0, (1L, 3L)))
@@ -186,7 +186,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       (1.0, 1))
 
     checkAnswer(
-      ds.groupBy(_.b).agg(ClassInputAgg.toColumn),
+      ds.groupByKey(_.b).agg(ClassInputAgg.toColumn),
       ("one", 1))
   }
 
@@ -203,7 +203,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       (1.5, 2))
 
     checkAnswer(
-      ds.groupBy(_.b).agg(ComplexBufferAgg.toColumn),
+      ds.groupByKey(_.b).agg(ComplexBufferAgg.toColumn),
       ("one", 1), ("two", 1))
   }
 }

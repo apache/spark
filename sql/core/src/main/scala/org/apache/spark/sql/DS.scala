@@ -264,19 +264,19 @@ class DS[T] private[sql](
 
   /**
    * Returns a new [[DS]] that has exactly `numPartitions` partitions.
-    * @since 1.6.0
-    */
+   * @since 1.6.0
+   */
   def repartition(numPartitions: Int): DS[T] = withPlan {
     Repartition(numPartitions, shuffle = true, _)
   }
 
   /**
    * Returns a new [[DS]] that has exactly `numPartitions` partitions.
-    * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
-    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-    * the 100 new partitions will claim 10 of the current partitions.
-    * @since 1.6.0
-    */
+   * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
+   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
+   * the 100 new partitions will claim 10 of the current partitions.
+   * @since 1.6.0
+   */
   def coalesce(numPartitions: Int): DS[T] = withPlan {
     Repartition(numPartitions, shuffle = false, _)
   }
@@ -426,7 +426,7 @@ class DS[T] private[sql](
    * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
    * @since 1.6.0
    */
-  def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
+  def groupByKey[K: Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
@@ -444,7 +444,7 @@ class DS[T] private[sql](
    * @since 1.6.0
    */
   @scala.annotation.varargs
-  def groupBy(cols: Column*): GroupedDataset[Row, T] = {
+  def groupByKey(cols: Column*): GroupedDataset[Row, T] = {
     val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias(_))
     val withKey = Project(withKeyColumns, logicalPlan)
     val executed = sqlContext.executePlan(withKey)
@@ -465,8 +465,8 @@ class DS[T] private[sql](
    * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
    * @since 1.6.0
    */
-  def groupBy[K](func: MapFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
-    groupBy(func.call(_))(encoder)
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
+    groupByKey(func.call(_))(encoder)
 
   /* ****************** *
    *  Typed Relational  *

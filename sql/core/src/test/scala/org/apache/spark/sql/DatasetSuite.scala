@@ -137,7 +137,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     // when we implement better pipelining and local execution mode.
     val ds: DS[(ClassData, Long)] = Seq(ClassData("one", 1), ClassData("two", 2)).toDS()
         .map(c => ClassData(c.a, c.b + 1))
-        .groupBy(p => p).count()
+        .groupByKey(p => p).count()
 
     checkAnswer(
       ds,
@@ -268,7 +268,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
-    val grouped = ds.groupBy(v => (1, v._2))
+    val grouped = ds.groupByKey(v => (1, v._2))
     checkAnswer(
       grouped.keys,
       (1, 1))
@@ -276,7 +276,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy(v => (v._1, "word"))
+    val grouped = ds.groupByKey(v => (v._1, "word"))
     val agged = grouped.mapGroups { case (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkAnswer(
@@ -286,7 +286,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy(v => (v._1, "word"))
+    val grouped = ds.groupByKey(v => (v._1, "word"))
     val agged = grouped.flatMapGroups { case (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
@@ -298,7 +298,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupBy(_.length).reduce(_ + _)
+    val agged = ds.groupByKey(_.length).reduce(_ + _)
 
     checkAnswer(
       agged,
@@ -307,7 +307,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy single field class, count") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val count = ds.groupBy(s => Tuple1(s.length)).count()
+    val count = ds.groupByKey(s => Tuple1(s.length)).count()
 
     checkAnswer(
       count,
@@ -317,7 +317,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1")
+    val grouped = ds.groupByKey($"_1")
     val agged = grouped.mapGroups { case (g, iter) => (g.getString(0), iter.map(_._2).sum) }
 
     checkAnswer(
@@ -327,7 +327,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns, count") {
     val ds = Seq("a" -> 1, "b" -> 1, "a" -> 2).toDS()
-    val count = ds.groupBy($"_1").count()
+    val count = ds.groupByKey($"_1").count()
 
     checkAnswer(
       count,
@@ -336,7 +336,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1").keyAs[String]
+    val grouped = ds.groupByKey($"_1").keyAs[String]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
@@ -346,7 +346,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns asKey tuple, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1", lit(1)).keyAs[(String, Int)]
+    val grouped = ds.groupByKey($"_1", lit(1)).keyAs[(String, Int)]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
@@ -356,7 +356,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("groupBy columns asKey class, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
-    val grouped = ds.groupBy($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
+    val grouped = ds.groupByKey($"_1".as("a"), lit(1).as("b")).keyAs[ClassData]
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
 
     checkAnswer(
@@ -368,7 +368,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Long]),
+      ds.groupByKey(_._1).agg(sum("_2").as[Long]),
       ("a", 30L), ("b", 3L), ("c", 1L))
   }
 
@@ -376,7 +376,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
+      ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long]),
       ("a", 30L, 32L), ("b", 3L, 5L), ("c", 1L, 2L))
   }
 
@@ -384,7 +384,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
+      ds.groupByKey(_._1).agg(sum("_2").as[Long], sum($"_2" + 1).as[Long], count("*")),
       ("a", 30L, 32L, 2L), ("b", 3L, 5L, 2L), ("c", 1L, 2L, 1L))
   }
 
@@ -392,7 +392,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
 
     checkAnswer(
-      ds.groupBy(_._1).agg(
+      ds.groupByKey(_._1).agg(
         sum("_2").as[Long],
         sum($"_2" + 1).as[Long],
         count("*").as[Long],
@@ -403,7 +403,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("cogroup") {
     val ds1 = Seq(1 -> "a", 3 -> "abc", 5 -> "hello", 3 -> "foo").toDS()
     val ds2 = Seq(2 -> "q", 3 -> "w", 5 -> "e", 5 -> "r").toDS()
-    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) { case (key, data1, data2) =>
       Iterator(key -> (data1.map(_._2).mkString + "#" + data2.map(_._2).mkString))
     }
 
@@ -415,7 +415,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("cogroup with complex data") {
     val ds1 = Seq(1 -> ClassData("a", 1), 2 -> ClassData("b", 2)).toDS()
     val ds2 = Seq(2 -> ClassData("c", 3), 3 -> ClassData("d", 4)).toDS()
-    val cogrouped = ds1.groupBy(_._1).cogroup(ds2.groupBy(_._1)) { case (key, data1, data2) =>
+    val cogrouped = ds1.groupByKey(_._1).cogroup(ds2.groupByKey(_._1)) { case (key, data1, data2) =>
       Iterator(key -> (data1.map(_._2.a).mkString + data2.map(_._2.a).mkString))
     }
 
@@ -477,7 +477,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
 
-    assert(ds.groupBy(p => p).count().collect().toSet ==
+    assert(ds.groupByKey(p => p).count().collect().toSet ==
       Set((KryoData(1), 1L), (KryoData(2), 1L)))
   }
 
@@ -496,7 +496,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
-    assert(ds.groupBy(p => p).count().collect().toSeq ==
+    assert(ds.groupByKey(p => p).count().collect().toSeq ==
       Seq((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
@@ -584,7 +584,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("grouping key and grouped value has field with same name") {
     val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
-    val agged = ds.groupBy(d => ClassNullableData(d.a, null)).mapGroups {
+    val agged = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
       case (key, values) => key.a + values.map(_.b).sum
     }
 
@@ -594,7 +594,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("cogroup's left and right side has field with same name") {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS()
     val right = Seq(ClassNullableData("a", 3), ClassNullableData("b", 4)).toDS()
-    val cogrouped = left.groupBy(_.a).cogroup(right.groupBy(_.a)) {
+    val cogrouped = left.groupByKey(_.a).cogroup(right.groupByKey(_.a)) {
       case (key, lData, rData) => Iterator(key + lData.map(_.b).sum + rData.map(_.b.toInt).sum)
     }
 
