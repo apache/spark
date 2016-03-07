@@ -112,6 +112,9 @@ case class PivotFirst(pivotColumn: Expression,
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
+  // Partial Aggregation for this is wastefull
+  override val supportsPartial = false
+
   // UnsafeRow.update throws UnsupportedOperationException so we need to do this
   private def updateRow(row: MutableRow, offset: Int, value: Any): Unit = valueDataType match {
     case null => {} // this should not happen, but lets do nothing anyway
