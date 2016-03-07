@@ -1180,7 +1180,7 @@ class Analyzer(
 
       // Finally, we create a Project to output currentChild's output
       // newExpressionsWithWindowFunctions.
-      Project(child.output ++ newExpressionsWithWindowFunctions, currentChild)
+      Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
     } // end of addWindow
 
     // We have to use transformDown at here to make sure the rule of
@@ -1201,7 +1201,7 @@ class Analyzer(
         val withWindow = addWindow(windowExpressions, withFilter)
 
         // Finally, generate output columns according to the original projectList.
-        val finalProjectList = aggregateExprs.map (_.toAttribute)
+        val finalProjectList = aggregateExprs.map(_.toAttribute)
         Project(finalProjectList, withWindow)
 
       case p: LogicalPlan if !p.childrenResolved => p
@@ -1217,7 +1217,7 @@ class Analyzer(
         val withWindow = addWindow(windowExpressions, withAggregate)
 
         // Finally, generate output columns according to the original projectList.
-        val finalProjectList = aggregateExprs.map (_.toAttribute)
+        val finalProjectList = aggregateExprs.map(_.toAttribute)
         Project(finalProjectList, withWindow)
 
       // We only extract Window Expressions after all expressions of the Project
@@ -1232,7 +1232,7 @@ class Analyzer(
         val withWindow = addWindow(windowExpressions, withProject)
 
         // Finally, generate output columns according to the original projectList.
-        val finalProjectList = projectList.map (_.toAttribute)
+        val finalProjectList = projectList.map(_.toAttribute)
         Project(finalProjectList, withWindow)
     }
   }
