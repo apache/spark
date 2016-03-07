@@ -19,6 +19,7 @@ package org.apache.spark.util.random
 
 import java.util.Random
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
@@ -40,6 +41,11 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
 
   /** take a random sample */
   def sample(items: Iterator[T]): Iterator[U]
+
+  /** take a random sample */
+  def sample(items: java.util.Iterator[T]): Iterator[U] = {
+    sample(items.asScala)
+  }
 
   /** return a copy of the RandomSampler object */
   override def clone: RandomSampler[T, U] =
