@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
+import java.net.URLClassLoader
 import java.sql.{Date, Timestamp}
 
 import scala.reflect.runtime.universe.typeOf
@@ -242,44 +243,72 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
 
-  private def testThreadSafetyFor(name: String)(exec: () => Any) = {
-    test(s"thread safety of ${name}") {
-      for (_ <- 0 until 100) {
-        val loader = new java.net.URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
-        (0 until 10).par.foreach { _ =>
-          val cl = Thread.currentThread.getContextClassLoader
-          try {
-            Thread.currentThread.setContextClassLoader(loader)
-            exec()
-          } finally {
-            Thread.currentThread.setContextClassLoader(cl)
-          }
-        }
-      }
-    }
-  }
-
   private val dataTypeForComplexData = dataTypeFor[ComplexData]
   private val typeOfComplexData = typeOf[ComplexData]
 
-  for {
-    (name, exec) <- Seq(
-      ("mirror", () => mirror),
-      ("dataTypeFor", () => dataTypeFor[ComplexData]),
-      ("constructorFor", () => constructorFor[ComplexData]),
-      ("extractorsFor", {
-        val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
-        () => extractorsFor[ComplexData](inputObject)
-      }),
-      ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
-      ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
-      ("getClassFromType", () => getClassFromType(typeOfComplexData)),
-      ("schemaFor", () => schemaFor[ComplexData]),
-      ("localTypeOf", () => localTypeOf[ComplexData]),
-      ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
-      ("getParameterTypes", () => getParameterTypes(() => ())),
-      ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData)))
-  } {
-    testThreadSafetyFor(name)(exec)
+  test("SPARK-13640: thread safety of mirror") {
+    testThreadSafetyFor(() => mirror)
+  }
+
+  test("SPARK-13640: thread safety of dataTypeFor") {
+    testThreadSafetyFor(() => dataTypeFor[ComplexData])
+  }
+
+  test("SPARK-13640: thread safety of constructorFor") {
+    testThreadSafetyFor(() => constructorFor[ComplexData])
+  }
+
+  test("SPARK-13640: thread safety of extractorsFor") {
+    val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
+    testThreadSafetyFor(() => extractorsFor[ComplexData](inputObject))
+  }
+
+  test("SPARK-13640: thread safety of getConstructorParameters(cls)") {
+    testThreadSafetyFor(() => getConstructorParameters(classOf[ComplexData]))
+  }
+
+  test("SPARK-13640: thread safety of getConstructorParameterNames") {
+    testThreadSafetyFor(() => getConstructorParameterNames(classOf[ComplexData]))
+  }
+
+  test("SPARK-13640: thread safety of getClassFromType") {
+    testThreadSafetyFor(() => getClassFromType(typeOfComplexData))
+  }
+
+  test("SPARK-13640: thread safety of schemaFor") {
+    testThreadSafetyFor(() => schemaFor[ComplexData])
+  }
+
+  test("SPARK-13640: thread safety of localTypeOf") {
+    testThreadSafetyFor(() => localTypeOf[ComplexData])
+  }
+
+  test("SPARK-13640: thread safety of getClassNameFromType") {
+    testThreadSafetyFor(() => getClassNameFromType(typeOfComplexData))
+  }
+
+  test("SPARK-13640: thread safety of getParameterTypes") {
+    testThreadSafetyFor(() => getParameterTypes(() => ()))
+  }
+
+  test("SPARK-13640: thread safety of getConstructorParameters(tpe)") {
+    testThreadSafetyFor(() => getClassNameFromType(typeOfComplexData))
+  }
+
+  private def testThreadSafetyFor(exec: () => Any) = {
+    // Repeat to check thread-safety
+    // because thread safety problem sometimes happens but sometimes doesn't.
+    for (_ <- 0 until 100) {
+      val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
+      (0 until 10).par.foreach { _ =>
+        val cl = Thread.currentThread.getContextClassLoader
+        try {
+          Thread.currentThread.setContextClassLoader(loader)
+          exec()
+        } finally {
+          Thread.currentThread.setContextClassLoader(cl)
+        }
+      }
+    }
   }
 }
