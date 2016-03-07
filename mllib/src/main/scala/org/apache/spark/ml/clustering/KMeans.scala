@@ -148,6 +148,7 @@ class KMeansModel private[ml] (
         this.clusterCenters.zip(that.clusterCenters)
         .foldLeft(true) { case (indicator, (v1, v2)) => indicator && (v1 == v2) }
     case _ => false
+  }
 
   private var trainingSummary: Option[KMeansSummary] = None
 
