@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.util._
 /**
  * Provides helper methods for comparing plans.
  */
-abstract class PlanTest extends SparkFunSuite {
+abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   /**
    * Since attribute references are given globally unique ids during analysis,
    * we must normalize them to check if two different queries are identical.
@@ -39,10 +39,22 @@ abstract class PlanTest extends SparkFunSuite {
     }
   }
 
+  /**
+   * Normalizes the filter conditions that appear in the plan. For instance,
+   * ((expr 1 && expr 2) && expr 3), (expr 1 && expr 2 && expr 3), (expr 3 && (expr 1 && expr 2)
+   * etc., will all now be equivalent.
+   */
+  private def normalizeFilters(plan: LogicalPlan) = {
+    plan transform {
+      case filter @ Filter(condition: Expression, child: LogicalPlan) =>
+        Filter(splitConjunctivePredicates(condition).sortBy(_.hashCode()).reduce(And), child)
+    }
+  }
+
   /** Fails the test if the two plans do not match */
   protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
-    val normalized1 = normalizeExprIds(plan1)
-    val normalized2 = normalizeExprIds(plan2)
+    val normalized1 = normalizeFilters(normalizeExprIds(plan1))
+    val normalized2 = normalizeFilters(normalizeExprIds(plan2))
     if (normalized1 != normalized2) {
       fail(
         s"""

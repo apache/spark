@@ -141,12 +141,17 @@ class SimpleTextRelation(
       // Constructs a filter predicate to simulate filter push-down
       val predicate = {
         val filterCondition: Expression = filters.collect {
-          // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` filter
+          // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` and
+          // `isNotNull` filters
           case sources.GreaterThan(column, value) =>
             val dataType = dataSchema(column).dataType
             val literal = Literal.create(value, dataType)
             val attribute = inputAttributes.find(_.name == column).get
             expressions.GreaterThan(attribute, literal)
+          case sources.IsNotNull(column) =>
+            val dataType = dataSchema(column).dataType
+            val attribute = inputAttributes.find(_.name == column).get
+            expressions.IsNotNull(attribute)
         }.reduceOption(expressions.And).getOrElse(Literal(true))
         InterpretedPredicate.create(filterCondition, inputAttributes)
       }
@@ -184,11 +189,12 @@ class SimpleTextRelation(
     }
   }
 
-  // `SimpleTextRelation` only handles `GreaterThan` filter.  This is used to test filter push-down
-  // and `BaseRelation.unhandledFilters()`.
+  // `SimpleTextRelation` only handles `GreaterThan` and `IsNotNull` filters.  This is used to test
+  // filter push-down and `BaseRelation.unhandledFilters()`.
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     filters.filter {
       case _: GreaterThan => false
+      case _: IsNotNull => false
       case _ => true
     }
   }
