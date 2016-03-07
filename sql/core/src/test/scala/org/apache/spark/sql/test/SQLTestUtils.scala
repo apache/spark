@@ -155,8 +155,21 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Drops view `viewName` after calling `f`.
+   */
+  protected def withView(viewNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      viewNames.foreach { name =>
+        sqlContext.sql(s"DROP VIEW IF EXISTS $name")
+      }
+    }
+  }
+
+  /**
    * Creates a temporary database and switches current database to it before executing `f`.  This
    * database is dropped after `f` returns.
+   *
+   * Note that this method doesn't switch current database before executing `f`.
    */
   protected def withTempDatabase(f: String => Unit): Unit = {
     val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
@@ -186,7 +199,7 @@ private[sql] trait SQLTestUtils
     val schema = df.schema
     val childRDD = df
       .queryExecution
-      .executedPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
+      .sparkPlan.asInstanceOf[org.apache.spark.sql.execution.Filter]
       .child
       .execute()
       .map(row => Row.fromSeq(row.copy().toSeq(schema)))
@@ -200,6 +213,20 @@ private[sql] trait SQLTestUtils
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     DataFrame(sqlContext, plan)
+  }
+
+  /**
+   * Disable stdout and stderr when running the test. To not output the logs to the console,
+   * ConsoleAppender's `follow` should be set to `true` so that it will honors reassignments of
+   * System.out or System.err. Otherwise, ConsoleAppender will still output to the console even if
+   * we change System.out and System.err.
+   */
+  protected def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
   }
 }
 

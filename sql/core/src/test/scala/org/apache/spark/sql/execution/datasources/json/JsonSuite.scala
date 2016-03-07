@@ -23,9 +23,10 @@ import java.sql.{Date, Timestamp}
 import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.core.JsonFactory
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
 import org.scalactic.Tolerance._
 
 import org.apache.spark.rdd.RDD
@@ -33,6 +34,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -771,6 +773,34 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )
   }
 
+  test("Loading a JSON dataset floatAsBigDecimal returns schema with float types as BigDecimal") {
+    val jsonDF = sqlContext.read.option("floatAsBigDecimal", "true").json(primitiveFieldAndType)
+
+    val expectedSchema = StructType(
+      StructField("bigInteger", DecimalType(20, 0), true) ::
+        StructField("boolean", BooleanType, true) ::
+        StructField("double", DecimalType(17, -292), true) ::
+        StructField("integer", LongType, true) ::
+        StructField("long", LongType, true) ::
+        StructField("null", StringType, true) ::
+        StructField("string", StringType, true) :: Nil)
+
+    assert(expectedSchema === jsonDF.schema)
+
+    jsonDF.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql("select * from jsonTable"),
+      Row(BigDecimal("92233720368547758070"),
+        true,
+        BigDecimal("1.7976931348623157E308"),
+        10,
+        21474836470L,
+        null,
+        "this is a simple string.")
+    )
+  }
+
   test("Loading a JSON dataset from a text file with SQL") {
     val dir = Utils.createTempDir()
     dir.delete()
@@ -1492,6 +1522,49 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
       val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
       checkAnswer(jsonCopySome, jsonDFSome)
+    }
+  }
+
+  test("SPARK-13543 Write the output as uncompressed via option()") {
+    val clonedConf = new Configuration(hadoopConfiguration)
+    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
+    hadoopConfiguration
+      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+    hadoopConfiguration
+      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
+    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
+    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    withTempDir { dir =>
+      try {
+        val dir = Utils.createTempDir()
+        dir.delete()
+
+        val path = dir.getCanonicalPath
+        primitiveFieldAndType.map(record => record.replaceAll("\n", " ")).saveAsTextFile(path)
+
+        val jsonDF = sqlContext.read.json(path)
+        val jsonDir = new File(dir, "json").getCanonicalPath
+        jsonDF.coalesce(1).write
+          .format("json")
+          .option("compression", "none")
+          .save(jsonDir)
+
+        val compressedFiles = new File(jsonDir).listFiles()
+        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+
+        val jsonCopy = sqlContext.read
+          .format("json")
+          .load(jsonDir)
+
+        assert(jsonCopy.count == jsonDF.count)
+        val jsonCopySome = jsonCopy.selectExpr("string", "long", "boolean")
+        val jsonDFSome = jsonDF.selectExpr("string", "long", "boolean")
+        checkAnswer(jsonCopySome, jsonDFSome)
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
     }
   }
 

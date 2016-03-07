@@ -70,7 +70,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
    */
   override def fit(dataset: DataFrame): PCAModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v}
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v}
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
     copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
@@ -102,6 +102,8 @@ object PCA extends DefaultParamsReadable[PCA] {
  * Model fitted by [[PCA]].
  *
  * @param pc A principal components Matrix. Each column is one principal component.
+ * @param explainedVariance A vector of proportions of variance explained by
+ *                          each principal component.
  */
 @Experimental
 class PCAModel private[ml] (

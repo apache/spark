@@ -176,7 +176,7 @@ class BlockMatrix @Since("1.3.0") (
   val numColBlocks = math.ceil(numCols() * 1.0 / colsPerBlock).toInt
 
   private[mllib] def createPartitioner(): GridPartitioner =
-    GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.size)
+    GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.length)
 
   private lazy val blockInfo = blocks.mapValues(block => (block.numRows, block.numCols)).cache()
 

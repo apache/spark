@@ -23,14 +23,12 @@ import java.util.{Locale, TimeZone}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.tags.ExtendedHiveTest
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
-@ExtendedHiveTest
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
   private lazy val hiveQueryDir = TestHive.getHiveFile(
@@ -57,7 +55,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Use Hive hash expression instead of the native one
-    TestHive.functionRegistry.unregisterFunction("hash")
+    TestHive.sessionState.functionRegistry.unregisterFunction("hash")
     RuleExecutor.resetTime()
   }
 
@@ -67,7 +65,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
-    TestHive.functionRegistry.restore()
+    TestHive.sessionState.functionRegistry.restore()
 
     // For debugging dump some statistics about how much time was spent in various optimizer rules.
     logWarning(RuleExecutor.dumpTimeSpent())
@@ -325,6 +323,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_partitions_ignore_protection",
     "protectmode",
 
+    // Hive returns null rather than NaN when n = 1
+    "udaf_covar_samp",
+
+    // The implementation of GROUPING__ID in Hive is wrong (not match with doc).
+    "groupby_grouping_id1",
+    "groupby_grouping_id2",
+    "groupby_grouping_sets1",
+
     // Spark parser treats numerical literals differently: it creates decimals instead of doubles.
     "udf_abs",
     "udf_format_number",
@@ -500,9 +506,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby11",
     "groupby12",
     "groupby1_limit",
-    "groupby_grouping_id1",
-    "groupby_grouping_id2",
-    "groupby_grouping_sets1",
     "groupby_grouping_sets2",
     "groupby_grouping_sets3",
     "groupby_grouping_sets4",
@@ -881,7 +884,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "type_widening",
     "udaf_collect_set",
     "udaf_covar_pop",
-    "udaf_covar_samp",
     "udaf_histogram_numeric",
     "udf2",
     "udf5",

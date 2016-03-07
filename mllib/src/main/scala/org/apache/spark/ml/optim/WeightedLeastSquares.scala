@@ -31,7 +31,12 @@ import org.apache.spark.rdd.RDD
 private[ml] class WeightedLeastSquaresModel(
     val coefficients: DenseVector,
     val intercept: Double,
-    val diagInvAtWA: DenseVector) extends Serializable
+    val diagInvAtWA: DenseVector) extends Serializable {
+
+  def predict(features: Vector): Double = {
+    BLAS.dot(coefficients, features) + intercept
+  }
+}
 
 /**
  * Weighted least squares solver via normal equation.
@@ -152,6 +157,12 @@ private[ml] class WeightedLeastSquares(
 private[ml] object WeightedLeastSquares {
 
   /**
+   * In order to take the normal equation approach efficiently, [[WeightedLeastSquares]]
+   * only supports the number of features is no more than 4096.
+   */
+  val MAX_NUM_FEATURES: Int = 4096
+
+  /**
    * Aggregator to provide necessary summary statistics for solving [[WeightedLeastSquares]].
    */
   // TODO: consolidate aggregates for summary statistics
@@ -169,8 +180,8 @@ private[ml] object WeightedLeastSquares {
     private var aaSum: DenseVector = _
 
     private def init(k: Int): Unit = {
-      require(k <= 4096, "In order to take the normal equation approach efficiently, " +
-        s"we set the max number of features to 4096 but got $k.")
+      require(k <= MAX_NUM_FEATURES, "In order to take the normal equation approach efficiently, " +
+        s"we set the max number of features to $MAX_NUM_FEATURES but got $k.")
       this.k = k
       triK = k * (k + 1) / 2
       count = 0L

@@ -23,18 +23,23 @@ import org.apache.spark.{Logging, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.ExecutedCommand
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVectorUtils}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.collection.BitSet
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
@@ -97,10 +102,15 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (partitionAndNormalColumnAttrs ++ projects).toSeq
       }
 
+      // Prune the buckets based on the pushed filters that do not contain partitioning key
+      // since the bucketing key is not allowed to use the columns in partitioning key
+      val bucketSet = getBuckets(pushedFilters, t.getBucketSpec)
+
       val scan = buildPartitionedTableScan(
         l,
         partitionAndNormalColumnProjs,
         pushedFilters,
+        bucketSet,
         t.partitionSpec.partitionColumns,
         selectedPartitions)
 
@@ -124,11 +134,14 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val sharedHadoopConf = SparkHadoopUtil.get.conf
       val confBroadcast =
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
+      // Prune the buckets based on the filters
+      val bucketSet = getBuckets(filters, t.getBucketSpec)
       pruneFilterProject(
         l,
         projects,
         filters,
-        (a, f) => t.buildInternalScan(a.map(_.name).toArray, f, t.paths, confBroadcast)) :: Nil
+        (a, f) =>
+          t.buildInternalScan(a.map(_.name).toArray, f, bucketSet, t.paths, confBroadcast)) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       execution.PhysicalRDD.createFromDataSource(
@@ -136,12 +149,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
-      execution.ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
+      ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case i @ logical.InsertIntoTable(
       l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false) =>
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      execution.ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
+      ExecutedCommand(InsertIntoHadoopFsRelation(t, query, mode)) :: Nil
 
     case _ => Nil
   }
@@ -150,6 +163,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       logicalRelation: LogicalRelation,
       projections: Seq[NamedExpression],
       filters: Seq[Expression],
+      buckets: Option[BitSet],
       partitionColumns: StructType,
       partitions: Array[Partition]): SparkPlan = {
     val relation = logicalRelation.relation.asInstanceOf[HadoopFsRelation]
@@ -174,7 +188,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
           // assuming partition columns data stored in data files are always consistent with those
           // partition values encoded in partition directory paths.
           val dataRows = relation.buildInternalScan(
-            requiredDataColumns.map(_.name).toArray, filters, Array(dir), confBroadcast)
+            requiredDataColumns.map(_.name).toArray, filters, buckets, Array(dir), confBroadcast)
 
           // Merges data values with partition values.
           mergeWithPartitionValues(
@@ -208,6 +222,44 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     sparkPlan
   }
 
+  /**
+   * Creates a ColumnarBatch that contains the values for `requiredColumns`. These columns can
+   * either come from `input` (columns scanned from the data source) or from the partitioning
+   * values (data from `partitionValues`). This is done *once* per physical partition. When
+   * the column is from `input`, it just references the same underlying column. When using
+   * partition columns, the column is populated once.
+   * TODO: there's probably a cleaner way to do this.
+   */
+  private def projectedColumnBatch(
+      input: ColumnarBatch,
+      requiredColumns: Seq[Attribute],
+      dataColumns: Seq[Attribute],
+      partitionColumnSchema: StructType,
+      partitionValues: InternalRow) : ColumnarBatch = {
+    val result = ColumnarBatch.allocate(StructType.fromAttributes(requiredColumns))
+    var resultIdx = 0
+    var inputIdx = 0
+
+    while (resultIdx < requiredColumns.length) {
+      val attr = requiredColumns(resultIdx)
+      if (inputIdx < dataColumns.length && requiredColumns(resultIdx) == dataColumns(inputIdx)) {
+        result.setColumn(resultIdx, input.column(inputIdx))
+        inputIdx += 1
+      } else {
+        require(partitionColumnSchema.fields.filter(_.name.equals(attr.name)).length == 1)
+        var partitionIdx = 0
+        partitionColumnSchema.fields.foreach { f => {
+          if (f.name.equals(attr.name)) {
+            ColumnVectorUtils.populate(result.column(resultIdx), partitionValues, partitionIdx)
+          }
+          partitionIdx += 1
+        }}
+      }
+      resultIdx += 1
+    }
+    result
+  }
+
   private def mergeWithPartitionValues(
       requiredColumns: Seq[Attribute],
       dataColumns: Seq[Attribute],
@@ -227,7 +279,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         }
       }
 
-      val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[InternalRow]) => {
+      val mapPartitionsFunc = (_: TaskContext, _: Int, iterator: Iterator[Object]) => {
         // Note that we can't use an `UnsafeRowJoiner` to replace the following `JoinedRow` and
         // `UnsafeProjection`.  Because the projection may also adjust column order.
         val mutableJoinedRow = new JoinedRow()
@@ -235,9 +287,27 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         val unsafeProjection =
           UnsafeProjection.create(requiredColumns, dataColumns ++ partitionColumns)
 
-        iterator.map { unsafeDataRow =>
-          unsafeProjection(mutableJoinedRow(unsafeDataRow, unsafePartitionValues))
-        }
+        // If we are returning batches directly, we need to augment them with the partitioning
+        // columns. We want to do this without a row by row operation.
+        var columnBatch: ColumnarBatch = null
+        var mergedBatch: ColumnarBatch = null
+
+        iterator.map { input => {
+          if (input.isInstanceOf[InternalRow]) {
+            unsafeProjection(mutableJoinedRow(
+              input.asInstanceOf[InternalRow], unsafePartitionValues))
+          } else {
+            require(input.isInstanceOf[ColumnarBatch])
+            val inputBatch = input.asInstanceOf[ColumnarBatch]
+            if (inputBatch != mergedBatch) {
+              mergedBatch = inputBatch
+              columnBatch = projectedColumnBatch(inputBatch, requiredColumns,
+                dataColumns, partitionColumnSchema, partitionValues)
+            }
+            columnBatch.setNumRows(inputBatch.numRows())
+            columnBatch
+          }
+        }}
       }
 
       // This is an internal RDD whose call site the user should not be concerned with
@@ -245,10 +315,73 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       // the call site may add up.
       Utils.withDummyCallSite(dataRows.sparkContext) {
         new MapPartitionsRDD(dataRows, mapPartitionsFunc, preservesPartitioning = false)
-      }
+      }.asInstanceOf[RDD[InternalRow]]
     } else {
       dataRows
     }
+  }
+
+  // Get the bucket ID based on the bucketing values.
+  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
+  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
+    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
+    val bucketIdGeneration = UnsafeProjection.create(
+      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
+      bucketColumn :: Nil)
+
+    bucketIdGeneration(mutableRow).getInt(0)
+  }
+
+  // Get the bucket BitSet by reading the filters that only contains bucketing keys.
+  // Note: When the returned BitSet is None, no pruning is possible.
+  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
+  private def getBuckets(
+      filters: Seq[Expression],
+      bucketSpec: Option[BucketSpec]): Option[BitSet] = {
+
+    if (bucketSpec.isEmpty ||
+      bucketSpec.get.numBuckets == 1 ||
+      bucketSpec.get.bucketColumnNames.length != 1) {
+      // None means all the buckets need to be scanned
+      return None
+    }
+
+    // Just get the first because bucketing pruning only works when the column has one column
+    val bucketColumnName = bucketSpec.get.bucketColumnNames.head
+    val numBuckets = bucketSpec.get.numBuckets
+    val matchedBuckets = new BitSet(numBuckets)
+    matchedBuckets.clear()
+
+    filters.foreach {
+      case expressions.EqualTo(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      case expressions.EqualTo(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, v))
+      // Because we only convert In to InSet in Optimizer when there are more than certain
+      // items. So it is possible we still get an In expression here that needs to be pushed
+      // down.
+      case expressions.In(a: Attribute, list)
+          if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
+        val hSet = list.map(e => e.eval(EmptyRow))
+        hSet.foreach(e => matchedBuckets.set(getBucketId(a, numBuckets, e)))
+      case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
+        matchedBuckets.set(getBucketId(a, numBuckets, null))
+      case _ =>
+    }
+
+    logInfo {
+      val selected = matchedBuckets.cardinality()
+      val percentPruned = (1 - selected.toDouble / numBuckets.toDouble) * 100
+      s"Selected $selected buckets out of $numBuckets, pruned $percentPruned% partitions."
+    }
+
+    // None means all the buckets need to be scanned
+    if (matchedBuckets.cardinality() == 0) None else Some(matchedBuckets)
   }
 
   protected def prunePartitions(

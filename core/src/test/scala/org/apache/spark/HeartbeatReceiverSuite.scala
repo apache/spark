@@ -215,14 +215,16 @@ class HeartbeatReceiverSuite
     val metrics = new TaskMetrics
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
-      Heartbeat(executorId, Array(1L -> metrics), blockManagerId))
+      Heartbeat(executorId, Array(1L -> metrics.accumulatorUpdates()), blockManagerId))
     if (executorShouldReregister) {
       assert(response.reregisterBlockManager)
     } else {
       assert(!response.reregisterBlockManager)
       // Additionally verify that the scheduler callback is called with the correct parameters
       verify(scheduler).executorHeartbeatReceived(
-        Matchers.eq(executorId), Matchers.eq(Array(1L -> metrics)), Matchers.eq(blockManagerId))
+        Matchers.eq(executorId),
+        Matchers.eq(Array(1L -> metrics.accumulatorUpdates())),
+        Matchers.eq(blockManagerId))
     }
   }
 

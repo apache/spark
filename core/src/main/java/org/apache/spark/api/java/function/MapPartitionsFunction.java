@@ -24,5 +24,5 @@ import java.util.Iterator;
  * Base interface for function used in Dataset's mapPartitions.
  */
 public interface MapPartitionsFunction<T, U> extends Serializable {
-  Iterable<U> call(Iterator<T> input) throws Exception;
+  Iterator<U> call(Iterator<T> input) throws Exception;
 }

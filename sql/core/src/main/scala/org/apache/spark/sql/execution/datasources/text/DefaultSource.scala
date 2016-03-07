@@ -31,7 +31,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
-import org.apache.spark.sql.execution.datasources.PartitionSpec
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, PartitionSpec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -48,7 +48,7 @@ class DefaultSource extends HadoopFsRelationProvider with DataSourceRegister {
       partitionColumns: Option[StructType],
       parameters: Map[String, String]): HadoopFsRelation = {
     dataSchema.foreach(verifySchema)
-    new TextRelation(None, dataSchema, partitionColumns, paths)(sqlContext)
+    new TextRelation(None, dataSchema, partitionColumns, paths, parameters)(sqlContext)
   }
 
   override def shortName(): String = "text"
@@ -98,16 +98,15 @@ private[sql] class TextRelation(
     sqlContext.sparkContext.hadoopRDD(
       conf.asInstanceOf[JobConf], classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
       .mapPartitions { iter =>
-        val bufferHolder = new BufferHolder
-        val unsafeRowWriter = new UnsafeRowWriter
         val unsafeRow = new UnsafeRow(1)
+        val bufferHolder = new BufferHolder(unsafeRow)
+        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
 
         iter.map { case (_, line) =>
           // Writes to an UnsafeRow directly
           bufferHolder.reset()
-          unsafeRowWriter.initialize(bufferHolder, 1)
           unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-          unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize())
+          unsafeRow.setTotalSize(bufferHolder.totalSize())
           unsafeRow
         }
       }
@@ -115,6 +114,12 @@ private[sql] class TextRelation(
 
   /** Write path. */
   override def prepareJobForWrite(job: Job): OutputWriterFactory = {
+    val conf = job.getConfiguration
+    val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
+    compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+
     new OutputWriterFactory {
       override def newInstance(
           path: String,

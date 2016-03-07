@@ -17,7 +17,6 @@
 
 package org.apache.spark.examples.streaming;
 
-import com.google.common.collect.Lists;
 import com.google.common.io.Closeables;
 
 import org.apache.spark.SparkConf;
@@ -37,6 +36,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.ConnectException;
 import java.net.Socket;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.regex.Pattern;
 
 /**
@@ -74,8 +75,8 @@ public class JavaCustomReceiver extends Receiver<String> {
       new JavaCustomReceiver(args[0], Integer.parseInt(args[1])));
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
-      public Iterable<String> call(String x) {
-        return Lists.newArrayList(SPACE.split(x));
+      public Iterator<String> call(String x) {
+        return Arrays.asList(SPACE.split(x)).iterator();
       }
     });
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(

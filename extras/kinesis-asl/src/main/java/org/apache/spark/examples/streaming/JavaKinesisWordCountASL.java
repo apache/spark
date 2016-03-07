@@ -16,7 +16,10 @@
  */
 package org.apache.spark.examples.streaming;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -38,7 +41,6 @@ import scala.Tuple2;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.services.kinesis.AmazonKinesisClient;
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
-import com.google.common.collect.Lists;
 
 /**
  * Consumes messages from a Amazon Kinesis streams and does wordcount.
@@ -154,8 +156,9 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     // Convert each line of Array[Byte] to String, and split into words
     JavaDStream<String> words = unionStreams.flatMap(new FlatMapFunction<byte[], String>() {
       @Override
-      public Iterable<String> call(byte[] line) {
-        return Lists.newArrayList(WORD_SEPARATOR.split(new String(line)));
+      public Iterator<String> call(byte[] line) {
+        String s = new String(line, StandardCharsets.UTF_8);
+        return Arrays.asList(WORD_SEPARATOR.split(s)).iterator();
       }
     });
 

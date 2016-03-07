@@ -112,6 +112,11 @@ public class TaskMemoryManager {
   private final HashSet<MemoryConsumer> consumers;
 
   /**
+   * The amount of memory that is acquired but not used.
+   */
+  private long acquiredButNotUsed = 0L;
+
+  /**
    * Construct a new TaskMemoryManager.
    */
   public TaskMemoryManager(MemoryManager memoryManager, long taskAttemptId) {
@@ -256,7 +261,20 @@ public class TaskMemoryManager {
       }
       allocatedPages.set(pageNumber);
     }
-    final MemoryBlock page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
+    MemoryBlock page = null;
+    try {
+      page = memoryManager.tungstenMemoryAllocator().allocate(acquired);
+    } catch (OutOfMemoryError e) {
+      logger.warn("Failed to allocate a page ({} bytes), try again.", acquired);
+      // there is no enough memory actually, it means the actual free memory is smaller than
+      // MemoryManager thought, we should keep the acquired memory.
+      acquiredButNotUsed += acquired;
+      synchronized (this) {
+        allocatedPages.clear(pageNumber);
+      }
+      // this could trigger spilling to free some pages.
+      return allocatePage(size, consumer);
+    }
     page.pageNumber = pageNumber;
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
@@ -312,7 +330,7 @@ public class TaskMemoryManager {
 
   @VisibleForTesting
   public static int decodePageNumber(long pagePlusOffsetAddress) {
-    return (int) ((pagePlusOffsetAddress & MASK_LONG_UPPER_13_BITS) >>> OFFSET_BITS);
+    return (int) (pagePlusOffsetAddress >>> OFFSET_BITS);
   }
 
   private static long decodeOffset(long pagePlusOffsetAddress) {
@@ -377,6 +395,9 @@ public class TaskMemoryManager {
       }
     }
     Arrays.fill(pageTable, null);
+
+    // release the memory that is not used by any consumer.
+    memoryManager.releaseExecutionMemory(acquiredButNotUsed, taskAttemptId, tungstenMemoryMode);
 
     return memoryManager.releaseAllExecutionMemoryForTask(taskAttemptId);
   }

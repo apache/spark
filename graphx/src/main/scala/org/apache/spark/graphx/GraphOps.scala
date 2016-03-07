@@ -184,6 +184,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * Remove self edges.
+   *
+   * @return a graph with all self edges removed
+   */
+  def removeSelfEdges(): Graph[VD, ED] = {
+    graph.subgraph(epred = e => e.srcId != e.dstId)
+  }
+
+  /**
    * Join the vertices with an RDD and then apply a function from the
    * vertex and RDD entry to a new vertex value.  The input table
    * should contain at most one entry for each vertex.  If no entry is
@@ -270,7 +279,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       if (selectedVertices.count > 1) {
         found = true
         val collectedVertices = selectedVertices.collect()
-        retVal = collectedVertices(Random.nextInt(collectedVertices.size))
+        retVal = collectedVertices(Random.nextInt(collectedVertices.length))
       }
     }
    retVal
@@ -406,13 +415,23 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+    * Compute the connected component membership of each vertex and return a graph with the vertex
+    * value containing the lowest vertex id in the connected component containing that vertex.
+    *
+    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
+    */
+  def connectedComponents(): Graph[VertexId, ED] = {
+    ConnectedComponents.run(graph)
+  }
+
+  /**
    * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
    */
-  def connectedComponents(): Graph[VertexId, ED] = {
-    ConnectedComponents.run(graph)
+  def connectedComponents(maxIterations: Int): Graph[VertexId, ED] = {
+    ConnectedComponents.run(graph, maxIterations)
   }
 
   /**

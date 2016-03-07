@@ -697,7 +697,7 @@ class VectorUDTTests(MLlibTestCase):
         schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
-        vectors = df.map(lambda p: p.features).collect()
+        vectors = df.rdd.map(lambda p: p.features).collect()
         self.assertEqual(len(vectors), 2)
         for v in vectors:
             if isinstance(v, SparseVector):
@@ -729,7 +729,7 @@ class MatrixUDTTests(MLlibTestCase):
         df = rdd.toDF()
         schema = df.schema
         self.assertTrue(schema.fields[1].dataType, self.udt)
-        matrices = df.map(lambda x: x._2).collect()
+        matrices = df.rdd.map(lambda x: x._2).collect()
         self.assertEqual(len(matrices), 2)
         for m in matrices:
             if isinstance(m, DenseMatrix):
@@ -1189,6 +1189,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         self._eventually(condition, catch_assertions=True)
 
+    @unittest.skip("SPARK-10086: Flaky StreamingKMeans test in PySpark")
     def test_trainOn_predictOn(self):
         """Test that prediction happens on the updated model."""
         stkm = StreamingKMeans(decayFactor=0.0, k=2)

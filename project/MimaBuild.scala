@@ -95,7 +95,7 @@ object MimaBuild {
     // because spark-streaming-mqtt(1.6.0) depends on it.
     // Remove the setting on updating previousSparkVersion.
     val previousSparkVersion = "1.6.0"
-    val fullId = "spark-" + projectRef.project + "_2.10"
+    val fullId = "spark-" + projectRef.project + "_2.11"
     mimaDefaultSettings ++
     Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
       binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value),

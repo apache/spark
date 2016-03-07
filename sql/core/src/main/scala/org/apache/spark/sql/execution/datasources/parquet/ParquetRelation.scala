@@ -45,8 +45,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
+import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -146,6 +147,19 @@ private[sql] class ParquetRelation(
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
+
+  private val compressionCodec: Option[String] = parameters
+    .get("compression")
+    .map { codecName =>
+      // Validate if given compression codec is supported or not.
+      val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
+      if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
+        val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+        throw new IllegalArgumentException(s"Codec [$codecName] " +
+          s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      }
+      codecName.toLowerCase
+    }
 
   private lazy val metadataCache: MetadataCache = {
     val meta = new MetadataCache
@@ -258,7 +272,12 @@ private[sql] class ParquetRelation(
     job.setOutputFormatClass(classOf[ParquetOutputFormat[Row]])
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[CatalystWriteSupport])
-    CatalystWriteSupport.setSchema(dataSchema, conf)
+
+    // We want to clear this temporary metadata from saving into Parquet file.
+    // This metadata is only useful for detecting optional columns when pushdowning filters.
+    val dataSchemaToWrite = StructType.removeMetadata(StructType.metadataKeyForOptionalField,
+      dataSchema).asInstanceOf[StructType]
+    CatalystWriteSupport.setSchema(dataSchemaToWrite, conf)
 
     // Sets flags for `CatalystSchemaConverter` (which converts Catalyst schema to Parquet schema)
     // and `CatalystWriteSupport` (writing actual rows to Parquet files).
@@ -280,7 +299,8 @@ private[sql] class ParquetRelation(
       ParquetRelation
         .shortParquetCompressionCodecNames
         .getOrElse(
-          sqlContext.conf.parquetCompressionCodec.toUpperCase,
+          compressionCodec
+            .getOrElse(sqlContext.conf.parquetCompressionCodec.toLowerCase),
           CompressionCodecName.UNCOMPRESSED).name())
 
     new BucketedOutputWriterFactory {
@@ -304,10 +324,6 @@ private[sql] class ParquetRelation(
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
 
-    // When merging schemas is enabled and the column of the given filter does not exist,
-    // Parquet emits an exception which is an issue of Parquet (PARQUET-389).
-    val safeParquetFilterPushDown = !shouldMergeSchemas && parquetFilterPushDown
-
     // Parquet row group size. We will use this value as the value for
     // mapreduce.input.fileinputformat.split.minsize and mapred.min.split.size if the value
     // of these flags are smaller than the parquet row group size.
@@ -321,7 +337,7 @@ private[sql] class ParquetRelation(
         dataSchema,
         parquetBlockSize,
         useMetadataCache,
-        safeParquetFilterPushDown,
+        parquetFilterPushDown,
         assumeBinaryIsString,
         assumeInt96IsTimestamp) _
 
@@ -799,12 +815,37 @@ private[sql] object ParquetRelation extends Logging {
               assumeInt96IsTimestamp = assumeInt96IsTimestamp,
               writeLegacyParquetFormat = writeLegacyParquetFormat)
 
-          footers.map { footer =>
-            ParquetRelation.readSchemaFromFooter(footer, converter)
-          }.reduceLeftOption(_ merge _).iterator
+          if (footers.isEmpty) {
+            Iterator.empty
+          } else {
+            var mergedSchema = ParquetRelation.readSchemaFromFooter(footers.head, converter)
+            footers.tail.foreach { footer =>
+              val schema = ParquetRelation.readSchemaFromFooter(footer, converter)
+              try {
+                mergedSchema = mergedSchema.merge(schema)
+              } catch { case cause: SparkException =>
+                throw new SparkException(
+                  s"Failed merging schema of file ${footer.getFile}:\n${schema.treeString}", cause)
+              }
+            }
+            Iterator.single(mergedSchema)
+          }
         }.collect()
 
-    partiallyMergedSchemas.reduceLeftOption(_ merge _)
+    if (partiallyMergedSchemas.isEmpty) {
+      None
+    } else {
+      var finalSchema = partiallyMergedSchemas.head
+      partiallyMergedSchemas.tail.foreach { schema =>
+        try {
+          finalSchema = finalSchema.merge(schema)
+        } catch { case cause: SparkException =>
+          throw new SparkException(
+            s"Failed merging schema:\n${schema.treeString}", cause)
+        }
+      }
+      Some(finalSchema)
+    }
   }
 
   /**
@@ -878,9 +919,9 @@ private[sql] object ParquetRelation extends Logging {
 
   // The parquet compression short names
   val shortParquetCompressionCodecNames = Map(
-    "NONE" -> CompressionCodecName.UNCOMPRESSED,
-    "UNCOMPRESSED" -> CompressionCodecName.UNCOMPRESSED,
-    "SNAPPY" -> CompressionCodecName.SNAPPY,
-    "GZIP" -> CompressionCodecName.GZIP,
-    "LZO" -> CompressionCodecName.LZO)
+    "none" -> CompressionCodecName.UNCOMPRESSED,
+    "uncompressed" -> CompressionCodecName.UNCOMPRESSED,
+    "snappy" -> CompressionCodecName.SNAPPY,
+    "gzip" -> CompressionCodecName.GZIP,
+    "lzo" -> CompressionCodecName.LZO)
 }

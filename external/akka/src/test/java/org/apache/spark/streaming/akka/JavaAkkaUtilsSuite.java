@@ -20,6 +20,7 @@ package org.apache.spark.streaming.akka;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import akka.actor.SupervisorStrategy;
+import akka.util.Timeout;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.junit.Test;
@@ -62,5 +63,6 @@ class JavaTestActor extends JavaActorReceiver {
   @Override
   public void onReceive(Object message) throws Exception {
     store((String) message);
+    store((String) message, new Timeout(1000));
   }
 }

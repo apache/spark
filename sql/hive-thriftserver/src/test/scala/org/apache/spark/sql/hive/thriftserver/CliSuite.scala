@@ -183,7 +183,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "CREATE DATABASE hive_test_db;"
         -> "OK",
       "USE hive_test_db;"
-        -> "OK",
+        -> "",
       "CREATE TABLE hive_test(key INT, val STRING);"
         -> "OK",
       "SHOW TABLES;"
@@ -233,5 +233,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "select * from nonexistent_table;"
         -> "Error in query: Table not found: nonexistent_table;"
     )
+  }
+
+  test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
+    runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
+      "" -> "This is a test for Spark-11624")
   }
 }

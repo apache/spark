@@ -20,20 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, EmptyConf, TableIdentifier}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 
-/**
- * Thrown by a catalog when a table cannot be found.  The analyzer will rethrow the exception
- * as an AnalysisException with the correct position information.
- */
-class NoSuchTableException extends Exception
-
-class NoSuchDatabaseException extends Exception
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
@@ -45,6 +36,10 @@ trait Catalog {
   def tableExists(tableIdent: TableIdentifier): Boolean
 
   def lookupRelation(tableIdent: TableIdentifier, alias: Option[String] = None): LogicalPlan
+
+  def setCurrentDatabase(databaseName: String): Unit = {
+    throw new UnsupportedOperationException
+  }
 
   /**
    * Returns tuples of (tableName, isTemporary) for all tables in the given database.
@@ -106,12 +101,12 @@ class SimpleCatalog(val conf: CatalystConf) extends Catalog {
     if (table == null) {
       throw new AnalysisException("Table not found: " + tableName)
     }
-    val tableWithQualifiers = Subquery(tableName, table)
+    val tableWithQualifiers = SubqueryAlias(tableName, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
     alias
-      .map(a => Subquery(a, tableWithQualifiers))
+      .map(a => SubqueryAlias(a, tableWithQualifiers))
       .getOrElse(tableWithQualifiers)
   }
 
@@ -154,11 +149,11 @@ trait OverrideCatalog extends Catalog {
     getOverriddenTable(tableIdent) match {
       case Some(table) =>
         val tableName = getTableName(tableIdent)
-        val tableWithQualifiers = Subquery(tableName, table)
+        val tableWithQualifiers = SubqueryAlias(tableName, table)
 
         // If an alias was specified by the lookup, wrap the plan in a sub-query so that attributes
         // are properly qualified with this alias.
-        alias.map(a => Subquery(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
+        alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
 
       case None => super.lookupRelation(tableIdent, alias)
     }
