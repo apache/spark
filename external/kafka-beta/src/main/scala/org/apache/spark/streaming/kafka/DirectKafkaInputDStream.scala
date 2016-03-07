@@ -202,24 +202,33 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
   }
 
   private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
-      "spark.streaming.kafka.maxRatePerPartition", 0)
-  protected def maxMessagesPerPartition: Option[Long] = {
+    "spark.streaming.kafka.maxRatePerPartition", 0)
+
+    protected[streaming] def maxMessagesPerPartition(
+      offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
-    val numPartitions = currentOffsets.keys.size
 
-    val effectiveRateLimitPerPartition = estimatedRateLimit
-      .filter(_ > 0)
-      .map { limit =>
-        if (maxRateLimitPerPartition > 0) {
-          Math.min(maxRateLimitPerPartition, (limit / numPartitions))
-        } else {
-          limit / numPartitions
+    // calculate a per-partition rate limit based on current lag
+    val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
+      case Some(rate) =>
+        val lagPerPartition = offsets.map { case (tp, offset) =>
+          tp -> Math.max(offset - currentOffsets.getOrElse(tp, offset), 0)
         }
-      }.getOrElse(maxRateLimitPerPartition)
+        val totalLag = lagPerPartition.values.sum
 
-    if (effectiveRateLimitPerPartition > 0) {
+        lagPerPartition.map { case (tp, lag) =>
+          val backpressureRate = Math.round(lag / totalLag.toFloat * rate)
+          tp -> (if (maxRateLimitPerPartition > 0) {
+            Math.min(backpressureRate, maxRateLimitPerPartition)} else backpressureRate)
+        }
+      case None => offsets.map { case (tp, offset) => tp -> maxRateLimitPerPartition }
+    }
+
+    if (effectiveRateLimitPerPartition.values.sum > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
-      Some((secsPerBatch * effectiveRateLimitPerPartition).toLong)
+      Some(effectiveRateLimitPerPartition.map {
+        case (tp, limit) => tp -> (secsPerBatch * limit).toLong
+      })
     } else {
       None
     }
@@ -238,9 +247,11 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
   // limits the maximum number of messages per partition
   protected def clamp(
     offsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-    maxMessagesPerPartition.map { mmp =>
-      offsets.map { case (tp, o) =>
-        tp -> Math.min(currentOffsets(tp) + mmp, o)
+
+    maxMessagesPerPartition(offsets).map { mmp =>
+      mmp.map { case (tp, messages) =>
+          val uo = offsets(tp)
+          tp -> Math.min(currentOffsets.getOrElse(tp, uo) + messages, uo)
       }
     }.getOrElse(offsets)
   }
