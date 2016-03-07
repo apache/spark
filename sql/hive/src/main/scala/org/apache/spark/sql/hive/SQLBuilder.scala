@@ -218,63 +218,14 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     )
   }
 
-  /**
-   * Get the row format specification
-   * Note:
-   * 1. Changes are needed when readerClause and writerClause are supported.
-   * 2. Changes are needed when "ESCAPED BY" is supported.
-   */
-  private def getRowFormat(
-      schemaLess: Boolean,
-      rowFormat: Seq[(String, String)],
-      serdeClass: Option[String],
-      serdeProps: Seq[(String, String)]): String = {
-    if (schemaLess) return ""
-
-    val rowFormatDelimited =
-      rowFormat.map {
-        case ("TOK_TABLEROWFORMATFIELD", value) =>
-          "FIELDS TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATCOLLITEMS", value) =>
-          "COLLECTION ITEMS TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATMAPKEYS", value) =>
-          "MAP KEYS TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATLINES", value) =>
-          "LINES TERMINATED BY " + value
-        case ("TOK_TABLEROWFORMATNULL", value) =>
-          "NULL DEFINED AS " + value
-        case o =>
-          throw new UnsupportedOperationException(
-            s"Row format $o doesn't have a SQL representation")
-    }
-
-    val serdeClassSQL = serdeClass.map("'" + _ + "'").getOrElse("")
-    val serdePropsSQL =
-      if (serdeClass.nonEmpty) {
-        val props = serdeProps.map{p => s"'${p._1}' = '${p._2}'"}.mkString(", ")
-        if (props.nonEmpty) " WITH SERDEPROPERTIES(" + props + ")" else ""
-      } else {
-        ""
-      }
-    if (rowFormat.nonEmpty) {
-      "ROW FORMAT DELIMITED " + rowFormatDelimited.mkString(" ")
-    } else {
-      "ROW FORMAT SERDE " + serdeClassSQL + serdePropsSQL
-    }
-  }
-
   private def scriptTransformationToSQL(plan: ScriptTransformation): String = {
     val ioSchema = plan.ioschema.asInstanceOf[HiveScriptIOSchema]
-    val inputRowFormat = getRowFormat(
-      ioSchema.schemaLess,
-      ioSchema.inputRowFormat,
-      ioSchema.inputSerdeClass,
-      ioSchema.inputSerdeProps)
-    val outputRowFormat = getRowFormat(
-      ioSchema.schemaLess,
-      ioSchema.outputRowFormat,
-      ioSchema.outputSerdeClass,
-      ioSchema.outputSerdeProps)
+    val inputRowFormatSQL = ioSchema.inputRowFormatSQL.getOrElse(
+      throw new UnsupportedOperationException(
+        s"unsupported row format ${ioSchema.inputRowFormat}"))
+    val outputRowFormatSQL = ioSchema.outputRowFormatSQL.getOrElse(
+      throw new UnsupportedOperationException(
+        s"unsupported row format ${ioSchema.outputRowFormat}"))
 
     val outputSchema = plan.output.map { attr =>
       s"${attr.sql} ${attr.dataType.simpleString}"
@@ -283,10 +234,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     build(
       "SELECT TRANSFORM",
       "(" + plan.input.map(_.sql).mkString(", ") + ")",
-      inputRowFormat,
+      inputRowFormatSQL,
       s"USING \'${plan.script}\'",
       "AS (" + outputSchema + ")",
-      outputRowFormat,
+      outputRowFormatSQL,
       if (plan.child == OneRowRelation) "" else "FROM",
       toSQL(plan.child)
     )
