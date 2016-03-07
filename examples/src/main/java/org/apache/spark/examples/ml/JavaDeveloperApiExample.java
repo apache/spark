@@ -86,7 +86,7 @@ public class JavaDeveloperApiExample {
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     Dataset<Row> results = model.transform(test);
     double sumPredictions = 0;
-    for (Row r : results.select("features", "label", "prediction").collect()) {
+    for (Row r : results.select("features", "label", "prediction").collectRows()) {
       sumPredictions += r.getDouble(2);
     }
     if (sumPredictions != 0.0) {
