@@ -332,6 +332,10 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT id FROM parquet_t0 DISTRIBUTE BY id SORT BY id")
   }
 
+  test("SPARK-13720: sort by after having") {
+    checkHiveQl("SELECT COUNT(value) FROM parquet_t1 GROUP BY key HAVING MAX(key) > 0 SORT BY key")
+  }
+
   test("distinct aggregation") {
     checkHiveQl("SELECT COUNT(DISTINCT id) FROM parquet_t0")
   }
