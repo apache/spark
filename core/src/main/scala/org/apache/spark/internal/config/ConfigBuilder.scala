@@ -68,8 +68,11 @@ private object ConfigHelpers {
 }
 
 /**
- * Note: fields are public since this class is extended by SQLConf to implement SQL-speciific
- * functionality.
+ * A type-safe config builder. Provides methods for transforming the input data (which can be
+ * used, e.g., for validation) and creating the final config entry.
+ *
+ * One of the methods that return a [[ConfigEntry]] must be called to create a config entry that
+ * can be used with [[SparkConf]].
  */
 private[spark] class TypedConfigBuilder[T](
   val parent: ConfigBuilder,
@@ -100,16 +103,22 @@ private[spark] class TypedConfigBuilder[T](
     new TypedConfigBuilder(parent, stringToSeq(_, converter), seqToString(_, stringConverter))
   }
 
+  /** Creates a [[ConfigEntry]] that does not require a default value. */
   def optional: OptionalConfigEntry[T] = {
     new OptionalConfigEntry[T](parent.key, converter, stringConverter, parent._doc, parent._public)
   }
 
+  /** Creates a [[ConfigEntry]] that has a default value. */
   def withDefault(default: T): ConfigEntry[T] = {
     val transformedDefault = converter(stringConverter(default))
     new ConfigEntryWithDefault[T](parent.key, transformedDefault, converter, stringConverter,
       parent._doc, parent._public)
   }
 
+  /**
+   * Creates a [[ConfigEntry]] that has a default value. The default value is provided as a
+   * [[String]] and must be a valid value for the entry.
+   */
   def withDefaultString(default: String): ConfigEntry[T] = {
     val typedDefault = converter(default)
     new ConfigEntryWithDefault[T](parent.key, typedDefault, converter, stringConverter, parent._doc,
@@ -118,6 +127,11 @@ private[spark] class TypedConfigBuilder[T](
 
 }
 
+/**
+ * Basic builder for Spark configurations. Provides methods for creating type-specific builders.
+ *
+ * @see TypedConfigBuilder
+ */
 private[spark] case class ConfigBuilder(key: String) {
 
   import ConfigHelpers._
