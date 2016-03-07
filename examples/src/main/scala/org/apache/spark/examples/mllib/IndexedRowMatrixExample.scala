@@ -19,25 +19,26 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.Vectors
 // $example on$
 import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, RowMatrix}
-// $example off$
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.rdd.RDD
+// $example off$
 
 object IndexedRowMatrixExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("IndexedRowMatrixExample")
     val sc = new SparkContext(conf)
 
-    val r1 = IndexedRow(1, Vectors.dense(1.0, 10.0, 100.0))
-    val r2 = IndexedRow(2, Vectors.dense(2.0, 20.0, 200.0))
-    val r3 = IndexedRow(3, Vectors.dense(3.0, 30.0, 300.0))
-
     // $example on$
-    val rows: RDD[IndexedRow] = sc.parallelize(Seq(r1, r2, r3)) // an RDD of indexed rows
+    val r0 = IndexedRow(0, Vectors.dense(1, 2, 3))
+    val r1 = IndexedRow(1, Vectors.dense(4, 5, 6))
+    val r2 = IndexedRow(2, Vectors.dense(7, 8, 9))
+    val r3 = IndexedRow(3, Vectors.dense(10, 11, 12))
+
+    val rows: RDD[IndexedRow] = sc.parallelize(Seq(r0, r1, r2, r3))  // an RDD of indexed rows
     // Create an IndexedRowMatrix from an RDD[IndexedRow].
     val mat: IndexedRowMatrix = new IndexedRowMatrix(rows)
 

@@ -21,22 +21,22 @@ package org.apache.spark.examples.mllib
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
-// $example off$
 import org.apache.spark.rdd.RDD
+// $example off$
 
 object CoordinateMatrixExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("CoordinateMatrixExample")
     val sc = new SparkContext(conf)
 
+    // $example on$
     val me1 = MatrixEntry(0, 0, 1.2)
     val me2 = MatrixEntry(1, 0, 2.1)
     val me3 = MatrixEntry(6, 1, 3.7)
 
-    // $example on$
-    val entries: RDD[MatrixEntry] = sc.parallelize(Seq(me1, me2, me3)) // an RDD of matrix entries
+    val entries: RDD[MatrixEntry] = sc.parallelize(Seq(me1, me2, me3))  // an RDD of matrix entries
     // Create a CoordinateMatrix from an RDD[MatrixEntry].
     val mat: CoordinateMatrix = new CoordinateMatrix(entries)
 

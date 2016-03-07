@@ -25,7 +25,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 
 object LabeledPointExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     // $example on$
     // Create a labeled point with a positive label and a dense feature vector.
     val pos = LabeledPoint(1.0, Vectors.dense(1.0, 0.0, 3.0))

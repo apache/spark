@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
 
 object LabeledPointSparseDataExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("LabeledPointSparseDataExample")
     val sc = new SparkContext(conf)

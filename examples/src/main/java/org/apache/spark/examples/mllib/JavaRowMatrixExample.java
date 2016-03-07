@@ -17,18 +17,18 @@
 
 package org.apache.spark.examples.mllib;
 
-import java.util.Arrays;
-
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
+import java.util.Arrays;
+
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.QRDecomposition;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 // $example off$
-import org.apache.spark.mllib.linalg.Matrix;
 
 public class JavaRowMatrixExample {
   public static void main(String[] args) {
@@ -38,7 +38,7 @@ public class JavaRowMatrixExample {
 
     Vector v1 = Vectors.dense(1.0, 10.0, 100.0);
     Vector v2 = Vectors.dense(2.0, 20.0, 200.0);
-    Vector v3 = Vectors.dense(5.0, 33.0, 366.0);
+    Vector v3 = Vectors.dense(3.0, 30.0, 300.0);
 
     // $example on$
     // a JavaRDD of local vectors

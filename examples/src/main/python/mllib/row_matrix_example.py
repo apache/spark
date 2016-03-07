@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     # $example on$
     # Create an RDD of vectors.
-    rows = sc.parallelize([[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]])
+    rows = sc.parallelize([[1.0, 10.0, 100.0], [2.0, 20.0, 200.0], [3.0, 30.0, 300.0]])
 
     # Create a RowMatrix from an RDD of vectors.
     mat = RowMatrix(rows)

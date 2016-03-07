@@ -25,10 +25,10 @@ import org.apache.spark.mllib.linalg.Vectors;
 public class JavaLocalVectorExample {
   public static void main(String[] args) {
     // $example on$
-    // Create a dense vector (1.0, 0.0, 3.0).
+    // Create a dense vector
     Vector dv = Vectors.dense(1.0, 0.0, 3.0);
 
-    // Create a sparse vector (1.0, 0.0, 3.0) by specifying its indices
+    // Create a sparse vector by specifying its indices
     // and values corresponding to nonzero entries.
     Vector sv = Vectors.sparse(3, new int[] {0, 2}, new double[] {1.0, 3.0});
     // $example off$

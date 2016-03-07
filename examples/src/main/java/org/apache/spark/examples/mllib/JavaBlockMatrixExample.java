@@ -17,16 +17,16 @@
 
 package org.apache.spark.examples.mllib;
 
-import java.util.Arrays;
-
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
 // $example on$
+import java.util.Arrays;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.distributed.BlockMatrix;
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
 // $example off$
-import org.apache.spark.mllib.linalg.distributed.MatrixEntry;
 
 public class JavaBlockMatrixExample {
   public static void main(String[] args) {
@@ -34,11 +34,11 @@ public class JavaBlockMatrixExample {
     SparkConf conf = new SparkConf().setAppName("JavaBlockMatrixExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
 
+    // $example on$
     MatrixEntry me1 = new MatrixEntry(0, 0, 1.2);
     MatrixEntry me2 = new MatrixEntry(1, 0, 2.1);
     MatrixEntry me3 = new MatrixEntry(6, 1, 3.7);
 
-    // $example on$
     // a JavaRDD of (i, j, v) Matrix Entries
     JavaRDD<MatrixEntry> entries = jsc.parallelize(Arrays.asList(me1, me2, me3));
 

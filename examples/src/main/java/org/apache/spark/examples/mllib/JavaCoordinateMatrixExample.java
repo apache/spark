@@ -17,11 +17,11 @@
 
 package org.apache.spark.examples.mllib;
 
-import java.util.Arrays;
-
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
+import java.util.Arrays;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix;
 import org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix;
@@ -34,11 +34,11 @@ public class JavaCoordinateMatrixExample {
     SparkConf conf = new SparkConf().setAppName("JavaCoordinateMatrixExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
 
+    // $example on$
     MatrixEntry me1 = new MatrixEntry(0, 0, 1.2);
     MatrixEntry me2 = new MatrixEntry(1, 0, 2.1);
     MatrixEntry me3 = new MatrixEntry(6, 1, 3.7);
 
-    // $example on$
     // a JavaRDD of matrix entries
     JavaRDD<MatrixEntry> entries = jsc.parallelize(Arrays.asList(me1, me2, me3));
     // Create a CoordinateMatrix from a JavaRDD<MatrixEntry>.
