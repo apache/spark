@@ -138,17 +138,12 @@ object NaiveBayes extends DefaultParamsReadable[NaiveBayes] {
 @Experimental
 class NaiveBayesModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    @Since("2.0.0") val labels: Vector,
     @Since("1.5.0") val pi: Vector,
     @Since("1.5.0") val theta: Matrix)
   extends ProbabilisticClassificationModel[Vector, NaiveBayesModel]
   with NaiveBayesParams with MLWritable {
 
   import OldNaiveBayes.{Bernoulli, Multinomial}
-
-  private[ml] def this(uid: String, pi: Vector, theta: Matrix) = {
-    this(uid, Vectors.dense((0 until pi.size).map(_.toDouble).toArray), pi, theta)
-  }
 
   /**
    * Bernoulli scoring requires log(condprob) if 1, log(1-condprob) if 0.
@@ -231,7 +226,7 @@ class NaiveBayesModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): NaiveBayesModel = {
-    copyValues(new NaiveBayesModel(uid, labels, pi, theta).setParent(this.parent), extra)
+    copyValues(new NaiveBayesModel(uid, pi, theta).setParent(this.parent), extra)
   }
 
   @Since("1.5.0")
@@ -270,11 +265,10 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       oldModel: OldNaiveBayesModel,
       parent: NaiveBayes): NaiveBayesModel = {
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("nb")
-    val labels = Vectors.dense(oldModel.labels)
     val pi = Vectors.dense(oldModel.pi)
     val theta = new DenseMatrix(oldModel.labels.length, oldModel.theta(0).length,
       oldModel.theta.flatten, true)
-    new NaiveBayesModel(uid, labels, pi, theta)
+    new NaiveBayesModel(uid, pi, theta)
   }
 
   @Since("1.6.0")
@@ -286,13 +280,13 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
   /** [[MLWriter]] instance for [[NaiveBayesModel]] */
   private[NaiveBayesModel] class NaiveBayesModelWriter(instance: NaiveBayesModel) extends MLWriter {
 
-    private case class Data(labels: Vector, pi: Vector, theta: Matrix)
+    private case class Data(pi: Vector, theta: Matrix)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: labels, pi, theta
-      val data = Data(instance.labels, instance.pi, instance.theta)
+      val data = Data(instance.pi, instance.theta)
       val dataPath = new Path(path, "data").toString
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -307,11 +301,10 @@ object NaiveBayesModel extends MLReadable[NaiveBayesModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("labels", "pi", "theta").head()
-      val labels = data.getAs[Vector](0)
-      val pi = data.getAs[Vector](1)
-      val theta = data.getAs[Matrix](2)
-      val model = new NaiveBayesModel(metadata.uid, labels, pi, theta)
+      val data = sqlContext.read.parquet(dataPath).select("pi", "theta").head()
+      val pi = data.getAs[Vector](0)
+      val theta = data.getAs[Matrix](1)
+      val model = new NaiveBayesModel(metadata.uid, pi, theta)
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
