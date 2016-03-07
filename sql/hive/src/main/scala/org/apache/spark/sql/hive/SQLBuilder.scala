@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 import org.apache.spark.sql.hive.execution.HiveScriptIOSchema
+import org.apache.spark.sql.types.{ByteType, DataType, IntegerType, NullType}
 
 /**
  * A place holder for generated SQL for subquery expression.
