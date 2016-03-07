@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.Catalog.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 
 
 /**

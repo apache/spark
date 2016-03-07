@@ -98,10 +98,10 @@ To host on HDFS, use the Hadoop fs put command: `hadoop fs -put spark-{{site.SPA
 
 
 Or if you are using a custom-compiled version of Spark, you will need to create a package using
-the `make-distribution.sh` script included in a Spark source tarball/checkout.
+the `dev/make-distribution.sh` script included in a Spark source tarball/checkout.
 
 1. Download and build Spark using the instructions [here](index.html)
-2. Create a binary package using `make-distribution.sh --tgz`.
+2. Create a binary package using `./dev/make-distribution.sh --tgz`.
 3. Upload archive to http/s3/hdfs
 
 

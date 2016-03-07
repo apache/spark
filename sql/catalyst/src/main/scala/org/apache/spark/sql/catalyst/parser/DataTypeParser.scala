@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.catalyst.parser
 
 import scala.language.implicitConversions
 import scala.util.matching.Regex
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 
-import org.apache.spark.sql.catalyst.SqlLexical
 import org.apache.spark.sql.types._
 
 /**

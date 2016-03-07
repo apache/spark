@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.parser
 
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.lexical.StdLexical

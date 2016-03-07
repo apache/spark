@@ -41,7 +41,7 @@ trait CodegenSupport extends SparkPlan {
     case _: BroadcastHashJoin => "bhj"
     case _: SortMergeJoin => "smj"
     case _: PhysicalRDD => "rdd"
-    case _: PhysicalScan => "scan"
+    case _: DataSourceScan => "scan"
     case _ => nodeName.toLowerCase
   }
 
