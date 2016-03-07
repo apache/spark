@@ -86,5 +86,4 @@ trait PMMLExportable {
     toPMML(new StreamResult(writer))
     writer.toString
   }
-
 }
