@@ -136,11 +136,11 @@ object ResolvedDataSource extends Logging {
             sqlContext,
             LogicalRelation(
               apply(
-              sqlContext,
-              paths = files,
-              userSpecifiedSchema = Some(dataSchema),
-              provider = providerName,
-              options = options.filterKeys(_ != "path")).relation))
+                sqlContext,
+                paths = files,
+                userSpecifiedSchema = Some(dataSchema),
+                provider = providerName,
+                options = options.filterKeys(_ != "path")).relation))
         }
 
         new FileStreamSource(
@@ -323,7 +323,9 @@ object ResolvedDataSource extends Logging {
 
           existingPartitionColumnSet.foreach { ex =>
             if (ex.map(_.toLowerCase) != partitionColumns.map(_.toLowerCase()).toSet) {
-              throw new AnalysisException(s"$ex ${partitionColumns.toSet}")
+              throw new AnalysisException(
+                s"Requested partitioning does not equal existing partitioning: " +
+                s"$ex != ${partitionColumns.toSet}.")
             }
           }
         }

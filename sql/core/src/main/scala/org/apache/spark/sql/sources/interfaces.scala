@@ -400,9 +400,6 @@ case class HadoopFsRelation(
     fileFormat: FileFormat,
     options: Map[String, String]) extends BaseRelation with FileRelation {
 
-  /**
-   *
-   */
   val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
     StructType(dataSchema ++ partitionSchema.filterNot { column =>
@@ -429,7 +426,7 @@ case class HadoopFsRelation(
  */
 trait FileFormat {
   /**
-   * When possible, this schema should return the schema of the given [[Files]].  When the format
+   * When possible, this method should return the schema of the given `files`.  When the format
    * does not support inference, or no valid files are given should return None.  In these cases
    * Spark will require that user specify the schema manually.
    */

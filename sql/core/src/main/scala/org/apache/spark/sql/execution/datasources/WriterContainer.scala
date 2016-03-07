@@ -354,8 +354,8 @@ private[sql] class DynamicPartitionWriterContainer(
    * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
    */
   private def newOutputWriter(
-        key: InternalRow,
-        getPartitionString: UnsafeProjection): OutputWriter = {
+      key: InternalRow,
+      getPartitionString: UnsafeProjection): OutputWriter = {
     val configuration = taskAttemptContext.getConfiguration
     val path = if (partitionColumns.nonEmpty) {
       val partitionPath = getPartitionString(key).getString(0)

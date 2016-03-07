@@ -147,6 +147,7 @@ case class CreateMetastoreDataSource(
         options
       }
 
+    // Create the relation to validate the arguments before writing the metadata to the metastore.
     ResolvedDataSource(
       sqlContext = sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,

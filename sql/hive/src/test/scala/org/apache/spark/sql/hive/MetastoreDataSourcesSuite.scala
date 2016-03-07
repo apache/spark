@@ -534,14 +534,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("path required error") {
     assert(
-      intercept[RuntimeException] {
+      intercept[AnalysisException] {
         createExternalTable(
           "createdJsonTable",
           "org.apache.spark.sql.json",
           Map.empty[String, String])
 
         table("createdJsonTable")
-      }.getMessage.contains("'path' is not specified"),
+      }.getMessage.contains("Unable to infer schema"),
       "We should complain that path is not specified.")
 
     sql("DROP TABLE createdJsonTable")

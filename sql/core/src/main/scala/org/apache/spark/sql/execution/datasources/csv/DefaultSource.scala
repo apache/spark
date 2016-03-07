@@ -42,6 +42,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 
+  override def toString: String = "CSV"
+
+  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+
   override def inferSchema(
       sqlContext: SQLContext,
       options: Map[String, String],
