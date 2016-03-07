@@ -146,15 +146,19 @@ trait CodegenSupport extends SparkPlan {
 
   /**
    * The subset of inputSet those should be evaluated before this plan.
+   *
+   * We will use this to insert some code to access those columns that are actually used by current
+   * plan before calling doConsume().
    */
   def usedInputs: AttributeSet = references
 
   /**
-   * Consume the columns generated from it's child, call doConsume() or emit the rows.
+   * Consume the columns generated from its child, call doConsume() or emit the rows.
    *
    * An operator could generate variables for the output, or a row, either one could be null.
    *
-   * If the row is not null, we create variables to access the columns before calling doConsume().
+   * If the row is not null, we create variables to access the columns that are actually used by
+   * current plan before calling doConsume().
    */
   def consumeChild(
       ctx: CodegenContext,
