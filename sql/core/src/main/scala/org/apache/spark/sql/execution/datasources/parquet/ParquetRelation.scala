@@ -45,7 +45,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{RDD, SqlNewHadoopPartition, SqlNewHadoopRDD}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.LegacyTypeStringParser
+import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources.{PartitionSpec, _}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -147,6 +147,19 @@ private[sql] class ParquetRelation(
   private val maybeMetastoreSchema = parameters
     .get(ParquetRelation.METASTORE_SCHEMA)
     .map(DataType.fromJson(_).asInstanceOf[StructType])
+
+  private val compressionCodec: Option[String] = parameters
+    .get("compression")
+    .map { codecName =>
+      // Validate if given compression codec is supported or not.
+      val shortParquetCompressionCodecNames = ParquetRelation.shortParquetCompressionCodecNames
+      if (!shortParquetCompressionCodecNames.contains(codecName.toLowerCase)) {
+        val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+        throw new IllegalArgumentException(s"Codec [$codecName] " +
+          s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
+      }
+      codecName.toLowerCase
+    }
 
   private lazy val metadataCache: MetadataCache = {
     val meta = new MetadataCache
@@ -286,7 +299,8 @@ private[sql] class ParquetRelation(
       ParquetRelation
         .shortParquetCompressionCodecNames
         .getOrElse(
-          sqlContext.conf.parquetCompressionCodec.toLowerCase(),
+          compressionCodec
+            .getOrElse(sqlContext.conf.parquetCompressionCodec.toLowerCase),
           CompressionCodecName.UNCOMPRESSED).name())
 
     new BucketedOutputWriterFactory {

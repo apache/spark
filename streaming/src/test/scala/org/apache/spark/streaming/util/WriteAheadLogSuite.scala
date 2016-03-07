@@ -74,12 +74,12 @@ abstract class CommonWriteAheadLogTests(
 
   test(testPrefix + "read all logs") {
     // Write data manually for testing reading through WriteAheadLog
-    val writtenData = (1 to 10).map { i =>
+    val writtenData = (1 to 10).flatMap { i =>
       val data = generateRandomData()
       val file = testDir + s"/log-$i-$i"
       writeDataManually(data, file, allowBatching)
       data
-    }.flatten
+    }
 
     val logDirectoryPath = new Path(testDir)
     val fileSystem = HdfsUtils.getFileSystemForPath(logDirectoryPath, hadoopConf)
@@ -193,12 +193,12 @@ abstract class CommonWriteAheadLogTests(
 
   test(testPrefix + "parallel recovery not enabled if closeFileAfterWrite = false") {
     // write some data
-    val writtenData = (1 to 10).map { i =>
+    val writtenData = (1 to 10).flatMap { i =>
       val data = generateRandomData()
       val file = testDir + s"/log-$i-$i"
       writeDataManually(data, file, allowBatching)
       data
-    }.flatten
+    }
 
     val wal = createWriteAheadLog(testDir, closeFileAfterWrite, allowBatching)
     // create iterator but don't materialize it
@@ -228,7 +228,9 @@ class FileBasedWriteAheadLogSuite
      the list of files.
      */
     val numThreads = 8
-    val tpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "wal-test-thread-pool")
+    val fpool = ThreadUtils.newForkJoinPool("wal-test-thread-pool", numThreads)
+    val executionContext = ExecutionContext.fromExecutorService(fpool)
+
     class GetMaxCounter {
       private val value = new AtomicInteger()
       @volatile private var max: Int = 0
@@ -258,7 +260,8 @@ class FileBasedWriteAheadLogSuite
       val t = new Thread() {
         override def run() {
           // run the calculation on a separate thread so that we can release the latch
-          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](tpool, testSeq, handle)
+          val iterator = FileBasedWriteAheadLog.seqToParIterator[Int, Int](executionContext,
+            testSeq, handle)
           collected = iterator.toSeq
         }
       }
@@ -273,7 +276,7 @@ class FileBasedWriteAheadLogSuite
       // make sure we didn't open too many Iterators
       assert(counter.getMax() <= numThreads)
     } finally {
-      tpool.shutdownNow()
+      fpool.shutdownNow()
     }
   }
 
