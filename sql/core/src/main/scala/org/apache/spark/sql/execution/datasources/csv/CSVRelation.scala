@@ -135,7 +135,7 @@ private[sql] class CSVRelation(
 
     val parsedRdd = tokenRdd(header, paths)
     if (options.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, options.nullValue)
+      InferSchema.infer(parsedRdd, header, options.nullValue, options.dateFormat)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -228,7 +228,8 @@ object CSVRelation extends Logging {
               indexSafeTokens(index),
               field.dataType,
               field.nullable,
-              params.nullValue)
+              params.nullValue,
+              params.dateFormat)
             subIndex = subIndex + 1
           }
           Some(Row.fromSeq(rowArray.take(requiredSize)))

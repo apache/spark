@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
 import java.sql.{Date, Timestamp}
-import java.text.NumberFormat
+import java.text.{NumberFormat, SimpleDateFormat}
 import java.util.Locale
 
 import scala.util.control.Exception._
@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.types._
 
-private[csv] object CSVInferSchema {
+private[csv] object InferSchema {
 
   /**
     * Similar to the JSON schema inference
@@ -40,11 +40,12 @@ private[csv] object CSVInferSchema {
   def infer(
       tokenRdd: RDD[Array[String]],
       header: Array[String],
-      nullValue: String = ""): StructType = {
+      nullValue: String = "",
+      dateFormat: SimpleDateFormat = null): StructType = {
 
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(nullValue), mergeRowTypes)
+      tokenRdd.aggregate(startType)(inferRowType(nullValue, dateFormat), mergeRowTypes)
 
     val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
@@ -57,11 +58,11 @@ private[csv] object CSVInferSchema {
     StructType(structFields)
   }
 
-  private def inferRowType(nullValue: String)
+  private def inferRowType(nullValue: String, dateFormat: SimpleDateFormat)
       (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      rowSoFar(i) = inferField(rowSoFar(i), next(i), nullValue)
+      rowSoFar(i) = inferField(rowSoFar(i), next(i), nullValue, dateFormat)
       i+=1
     }
     rowSoFar
@@ -77,7 +78,55 @@ private[csv] object CSVInferSchema {
     * Infer type of string field. Given known type Double, and a string "1", there is no
     * point checking if it is an Int, as the final type must be Double or higher.
     */
-  def inferField(typeSoFar: DataType, field: String, nullValue: String = ""): DataType = {
+  def inferField(typeSoFar: DataType,
+      field: String,
+      nullValue: String = "",
+      dateFormat: SimpleDateFormat = null): DataType = {
+    def tryParseInteger(field: String): DataType = if ((allCatch opt field.toInt).isDefined) {
+      IntegerType
+    } else {
+      tryParseLong(field)
+    }
+
+    def tryParseLong(field: String): DataType = if ((allCatch opt field.toLong).isDefined) {
+      LongType
+    } else {
+      tryParseDouble(field)
+    }
+
+    def tryParseDouble(field: String): DataType = {
+      if ((allCatch opt field.toDouble).isDefined) {
+        DoubleType
+      } else {
+        tryParseTimestamp(field)
+      }
+    }
+
+    def tryParseTimestamp(field: String): DataType = {
+      if (dateFormat != null) {
+        // This case infers a custom `dataFormat` is set.
+        if ((allCatch opt dateFormat.parse(field)).isDefined){
+          TimestampType
+        } else {
+          stringType()
+        }
+      } else {
+        // We keep this for backwords competibility.
+        if ((allCatch opt Timestamp.valueOf(field)).isDefined) {
+          TimestampType
+        } else {
+          stringType()
+        }
+      }
+    }
+
+    // Defining a function to return the StringType constant is necessary in order to work around
+    // a Scala compiler issue which leads to runtime incompatibilities with certain Spark versions;
+    // see issue #128 for more details.
+    def stringType(): DataType = {
+      StringType
+    }
+
     if (field == null || field.isEmpty || field == nullValue) {
       typeSoFar
     } else {
@@ -92,41 +141,6 @@ private[csv] object CSVInferSchema {
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
     }
-  }
-
-  private def tryParseInteger(field: String): DataType = if ((allCatch opt field.toInt).isDefined) {
-    IntegerType
-  } else {
-    tryParseLong(field)
-  }
-
-  private def tryParseLong(field: String): DataType = if ((allCatch opt field.toLong).isDefined) {
-    LongType
-  } else {
-    tryParseDouble(field)
-  }
-
-  private def tryParseDouble(field: String): DataType = {
-    if ((allCatch opt field.toDouble).isDefined) {
-      DoubleType
-    } else {
-      tryParseTimestamp(field)
-    }
-  }
-
-  def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt Timestamp.valueOf(field)).isDefined) {
-      TimestampType
-    } else {
-      stringType()
-    }
-  }
-
-  // Defining a function to return the StringType constant is necessary in order to work around
-  // a Scala compiler issue which leads to runtime incompatibilities with certain Spark versions;
-  // see issue #128 for more details.
-  private def stringType(): DataType = {
-    StringType
   }
 
   private val numericPrecedence: IndexedSeq[DataType] = HiveTypeCoercion.numericPrecedence
@@ -167,7 +181,8 @@ private[csv] object CSVTypeCast {
       datum: String,
       castType: DataType,
       nullable: Boolean = true,
-      nullValue: String = ""): Any = {
+      nullValue: String = "",
+      dateFormat: SimpleDateFormat = null): Any = {
 
     if (datum == nullValue && nullable && (!castType.isInstanceOf[StringType])) {
       null
@@ -183,9 +198,11 @@ private[csv] object CSVTypeCast {
           .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
         case _: BooleanType => datum.toBoolean
         case _: DecimalType => new BigDecimal(datum.replaceAll(",", ""))
-        // TODO(hossein): would be good to support other common timestamp formats
+        case _: TimestampType if dateFormat != null =>
+          new Timestamp(dateFormat.parse(datum).getTime)
         case _: TimestampType => Timestamp.valueOf(datum)
-        // TODO(hossein): would be good to support other common date formats
+        case _: DateType if dateFormat != null =>
+          new Date(dateFormat.parse(datum).getTime)
         case _: DateType => Date.valueOf(datum)
         case _: StringType => datum
         case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")

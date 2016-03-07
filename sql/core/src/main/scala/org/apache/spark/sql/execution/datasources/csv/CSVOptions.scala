@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.Charset
+import java.text.SimpleDateFormat
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.datasources.CompressionCodecs
@@ -89,6 +90,12 @@ private[sql] class CSVOptions(
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
+  }
+
+  // Share date format object as it is expensive to parse date pattern.
+  val dateFormat = {
+    val dateFormat = parameters.get("dateFormat")
+    dateFormat.map(new SimpleDateFormat(_)).orNull
   }
 
   val maxColumns = getInt("maxColumns", 20480)
