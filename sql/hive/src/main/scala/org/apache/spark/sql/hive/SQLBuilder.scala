@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive
 
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
@@ -208,6 +207,11 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   private def build(segments: String*): String =
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
+  /**
+   * Given a seq of qualifiers(names and their corresponding [[AttributeSet]]), transform the given
+   * expression tree, if an [[Attribute]] belongs to one of the [[AttributeSet]]s, update its
+   * qualifier with the corresponding name of the [[AttributeSet]].
+   */
   private def updateQualifier(
       expr: Expression,
       qualifiers: Seq[(String, AttributeSet)]): Expression = {
@@ -228,27 +232,37 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     }
   }
 
-  private def findQualifiers(input: LogicalPlan): Seq[(String, AttributeSet)] = {
-    val results = mutable.ArrayBuffer.empty[(String, AttributeSet)]
-    val nodes = mutable.Stack(input)
-
-    while (nodes.nonEmpty) {
-      val node = nodes.pop()
-      node match {
-        case SubqueryAlias(alias, child) => results += alias -> child.outputSet
-        case _ => node.children.foreach(nodes.push)
-      }
-    }
-
-    results.toSeq
+  /**
+   * Finds the outer most [[SubqueryAlias]] nodes in the input logical plan and return their alias
+   * names and outputSet.
+   */
+  private def findOutermostQualifiers(input: LogicalPlan): Seq[(String, AttributeSet)] = {
+    input.collectFirst {
+      case SubqueryAlias(alias, child) => Seq(alias -> child.outputSet)
+      case plan => plan.children.flatMap(findOutermostQualifiers)
+    }.toSeq.flatten
   }
 
+  /**
+   * Converts an expression to SQL string.
+   *
+   * Note that we may add extra [[SubqueryAlias]]s to the logical plan, but the qualifiers haven't
+   * been propagated yet. So here we try to find the corrected qualifiers first, and then update
+   * the given expression with the qualifiers and finally convert it to SQL string.
+   */
   private def exprToSQL(e: Expression, input: LogicalPlan): String = {
-    updateQualifier(e, findQualifiers(input)).sql
+    updateQualifier(e, findOutermostQualifiers(input)).sql
   }
 
+  /**
+   * Converts a seq of expressions to SQL string.
+   *
+   * Note that we may add extra [[SubqueryAlias]]s to the logical plan, but the qualifiers haven't
+   * been propagated yet. So here we try to find the corrected qualifiers first, and then update
+   * the given expressions with the qualifiers and finally convert them to SQL string.
+   */
   private def exprsToSQL(exprs: Seq[Expression], input: LogicalPlan): String = {
-    val qualifiers = findQualifiers(input)
+    val qualifiers = findOutermostQualifiers(input)
     exprs.map(updateQualifier(_, qualifiers).sql).mkString(", ")
   }
 
