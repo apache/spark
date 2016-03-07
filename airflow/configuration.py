@@ -184,7 +184,7 @@ fernet_key = {FERNET_KEY}
 # Whether to disable pickling dags
 donot_pickle = False
 
-# How long before timing out a python file import while filing the DagBag
+# How long before timing out a python file import while filling the DagBag
 dagbag_import_timeout = 30
 
 [webserver]
