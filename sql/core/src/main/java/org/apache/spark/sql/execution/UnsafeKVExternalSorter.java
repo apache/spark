@@ -97,7 +97,7 @@ public final class UnsafeKVExternalSorter {
       UnsafeRow row = new UnsafeRow(numKeyFields);
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
-        final Object baseObject = loc.getKeyBase();
+        final MemoryBlock baseObject = loc.getKeyBase();
         final long baseOffset = loc.getKeyOffset();
 
         // Get encoded memory address
@@ -206,7 +206,7 @@ public final class UnsafeKVExternalSorter {
     }
 
     @Override
-    public int compare(Object baseObj1, long baseOff1, Object baseObj2, long baseOff2) {
+    public int compare(MemoryBlock baseObj1, long baseOff1, MemoryBlock baseObj2, long baseOff2) {
       // Note that since ordering doesn't need the total length of the record, we just pass -1
       // into the row.
       row1.pointTo(baseObj1, baseOff1 + 4, -1);
@@ -230,7 +230,7 @@ public final class UnsafeKVExternalSorter {
         if (underlying.hasNext()) {
           underlying.loadNext();
 
-          Object baseObj = underlying.getBaseObject();
+          MemoryBlock baseObj = underlying.getBaseObject();
           long recordOffset = underlying.getBaseOffset();
           int recordLen = underlying.getRecordLength();
 

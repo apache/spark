@@ -19,7 +19,7 @@ package org.apache.spark.shuffle.sort;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.util.collection.SortDataFormat;
 
 final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, LongArray> {
@@ -60,9 +60,9 @@ final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, Lo
   @Override
   public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
     Platform.copyMemory(
-      src.getBaseObject(),
+      src.memoryBlock(),
       src.getBaseOffset() + srcPos * 8,
-      dst.getBaseObject(),
+      dst.memoryBlock(),
       dst.getBaseOffset() + dstPos * 8,
       length * 8
     );
@@ -71,7 +71,7 @@ final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, Lo
   @Override
   public LongArray allocate(int length) {
     // This buffer is used temporary (usually small), so it's fine to allocated from JVM heap.
-    return new LongArray(MemoryBlock.fromLongArray(new long[length]));
+    return new LongArray(LongArrayMemoryBlock.fromLongArray(new long[length]));
   }
 
 }

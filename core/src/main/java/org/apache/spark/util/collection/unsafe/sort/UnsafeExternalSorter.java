@@ -187,7 +187,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       final UnsafeSorterIterator sortedRecords = inMemSorter.getSortedIterator();
       while (sortedRecords.hasNext()) {
         sortedRecords.loadNext();
-        final Object baseObject = sortedRecords.getBaseObject();
+        final MemoryBlock baseObject = sortedRecords.getBaseObject();
         final long baseOffset = sortedRecords.getBaseOffset();
         final int recordLength = sortedRecords.getRecordLength();
         spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
@@ -325,7 +325,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   /**
    * Write a record to the sorter.
    */
-  public void insertRecord(Object recordBase, long recordOffset, int length, long prefix)
+  public void insertRecord(MemoryBlock recordBase, long recordOffset, int length, long prefix)
     throws IOException {
 
     growPointerArrayIfNecessary();
@@ -333,7 +333,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     final int required = length + 4;
     acquireNewPageIfNecessary(required);
 
-    final Object base = currentPage.getBaseObject();
+    final MemoryBlock base = currentPage;
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     Platform.putInt(base, pageCursor, length);
     pageCursor += 4;
@@ -351,15 +351,15 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    *
    * record length = key length + value length + 4
    */
-  public void insertKVRecord(Object keyBase, long keyOffset, int keyLen,
-      Object valueBase, long valueOffset, int valueLen, long prefix)
+  public void insertKVRecord(MemoryBlock keyBase, long keyOffset, int keyLen,
+      MemoryBlock valueBase, long valueOffset, int valueLen, long prefix)
     throws IOException {
 
     growPointerArrayIfNecessary();
     final int required = keyLen + valueLen + 4 + 4;
     acquireNewPageIfNecessary(required);
 
-    final Object base = currentPage.getBaseObject();
+    final MemoryBlock base = currentPage;
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     Platform.putInt(base, pageCursor, keyLen + valueLen + 4);
     pageCursor += 4;
@@ -445,7 +445,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
         while (inMemIterator.hasNext()) {
           inMemIterator.loadNext();
-          final Object baseObject = inMemIterator.getBaseObject();
+          final MemoryBlock baseObject = inMemIterator.getBaseObject();
           final long baseOffset = inMemIterator.getBaseOffset();
           final int recordLength = inMemIterator.getRecordLength();
           spillWriter.write(baseObject, baseOffset, recordLength, inMemIterator.getKeyPrefix());
@@ -503,7 +503,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     @Override
-    public Object getBaseObject() {
+    public MemoryBlock getBaseObject() {
       return upstream.getBaseObject();
     }
 
@@ -588,7 +588,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     @Override
-    public Object getBaseObject() { return current.getBaseObject(); }
+    public MemoryBlock getBaseObject() { return current.getBaseObject(); }
 
     @Override
     public long getBaseOffset() { return current.getBaseOffset(); }

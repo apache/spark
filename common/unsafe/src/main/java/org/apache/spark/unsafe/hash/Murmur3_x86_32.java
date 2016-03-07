@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.hash;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.
@@ -48,18 +49,29 @@ public final class Murmur3_x86_32 {
     return fmix(h1, 4);
   }
 
-  public int hashUnsafeWords(Object base, long offset, int lengthInBytes) {
+  public int hashUnsafeWords(byte[] base, long offset, int lengthInBytes) {
     return hashUnsafeWords(base, offset, lengthInBytes, seed);
   }
 
-  public static int hashUnsafeWords(Object base, long offset, int lengthInBytes, int seed) {
+  public int hashUnsafeWords(MemoryBlock base, long offset, int lengthInBytes) {
+    return hashUnsafeWords(base, offset, lengthInBytes, seed);
+  }
+
+  public static int hashUnsafeWords(byte[] base, long offset, int lengthInBytes, int seed) {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
     int h1 = hashBytesByInt(base, offset, lengthInBytes, seed);
     return fmix(h1, lengthInBytes);
   }
 
-  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
+  public static int hashUnsafeWords(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+    // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
+    assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
+    int h1 = hashBytesByInt(base, offset, lengthInBytes, seed);
+    return fmix(h1, lengthInBytes);
+  }
+
+  public static int hashUnsafeBytes(byte[] base, long offset, int lengthInBytes, int seed) {
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
@@ -71,7 +83,30 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  private static int hashBytesByInt(Object base, long offset, int lengthInBytes, int seed) {
+  public static int hashUnsafeBytes(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
+    int lengthAligned = lengthInBytes - lengthInBytes % 4;
+    int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
+    for (int i = lengthAligned; i < lengthInBytes; i++) {
+      int halfWord = Platform.getByte(base, offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return fmix(h1, lengthInBytes);
+  }
+
+  private static int hashBytesByInt(byte[] base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes % 4 == 0);
+    int h1 = seed;
+    for (int i = 0; i < lengthInBytes; i += 4) {
+      int halfWord = Platform.getInt(base, offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return h1;
+  }
+
+  private static int hashBytesByInt(MemoryBlock base, long offset, int lengthInBytes, int seed) {
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
     for (int i = 0; i < lengthInBytes; i += 4) {

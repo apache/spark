@@ -27,6 +27,7 @@ import com.google.common.io.ByteStreams
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer, SerializerInstance}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock
 
 /**
  * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored as
@@ -93,7 +94,9 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
     new DeserializationStream {
       private[this] val dIn: DataInputStream = new DataInputStream(new BufferedInputStream(in))
       // 1024 is a default buffer size; this buffer will grow to accommodate larger rows
-      private[this] var rowBuffer: Array[Byte] = new Array[Byte](1024)
+//      private[this] var rowBuffer: Array[Byte] = new Array[Byte](1024)
+      private[this] var rowBuffer: ByteArrayMemoryBlock = ByteArrayMemoryBlock.fromByteArray(
+        new Array[Byte](1024))
       private[this] var row: UnsafeRow = new UnsafeRow(numFields)
       private[this] var rowTuple: (Int, UnsafeRow) = (0, row)
       private[this] val EOF: Int = -1
@@ -113,10 +116,10 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
           override def hasNext: Boolean = rowSize != EOF
 
           override def next(): (Int, UnsafeRow) = {
-            if (rowBuffer.length < rowSize) {
-              rowBuffer = new Array[Byte](rowSize)
+            if (rowBuffer.size() < rowSize) {
+              rowBuffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](rowSize))
             }
-            ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
+            ByteStreams.readFully(dIn, rowBuffer.getByteArray, 0, rowSize)
             row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, rowSize)
             rowSize = readSize()
             if (rowSize == EOF) { // We are returning the last row in this stream
@@ -148,10 +151,10 @@ private class UnsafeRowSerializerInstance(numFields: Int) extends SerializerInst
 
       override def readValue[T: ClassTag](): T = {
         val rowSize = dIn.readInt()
-        if (rowBuffer.length < rowSize) {
-          rowBuffer = new Array[Byte](rowSize)
+        if (rowBuffer.size() < rowSize) {
+          rowBuffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](rowSize))
         }
-        ByteStreams.readFully(dIn, rowBuffer, 0, rowSize)
+        ByteStreams.readFully(dIn, rowBuffer.getByteArray, 0, rowSize)
         row.pointTo(rowBuffer, Platform.BYTE_ARRAY_OFFSET, rowSize)
         row.asInstanceOf[T]
       }

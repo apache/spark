@@ -64,11 +64,15 @@ public class HeapMemoryAllocator implements MemoryAllocator {
       }
     }
     long[] array = new long[(int) ((size + 7) / 8)];
-    return new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
+    return new LongArrayMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
   }
 
   @Override
   public void free(MemoryBlock memory) {
+    if(memory.getBaseObject() == null ) {
+      throw new IllegalArgumentException("cannot manage off-heap memory block");
+    }
+
     final long size = memory.size();
     if (shouldPool(size)) {
       synchronized (this) {

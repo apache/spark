@@ -29,6 +29,8 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
+import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryLocation;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -41,7 +43,7 @@ public final class UnsafeFixedWidthAggregationMap {
    * An empty aggregation buffer, encoded in UnsafeRow format. When inserting a new key into the
    * map, we copy this buffer and use it as the value.
    */
-  private final byte[] emptyAggregationBuffer;
+  private final MemoryBlock emptyAggregationBuffer;
 
   private final StructType aggregationBufferSchema;
 
@@ -106,7 +108,7 @@ public final class UnsafeFixedWidthAggregationMap {
 
     // Initialize the buffer for aggregation value
     final UnsafeProjection valueProjection = UnsafeProjection.create(aggregationBufferSchema);
-    this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBytes();
+    this.emptyAggregationBuffer = valueProjection.apply(emptyAggregationBuffer).getBaseObject();
   }
 
   /**
@@ -139,8 +141,8 @@ public final class UnsafeFixedWidthAggregationMap {
         key.getBaseOffset(),
         key.getSizeInBytes(),
         emptyAggregationBuffer,
-        Platform.BYTE_ARRAY_OFFSET,
-        emptyAggregationBuffer.length
+        emptyAggregationBuffer.getBaseOffset(),
+        (int)emptyAggregationBuffer.size()
       );
       if (!putSucceeded) {
         return null;

@@ -76,9 +76,9 @@ final class ShuffleInMemorySorter {
   public void expandPointerArray(LongArray newArray) {
     assert(newArray.size() > array.size());
     Platform.copyMemory(
-      array.getBaseObject(),
+      array.memoryBlock(),
       array.getBaseOffset(),
-      newArray.getBaseObject(),
+      newArray.memoryBlock(),
       newArray.getBaseOffset(),
       array.size() * 8L
     );

@@ -19,7 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.util.collection.SortDataFormat;
 
 /**
@@ -72,9 +72,9 @@ final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefi
   @Override
   public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
     Platform.copyMemory(
-      src.getBaseObject(),
+      src.memoryBlock(),
       src.getBaseOffset() + srcPos * 16,
-      dst.getBaseObject(),
+      dst.memoryBlock(),
       dst.getBaseOffset() + dstPos * 16,
       length * 16);
   }
@@ -83,7 +83,7 @@ final class UnsafeSortDataFormat extends SortDataFormat<RecordPointerAndKeyPrefi
   public LongArray allocate(int length) {
     assert (length < Integer.MAX_VALUE / 2) : "Length " + length + " is too large";
     // This is used as temporary buffer, it's fine to allocate from JVM heap.
-    return new LongArray(MemoryBlock.fromLongArray(new long[length * 2]));
+    return new LongArray(LongArrayMemoryBlock.fromLongArray(new long[length * 2]));
   }
 
 }

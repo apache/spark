@@ -28,12 +28,12 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public class UnsafeArrayWriter {
 
-  private BufferHolder holder;
+  private MemoryBlockHolder holder;
 
   // The offset of the global buffer where we start to write this array.
   private int startingOffset;
 
-  public void initialize(BufferHolder holder, int numElements, int fixedElementSize) {
+  public void initialize(MemoryBlockHolder holder, int numElements, int fixedElementSize) {
     // We need 4 bytes to store numElements and 4 bytes each element to store offset.
     final int fixedSize = 4 + 4 * numElements;
 
@@ -41,7 +41,7 @@ public class UnsafeArrayWriter {
     this.startingOffset = holder.cursor;
 
     holder.grow(fixedSize);
-    Platform.putInt(holder.buffer, holder.cursor, numElements);
+    Platform.putInt(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, numElements);
     holder.cursor += fixedSize;
 
     // Grows the global buffer ahead for fixed size data.
@@ -55,40 +55,40 @@ public class UnsafeArrayWriter {
   public void setNullAt(int ordinal) {
     final int relativeOffset = holder.cursor - startingOffset;
     // Writes negative offset value to represent null element.
-    Platform.putInt(holder.buffer, getElementOffset(ordinal), -relativeOffset);
+    Platform.putInt(holder.getBaseObject(), holder.getBaseOffset() + getElementOffset(ordinal), -relativeOffset);
   }
 
   public void setOffset(int ordinal) {
     final int relativeOffset = holder.cursor - startingOffset;
-    Platform.putInt(holder.buffer, getElementOffset(ordinal), relativeOffset);
+    Platform.putInt(holder.getBaseObject(), holder.getBaseOffset() + getElementOffset(ordinal), relativeOffset);
   }
 
   public void write(int ordinal, boolean value) {
-    Platform.putBoolean(holder.buffer, holder.cursor, value);
+    Platform.putBoolean(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 1;
   }
 
   public void write(int ordinal, byte value) {
-    Platform.putByte(holder.buffer, holder.cursor, value);
+    Platform.putByte(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 1;
   }
 
   public void write(int ordinal, short value) {
-    Platform.putShort(holder.buffer, holder.cursor, value);
+    Platform.putShort(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 2;
   }
 
   public void write(int ordinal, int value) {
-    Platform.putInt(holder.buffer, holder.cursor, value);
+    Platform.putInt(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 4;
   }
 
   public void write(int ordinal, long value) {
-    Platform.putLong(holder.buffer, holder.cursor, value);
+    Platform.putLong(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 8;
   }
@@ -97,7 +97,7 @@ public class UnsafeArrayWriter {
     if (Float.isNaN(value)) {
       value = Float.NaN;
     }
-    Platform.putFloat(holder.buffer, holder.cursor, value);
+    Platform.putFloat(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 4;
   }
@@ -106,7 +106,7 @@ public class UnsafeArrayWriter {
     if (Double.isNaN(value)) {
       value = Double.NaN;
     }
-    Platform.putDouble(holder.buffer, holder.cursor, value);
+    Platform.putDouble(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, value);
     setOffset(ordinal);
     holder.cursor += 8;
   }
@@ -115,7 +115,7 @@ public class UnsafeArrayWriter {
     // make sure Decimal object has the same scale as DecimalType
     if (input.changePrecision(precision, scale)) {
       if (precision <= Decimal.MAX_LONG_DIGITS()) {
-        Platform.putLong(holder.buffer, holder.cursor, input.toUnscaledLong());
+        Platform.putLong(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, input.toUnscaledLong());
         setOffset(ordinal);
         holder.cursor += 8;
       } else {
@@ -125,7 +125,7 @@ public class UnsafeArrayWriter {
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
-          bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
+          bytes, Platform.BYTE_ARRAY_OFFSET, holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, bytes.length);
         setOffset(ordinal);
         holder.cursor += bytes.length;
       }
@@ -141,7 +141,7 @@ public class UnsafeArrayWriter {
     holder.grow(numBytes);
 
     // Write the bytes to the variable length portion.
-    input.writeToMemory(holder.buffer, holder.cursor);
+    input.writeToMemory(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor);
 
     setOffset(ordinal);
 
@@ -155,7 +155,7 @@ public class UnsafeArrayWriter {
 
     // Write the bytes to the variable length portion.
     Platform.copyMemory(
-      input, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, input.length);
+      input, Platform.BYTE_ARRAY_OFFSET, holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, input.length);
 
     setOffset(ordinal);
 
@@ -168,8 +168,8 @@ public class UnsafeArrayWriter {
     holder.grow(16);
 
     // Write the months and microseconds fields of Interval to the variable length portion.
-    Platform.putLong(holder.buffer, holder.cursor, input.months);
-    Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
+    Platform.putLong(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor, input.months);
+    Platform.putLong(holder.getBaseObject(), holder.getBaseOffset() + holder.cursor + 8, input.microseconds);
 
     setOffset(ordinal);
 

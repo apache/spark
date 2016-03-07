@@ -275,7 +275,7 @@ public class TaskMemoryManager {
       // this could trigger spilling to free some pages.
       return allocatePage(size, consumer);
     }
-    page.pageNumber = pageNumber;
+    page.setPageNumber(pageNumber);
     pageTable[pageNumber] = page;
     if (logger.isTraceEnabled()) {
       logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
@@ -287,15 +287,15 @@ public class TaskMemoryManager {
    * Free a block of memory allocated via {@link TaskMemoryManager#allocatePage}.
    */
   public void freePage(MemoryBlock page, MemoryConsumer consumer) {
-    assert (page.pageNumber != -1) :
+    assert (page.getPageNumber() != -1) :
       "Called freePage() on memory that wasn't allocated with allocatePage()";
-    assert(allocatedPages.get(page.pageNumber));
-    pageTable[page.pageNumber] = null;
+    assert(allocatedPages.get(page.getPageNumber()));
+    pageTable[page.getPageNumber()] = null;
     synchronized (this) {
-      allocatedPages.clear(page.pageNumber);
+      allocatedPages.clear(page.getPageNumber());
     }
     if (logger.isTraceEnabled()) {
-      logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
+      logger.trace("Freed page number {} ({} bytes)", page.getPageNumber(), page.size());
     }
     long pageSize = page.size();
     memoryManager.tungstenMemoryAllocator().free(page);
@@ -319,7 +319,7 @@ public class TaskMemoryManager {
       // relative to the page's base offset; this relative offset will fit in 51 bits.
       offsetInPage -= page.getBaseOffset();
     }
-    return encodePageNumberAndOffset(page.pageNumber, offsetInPage);
+    return encodePageNumberAndOffset(page.getPageNumber(), offsetInPage);
   }
 
   @VisibleForTesting
@@ -341,17 +341,17 @@ public class TaskMemoryManager {
    * Get the page associated with an address encoded by
    * {@link TaskMemoryManager#encodePageNumberAndOffset(MemoryBlock, long)}
    */
-  public Object getPage(long pagePlusOffsetAddress) {
+  public MemoryBlock getPage(long pagePlusOffsetAddress) {
+    final int pageNumber = decodePageNumber(pagePlusOffsetAddress);
+    assert (pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE);
+    final MemoryBlock page = pageTable[pageNumber];
+    assert (page != null);
+
     if (tungstenMemoryMode == MemoryMode.ON_HEAP) {
-      final int pageNumber = decodePageNumber(pagePlusOffsetAddress);
-      assert (pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE);
-      final MemoryBlock page = pageTable[pageNumber];
-      assert (page != null);
       assert (page.getBaseObject() != null);
-      return page.getBaseObject();
-    } else {
-      return null;
     }
+
+    return page;
   }
 
   /**

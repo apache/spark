@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
@@ -32,7 +34,7 @@ import org.apache.spark.unsafe.Platform;
 // TODO: Use a more efficient format which doesn't depend on unsafe array.
 public class UnsafeMapData extends MapData {
 
-  private Object baseObject;
+  private MemoryBlock baseObject;
   private long baseOffset;
 
   // The size of this map's backing data, in bytes.
@@ -40,7 +42,7 @@ public class UnsafeMapData extends MapData {
   // 4 + key array numBytes + value array numBytes.
   private int sizeInBytes;
 
-  public Object getBaseObject() { return baseObject; }
+  public MemoryBlock getBaseObject() { return baseObject; }
   public long getBaseOffset() { return baseOffset; }
   public int getSizeInBytes() { return sizeInBytes; }
 
@@ -64,7 +66,7 @@ public class UnsafeMapData extends MapData {
    * @param baseOffset the offset within the base object
    * @param sizeInBytes the size of this map's backing data, in bytes
    */
-  public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+  public void pointTo(MemoryBlock baseObject, long baseOffset, int sizeInBytes) {
     // Read the numBytes of key array from the first 4 bytes.
     final int keyArraySize = Platform.getInt(baseObject, baseOffset);
     final int valueArraySize = sizeInBytes - keyArraySize - 4;
@@ -96,7 +98,11 @@ public class UnsafeMapData extends MapData {
     return values;
   }
 
-  public void writeToMemory(Object target, long targetOffset) {
+  public void writeToMemory(byte[] target, long targetOffset) {
+    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+  }
+
+  public void writeToMemory(MemoryBlock target, long targetOffset) {
     Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
   }
 
@@ -112,7 +118,7 @@ public class UnsafeMapData extends MapData {
   @Override
   public UnsafeMapData copy() {
     UnsafeMapData mapCopy = new UnsafeMapData();
-    final byte[] mapDataCopy = new byte[sizeInBytes];
+    final ByteArrayMemoryBlock mapDataCopy = ByteArrayMemoryBlock.fromByteArray(new byte[sizeInBytes]);
     Platform.copyMemory(
       baseObject, baseOffset, mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);

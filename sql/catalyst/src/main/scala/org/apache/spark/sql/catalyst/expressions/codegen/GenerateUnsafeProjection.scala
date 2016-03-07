@@ -270,7 +270,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
         // Write the numBytes of key array into the first 4 bytes.
-        Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
+        Platform.putInt($bufferHolder.getBaseObject(),
+                        $bufferHolder.getBaseOffset() + $tmpCursor - 4,
+                        $bufferHolder.cursor - $tmpCursor);
 
         ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
       }
@@ -287,7 +289,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       final int $sizeInBytes = $input.getSizeInBytes();
       // grow the global buffer before writing data.
       $bufferHolder.grow($sizeInBytes);
-      $input.writeToMemory($bufferHolder.buffer, $bufferHolder.cursor);
+      $input.writeToMemory($bufferHolder.getBaseObject(),
+                           $bufferHolder.getBaseOffset() + $bufferHolder.cursor);
       $bufferHolder.cursor += $sizeInBytes;
     """
   }
@@ -309,7 +312,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
 
     val holder = ctx.freshName("holder")
-    val holderClass = classOf[BufferHolder].getName
+    val holderClass = classOf[MemoryBlockHolder].getName
     ctx.addMutableState(holderClass, holder,
       s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
 

@@ -119,7 +119,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import java.nio.ByteOrder;
       import scala.collection.Iterator;
       import org.apache.spark.sql.types.DataType;
-      import org.apache.spark.sql.catalyst.expressions.codegen.BufferHolder;
+      import org.apache.spark.sql.catalyst.expressions.codegen.MemoryBlockHolder;
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
@@ -132,7 +132,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
         private UnsafeRow unsafeRow = new UnsafeRow($numFields);
-        private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
+        private MemoryBlockHolder bufferHolder = new MemoryBlockHolder(unsafeRow);
         private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
         private MutableUnsafeRow mutableRow = null;
 

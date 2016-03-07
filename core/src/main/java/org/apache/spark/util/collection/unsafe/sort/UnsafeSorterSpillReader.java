@@ -25,6 +25,8 @@ import com.google.common.io.Closeables;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
@@ -41,8 +43,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   private int numRecords;
   private int numRecordsRemaining;
 
-  private byte[] arr = new byte[1024 * 1024];
-  private Object baseObject = arr;
+  private ByteArrayMemoryBlock baseObject = ByteArrayMemoryBlock.fromByteArray(new byte[1024 * 1024]);
   private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
 
   public UnsafeSorterSpillReader(
@@ -75,11 +76,10 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   public void loadNext() throws IOException {
     recordLength = din.readInt();
     keyPrefix = din.readLong();
-    if (recordLength > arr.length) {
-      arr = new byte[recordLength];
-      baseObject = arr;
+    if (recordLength > baseObject.getByteArray().length) {
+      baseObject = ByteArrayMemoryBlock.fromByteArray(new byte[recordLength]);
     }
-    ByteStreams.readFully(in, arr, 0, recordLength);
+    ByteStreams.readFully(in, baseObject.getByteArray(), 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       close();
@@ -87,7 +87,7 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   }
 
   @Override
-  public Object getBaseObject() {
+  public MemoryBlock getBaseObject() {
     return baseObject;
   }
 

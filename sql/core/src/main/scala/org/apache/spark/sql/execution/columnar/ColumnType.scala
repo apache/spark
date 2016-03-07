@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock
 import org.apache.spark.unsafe.types.UTF8String
 
 
@@ -577,7 +578,7 @@ private[columnar] case class STRUCT(dataType: StructType)
     buffer.position(cursor + sizeInBytes)
     val unsafeRow = new UnsafeRow(numOfFields)
     unsafeRow.pointTo(
-      buffer.array(),
+      ByteArrayMemoryBlock.fromByteArray(buffer.array()),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       sizeInBytes)
     unsafeRow
@@ -616,7 +617,7 @@ private[columnar] case class ARRAY(dataType: ArrayType)
     buffer.position(cursor + numBytes)
     val array = new UnsafeArrayData
     array.pointTo(
-      buffer.array(),
+      ByteArrayMemoryBlock.fromByteArray(buffer.array()),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       numBytes)
     array
@@ -654,7 +655,7 @@ private[columnar] case class MAP(dataType: MapType)
     buffer.position(cursor + numBytes)
     val map = new UnsafeMapData
     map.pointTo(
-      buffer.array(),
+      ByteArrayMemoryBlock.fromByteArray(buffer.array()),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,
       numBytes)
     map

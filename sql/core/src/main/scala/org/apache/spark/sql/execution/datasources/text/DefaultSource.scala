@@ -30,7 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.expressions.codegen.{MemoryBlockHolder, UnsafeRowWriter}
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, PartitionSpec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -99,7 +99,7 @@ private[sql] class TextRelation(
       conf.asInstanceOf[JobConf], classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
       .mapPartitions { iter =>
         val unsafeRow = new UnsafeRow(1)
-        val bufferHolder = new BufferHolder(unsafeRow)
+        val bufferHolder = new MemoryBlockHolder(unsafeRow)
         val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
 
         iter.map { case (_, line) =>

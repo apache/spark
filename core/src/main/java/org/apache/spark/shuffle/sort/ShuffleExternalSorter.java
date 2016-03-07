@@ -189,7 +189,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
-      final Object recordPage = taskMemoryManager.getPage(recordPointer);
+      final MemoryBlock recordPage = taskMemoryManager.getPage(recordPointer);
       final long recordOffsetInPage = taskMemoryManager.getOffsetInPage(recordPointer);
       int dataRemaining = Platform.getInt(recordPage, recordOffsetInPage);
       long recordReadPosition = recordOffsetInPage + 4; // skip over record length
@@ -352,7 +352,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   /**
    * Write a record to the shuffle sorter.
    */
-  public void insertRecord(Object recordBase, long recordOffset, int length, int partitionId)
+  public void insertRecord(MemoryBlock recordBase, long recordOffset, int length, int partitionId)
     throws IOException {
 
     // for tests
@@ -367,7 +367,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     acquireNewPageIfNecessary(required);
 
     assert(currentPage != null);
-    final Object base = currentPage.getBaseObject();
+    final MemoryBlock base = currentPage;
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
     Platform.putInt(base, pageCursor, length);
     pageCursor += 4;

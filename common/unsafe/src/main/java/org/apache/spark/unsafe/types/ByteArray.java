@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 import java.util.Arrays;
 
@@ -30,7 +31,7 @@ public final class ByteArray {
    * offset. The target memory address must already been allocated, and have enough space to
    * hold all the bytes in this string.
    */
-  public static void writeToMemory(byte[] src, Object target, long targetOffset) {
+  public static void writeToMemory(byte[] src, MemoryBlock target, long targetOffset) {
     Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET, target, targetOffset, src.length);
   }
 

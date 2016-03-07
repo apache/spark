@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types.{BinaryType, IntegerType}
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.memory.{ByteArrayMemoryBlock, MemoryBlock, MemoryAllocator}
 import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.BitSet
 
@@ -117,20 +118,20 @@ object ColumnarBatchBenchmark {
 
     // Using unsafe memory
     val unsafeBuffer = { i: Int =>
-      val data: Long = Platform.allocateMemory(count * 4)
+      val data = MemoryAllocator.UNSAFE.allocate(count * 4)
       var sum = 0L
       for (n <- 0L until iters) {
-        var ptr = data
+        var ptr = data.getBaseOffset
         var i = 0
         while (i < count) {
-          Platform.putInt(null, ptr, i)
+          Platform.putInt(data, ptr, i)
           ptr += 4
           i += 1
         }
-        ptr = data
+        ptr = data.getBaseOffset
         i = 0
         while (i < count) {
-          sum += Platform.getInt(null, ptr)
+          sum += Platform.getInt(data, ptr)
           ptr += 4
           i += 1
         }
@@ -183,14 +184,14 @@ object ColumnarBatchBenchmark {
         var addr = col.valuesNativeAddress()
         var i = 0
         while (i < count) {
-          Platform.putInt(null, addr, i)
+          Platform.putInt(null.asInstanceOf[Array[Byte]], addr, i)
           addr += 4
           i += 1
         }
         i = 0
         addr = col.valuesNativeAddress()
         while (i < count) {
-          sum += Platform.getInt(null, addr)
+          sum += Platform.getInt(null.asInstanceOf[Array[Byte]], addr)
           addr += 4
           i += 1
         }
@@ -200,7 +201,7 @@ object ColumnarBatchBenchmark {
 
     // Access by going through a batch of unsafe rows.
     val unsafeRowOnheap = { i: Int =>
-      val buffer = new Array[Byte](count * 16)
+      val buffer = ByteArrayMemoryBlock.fromByteArray(new Array[Byte](count * 16))
       var sum = 0L
       for (n <- 0L until iters) {
         val row = new UnsafeRow(1)

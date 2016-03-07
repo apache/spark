@@ -25,6 +25,7 @@ import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
 /**
@@ -55,9 +56,9 @@ public final class UnsafeInMemorySorter {
     public int compare(RecordPointerAndKeyPrefix r1, RecordPointerAndKeyPrefix r2) {
       final int prefixComparisonResult = prefixComparator.compare(r1.keyPrefix, r2.keyPrefix);
       if (prefixComparisonResult == 0) {
-        final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
+        final MemoryBlock baseObject1 = memoryManager.getPage(r1.recordPointer);
         final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + 4; // skip length
-        final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
+        final MemoryBlock baseObject2 = memoryManager.getPage(r2.recordPointer);
         final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + 4; // skip length
         return recordComparator.compare(baseObject1, baseOffset1, baseObject2, baseOffset2);
       } else {
@@ -146,9 +147,9 @@ public final class UnsafeInMemorySorter {
       throw new OutOfMemoryError("Not enough memory to grow pointer array");
     }
     Platform.copyMemory(
-      array.getBaseObject(),
+      array.memoryBlock(),
       array.getBaseOffset(),
-      newArray.getBaseObject(),
+      newArray.memoryBlock(),
       newArray.getBaseOffset(),
       array.size() * 8L);
     consumer.freeArray(array);
@@ -176,7 +177,7 @@ public final class UnsafeInMemorySorter {
 
     private final int numRecords;
     private int position;
-    private Object baseObject;
+    private MemoryBlock baseObject;
     private long baseOffset;
     private long keyPrefix;
     private int recordLength;
@@ -218,7 +219,7 @@ public final class UnsafeInMemorySorter {
     }
 
     @Override
-    public Object getBaseObject() { return baseObject; }
+    public MemoryBlock getBaseObject() { return baseObject; }
 
     @Override
     public long getBaseOffset() { return baseOffset; }
