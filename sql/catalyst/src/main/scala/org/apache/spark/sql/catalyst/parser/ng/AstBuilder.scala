@@ -267,9 +267,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     import ctx._
 
     // WHERE
-    val withFilter = relation.optional(where) {
-      Filter(expression(where), relation)
+    def filter(ctx: BooleanExpressionContext, plan: LogicalPlan): LogicalPlan = {
+      Filter(expression(ctx), plan)
     }
+    val withFilter = relation.optionalMap(where)(filter)
 
     // Expressions.
     val expressions = namedExpression.asScala.map(visit).map {
@@ -310,18 +311,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
 
         // Add aggregation with having or a project.
         val withProject = if (aggregation != null) {
-          withAggregation(aggregation, expressions, withLateralView).optionalMap(having) {
-            case (h, p) => Filter(expression(h), p)
-          }
+          withAggregation(aggregation, expressions, withLateralView)
         } else {
           Project(expressions, withLateralView)
         }
 
+        // Having
+        val withHaving = withProject.optionalMap(having)(filter)
+
         // Distinct
         val withDistinct = if (setQuantifier() != null && setQuantifier().DISTINCT() != null) {
-          Distinct(withProject)
+          Distinct(withHaving)
         } else {
-          withProject
+          withHaving
         }
 
         // Window

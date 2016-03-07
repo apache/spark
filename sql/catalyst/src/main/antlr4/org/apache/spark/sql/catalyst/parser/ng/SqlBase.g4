@@ -447,6 +447,7 @@ looseIdentifier
     | FROM
     | TO
     | TABLE
+    | WITH
     ;
 
 identifier
