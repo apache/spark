@@ -224,7 +224,7 @@ final class OneVsOne @Since("2.0.0") (
         val labelColName = "mc2b$" + negIndex + "vs" + posIndex
 
         val trainingDataset = multiclassLabeled
-          .filter(s"${$(labelCol)} == ${negIndex} or ${$(labelCol)} == ${posIndex}")
+          .filter(s"${$(labelCol)} = ${negIndex} or ${$(labelCol)} = ${posIndex}")
           .withColumn(labelColName, when(col($(labelCol)) === posIndex.toDouble, 1.0)
             .otherwise(0.0), newLabelMeta)
 
