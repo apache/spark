@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.parser.ng
 
 import org.antlr.v4.runtime._
 import org.antlr.v4.runtime.atn.PredictionMode
-import org.antlr.v4.runtime.misc.ParseCancellationException
+import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.AnalysisException
@@ -91,28 +91,18 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
       }
     }
     catch {
+      case e: ParseException if e.command.isDefined =>
+        throw e
+      case e: ParseException =>
+        throw e.withCommand(command)
       case e: AnalysisException =>
         (e.line, e.startPosition) match {
           case (Some(line), Some(position)) =>
-            val lines = command.split("\n").toBuffer
-            val marker = (0 until position).map(_ => "-").mkString("") + "^"
-            val elements = e.getStackTrace.takeWhile { element =>
-              val clazz = Utils.classForName(element.getClassName)
-              classOf[AbstractSqlParser].isAssignableFrom(clazz)
-            }
-            val message =
-              s"""
-                 |Error during parsing
-                 |== SQL ==
-                 |${lines.iterator.take(line).mkString("\n")}
-                 |$marker
-                 |${lines.iterator.drop(line).mkString("\n")}
-                 |== Error ==
-                 |${e.message}
-                 |== Stacktrace ==
-                 |${elements.mkString("\n")}
-               """.stripMargin
-            throw new AnalysisException(message, Some(line), Some(position))
+            throw new ParseException(
+              Option(command),
+              e.message,
+              (line, position),
+              (line, position))
           case _ => throw e
         }
     }
@@ -165,8 +155,63 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    throw new AnalysisException(msg, Some(line), Some(charPositionInLine))
+    val position = (line, charPositionInLine)
+    throw new ParseException(None, msg, position, position)
   }
+}
+
+/**
+ * A [[ParseException]] is an [[AnalysisException]] that is thrown during the parse process. It
+ * contains a fields and an extended error message that make reporting and diagnosing errors easier.
+ */
+class ParseException(
+    val command: Option[String],
+    message: String,
+    val start: (Int, Int),
+    val stop: (Int, Int)) extends AnalysisException(message, Some(start._1), Some(start._2)) {
+
+  def this(message: String, ctx: ParserRuleContext) = {
+    this(ParseException.cmd(ctx),
+      message,
+      ParseException.position(ctx.getStart),
+      ParseException.position(ctx.getStop))
+  }
+
+  override def getMessage: String = {
+    val (line, position) = start
+
+    // Build the error message.
+    val location = s"(line $line, pos $position)"
+    val builder = new StringBuilder
+    builder ++= s"\n$message $location\n"
+    command.foreach { cmd =>
+      val (above, below) = cmd.split("\n").splitAt(line)
+      builder ++= "\n== SQL ==\n"
+      above.foreach(builder ++= _ += '\n')
+      builder ++= (0 until position).map(_ => "-").mkString("") ++= "^^^\n"
+      below.foreach(builder ++= _ += '\n')
+    }
+    builder.toString
+  }
+
+  def withCommand(cmd: String): ParseException = {
+    new ParseException(Option(cmd), message, start, stop)
+  }
+}
+
+object ParseException {
+  /** Get the command which created the token. */
+  def cmd(ctx: ParserRuleContext): Option[String] = {
+    cmd(ctx.getStart.getInputStream)
+  }
+
+  /** Get the command which created the token. */
+  def cmd(stream: CharStream): Option[String] = {
+    Option(stream.getText(Interval.of(0, stream.size())))
+  }
+
+  /** Get the line and position of the token. */
+  def position(token: Token): (Int, Int) = (token.getLine, token.getCharPositionInLine)
 }
 
 /**
@@ -174,10 +219,10 @@ case object ParseErrorListener extends BaseErrorListener {
  */
 case object PostProcessor extends SqlBaseBaseListener {
 
-  /** Remove the backticks from an Identifier. */
+  /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: QuotedIdentifierContext): Unit = {
     replaceTokenByIdentifier(ctx, 1) { token =>
-      // Remove the double backticks in the string.
+      // Remove the double back ticks in the string.
       token.setText(token.getText.replace("``", "`"))
       token
     }

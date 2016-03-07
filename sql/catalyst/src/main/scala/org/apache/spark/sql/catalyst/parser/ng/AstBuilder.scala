@@ -1096,16 +1096,12 @@ private[spark] object AstBuilder extends Logging {
   }
 
   def notSupported(message: String, ctx: ParserRuleContext): Nothing = {
-    val token = ctx.getStart
-    throw new AnalysisException(
-      message + s"\n$ctx",
-      Some(token.getLine),
-      Some(token.getCharPositionInLine))
+    throw new ParseException(message, ctx)
   }
 
   def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
-      notSupported(message, ctx)
+      throw new ParseException(message, ctx)
     }
   }
 
