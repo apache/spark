@@ -22,11 +22,12 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{CatalystQl, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.parser.CatalystQl
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
@@ -1052,6 +1053,8 @@ object functions extends LegacyFunctions {
   /**
    * Generate a random column with i.i.d. samples from U[0.0, 1.0].
    *
+   * Note that this is indeterministic when data partitions are not fixed.
+   *
    * @group normal_funcs
    * @since 1.4.0
    */
@@ -1067,6 +1070,8 @@ object functions extends LegacyFunctions {
 
   /**
    * Generate a column with i.i.d. samples from the standard normal distribution.
+   *
+   * Note that this is indeterministic when data partitions are not fixed.
    *
    * @group normal_funcs
    * @since 1.4.0
@@ -1778,7 +1783,7 @@ object functions extends LegacyFunctions {
   def round(e: Column, scale: Int): Column = withExpr { Round(e.expr, Literal(scale)) }
 
   /**
-   * Shift the the given value numBits left. If the given value is a long value, this function
+   * Shift the given value numBits left. If the given value is a long value, this function
    * will return a long value else it will return an integer value.
    *
    * @group math_funcs
@@ -1787,7 +1792,7 @@ object functions extends LegacyFunctions {
   def shiftLeft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
 
   /**
-   * Shift the the given value numBits right. If the given value is a long value, it will return
+   * Shift the given value numBits right. If the given value is a long value, it will return
    * a long value else it will return an integer value.
    *
    * @group math_funcs
@@ -1798,7 +1803,7 @@ object functions extends LegacyFunctions {
   }
 
   /**
-   * Unsigned shift the the given value numBits right. If the given value is a long value,
+   * Unsigned shift the given value numBits right. If the given value is a long value,
    * it will return a long value else it will return an integer value.
    *
    * @group math_funcs
@@ -1968,7 +1973,7 @@ object functions extends LegacyFunctions {
   def crc32(e: Column): Column = withExpr { Crc32(e.expr) }
 
   /**
-   * Calculates the hash code of given columns, and returns the result as a int column.
+   * Calculates the hash code of given columns, and returns the result as an int column.
    *
    * @group misc_funcs
    * @since 2.0

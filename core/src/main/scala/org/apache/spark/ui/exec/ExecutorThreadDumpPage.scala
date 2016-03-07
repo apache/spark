@@ -19,7 +19,6 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.util.Try
 import scala.xml.{Node, Text}
 
 import org.apache.spark.ui.{UIUtils, WebUIPage}

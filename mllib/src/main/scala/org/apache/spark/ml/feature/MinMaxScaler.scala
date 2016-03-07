@@ -108,7 +108,7 @@ class MinMaxScaler(override val uid: String)
 
   override def fit(dataset: DataFrame): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val summary = Statistics.colStats(input)
     copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
@@ -166,7 +166,7 @@ class MinMaxScalerModel private[ml] (
 
       // 0 in sparse vector will probably be rescaled to non-zero
       val values = vector.toArray
-      val size = values.size
+      val size = values.length
       var i = 0
       while (i < size) {
         val raw = if (originalRange(i) != 0) (values(i) - minArray(i)) / originalRange(i) else 0.5

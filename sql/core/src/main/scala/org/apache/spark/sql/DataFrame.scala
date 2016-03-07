@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.CharArrayWriter
 
 import scala.language.implicitConversions
-import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -36,10 +35,14 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.{ExplainCommand, FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, Queryable,
+  QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -670,7 +673,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def as(alias: String): DataFrame = withPlan {
-    Subquery(alias, logicalPlan)
+    SubqueryAlias(alias, logicalPlan)
   }
 
   /**
@@ -1040,7 +1043,7 @@ class DataFrame private[sql](
    * @since 1.3.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = withPlan {
-    Sample(0.0, fraction, withReplacement, seed, logicalPlan)
+    Sample(0.0, fraction, withReplacement, seed, logicalPlan)()
   }
 
   /**
@@ -1072,7 +1075,7 @@ class DataFrame private[sql](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted))
+      new DataFrame(sqlContext, Sample(x(0), x(1), withReplacement = false, seed, sorted)())
     }.toArray
   }
 
@@ -1359,7 +1362,8 @@ class DataFrame private[sql](
       "min" -> ((child: Expression) => Min(child).toAggregateExpression()),
       "max" -> ((child: Expression) => Max(child).toAggregateExpression()))
 
-    val outputCols = (if (cols.isEmpty) numericColumns.map(_.prettyString) else cols).toList
+    val outputCols =
+      (if (cols.isEmpty) numericColumns.map(usePrettyExpression(_).sql) else cols).toList
 
     val ret: Seq[Row] = if (outputCols.nonEmpty) {
       val aggExprs = statistics.flatMap { case (_, colToAgg) =>
@@ -1422,30 +1426,6 @@ class DataFrame private[sql](
    * @since 1.6.0
    */
   def transform[U](t: DataFrame => DataFrame): DataFrame = t(this)
-
-  /**
-   * Returns a new RDD by applying a function to all rows of this DataFrame.
-   * @group rdd
-   * @since 1.3.0
-   */
-  def map[R: ClassTag](f: Row => R): RDD[R] = rdd.map(f)
-
-  /**
-   * Returns a new RDD by first applying a function to all rows of this [[DataFrame]],
-   * and then flattening the results.
-   * @group rdd
-   * @since 1.3.0
-   */
-  def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R] = rdd.flatMap(f)
-
-  /**
-   * Returns a new RDD by applying a function to each partition of this DataFrame.
-   * @group rdd
-   * @since 1.3.0
-   */
-  def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
-    rdd.mapPartitions(f)
-  }
 
   /**
    * Applies a function `f` to all rows.

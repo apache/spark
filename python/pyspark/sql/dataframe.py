@@ -173,7 +173,8 @@ class DataFrame(object):
 
         >>> df.explain()
         == Physical Plan ==
-        Scan ExistingRDD[age#0,name#1]
+        WholeStageCodegen
+        :  +- Scan ExistingRDD[age#0,name#1]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -266,44 +267,6 @@ class DataFrame(object):
                 self._jdf, num)
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
 
-    @ignore_unicode_prefix
-    @since(1.3)
-    def map(self, f):
-        """ Returns a new :class:`RDD` by applying a the ``f`` function to each :class:`Row`.
-
-        This is a shorthand for ``df.rdd.map()``.
-
-        >>> df.map(lambda p: p.name).collect()
-        [u'Alice', u'Bob']
-        """
-        return self.rdd.map(f)
-
-    @ignore_unicode_prefix
-    @since(1.3)
-    def flatMap(self, f):
-        """ Returns a new :class:`RDD` by first applying the ``f`` function to each :class:`Row`,
-        and then flattening the results.
-
-        This is a shorthand for ``df.rdd.flatMap()``.
-
-        >>> df.flatMap(lambda p: p.name).collect()
-        [u'A', u'l', u'i', u'c', u'e', u'B', u'o', u'b']
-        """
-        return self.rdd.flatMap(f)
-
-    @since(1.3)
-    def mapPartitions(self, f, preservesPartitioning=False):
-        """Returns a new :class:`RDD` by applying the ``f`` function to each partition.
-
-        This is a shorthand for ``df.rdd.mapPartitions()``.
-
-        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
-        >>> def f(iterator): yield 1
-        >>> rdd.mapPartitions(f).sum()
-        4
-        """
-        return self.rdd.mapPartitions(f, preservesPartitioning)
-
     @since(1.3)
     def foreach(self, f):
         """Applies the ``f`` function to all :class:`Row` of this :class:`DataFrame`.
@@ -314,7 +277,7 @@ class DataFrame(object):
         ...     print(person.name)
         >>> df.foreach(f)
         """
-        return self.rdd.foreach(f)
+        self.rdd.foreach(f)
 
     @since(1.3)
     def foreachPartition(self, f):
@@ -327,7 +290,7 @@ class DataFrame(object):
         ...         print(person.name)
         >>> df.foreachPartition(f)
         """
-        return self.rdd.foreachPartition(f)
+        self.rdd.foreachPartition(f)
 
     @since(1.3)
     def cache(self):
@@ -551,8 +514,8 @@ class DataFrame(object):
         >>> df_as1 = df.alias("df_as1")
         >>> df_as2 = df.alias("df_as2")
         >>> joined_df = df_as1.join(df_as2, col("df_as1.name") == col("df_as2.name"), 'inner')
-        >>> joined_df.select(col("df_as1.name"), col("df_as2.name"), col("df_as2.age")).collect()
-        [Row(name=u'Bob', name=u'Bob', age=5), Row(name=u'Alice', name=u'Alice', age=2)]
+        >>> joined_df.select("df_as1.name", "df_as2.name", "df_as2.age").collect()
+        [Row(name=u'Alice', name=u'Alice', age=2), Row(name=u'Bob', name=u'Bob', age=5)]
         """
         assert isinstance(alias, basestring), "alias should be a string"
         return DataFrame(getattr(self._jdf, "as")(alias), self.sql_ctx)
@@ -1177,6 +1140,55 @@ class DataFrame(object):
         return DataFrame(
             self._jdf.na().replace(self._jseq(subset), self._jmap(rep_dict)), self.sql_ctx)
 
+    @since(2.0)
+    def approxQuantile(self, col, probabilities, relativeError):
+        """
+        Calculates the approximate quantiles of a numerical column of a
+        DataFrame.
+
+        The result of this algorithm has the following deterministic bound:
+        If the DataFrame has N elements and if we request the quantile at
+        probability `p` up to error `err`, then the algorithm will return
+        a sample `x` from the DataFrame so that the *exact* rank of `x` is
+        close to (p * N). More precisely,
+
+          floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
+
+        This method implements a variation of the Greenwald-Khanna
+        algorithm (with some speed optimizations). The algorithm was first
+        present in [[http://dx.doi.org/10.1145/375663.375670
+        Space-efficient Online Computation of Quantile Summaries]]
+        by Greenwald and Khanna.
+
+        :param col: the name of the numerical column
+        :param probabilities: a list of quantile probabilities
+          Each number must belong to [0, 1].
+          For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
+        :param relativeError:  The relative target precision to achieve
+          (>= 0). If set to zero, the exact quantiles are computed, which
+          could be very expensive. Note that values greater than 1 are
+          accepted but give the same result as 1.
+        :return:  the approximate quantiles at the given probabilities
+        """
+        if not isinstance(col, str):
+            raise ValueError("col should be a string.")
+
+        if not isinstance(probabilities, (list, tuple)):
+            raise ValueError("probabilities should be a list or tuple")
+        if isinstance(probabilities, tuple):
+            probabilities = list(probabilities)
+        for p in probabilities:
+            if not isinstance(p, (float, int, long)) or p < 0 or p > 1:
+                raise ValueError("probabilities should be numerical (float, int, long) in [0,1].")
+        probabilities = _to_list(self._sc, probabilities)
+
+        if not isinstance(relativeError, (float, int, long)) or relativeError < 0:
+            raise ValueError("relativeError should be numerical (float, int, long) >= 0.")
+        relativeError = float(relativeError)
+
+        jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
+        return list(jaq)
+
     @since(1.4)
     def corr(self, col1, col2, method=None):
         """
@@ -1394,6 +1406,11 @@ class DataFrameStatFunctions(object):
 
     def __init__(self, df):
         self.df = df
+
+    def approxQuantile(self, col, probabilities, relativeError):
+        return self.df.approxQuantile(col, probabilities, relativeError)
+
+    approxQuantile.__doc__ = DataFrame.approxQuantile.__doc__
 
     def corr(self, col1, col2, method=None):
         return self.df.corr(col1, col2, method)

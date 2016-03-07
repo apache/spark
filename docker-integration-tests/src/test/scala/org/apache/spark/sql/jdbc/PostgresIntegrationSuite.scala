@@ -22,6 +22,7 @@ import java.util.Properties
 
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.types.{ArrayType, DecimalType}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
@@ -42,10 +43,10 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TYPE enum_type AS ENUM ('d1', 'd2')").executeUpdate()
     conn.prepareStatement("CREATE TABLE bar (c0 text, c1 integer, c2 double precision, c3 bigint, "
       + "c4 bit(1), c5 bit(10), c6 bytea, c7 boolean, c8 inet, c9 cidr, "
-      + "c10 integer[], c11 text[], c12 real[], c13 enum_type)").executeUpdate()
+      + "c10 integer[], c11 text[], c12 real[], c13 numeric(2,2)[], c14 enum_type)").executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES ('hello', 42, 1.25, 123456789012345, B'0', "
       + "B'1000100101', E'\\\\xDEADBEEF', true, '172.16.0.42', '192.168.0.0/16', "
-      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}', 'd1')""").executeUpdate()
+      + """'{1, 2}', '{"a", null, "b"}', '{0.11, 0.22}', '{0.11, 0.22}', 'd1')""").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -53,7 +54,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass)
-    assert(types.length == 14)
+    assert(types.length == 15)
     assert(classOf[String].isAssignableFrom(types(0)))
     assert(classOf[java.lang.Integer].isAssignableFrom(types(1)))
     assert(classOf[java.lang.Double].isAssignableFrom(types(2)))
@@ -67,7 +68,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[Seq[Int]].isAssignableFrom(types(10)))
     assert(classOf[Seq[String]].isAssignableFrom(types(11)))
     assert(classOf[Seq[Double]].isAssignableFrom(types(12)))
-    assert(classOf[String].isAssignableFrom(types(13)))
+    assert(classOf[Seq[BigDecimal]].isAssignableFrom(types(13)))
+    assert(classOf[String].isAssignableFrom(types(14)))
     assert(rows(0).getString(0).equals("hello"))
     assert(rows(0).getInt(1) == 42)
     assert(rows(0).getDouble(2) == 1.25)
@@ -84,13 +86,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(10) == Seq(1, 2))
     assert(rows(0).getSeq(11) == Seq("a", null, "b"))
     assert(rows(0).getSeq(12).toSeq == Seq(0.11f, 0.22f))
-    assert(rows(0).getString(13) == "d1")
+    assert(rows(0).getSeq(13) == Seq("0.11", "0.22").map(BigDecimal(_).bigDecimal))
+    assert(rows(0).getString(14) == "d1")
   }
 
   test("Basic write test") {
     val df = sqlContext.read.jdbc(jdbcUrl, "bar", new Properties)
     // Test only that it doesn't crash.
     df.write.jdbc(jdbcUrl, "public.barcopy", new Properties)
+    // Test that written numeric type has same DataType as input
+    assert(sqlContext.read.jdbc(jdbcUrl, "public.barcopy", new Properties).schema(13).dataType ==
+      ArrayType(DecimalType(2, 2), true))
     // Test write null values.
     df.select(df.queryExecution.analyzed.output.map { a =>
       Column(Literal.create(null, a.dataType)).as(a.name)

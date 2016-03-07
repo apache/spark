@@ -199,7 +199,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     // describeTopics
     val topics = model.describeTopics(3)
     assert(topics.count() === k)
-    assert(topics.select("topic").map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
+    assert(topics.select("topic").rdd.map(_.getInt(0)).collect().toSet === Range(0, k).toSet)
     topics.select("termIndices").collect().foreach { case r: Row =>
       val termIndices = r.getAs[Seq[Int]](0)
       assert(termIndices.length === 3 && termIndices.toSet.size === 3)
