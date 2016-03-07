@@ -28,7 +28,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.{RunnableCommand, SQLExecution}
+import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils

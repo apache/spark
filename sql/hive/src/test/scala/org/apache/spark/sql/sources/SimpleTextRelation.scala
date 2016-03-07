@@ -25,6 +25,7 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{sources, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
@@ -140,12 +141,17 @@ class SimpleTextRelation(
       // Constructs a filter predicate to simulate filter push-down
       val predicate = {
         val filterCondition: Expression = filters.collect {
-          // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` filter
+          // According to `unhandledFilters`, `SimpleTextRelation` only handles `GreaterThan` and
+          // `isNotNull` filters
           case sources.GreaterThan(column, value) =>
             val dataType = dataSchema(column).dataType
             val literal = Literal.create(value, dataType)
             val attribute = inputAttributes.find(_.name == column).get
             expressions.GreaterThan(attribute, literal)
+          case sources.IsNotNull(column) =>
+            val dataType = dataSchema(column).dataType
+            val attribute = inputAttributes.find(_.name == column).get
+            expressions.IsNotNull(attribute)
         }.reduceOption(expressions.And).getOrElse(Literal(true))
         InterpretedPredicate.create(filterCondition, inputAttributes)
       }
@@ -183,11 +189,12 @@ class SimpleTextRelation(
     }
   }
 
-  // `SimpleTextRelation` only handles `GreaterThan` filter.  This is used to test filter push-down
-  // and `BaseRelation.unhandledFilters()`.
+  // `SimpleTextRelation` only handles `GreaterThan` and `IsNotNull` filters.  This is used to test
+  // filter push-down and `BaseRelation.unhandledFilters()`.
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {
     filters.filter {
       case _: GreaterThan => false
+      case _: IsNotNull => false
       case _ => true
     }
   }
@@ -199,6 +206,15 @@ object SimpleTextRelation {
 
   // Used to test filter push-down
   var pushedFilters: Set[Filter] = Set.empty
+
+  // Used to test failed committer
+  var failCommitter = false
+
+  // Used to test failed writer
+  var failWriter = false
+
+  // Used to test failure callback
+  var callbackCalled = false
 }
 
 /**
@@ -229,9 +245,25 @@ class CommitFailureTestRelation(
         dataSchema: StructType,
         context: TaskAttemptContext): OutputWriter = {
       new SimpleTextOutputWriter(path, context) {
+        var failed = false
+        TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
+          failed = true
+          SimpleTextRelation.callbackCalled = true
+        }
+
+        override def write(row: Row): Unit = {
+          if (SimpleTextRelation.failWriter) {
+            sys.error("Intentional task writer failure for testing purpose.")
+
+          }
+          super.write(row)
+        }
+
         override def close(): Unit = {
+          if (SimpleTextRelation.failCommitter) {
+            sys.error("Intentional task commitment failure for testing purpose.")
+          }
           super.close()
-          sys.error("Intentional task commitment failure for testing purpose.")
         }
       }
     }

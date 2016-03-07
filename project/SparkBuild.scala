@@ -688,7 +688,7 @@ object Unidoc {
       "-noqualifier", "java.lang"
     ),
 
-    // Use GitHub repository for Scaladoc source linke
+    // Use GitHub repository for Scaladoc source links
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
 
     scalacOptions in (ScalaUnidoc, unidoc) ++= Seq(
