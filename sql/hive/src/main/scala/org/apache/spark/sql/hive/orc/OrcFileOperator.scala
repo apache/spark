@@ -45,7 +45,6 @@ private[orc] object OrcFileOperator extends Logging {
    *       directly from HDFS via Spark SQL, because we have to discover the schema from raw ORC
    *       files.  So this method always tries to find a ORC file whose schema is non-empty, and
    *       create the result reader from that file.  If no such file is found, it returns `None`.
-   *
    * @todo Needs to consider all files when schema evolution is taken into account.
    */
   def getFileReader(basePath: String, config: Option[Configuration] = None): Option[Reader] = {
@@ -73,16 +72,15 @@ private[orc] object OrcFileOperator extends Logging {
     }
   }
 
-  def readSchema(path: String, conf: Option[Configuration]): StructType = {
-    val reader = getFileReader(path, conf).getOrElse {
-      throw new AnalysisException(
-        s"Failed to discover schema from ORC files stored in $path. " +
-          "Probably there are either no ORC files or only empty ORC files.")
+  def readSchema(paths: Seq[String], conf: Option[Configuration]): Option[StructType] = {
+    // Take the first file where we can open a valid reader if we can find one.  Otherwise just
+    // return None to indicate we can't infer the schema.
+    paths.flatMap(getFileReader(_, conf)).headOption.map { reader =>
+      val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
+      val schema = readerInspector.getTypeName
+      logDebug(s"Reading schema from file $paths, got Hive schema string: $schema")
+      HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType]
     }
-    val readerInspector = reader.getObjectInspector.asInstanceOf[StructObjectInspector]
-    val schema = readerInspector.getTypeName
-    logDebug(s"Reading schema from file $path, got Hive schema string: $schema")
-    HiveMetastoreTypes.toDataType(schema).asInstanceOf[StructType]
   }
 
   def getObjectInspector(
@@ -91,6 +89,7 @@ private[orc] object OrcFileOperator extends Logging {
   }
 
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
+    // TODO: Check if the paths comming in are already qualified and simplify.
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
     val path = origPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
@@ -99,12 +98,6 @@ private[orc] object OrcFileOperator extends Logging {
       .map(_.getPath)
       .filterNot(_.getName.startsWith("_"))
       .filterNot(_.getName.startsWith("."))
-
-    if (paths == null || paths.isEmpty) {
-      throw new IllegalArgumentException(
-        s"orcFileOperator: path $path does not have valid orc files matching the pattern")
-    }
-
     paths
   }
 }

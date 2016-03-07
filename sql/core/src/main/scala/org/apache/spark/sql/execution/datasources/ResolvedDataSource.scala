@@ -24,19 +24,23 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.StringUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
 
 case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
-
+/**
+ * Responsible for taking a description of a datasource (either from
+ * [[org.apache.spark.sql.DataFrameReader]], or a metastore) and converting it into a logical
+ * relation that can be used in a query plan.
+ */
 object ResolvedDataSource extends Logging {
 
   /** A map to maintain backward compatibility in case we move data sources around. */
@@ -92,19 +96,61 @@ object ResolvedDataSource extends Logging {
     }
   }
 
+  // TODO: Combine with apply?
   def createSource(
       sqlContext: SQLContext,
       userSpecifiedSchema: Option[StructType],
       providerName: String,
       options: Map[String, String]): Source = {
     val provider = lookupDataSource(providerName).newInstance() match {
-      case s: StreamSourceProvider => s
+      case s: StreamSourceProvider =>
+        s.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+
+      case format: FileFormat =>
+        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+        val path = caseInsensitiveOptions.getOrElse("path", {
+          throw new IllegalArgumentException("'path' is not specified")
+        })
+        val metadataPath = caseInsensitiveOptions.getOrElse("metadataPath", s"$path/_metadata")
+
+        val allPaths = caseInsensitiveOptions.get("path")
+        val globbedPaths = allPaths.toSeq.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          SparkHadoopUtil.get.globPathIfNecessary(qualified)
+        }.toArray
+
+        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
+        val dataSchema = userSpecifiedSchema.orElse {
+          format.inferSchema(
+            sqlContext,
+            caseInsensitiveOptions,
+            fileCatalog.allFiles())
+        }.getOrElse {
+          throw new AnalysisException("Unable to infer schema.  It must be specified manually.")
+        }
+
+        def dataFrameBuilder(files: Array[String]): DataFrame = {
+          new DataFrame(
+            sqlContext,
+            LogicalRelation(
+              apply(
+                sqlContext,
+                paths = files,
+                userSpecifiedSchema = Some(dataSchema),
+                provider = providerName,
+                options = options.filterKeys(_ != "path")).relation))
+        }
+
+        new FileStreamSource(
+          sqlContext, metadataPath, path, Some(dataSchema), providerName, dataFrameBuilder)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $providerName does not support streamed reading")
     }
 
-    provider.createSource(sqlContext, userSpecifiedSchema, providerName, options)
+    provider
   }
 
   def createSink(
@@ -125,98 +171,72 @@ object ResolvedDataSource extends Logging {
   /** Create a [[ResolvedDataSource]] for reading data in. */
   def apply(
       sqlContext: SQLContext,
-      userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      bucketSpec: Option[BucketSpec],
+      paths: Seq[String] = Nil,
+      userSpecifiedSchema: Option[StructType] = None,
+      partitionColumns: Array[String] = Array.empty,
+      bucketSpec: Option[BucketSpec] = None,
       provider: String,
       options: Map[String, String]): ResolvedDataSource = {
     val clazz: Class[_] = lookupDataSource(provider)
     def className: String = clazz.getCanonicalName
-    val relation = userSpecifiedSchema match {
-      case Some(schema: StructType) => clazz.newInstance() match {
-        case dataSource: SchemaRelationProvider =>
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          if (caseInsensitiveOptions.contains("paths")) {
-            throw new AnalysisException(s"$className does not support paths option.")
-          }
-          dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
-        case dataSource: HadoopFsRelationProvider =>
-          val maybePartitionsSchema = if (partitionColumns.isEmpty) {
-            None
-          } else {
-            Some(partitionColumnsSchema(
-              schema, partitionColumns, sqlContext.conf.caseSensitiveAnalysis))
-          }
 
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          val paths = {
-            if (caseInsensitiveOptions.contains("paths") &&
-              caseInsensitiveOptions.contains("path")) {
-              throw new AnalysisException(s"Both path and paths options are present.")
-            }
-            caseInsensitiveOptions.get("paths")
-              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-              .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
-                throw new IllegalArgumentException("'path' is not specified")
-              })))
-              .flatMap{ pathString =>
-                val hdfsPath = new Path(pathString)
-                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
-              }
-          }
+    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+    val relation = (clazz.newInstance(), userSpecifiedSchema) match {
+      // TODO: Throw when too much is given.
+      case (dataSource: SchemaRelationProvider, Some(schema)) =>
+        dataSource.createRelation(sqlContext, caseInsensitiveOptions, schema)
+      case (dataSource: RelationProvider, None) =>
+        dataSource.createRelation(sqlContext, caseInsensitiveOptions)
+      case (_: SchemaRelationProvider, None) =>
+        throw new AnalysisException(s"A schema needs to be specified when using $className.")
+      case (_: RelationProvider, Some(_)) =>
+        throw new AnalysisException(s"$className does not allow user-specified schemas.")
 
-          val dataSchema =
-            StructType(schema.filterNot(f => partitionColumns.contains(f.name))).asNullable
+      case (format: FileFormat, _) =>
+        val allPaths = caseInsensitiveOptions.get("path") ++ paths
+        val globbedPaths = allPaths.flatMap { path =>
+          val hdfsPath = new Path(path)
+          val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
+          val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+          SparkHadoopUtil.get.globPathIfNecessary(qualified)
+        }.toArray
 
-          dataSource.createRelation(
+        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
+        val dataSchema = userSpecifiedSchema.orElse {
+          format.inferSchema(
             sqlContext,
-            paths,
-            Some(dataSchema),
-            maybePartitionsSchema,
-            bucketSpec,
-            caseInsensitiveOptions)
-        case dataSource: org.apache.spark.sql.sources.RelationProvider =>
-          throw new AnalysisException(s"$className does not allow user-specified schemas.")
-        case _ =>
-          throw new AnalysisException(s"$className is not a RelationProvider.")
-      }
+            caseInsensitiveOptions,
+            fileCatalog.allFiles())
+        }.getOrElse {
+          throw new AnalysisException(
+            s"Unable to infer schema for $format at ${allPaths.take(2).mkString(",")}. " +
+            "It must be specified manually")
+        }
 
-      case None => clazz.newInstance() match {
-        case dataSource: RelationProvider =>
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          if (caseInsensitiveOptions.contains("paths")) {
-            throw new AnalysisException(s"$className does not support paths option.")
-          }
-          dataSource.createRelation(sqlContext, caseInsensitiveOptions)
-        case dataSource: HadoopFsRelationProvider =>
-          val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-          val paths = {
-            if (caseInsensitiveOptions.contains("paths") &&
-              caseInsensitiveOptions.contains("path")) {
-              throw new AnalysisException(s"Both path and paths options are present.")
-            }
-            caseInsensitiveOptions.get("paths")
-              .map(_.split("(?<!\\\\),").map(StringUtils.unEscapeString(_, '\\', ',')))
-              .getOrElse(Array(caseInsensitiveOptions.getOrElse("path", {
-                throw new IllegalArgumentException("'path' is not specified")
-              })))
-              .flatMap{ pathString =>
-                val hdfsPath = new Path(pathString)
-                val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-                val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-                SparkHadoopUtil.get.globPathIfNecessary(qualified).map(_.toString)
-              }
-          }
-          dataSource.createRelation(sqlContext, paths, None, None, None, caseInsensitiveOptions)
-        case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-          throw new AnalysisException(
-            s"A schema needs to be specified when using $className.")
-        case _ =>
-          throw new AnalysisException(
-            s"$className is neither a RelationProvider nor a FSBasedRelationProvider.")
-      }
+        // If they gave a schema, then we try and figure out the types of the partition columns
+        // from that schema.
+        val partitionSchema = userSpecifiedSchema.map { schema =>
+          StructType(
+            partitionColumns.map { c =>
+              // TODO: Case sensitivity.
+              schema
+                .find(_.name.toLowerCase() == c.toLowerCase())
+                .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
+          })
+        }.getOrElse(fileCatalog.partitionSpec(None).partitionColumns)
+
+        HadoopFsRelation(
+          sqlContext,
+          fileCatalog,
+          partitionSchema = partitionSchema,
+          dataSchema = dataSchema.asNullable,
+          bucketSpec = bucketSpec,
+          format,
+          options)
+
+      case _ =>
+        throw new AnalysisException(
+          s"$className is not a valid Spark SQL Data Source.")
     }
     new ResolvedDataSource(clazz, relation)
   }
@@ -254,10 +274,10 @@ object ResolvedDataSource extends Logging {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
     val clazz: Class[_] = lookupDataSource(provider)
-    val relation = clazz.newInstance() match {
+    clazz.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         dataSource.createRelation(sqlContext, mode, options, data)
-      case dataSource: HadoopFsRelationProvider =>
+      case format: FileFormat =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
         //  2. Output path must be a legal HDFS style file system path;
@@ -278,26 +298,63 @@ object ResolvedDataSource extends Logging {
         val equality = columnNameEquality(caseSensitive)
         val dataSchema = StructType(
           data.schema.filterNot(f => partitionColumns.exists(equality(_, f.name))))
-        val r = dataSource.createRelation(
-          sqlContext,
-          Array(outputPath.toString),
-          Some(dataSchema.asNullable),
-          Some(partitionColumnsSchema(data.schema, partitionColumns, caseSensitive)),
-          bucketSpec,
-          caseInsensitiveOptions)
+
+        // If we are appending to a table that already exists, make sure the partitioning matches
+        // up.  If we fail to load the table for whatever reason, ignore the check.
+        if (mode == SaveMode.Append) {
+          val existingPartitionColumnSet = try {
+            val resolved = apply(
+              sqlContext,
+              userSpecifiedSchema = Some(data.schema.asNullable),
+              provider = provider,
+              options = options)
+
+            Some(resolved.relation
+              .asInstanceOf[HadoopFsRelation]
+              .location
+              .partitionSpec(None)
+              .partitionColumns
+              .fieldNames
+              .toSet)
+          } catch {
+            case e: Exception =>
+              None
+          }
+
+          existingPartitionColumnSet.foreach { ex =>
+            if (ex.map(_.toLowerCase) != partitionColumns.map(_.toLowerCase()).toSet) {
+              throw new AnalysisException(
+                s"Requested partitioning does not equal existing partitioning: " +
+                s"$ex != ${partitionColumns.toSet}.")
+            }
+          }
+        }
 
         // For partitioned relation r, r.schema's column ordering can be different from the column
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
-        sqlContext.executePlan(
+        val plan =
           InsertIntoHadoopFsRelation(
-            r,
+            outputPath,
+            partitionColumns.map(UnresolvedAttribute.quoted),
+            bucketSpec,
+            format,
+            () => Unit, // No existing table needs to be refreshed.
+            options,
             data.logicalPlan,
-            mode)).toRdd
-        r
+            mode)
+        sqlContext.executePlan(plan).toRdd
+
       case _ =>
         sys.error(s"${clazz.getCanonicalName} does not allow create table as select.")
     }
-    ResolvedDataSource(clazz, relation)
+
+    apply(
+      sqlContext,
+      userSpecifiedSchema = Some(data.schema.asNullable),
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
+      provider = provider,
+      options = options)
   }
 }

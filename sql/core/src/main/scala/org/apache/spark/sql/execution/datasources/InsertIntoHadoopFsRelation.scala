@@ -25,15 +25,14 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.util.Utils
-
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -58,18 +57,29 @@ import org.apache.spark.util.Utils
  *      thrown during job commitment, also aborts the job.
  */
 private[sql] case class InsertIntoHadoopFsRelation(
-    @transient relation: HadoopFsRelation,
+    outputPath: Path,
+    partitionColumns: Seq[Attribute],
+    bucketSpec: Option[BucketSpec],
+    fileFormat: FileFormat,
+    refreshFunction: () => Unit,
+    options: Map[String, String],
     @transient query: LogicalPlan,
     mode: SaveMode)
   extends RunnableCommand {
 
+  override def children: Seq[LogicalPlan] = query :: Nil
+
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    require(
-      relation.paths.length == 1,
-      s"Cannot write to multiple destinations: ${relation.paths.mkString(",")}")
+    // Most formats don't do well with duplicate columns, so lets not allow that
+    if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
+      val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }.mkString(", ")
+      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
+          s"cannot save to file.")
+    }
 
     val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
-    val outputPath = new Path(relation.paths.head)
     val fs = outputPath.getFileSystem(hadoopConf)
     val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
 
@@ -101,45 +111,28 @@ private[sql] case class InsertIntoHadoopFsRelation(
       job.setOutputValueClass(classOf[InternalRow])
       FileOutputFormat.setOutputPath(job, qualifiedOutputPath)
 
-      // A partitioned relation schema's can be different from the input logicalPlan, since
-      // partition columns are all moved after data column. We Project to adjust the ordering.
-      // TODO: this belongs in the analyzer.
-      val project = Project(
-        relation.schema.map(field => UnresolvedAttribute.quoted(field.name)), query)
-      val queryExecution = DataFrame(sqlContext, project).queryExecution
+      val partitionSet = AttributeSet(partitionColumns)
+      val dataColumns = query.output.filterNot(partitionSet.contains)
 
+      val queryExecution = DataFrame(sqlContext, query).queryExecution
       SQLExecution.withNewExecutionId(sqlContext, queryExecution) {
-        val df = sqlContext.internalCreateDataFrame(queryExecution.toRdd, relation.schema)
-        val partitionColumns = relation.partitionColumns.fieldNames
+        val relation =
+          WriteRelation(
+            sqlContext,
+            dataColumns.toStructType,
+            qualifiedOutputPath.toString,
+            fileFormat.prepareWrite(sqlContext, _, options, dataColumns.toStructType),
+            bucketSpec)
 
-        // Some pre-flight checks.
-        require(
-          df.schema == relation.schema,
-          s"""DataFrame must have the same schema as the relation to which is inserted.
-             |DataFrame schema: ${df.schema}
-             |Relation schema: ${relation.schema}
-          """.stripMargin)
-        val partitionColumnsInSpec = relation.partitionColumns.fieldNames
-        require(
-          partitionColumnsInSpec.sameElements(partitionColumns),
-          s"""Partition columns mismatch.
-             |Expected: ${partitionColumnsInSpec.mkString(", ")}
-             |Actual: ${partitionColumns.mkString(", ")}
-          """.stripMargin)
-
-        val writerContainer = if (partitionColumns.isEmpty && relation.maybeBucketSpec.isEmpty) {
+        val writerContainer = if (partitionColumns.isEmpty && bucketSpec.isEmpty) {
           new DefaultWriterContainer(relation, job, isAppend)
         } else {
-          val output = df.queryExecution.executedPlan.output
-          val (partitionOutput, dataOutput) =
-            output.partition(a => partitionColumns.contains(a.name))
-
           new DynamicPartitionWriterContainer(
             relation,
             job,
-            partitionOutput,
-            dataOutput,
-            output,
+            partitionColumns = partitionColumns,
+            dataColumns = dataColumns,
+            inputSchema = query.output,
             PartitioningUtils.DEFAULT_PARTITION_NAME,
             sqlContext.conf.getConf(SQLConf.PARTITION_MAX_FILES),
             isAppend)
@@ -150,9 +143,9 @@ private[sql] case class InsertIntoHadoopFsRelation(
         writerContainer.driverSideSetup()
 
         try {
-          sqlContext.sparkContext.runJob(df.queryExecution.toRdd, writerContainer.writeRows _)
+          sqlContext.sparkContext.runJob(queryExecution.toRdd, writerContainer.writeRows _)
           writerContainer.commitJob()
-          relation.refresh()
+          refreshFunction()
         } catch { case cause: Throwable =>
           logError("Aborting job.", cause)
           writerContainer.abortJob()

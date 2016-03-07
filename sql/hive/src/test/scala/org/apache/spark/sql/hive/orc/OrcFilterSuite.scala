@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
+import org.apache.spark.sql.sources.HadoopFsRelation
 
 /**
  * A test suite that tests ORC filter API based filter pushdown optimization.
@@ -40,9 +41,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
-    var maybeRelation: Option[OrcRelation] = None
+    var maybeRelation: Option[HadoopFsRelation] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: OrcRelation, _, _)) =>
+      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _)) =>
         maybeRelation = Some(orcRelation)
         filters
     }.flatten.reduceLeftOption(_ && _)

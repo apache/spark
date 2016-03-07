@@ -22,7 +22,7 @@ import java.io.{File, IOException}
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.SaveMode
@@ -88,7 +88,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val df = sqlContext.read.format("libsvm").load(path)
     val tempDir2 = Utils.createTempDir()
     val writepath = tempDir2.toURI.toString
-    df.write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
+    // TODO: Remove requirement to coalesce by supporting mutiple reads.
+    df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
 
     val df2 = sqlContext.read.format("libsvm").load(writepath)
     val row1 = df2.first()
@@ -98,9 +99,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data failed due to invalid schema") {
     val df = sqlContext.read.format("text").load(path)
-    val e = intercept[IOException] {
+    val e = intercept[SparkException] {
       df.write.format("libsvm").save(path + "_2")
     }
-    assert(e.getMessage.contains("Illegal schema for libsvm data"))
   }
 }

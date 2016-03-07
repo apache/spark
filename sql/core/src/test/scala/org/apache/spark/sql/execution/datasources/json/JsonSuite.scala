@@ -582,35 +582,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     jsonDF.registerTempTable("jsonTable")
   }
 
-  test("jsonFile should be based on JSONRelation") {
-    val dir = Utils.createTempDir()
-    dir.delete()
-    val path = dir.getCanonicalFile.toURI.toString
-    sparkContext.parallelize(1 to 100)
-      .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
-    val jsonDF = sqlContext.read.option("samplingRatio", "0.49").json(path)
-
-    val analyzed = jsonDF.queryExecution.analyzed
-    assert(
-      analyzed.isInstanceOf[LogicalRelation],
-      "The DataFrame returned by jsonFile should be based on LogicalRelation.")
-    val relation = analyzed.asInstanceOf[LogicalRelation].relation
-    assert(
-      relation.isInstanceOf[JSONRelation],
-      "The DataFrame returned by jsonFile should be based on JSONRelation.")
-    assert(relation.asInstanceOf[JSONRelation].paths === Array(path))
-    assert(relation.asInstanceOf[JSONRelation].options.samplingRatio === (0.49 +- 0.001))
-
-    val schema = StructType(StructField("a", LongType, true) :: Nil)
-    val logicalRelation =
-      sqlContext.read.schema(schema).json(path)
-        .queryExecution.analyzed.asInstanceOf[LogicalRelation]
-    val relationWithSchema = logicalRelation.relation.asInstanceOf[JSONRelation]
-    assert(relationWithSchema.paths === Array(path))
-    assert(relationWithSchema.schema === schema)
-    assert(relationWithSchema.options.samplingRatio > 0.99)
-  }
-
   test("Loading a JSON dataset from a text file") {
     val dir = Utils.createTempDir()
     dir.delete()
@@ -1202,48 +1173,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("JSONRelation equality test") {
-    val relation0 = new JSONRelation(
-      Some(empty),
-      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None,
-      None)(sqlContext)
-    val logicalRelation0 = LogicalRelation(relation0)
-    val relation1 = new JSONRelation(
-      Some(singleRow),
-      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None,
-      None)(sqlContext)
-    val logicalRelation1 = LogicalRelation(relation1)
-    val relation2 = new JSONRelation(
-      Some(singleRow),
-      Some(StructType(StructField("a", IntegerType, true) :: Nil)),
-      None,
-      None,
-      parameters = Map("samplingRatio" -> "0.5"))(sqlContext)
-    val logicalRelation2 = LogicalRelation(relation2)
-    val relation3 = new JSONRelation(
-      Some(singleRow),
-      Some(StructType(StructField("b", IntegerType, true) :: Nil)),
-      None,
-      None)(sqlContext)
-    val logicalRelation3 = LogicalRelation(relation3)
-
-    assert(relation0 !== relation1)
-    assert(!logicalRelation0.sameResult(logicalRelation1),
-      s"$logicalRelation0 and $logicalRelation1 should be considered not having the same result.")
-
-    assert(relation1 === relation2)
-    assert(logicalRelation1.sameResult(logicalRelation2),
-      s"$logicalRelation1 and $logicalRelation2 should be considered having the same result.")
-
-    assert(relation1 !== relation3)
-    assert(!logicalRelation1.sameResult(logicalRelation3),
-      s"$logicalRelation1 and $logicalRelation3 should be considered not having the same result.")
-
-    assert(relation2 !== relation3)
-    assert(!logicalRelation2.sameResult(logicalRelation3),
-      s"$logicalRelation2 and $logicalRelation3 should be considered not having the same result.")
-
     withTempPath(dir => {
       val path = dir.getCanonicalFile.toURI.toString
       sparkContext.parallelize(1 to 100)

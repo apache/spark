@@ -34,6 +34,7 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
       try {
         val resolved = ResolvedDataSource(
           sqlContext,
+          paths = Seq.empty,
           userSpecifiedSchema = None,
           partitionColumns = Array(),
           bucketSpec = None,
@@ -130,7 +131,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         LogicalRelation(r: HadoopFsRelation, _, _), part, query, overwrite, _) =>
         // We need to make sure the partition columns specified by users do match partition
         // columns of the relation.
-        val existingPartitionColumns = r.partitionColumns.fieldNames.toSet
+        val existingPartitionColumns = r.partitionSchema.fieldNames.toSet
         val specifiedPartitionColumns = part.keySet
         if (existingPartitionColumns != specifiedPartitionColumns) {
           failAnalysis(s"Specified partition columns " +

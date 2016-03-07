@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{File, IOException}
+import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -27,9 +27,9 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -403,20 +403,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
-    withTable("jsonTable") {
-      sql(
-        s"""CREATE TABLE jsonTable
-           |USING org.apache.spark.sql.json.DefaultSource
-           |OPTIONS (
-           |  path 'it is not a path at all!'
-           |)
-         """.stripMargin)
-
-      sql("DROP TABLE jsonTable").collect().foreach(i => logInfo(i.toString))
-    }
-  }
-
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
@@ -473,7 +459,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
           // Drop table will also delete the data.
           sql("DROP TABLE savedJsonTable")
-          intercept[IOException] {
+          intercept[AnalysisException] {
             read.json(catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
           }
         }
@@ -541,19 +527,24 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             sql("SELECT b FROM savedJsonTable"))
 
           sql("DROP TABLE createdJsonTable")
-
-          assert(
-            intercept[RuntimeException] {
-              createExternalTable(
-                "createdJsonTable",
-                "org.apache.spark.sql.json",
-                schema,
-                Map.empty[String, String])
-            }.getMessage.contains("'path' is not specified"),
-            "We should complain that path is not specified.")
         }
       }
     }
+  }
+
+  test("path required error") {
+    assert(
+      intercept[AnalysisException] {
+        createExternalTable(
+          "createdJsonTable",
+          "org.apache.spark.sql.json",
+          Map.empty[String, String])
+
+        table("createdJsonTable")
+      }.getMessage.contains("Unable to infer schema"),
+      "We should complain that path is not specified.")
+
+    sql("DROP TABLE createdJsonTable")
   }
 
   test("scan a parquet table created through a CTAS statement") {
@@ -572,9 +563,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: ParquetRelation, _, _) => // OK
+            case LogicalRelation(p: HadoopFsRelation, _, _) => // OK
             case _ =>
-              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
+              fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }
         }
       }

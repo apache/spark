@@ -46,7 +46,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 object TestHive
   extends TestHiveContext(
     new SparkContext(
-      System.getProperty("spark.sql.test.master", "local[32]"),
+      System.getProperty("spark.sql.test.master", "local[1]"),
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
