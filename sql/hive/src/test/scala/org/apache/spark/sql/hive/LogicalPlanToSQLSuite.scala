@@ -67,7 +67,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
              |
              |# Resolved query plan:
              |${df.queryExecution.analyzed.treeString}
-           """.stripMargin)
+           """.stripMargin, e)
     }
 
     try {
@@ -84,8 +84,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
            |
            |# Resolved query plan:
            |${df.queryExecution.analyzed.treeString}
-         """.stripMargin,
-        cause)
+         """.stripMargin, cause)
     }
   }
 

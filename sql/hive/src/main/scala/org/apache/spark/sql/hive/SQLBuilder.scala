@@ -107,7 +107,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       windowToSQL(w)
 
     case Limit(limitExpr, child) =>
-      s"${toSQL(child)} LIMIT ${exprToSQL(limitExpr, child)}"
+      s"${toSQL(child)} LIMIT ${limitExpr.sql}"
 
     case p: Sample if p.isTableSample =>
       val fraction = math.min(100, math.max(0, (p.upperBound - p.lowerBound) * 100))
@@ -131,7 +131,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case _: Aggregate => "HAVING"
         case _ => "WHERE"
       }
-      build(toSQL(child), whereOrHaving, exprToSQL(condition, child))
+      build(toSQL(child), whereOrHaving, condition.sql)
 
     case p @ Distinct(u: Union) if u.children.length > 1 =>
       val childrenSql = u.children.map(c => s"(${toSQL(c)})")
@@ -166,7 +166,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         p.joinType.sql,
         "JOIN",
         toSQL(p.right),
-        p.condition.map(" ON " + exprToSQL(_, p)).getOrElse(""))
+        p.condition.map(" ON " + _.sql).getOrElse(""))
 
     case p: MetastoreRelation =>
       build(
@@ -176,20 +176,20 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case Sort(orders, _, RepartitionByExpression(partitionExprs, child, _))
         if orders.map(_.child) == partitionExprs =>
-      build(toSQL(child), "CLUSTER BY", exprsToSQL(partitionExprs, child))
+      build(toSQL(child), "CLUSTER BY", partitionExprs.map(_.sql).mkString(", "))
 
     case p: Sort =>
       build(
         toSQL(p.child),
         if (p.global) "ORDER BY" else "SORT BY",
-        exprsToSQL(p.order, p.child)
+        p.order.map(_.sql).mkString(", ")
       )
 
     case p: RepartitionByExpression =>
       build(
         toSQL(p.child),
         "DISTRIBUTE BY",
-        exprsToSQL(p.partitionExpressions, p.child)
+        p.partitionExpressions.map(_.sql).mkString(", ")
       )
 
     case OneRowRelation =>
@@ -207,70 +207,11 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   private def build(segments: String*): String =
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
-  /**
-   * Given a seq of qualifiers(names and their corresponding [[AttributeSet]]), transform the given
-   * expression tree, if an [[Attribute]] belongs to one of the [[AttributeSet]]s, update its
-   * qualifier with the corresponding name of the [[AttributeSet]].
-   */
-  private def updateQualifier(
-      expr: Expression,
-      qualifiers: Seq[(String, AttributeSet)]): Expression = {
-    if (qualifiers.isEmpty) {
-      expr
-    } else {
-      expr transform {
-        case a: Attribute =>
-          val index = qualifiers.indexWhere {
-            case (_, inputAttributes) => inputAttributes.contains(a)
-          }
-          if (index == -1) {
-            a
-          } else {
-            a.withQualifiers(qualifiers(index)._1 :: Nil)
-          }
-      }
-    }
-  }
-
-  /**
-   * Finds the outer most [[SubqueryAlias]] nodes in the input logical plan and return their alias
-   * names and outputSet.
-   */
-  private def findOutermostQualifiers(input: LogicalPlan): Seq[(String, AttributeSet)] = {
-    input.collectFirst {
-      case SubqueryAlias(alias, child) => Seq(alias -> child.outputSet)
-      case plan => plan.children.flatMap(findOutermostQualifiers)
-    }.toSeq.flatten
-  }
-
-  /**
-   * Converts an expression to SQL string.
-   *
-   * Note that we may add extra [[SubqueryAlias]]s to the logical plan, but the qualifiers haven't
-   * been propagated yet. So here we try to find the corrected qualifiers first, and then update
-   * the given expression with the qualifiers and finally convert it to SQL string.
-   */
-  private def exprToSQL(e: Expression, input: LogicalPlan): String = {
-    updateQualifier(e, findOutermostQualifiers(input)).sql
-  }
-
-  /**
-   * Converts a seq of expressions to SQL string.
-   *
-   * Note that we may add extra [[SubqueryAlias]]s to the logical plan, but the qualifiers haven't
-   * been propagated yet. So here we try to find the corrected qualifiers first, and then update
-   * the given expressions with the qualifiers and finally convert them to SQL string.
-   */
-  private def exprsToSQL(exprs: Seq[Expression], input: LogicalPlan): String = {
-    val qualifiers = findOutermostQualifiers(input)
-    exprs.map(updateQualifier(_, qualifiers).sql).mkString(", ")
-  }
-
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
     build(
       "SELECT",
       if (isDistinct) "DISTINCT" else "",
-      exprsToSQL(plan.projectList, plan.child),
+      plan.projectList.map(_.sql).mkString(", "),
       if (plan.child == OneRowRelation) "" else "FROM",
       toSQL(plan.child)
     )
@@ -280,7 +221,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val groupingSQL = plan.groupingExpressions.map(_.sql).mkString(", ")
     build(
       "SELECT",
-      exprsToSQL(plan.aggregateExpressions, plan.child),
+      plan.aggregateExpressions.map(_.sql).mkString(", "),
       if (plan.child == OneRowRelation) "" else "FROM",
       toSQL(plan.child),
       if (groupingSQL.isEmpty) "" else "GROUP BY",
@@ -303,12 +244,11 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       expand: Expand,
       project: Project): String = {
     assert(agg.groupingExpressions.length > 1)
-    val input = project.child
 
     // The last column of Expand is always grouping ID
     val gid = expand.output.last
 
-    val numOriginalOutput = input.output.length
+    val numOriginalOutput = project.child.output.length
     // Assumption: Aggregate's groupingExpressions is composed of
     // 1) the attributes of aliased group by expressions
     // 2) gid, which is always the last one
@@ -317,7 +257,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     // 1) the original output (Project's child.output),
     // 2) the aliased group by expressions.
     val groupByExprs = project.projectList.drop(numOriginalOutput).map(_.asInstanceOf[Alias].child)
-    val groupingSQL = exprsToSQL(groupByExprs, input)
+    val groupingSQL = groupByExprs.map(_.sql).mkString(", ")
 
     // a map from group by attributes to the original group by expressions.
     val groupByAttrMap = AttributeMap(groupByAttributes.zip(groupByExprs))
@@ -331,8 +271,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case attr: Attribute if groupByAttrMap.contains(attr) => groupByAttrMap(attr)
       }
     }
-    val groupingSetSQL =
-      "GROUPING SETS(" + groupingSet.map(e => "(" + exprsToSQL(e, input) + ")").mkString(", ") + ")"
+    val groupingSetSQL = "GROUPING SETS(" +
+      groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
 
     val aggExprs = agg.aggregateExpressions.map { case expr =>
       expr.transformDown {
@@ -350,9 +290,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     build(
       "SELECT",
-      exprsToSQL(aggExprs, input),
+      aggExprs.map(_.sql).mkString(", "),
       if (agg.child == OneRowRelation) "" else "FROM",
-      toSQL(input),
+      toSQL(project.child),
       "GROUP BY",
       groupingSQL,
       groupingSetSQL
@@ -362,7 +302,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   private def windowToSQL(w: Window): String = {
     build(
       "SELECT",
-      exprsToSQL(w.child.output ++ w.windowExpressions, w.child),
+      (w.child.output ++ w.windowExpressions).map(_.sql).mkString(", "),
       if (w.child == OneRowRelation) "" else "FROM",
       toSQL(w.child)
     )
@@ -370,20 +310,23 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
-      Batch("Canonicalizer", FixedPoint(100),
+      Batch("Collapse Project", FixedPoint(100),
         // The `WidenSetOperationTypes` analysis rule may introduce extra `Project`s over
         // `Aggregate`s to perform type casting.  This rule merges these `Project`s into
         // `Aggregate`s.
-        CollapseProject,
-
+        CollapseProject),
+      Batch("Recover Scoping Info", Once,
         // Used to handle other auxiliary `Project`s added by analyzer (e.g.
         // `ResolveAggregateFunctions` rule)
-        RecoverScopingInfo
+        AddSubquery,
+        // Previous rule will add extra sub-queries, this rule is used to re-propagate and update
+        // the qualifiers bottom up.
+        UpdateQualifiers
       )
     )
 
-    object RecoverScopingInfo extends Rule[LogicalPlan] {
-      override def apply(tree: LogicalPlan): LogicalPlan = tree transform {
+    object AddSubquery extends Rule[LogicalPlan] {
+      override def apply(tree: LogicalPlan): LogicalPlan = tree transformUp {
         // This branch handles aggregate functions within HAVING clauses.  For example:
         //
         //   SELECT key FROM src GROUP BY key HAVING max(value) > "val_255"
@@ -395,11 +338,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         //    +- Filter ...
         //        +- Aggregate ...
         //            +- MetastoreRelation default, src, None
-        case plan @ Project(_, Filter(_, _: Aggregate)) =>
-          plan.copy(child = SubqueryAlias(SQLBuilder.newSubqueryName, plan.child))
+        case plan @ Project(_, Filter(_, _: Aggregate)) => wrapChildWithSubquery(plan)
 
-        case w @ Window(_, _, _, _, Filter(_, _: Aggregate)) =>
-          w.copy(child = SubqueryAlias(SQLBuilder.newSubqueryName, w.child))
+        case w @ Window(_, _, _, _, Filter(_, _: Aggregate)) => wrapChildWithSubquery(w)
 
         case plan @ Project(_,
           _: SubqueryAlias
@@ -412,8 +353,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
             | _: Sample
         ) => plan
 
-        case plan: Project =>
-          plan.copy(child = SubqueryAlias(SQLBuilder.newSubqueryName, plan.child))
+        case plan: Project => wrapChildWithSubquery(plan)
 
         case w @ Window(_, _, _, _,
           _: SubqueryAlias
@@ -426,8 +366,24 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
             | _: Sample
         ) => w
 
-        case w: Window =>
-          w.copy(child = SubqueryAlias(SQLBuilder.newSubqueryName, w.child))
+        case w: Window => wrapChildWithSubquery(w)
+      }
+
+      private def wrapChildWithSubquery(plan: UnaryNode): LogicalPlan = {
+        val newChild = SubqueryAlias(SQLBuilder.newSubqueryName, plan.child)
+        plan.withNewChildren(Seq(newChild))
+      }
+    }
+
+    object UpdateQualifiers extends Rule[LogicalPlan] {
+      override def apply(tree: LogicalPlan): LogicalPlan = tree transformUp {
+        case plan =>
+          val inputAttributes = plan.children.flatMap(_.output)
+          plan transformExpressions {
+            case a: AttributeReference if !plan.producedAttributes.contains(a) =>
+              val qualifier = inputAttributes.find(_ semanticEquals a).map(_.qualifiers)
+              a.withQualifiers(qualifier.getOrElse(Nil))
+          }
       }
     }
   }
