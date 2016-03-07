@@ -110,9 +110,7 @@ object KafkaUtils {
    */
   def createRDD[
     K: ClassTag,
-    V: ClassTag,
-    KD <: Decoder[K]: ClassTag,
-    VD <: Decoder[V]: ClassTag](
+    V: ClassTag](
       sc: SparkContext,
       kafkaParams: Map[String, String],
       offsetRanges: Array[OffsetRange]
@@ -121,7 +119,7 @@ object KafkaUtils {
     val kc = new KafkaCluster(kafkaParams)
     val leaders = leadersForRanges(kc, offsetRanges)
     checkOffsets(kc, offsetRanges)
-    new KafkaRDD[K, V, KD, VD, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
+    new KafkaRDD[K, V, (K, V)](sc, kafkaParams, offsetRanges, leaders, messageHandler)
   }
 
   /**
@@ -149,8 +147,6 @@ object KafkaUtils {
   def createRDD[
     K: ClassTag,
     V: ClassTag,
-    KD <: Decoder[K]: ClassTag,
-    VD <: Decoder[V]: ClassTag,
     R: ClassTag](
       sc: SparkContext,
       kafkaParams: Map[String, String],
@@ -205,7 +201,7 @@ object KafkaUtils {
     implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
     implicit val keyDecoderCmt: ClassTag[KD] = ClassTag(keyDecoderClass)
     implicit val valueDecoderCmt: ClassTag[VD] = ClassTag(valueDecoderClass)
-    new JavaPairRDD(createRDD[K, V, KD, VD](
+    new JavaPairRDD(createRDD[K, V](
       jsc.sc, Map(kafkaParams.asScala.toSeq: _*), offsetRanges))
   }
 
@@ -592,14 +588,14 @@ private[kafka] class KafkaUtilsPythonHelper {
 
   def offsetRangesOfKafkaRDD(rdd: RDD[_]): JList[OffsetRange] = {
     val parentRDDs = rdd.getNarrowAncestors
-    val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _, _, _]])
+    val kafkaRDDs = parentRDDs.filter(rdd => rdd.isInstanceOf[KafkaRDD[_, _, _]])
 
     require(
       kafkaRDDs.length == 1,
       "Cannot get offset ranges, as there may be multiple Kafka RDDs or no Kafka RDD associated" +
         "with this RDD, please call this method only on a Kafka RDD.")
 
-    val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _, _, _]]
+    val kafkaRDD = kafkaRDDs.head.asInstanceOf[KafkaRDD[_, _, _]]
     kafkaRDD.offsetRanges.toSeq.asJava
   }
 }

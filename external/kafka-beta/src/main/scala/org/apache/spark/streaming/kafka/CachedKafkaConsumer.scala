@@ -33,15 +33,15 @@ class CachedKafkaConsumer[K, V] private(
   val groupId: String,
   val topic: String,
   val partition: Int,
-  val kafkaConfig: ju.Map[String, Object]) {
+  val kafkaParams: ju.Map[String, Object]) {
 
-  assert(groupId == kafkaConfig.get(ConsumerConfig.GROUP_ID_CONFIG),
-    "groupId used for cache key must match the groupId in kafkaConfig")
+  assert(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
+    "groupId used for cache key must match the groupId in kafkaParams")
 
   val topicPartition = new TopicPartition(topic, partition)
 
   protected val consumer = {
-    val c = new KafkaConsumer[K, V](kafkaConfig)
+    val c = new KafkaConsumer[K, V](kafkaParams)
     val tps = new ju.ArrayList[TopicPartition]()
     tps.add(topicPartition)
     c.assign(tps)
@@ -108,18 +108,18 @@ object CachedKafkaConsumer {
   }
 
   /** Get a cached consumer for groupId, assigned to topic and partition.
-    * If matching consumer doesn't already exist, will be created using kafkaConfig.
+    * If matching consumer doesn't already exist, will be created using kafkaParams.
     */
   def get[K, V](
     groupId: String,
     topic: String,
     partition: Int,
-    kafkaConfig: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
+    kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
     CachedKafkaConsumer.synchronized {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
       if (null == v) {
-        val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaConfig)
+        val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
         cache.put(k, c)
         c
       } else {

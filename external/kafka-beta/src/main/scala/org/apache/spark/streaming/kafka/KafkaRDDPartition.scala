@@ -17,14 +17,15 @@
 
 package org.apache.spark.streaming.kafka
 
+import org.apache.kafka.common.TopicPartition
+
 import org.apache.spark.Partition
+
 
 /** @param topic kafka topic name
   * @param partition kafka partition id
   * @param fromOffset inclusive starting offset
   * @param untilOffset exclusive ending offset
-  * @param host preferred kafka host, i.e. the leader at the time the rdd was created
-  * @param port preferred kafka host's port
   */
 private[kafka]
 class KafkaRDDPartition(
@@ -32,10 +33,12 @@ class KafkaRDDPartition(
   val topic: String,
   val partition: Int,
   val fromOffset: Long,
-  val untilOffset: Long,
-  val host: String,
-  val port: Int
+  val untilOffset: Long
 ) extends Partition {
   /** Number of messages this partition refers to */
   def count(): Long = untilOffset - fromOffset
+
+  /** Kafka TopicPartition object, for convenience */
+  def topicPartition(): TopicPartition = new TopicPartition(topic, partition)
+
 }

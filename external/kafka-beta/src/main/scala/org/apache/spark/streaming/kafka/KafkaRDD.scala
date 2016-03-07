@@ -34,27 +34,34 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
  * A batch-oriented interface for consuming from Kafka.
  * Starting and ending offsets are specified in advance,
  * so that you can control exactly-once semantics.
- * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
- * configuration parameters</a>. Requires "metadata.broker.list" or "bootstrap.servers" to be set
+ * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+ * configuration parameters</a>. Requires "bootstrap.servers" to be set
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
- * @param messageHandler function for translating each message into the desired type
  */
 
 class KafkaRDD[
   K: ClassTag,
-  V: ClassTag,
-  R: ClassTag] private[spark] (
+  V: ClassTag] private (
     sc: SparkContext,
-    kafkaParams: ju.Map[String, Object],
+    val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
-    leaders: Map[TopicPartition, (String, Int)],
-    messageHandler: ConsumerRecord[K, V] => R
-  ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
+    val preferredHosts: ju.Map[TopicPartition, String]
+) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
+
+  assert("none" ==
+    kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String],
+    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
+      " must be set to none for executor kafka params, else messages may not match offsetRange")
+
+  assert(false ==
+    kafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
+    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
+      " must be set to false for executor kafka params, else offsets may commit before processing")
+
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map { case (o, i) =>
-        val (host, port) = leaders(new TopicPartition(o.topic, o.partition))
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
+        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset)
     }.toArray
   }
 
@@ -70,13 +77,13 @@ class KafkaRDD[
 
   override def isEmpty(): Boolean = count == 0L
 
-  override def take(num: Int): Array[R] = {
+  override def take(num: Int): Array[ConsumerRecord[K, V]] = {
     val nonEmptyPartitions = this.partitions
       .map(_.asInstanceOf[KafkaRDDPartition])
       .filter(_.count > 0)
 
     if (num < 1 || nonEmptyPartitions.size < 1) {
-      return new Array[R](0)
+      return new Array[ConsumerRecord[K, V]](0)
     }
 
     // Determine in advance how many messages need to be taken from each partition
@@ -90,11 +97,12 @@ class KafkaRDD[
       }
     }
 
-    val buf = new ArrayBuffer[R]
+    val buf = new ArrayBuffer[ConsumerRecord[K, V]]
     val res = context.runJob(
       this,
-      (tc: TaskContext, it: Iterator[R]) => it.take(parts(tc.partitionId)).toArray,
-      parts.keys.toArray)
+      (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
+      it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
+    )
     res.foreach(buf ++= _)
     buf.toArray
   }
@@ -115,13 +123,14 @@ class KafkaRDD[
   private def floorMod(a: Int, b: Int): Int = ((a % b) + b) % b
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
-    // want lead broker if an executor is running on it, otherwise stable exec to use caching
-    // TODO what if broker host is ip and executor is name, or vice versa
+    // TODO what about hosts specified by ip vs name
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     val allExecs = executors()
-    val brokerExecs = allExecs.filter(_.host == part.host)
-    val execs = if (brokerExecs.isEmpty) allExecs else brokerExecs
-    val index = floorMod(part.topic.hashCode * 41 + part.partition.hashCode, execs.length)
+    val tp = part.topicPartition
+    val prefHost = preferredHosts.get(tp)
+    val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
+    val execs = if (prefExecs.isEmpty) allExecs else prefExecs
+    val index = floorMod(tp.hashCode, execs.length)
     val chosen = execs(index)
 
     Seq(chosen.toString)
@@ -132,7 +141,7 @@ class KafkaRDD[
       s"for topic ${part.topic} partition ${part.partition}. " +
       "You either provided an invalid fromOffset, or the Kafka topic has been damaged"
 
-  override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[ConsumerRecord[K, V]] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
@@ -146,7 +155,7 @@ class KafkaRDD[
 
   private class KafkaRDDIterator(
       part: KafkaRDDPartition,
-      context: TaskContext) extends Iterator[R] {
+      context: TaskContext) extends Iterator[ConsumerRecord[K, V]] {
 
     log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
       s"offsets ${part.fromOffset} -> ${part.untilOffset}")
@@ -168,51 +177,26 @@ class KafkaRDD[
 
     override def hasNext(): Boolean = requestOffset < part.untilOffset
 
-    override def next(): R = {
+    override def next(): ConsumerRecord[K, V] = {
       assert(hasNext(), "Can't call getNext() once untilOffset has been reached")
-      // XXX TODO is messageHandler even useful any more?
-      // Don't think it can catch serialization problems with the new consumer in an efficient way
-      val r = messageHandler(consumer.get(requestOffset, pollTimeout))
+      val r = consumer.get(requestOffset, pollTimeout)
       requestOffset += 1
       r
     }
   }
 }
 
-private[kafka]
 object KafkaRDD {
-  import KafkaCluster.LeaderOffset
 
-  /**
-   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
-   * configuration parameters</a>.
-   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
-   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-   * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-   *  starting point of the batch
-   * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
-   *  ending point of the batch
-   * @param messageHandler function for translating each message into the desired type
-   */
   def apply[
     K: ClassTag,
-    V: ClassTag,
-    R: ClassTag](
-      sc: SparkContext,
-      kafkaParams: ju.Map[String, Object],
-      fromOffsets: Map[TopicPartition, Long],
-      untilOffsets: Map[TopicPartition, LeaderOffset],
-      messageHandler: ConsumerRecord[K, V] => R
-    ): KafkaRDD[K, V, R] = {
-    val leaders = untilOffsets.map { case (tp, lo) =>
-        tp -> (lo.host, lo.port)
-    }.toMap
+    V: ClassTag](
+    sc: SparkContext,
+    kafkaParams: ju.Map[String, Object],
+    offsetRanges: Array[OffsetRange],
+    preferredHosts: ju.Map[TopicPartition, String]
+    ): KafkaRDD[K, V] = {
 
-    val offsetRanges = fromOffsets.map { case (tp, fo) =>
-        val uo = untilOffsets(tp)
-        OffsetRange(tp.topic, tp.partition, fo, uo.offset)
-    }.toArray
-
-    new KafkaRDD[K, V, R](sc, kafkaParams, offsetRanges, leaders, messageHandler)
+    new KafkaRDD[K, V](sc, kafkaParams, offsetRanges, preferredHosts)
   }
 }
