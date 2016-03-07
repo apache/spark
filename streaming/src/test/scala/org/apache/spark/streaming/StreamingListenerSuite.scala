@@ -20,7 +20,7 @@ package org.apache.spark.streaming
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, SynchronizedMap}
+import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -270,12 +270,15 @@ class StreamingListenerSuite extends TestSuiteBase with Matchers {
       }
     }
     _ssc.stop()
-    failureReasonsCollector.failureReasons.toMap
+    failureReasonsCollector.failureReasons.synchronized
+    {
+      failureReasonsCollector.failureReasons.toMap
+    }
   }
 
   /** Check if a sequence of numbers is in increasing order */
   def isInIncreasingOrder(data: Iterable[Long]): Boolean = {
-    !data.sliding(2).map{itr => itr.size == 2 && itr.head > itr.tail.head }.contains(true)
+    !data.sliding(2).exists { itr => itr.size == 2 && itr.head > itr.tail.head }
   }
 }
 
@@ -354,12 +357,15 @@ class StreamingListenerSuiteReceiver extends Receiver[Any](StorageLevel.MEMORY_O
  */
 class FailureReasonsCollector extends StreamingListener {
 
-  val failureReasons = new HashMap[Int, String] with SynchronizedMap[Int, String]
+  val failureReasons = new HashMap[Int, String]
 
   override def onOutputOperationCompleted(
       outputOperationCompleted: StreamingListenerOutputOperationCompleted): Unit = {
     outputOperationCompleted.outputOperationInfo.failureReason.foreach { f =>
-      failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+      failureReasons.synchronized
+      {
+        failureReasons(outputOperationCompleted.outputOperationInfo.id) = f
+      }
     }
   }
 }

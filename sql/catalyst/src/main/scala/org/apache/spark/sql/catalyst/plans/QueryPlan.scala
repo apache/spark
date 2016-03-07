@@ -62,17 +62,19 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /**
-   * A sequence of expressions that describes the data property of the output rows of this
-   * operator. For example, if the output of this operator is column `a`, an example `constraints`
-   * can be `Set(a > 10, a < 20)`.
+   * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
+   * example, if this set contains the expression `a = 2` then that expression is guaranteed to
+   * evaluate to `true` for all rows produced.
    */
-  lazy val constraints: Set[Expression] = getRelevantConstraints(validConstraints)
+  lazy val constraints: ExpressionSet = ExpressionSet(getRelevantConstraints(validConstraints))
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
    * based on the given operator's constraint propagation logic. These constraints are then
    * canonicalized and filtered automatically to contain only those attributes that appear in the
-   * [[outputSet]]
+   * [[outputSet]].
+   *
+   * See [[Canonicalize]] for more details.
    */
   protected def validConstraints: Set[Expression] = Set.empty
 
@@ -226,4 +228,13 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
   override def simpleString: String = statePrefix + super.simpleString
+
+  /**
+   * All the subqueries of current plan.
+   */
+  def subqueries: Seq[PlanType] = {
+    expressions.flatMap(_.collect {case e: SubqueryExpression => e.plan.asInstanceOf[PlanType]})
+  }
+
+  override def innerChildren: Seq[PlanType] = subqueries
 }

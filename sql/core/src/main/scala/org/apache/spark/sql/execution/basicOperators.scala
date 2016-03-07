@@ -31,8 +31,8 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -69,8 +69,8 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def upstream(): RDD[InternalRow] = {
-    child.asInstanceOf[CodegenSupport].upstream()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -156,8 +156,9 @@ case class Range(
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def upstream(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
+      .map(i => InternalRow(i)) :: Nil
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
@@ -213,12 +214,15 @@ case class Range(
         | }
        """.stripMargin)
 
+    val input = ctx.freshName("input")
+    // Right now, Range is only used when there is one upstream.
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
     s"""
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   if (input.hasNext()) {
-      |     initRange(((InternalRow) input.next()).getInt(0));
+      |   if ($input.hasNext()) {
+      |     initRange(((InternalRow) $input.next()).getInt(0));
       |   } else {
       |     return;
       |   }
@@ -342,4 +346,19 @@ case class OutputFaker(output: Seq[Attribute], child: SparkPlan) extends SparkPl
   def children: Seq[SparkPlan] = child :: Nil
 
   protected override def doExecute(): RDD[InternalRow] = child.execute()
+}
+
+/**
+ * A plan as subquery.
+ *
+ * This is used to generate tree string for SparkScalarSubquery.
+ */
+case class Subquery(name: String, child: SparkPlan) extends UnaryNode {
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException
+  }
 }

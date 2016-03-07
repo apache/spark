@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver.ui
 
 import org.apache.spark.{Logging, SparkContext, SparkException}
-import org.apache.spark.sql.hive.thriftserver.{HiveThriftServer2, SparkSQLEnv}
+import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
