@@ -17,7 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import java.io.File
+
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
+
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -54,6 +62,53 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
     intercept[AnalysisException] {
       sqlContext.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
+    }
+  }
+
+  test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
+    val testDf = sqlContext.read.text(testFile)
+    val extensionNameMap = Map("bzip2" -> ".bz2", "deflate" -> ".deflate", "gzip" -> ".gz")
+    extensionNameMap.foreach {
+      case (codecName, extension) =>
+        val tempDir = Utils.createTempDir()
+        val tempDirPath = tempDir.getAbsolutePath
+        testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
+        val compressedFiles = new File(tempDirPath).listFiles()
+        assert(compressedFiles.exists(_.getName.endsWith(extension)))
+        verifyFrame(sqlContext.read.text(tempDirPath))
+    }
+
+    val errMsg = intercept[IllegalArgumentException] {
+      val tempDirPath = Utils.createTempDir().getAbsolutePath
+      testDf.write.option("compression", "illegal").mode(SaveMode.Overwrite).text(tempDirPath)
+    }
+    assert(errMsg.getMessage.contains("Codec [illegal] is not available. " +
+      "Known codecs are"))
+  }
+
+  test("SPARK-13543 Write the output as uncompressed via option()") {
+    val clonedConf = new Configuration(hadoopConfiguration)
+    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
+    hadoopConfiguration
+      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+    hadoopConfiguration
+      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
+    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
+    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    withTempDir { dir =>
+      try {
+        val testDf = sqlContext.read.text(testFile)
+        val tempDir = Utils.createTempDir()
+        val tempDirPath = tempDir.getAbsolutePath
+        testDf.write.option("compression", "none").mode(SaveMode.Overwrite).text(tempDirPath)
+        val compressedFiles = new File(tempDirPath).listFiles()
+        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+        verifyFrame(sqlContext.read.text(tempDirPath))
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
     }
   }
 

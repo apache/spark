@@ -21,8 +21,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 
 
 /**
@@ -38,7 +39,8 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
   protected override def doExecute(): RDD[InternalRow] = {
     val shuffled = new ShuffledRowRDD(
-      Exchange.prepareShuffleDependency(child.execute(), child.output, SinglePartition, serializer))
+      ShuffleExchange.prepareShuffleDependency(
+        child.execute(), child.output, SinglePartition, serializer))
     shuffled.mapPartitionsInternal(_.take(limit))
   }
 }
@@ -46,13 +48,43 @@ case class CollectLimit(limit: Int, child: SparkPlan) extends UnaryNode {
 /**
  * Helper trait which defines methods that are shared by both [[LocalLimit]] and [[GlobalLimit]].
  */
-trait BaseLimit extends UnaryNode {
+trait BaseLimit extends UnaryNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
   override def outputPartitioning: Partitioning = child.outputPartitioning
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].upstreams()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val stopEarly = ctx.freshName("stopEarly")
+    ctx.addMutableState("boolean", stopEarly, s"$stopEarly = false;")
+
+    ctx.addNewFunction("shouldStop", s"""
+      @Override
+      protected boolean shouldStop() {
+        return !currentRows.isEmpty() || $stopEarly;
+      }
+    """)
+    val countTerm = ctx.freshName("count")
+    ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
+    s"""
+       | if ($countTerm < $limit) {
+       |   $countTerm += 1;
+       |   ${consume(ctx, input)}
+       | } else {
+       |   $stopEarly = true;
+       | }
+     """.stripMargin
   }
 }
 
@@ -110,7 +142,8 @@ case class TakeOrderedAndProject(
       }
     }
     val shuffled = new ShuffledRowRDD(
-      Exchange.prepareShuffleDependency(localTopK, child.output, SinglePartition, serializer))
+      ShuffleExchange.prepareShuffleDependency(
+        localTopK, child.output, SinglePartition, serializer))
     shuffled.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList.isDefined) {

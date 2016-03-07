@@ -93,7 +93,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
-    partitionBy(partitionStrategy, edges.partitions.size)
+    partitionBy(partitionStrategy, edges.partitions.length)
   }
 
   override def partitionBy(
@@ -266,7 +266,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
   }
 
-  /** Test whether the closure accesses the the attribute with name `attrName`. */
+  /** Test whether the closure accesses the attribute with name `attrName`. */
   private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
     try {
       BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
@@ -352,7 +352,8 @@ object GraphImpl {
       edgeStorageLevel: StorageLevel,
       vertexStorageLevel: StorageLevel): GraphImpl[VD, ED] = {
     val edgesCached = edges.withTargetStorageLevel(edgeStorageLevel).cache()
-    val vertices = VertexRDD.fromEdges(edgesCached, edgesCached.partitions.size, defaultVertexAttr)
+    val vertices =
+      VertexRDD.fromEdges(edgesCached, edgesCached.partitions.length, defaultVertexAttr)
       .withTargetStorageLevel(vertexStorageLevel)
     fromExistingRDDs(vertices, edgesCached)
   }

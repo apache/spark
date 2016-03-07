@@ -19,8 +19,6 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.Logging
 
 /**
@@ -43,12 +41,6 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
     level: StorageLevel,
     returnValues: Boolean): PutResult
 
-  def putArray(
-    blockId: BlockId,
-    values: Array[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult
-
   /**
    * Return the size of a block in bytes.
    */
@@ -60,8 +52,10 @@ private[spark] abstract class BlockStore(val blockManager: BlockManager) extends
 
   /**
    * Remove a block, if it exists.
+   *
    * @param blockId the block to remove.
    * @return True if the block was found and removed, False otherwise.
+   * @throws IllegalStateException if the block is pinned by a task.
    */
   def remove(blockId: BlockId): Boolean
 

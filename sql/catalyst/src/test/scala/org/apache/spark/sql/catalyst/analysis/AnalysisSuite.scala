@@ -344,8 +344,8 @@ class AnalysisSuite extends AnalysisTest {
     val query =
       Project(Seq($"x.key", $"y.key"),
         Join(
-          Project(Seq($"x.key"), Subquery("x", input)),
-          Project(Seq($"y.key"), Subquery("y", input)),
+          Project(Seq($"x.key"), SubqueryAlias("x", input)),
+          Project(Seq($"y.key"), SubqueryAlias("y", input)),
           Inner, None))
 
     assertAnalysisSuccess(query)

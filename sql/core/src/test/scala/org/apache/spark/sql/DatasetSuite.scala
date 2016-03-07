@@ -113,12 +113,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", 2), ("b", 3), ("c", 4))
   }
 
-  test("map with type change") {
+  test("map with type change with the exact matched number of attributes") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
 
     checkAnswer(
       ds.map(identity[(String, Int)])
         .as[OtherTuple]
+        .map(identity[OtherTuple]),
+      OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
+  }
+
+  test("map with type change with less attributes") {
+    val ds = Seq(("a", 1, 3), ("b", 2, 4), ("c", 3, 5)).toDS()
+
+    checkAnswer(
+      ds.as[OtherTuple]
         .map(identity[OtherTuple]),
       OtherTuple("a", 1), OtherTuple("b", 2), OtherTuple("c", 3))
   }
@@ -525,7 +534,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {
@@ -613,9 +622,27 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         " - Input schema: struct<a:string,b:int>\n" +
         " - Target schema: struct<_1:string>")
   }
+
+  test("SPARK-13440: Resolving option fields") {
+    val df = Seq(1, 2, 3).toDS()
+    val ds = df.as[Option[Int]]
+    checkAnswer(
+      ds.filter(_ => true),
+      Some(1), Some(2), Some(3))
+  }
+
+  test("SPARK-13540 Dataset of nested class defined in Scala object") {
+    checkAnswer(
+      Seq(OuterObject.InnerClass("foo")).toDS(),
+      OuterObject.InnerClass("foo"))
+  }
 }
 
 class OuterClass extends Serializable {
+  case class InnerClass(a: String)
+}
+
+object OuterObject {
   case class InnerClass(a: String)
 }
 

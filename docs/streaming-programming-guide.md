@@ -158,7 +158,7 @@ JavaReceiverInputDStream<String> lines = jssc.socketTextStream("localhost", 9999
 {% endhighlight %}
 
 This `lines` DStream represents the stream of data that will be received from the data
-server. Each record in this stream is a line of text. Then, we want to split the the lines by
+server. Each record in this stream is a line of text. Then, we want to split the lines by
 space into words.
 
 {% highlight java %}
@@ -872,10 +872,7 @@ val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
-the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
-[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
-/spark/examples/streaming/StatefulNetworkWordCount.scala).
+the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 </div>
 <div data-lang="java" markdown="1">

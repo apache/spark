@@ -25,6 +25,7 @@ import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
+import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{sources, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters}
@@ -199,6 +200,15 @@ object SimpleTextRelation {
 
   // Used to test filter push-down
   var pushedFilters: Set[Filter] = Set.empty
+
+  // Used to test failed committer
+  var failCommitter = false
+
+  // Used to test failed writer
+  var failWriter = false
+
+  // Used to test failure callback
+  var callbackCalled = false
 }
 
 /**
@@ -229,9 +239,25 @@ class CommitFailureTestRelation(
         dataSchema: StructType,
         context: TaskAttemptContext): OutputWriter = {
       new SimpleTextOutputWriter(path, context) {
+        var failed = false
+        TaskContext.get().addTaskFailureListener { (t: TaskContext, e: Throwable) =>
+          failed = true
+          SimpleTextRelation.callbackCalled = true
+        }
+
+        override def write(row: Row): Unit = {
+          if (SimpleTextRelation.failWriter) {
+            sys.error("Intentional task writer failure for testing purpose.")
+
+          }
+          super.write(row)
+        }
+
         override def close(): Unit = {
+          if (SimpleTextRelation.failCommitter) {
+            sys.error("Intentional task commitment failure for testing purpose.")
+          }
           super.close()
-          sys.error("Intentional task commitment failure for testing purpose.")
         }
       }
     }

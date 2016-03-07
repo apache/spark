@@ -19,15 +19,13 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException,
   OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
-import java.security.PrivilegedExceptionAction
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
-import scala.reflect.runtime.universe
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -38,10 +36,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
-import org.apache.hadoop.io.{DataOutputBuffer, Text}
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -345,8 +342,8 @@ private[spark] class Client(
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
-    obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-    obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+    YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+    YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -537,9 +534,14 @@ private[spark] class Client(
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
         if (dir.isDirectory()) {
-          dir.listFiles().foreach { file =>
-            if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
-              hadoopConfFiles(file.getName()) = file
+          val files = dir.listFiles()
+          if (files == null) {
+            logWarning("Failed to list files under directory " + dir)
+          } else {
+            files.foreach { file =>
+              if (file.isFile && !hadoopConfFiles.contains(file.getName())) {
+                hadoopConfFiles(file.getName()) = file
+              }
             }
           }
         }
@@ -1353,35 +1355,6 @@ object Client extends Logging {
   }
 
   /**
-   * Obtains token for the Hive metastore and adds them to the credentials.
-   */
-  private def obtainTokenForHiveMetastore(
-      sparkConf: SparkConf,
-      conf: Configuration,
-      credentials: Credentials) {
-    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
-      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
-        credentials.addToken(new Text("hive.server2.delegation.token"), _)
-      }
-    }
-  }
-
-  /**
-   * Obtain a security token for HBase.
-   */
-  def obtainTokenForHBase(
-      sparkConf: SparkConf,
-      conf: Configuration,
-      credentials: Credentials): Unit = {
-    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
-      YarnSparkHadoopUtil.get.obtainTokenForHBase(conf).foreach { token =>
-        credentials.addToken(token.getService, token)
-        logInfo("Added HBase security token to credentials.")
-      }
-    }
-  }
-
-  /**
    * Return whether the two file systems are the same.
    */
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
@@ -1443,15 +1416,6 @@ object Client extends Logging {
    */
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
-  }
-
-  /**
-   * Return whether delegation tokens should be retrieved for the given service when security is
-   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
-   * a service-specific configuration.
-   */
-  def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
-    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
   }
 
 }
