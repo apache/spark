@@ -90,22 +90,22 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       sqlContext.range(N).sample(true, 0.8).collect()
     }
     /*
-    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    Intel(R) Core(TM) i7-5557U CPU @ 3.10GHz
     range/sample withRep.:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/sample withRep. codegen=false       149 /  238          0.3        2908.4       1.0X
-    range/sample withRep. codegen=true        192 /  206          0.3        3751.7       0.8X
+    range/sample withRep. codegen=false       237 /  322          0.2        4633.6       1.0X
+    range/sample withRep. codegen=true        232 /  302          0.2        4536.5       1.0X
     */
 
     runBenchmark("range/sample", N) {
       sqlContext.range(N).sample(false, 0.8).collect()
     }
     /*
-    Westmere E56xx/L56xx/X56xx (Nehalem-C)
+    Intel(R) Core(TM) i7-5557U CPU @ 3.10GHz
     range/sample:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/sample codegen=false                104 /  122          0.5        2023.5       1.0X
-    range/sample codegen=true                 147 /  159          0.3        2879.0       0.7X
+    range/sample codegen=false                135 /  180          0.4        2628.3       1.0X
+    range/sample codegen=true                 184 /  225          0.3        3592.5       0.7X
     */
   }
 

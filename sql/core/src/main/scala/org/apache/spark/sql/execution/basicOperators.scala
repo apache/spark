@@ -155,8 +155,8 @@ case class Sample(
     ctx.addMutableState("boolean", needToProduce, s"$needToProduce = true;")
 
     rowBuffer = ctx.freshName("rowBuffer")
-    ctx.addMutableState("scala.collection.mutable.ArrayBuffer<UnsafeRow>", rowBuffer,
-      s"$rowBuffer = new scala.collection.mutable.ArrayBuffer<UnsafeRow>();")
+    ctx.addMutableState("java.util.ArrayList<UnsafeRow>", rowBuffer,
+      s"$rowBuffer = new java.util.ArrayList<UnsafeRow>();")
 
     val addToBuffer = ctx.freshName("addToBuffer")
     ctx.addNewFunction(addToBuffer,
@@ -194,7 +194,7 @@ case class Sample(
          |   $loopCount += 1;
          | }
          | $sampler.setSeed($randomSeed);
-         | $sampledIterator = $sampler.sample($rowBuffer.toIterator());
+         | $sampledIterator = $sampler.sample($rowBuffer.iterator());
        """.stripMargin
     } else {
       val samplerClass = classOf[BernoulliCellSampler[UnsafeRow]].getName
@@ -204,7 +204,7 @@ case class Sample(
 
       s"""
          | $sampler.setSeed(${seed}L + partitionIndex);
-         | $sampledIterator = $sampler.sample($rowBuffer.toIterator());
+         | $sampledIterator = $sampler.sample($rowBuffer.iterator());
        """.stripMargin
     }
 
@@ -215,7 +215,7 @@ case class Sample(
        |   $needToProduce = false;
        | }
        |
-       | while ($sampledIterator != null && $sampledIterator.hasNext()) {
+       | while ($sampledIterator.hasNext()) {
        |   UnsafeRow $outputRow = (UnsafeRow)$sampledIterator.next();
        |   ${consume(ctx, null, outputRow)}
        | }
@@ -233,7 +233,7 @@ case class Sample(
     s"""
        | // Convert the input attributes to an UnsafeRow and add it to the iterator.
        | ${code.code}
-       | $rowBuffer.$$plus$$eq(${code.value}.copy());
+       | $rowBuffer.add(${code.value}.copy());
      """.stripMargin.trim
   }
 }
