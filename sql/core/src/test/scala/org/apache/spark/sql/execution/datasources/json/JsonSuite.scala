@@ -1461,6 +1461,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  test("Read files with auto-detecting format (by extension)") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withTempPath { file =>
+      val path = s"${file.getCanonicalPath}/tmp.json"
+      sqlContext.createDataFrame(data).write.json(path)
+      val df = sqlContext.read.load(path)
+      checkAnswer(df, data.map(Row.fromTuple))
+    }
+  }
+
   test("SPARK-12057 additional corrupt records do not throw exceptions") {
     // Test if we can query corrupt records.
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {

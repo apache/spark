@@ -95,6 +95,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("Read files with auto-detecting format (by extension)") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withTempPath { file =>
+      val path = s"${file.getCanonicalPath}/tmp.orc"
+      sqlContext.createDataFrame(data).write.orc(path)
+      val df = sqlContext.read.load(path)
+      checkAnswer(df, data.map(Row.fromTuple))
+    }
+  }
+
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
     sparkContext.parallelize(data).toDF().registerTempTable("t")

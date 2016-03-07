@@ -36,6 +36,10 @@ class TextSuite extends QueryTest with SharedSQLContext {
     verifyFrame(sqlContext.read.format("text").load(testFile))
   }
 
+  test("reading text file (auto detect by extension)") {
+    verifyFrame(sqlContext.read.load(testFile))
+  }
+
   test("SQLContext.read.text() API") {
     verifyFrame(sqlContext.read.text(testFile))
   }

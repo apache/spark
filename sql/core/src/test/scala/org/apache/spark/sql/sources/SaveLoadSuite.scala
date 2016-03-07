@@ -74,14 +74,19 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
       sql(s"SELECT b FROM $tbl").collect())
   }
 
-  test("save with path and load") {
+  /**
+   * Data source would be auto-detected and we will assume the default data source is Parquet.
+   * Namely `spark.sql.sources.default` will be dropped.
+   * See https://issues.apache.org/jira/browse/SPARK-8000
+   */
+  ignore("save with path and load") {
     caseInsensitiveContext.conf.setConf(
       SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
     df.write.save(path.toString)
     checkLoad()
   }
 
-  test("save with string mode and path, and load") {
+  ignore("save with string mode and path, and load") {
     caseInsensitiveContext.conf.setConf(
       SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
     path.createNewFile()
@@ -89,19 +94,19 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     checkLoad()
   }
 
-  test("save with path and datasource, and load") {
+  ignore("save with path and datasource, and load") {
     caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
     df.write.json(path.toString)
     checkLoad()
   }
 
-  test("save with data source and options, and load") {
+  ignore("save with data source and options, and load") {
     caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
     df.write.mode(SaveMode.ErrorIfExists).json(path.toString)
     checkLoad()
   }
 
-  test("save and save again") {
+  ignore("save and save again") {
     df.write.json(path.toString)
 
     val message = intercept[AnalysisException] {

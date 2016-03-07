@@ -419,7 +419,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sqlContext.conf.defaultDataSourceName
+  private var source: String = _
 
   private var userSpecifiedSchema: Option[StructType] = None
 

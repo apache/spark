@@ -118,6 +118,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
+  test("simple csv test with auto-detecting format") {
+    val cars = sqlContext
+      .read
+      .option("header", "false")
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
   test("test with alternative delimiter and quote") {
     val cars = sqlContext.read
       .format("csv")

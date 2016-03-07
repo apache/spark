@@ -410,6 +410,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  test("read - auto-detect (by extension)") {
+    val data = (1 to 10).map(i => (i, i.toString))
+    withTempPath { file =>
+      val path = s"${file.getCanonicalPath}/tmp.parquet"
+      sqlContext.createDataFrame(data).write.parquet(path)
+      val df = sqlContext.read.load(path)
+      checkAnswer(df, data.map(Row.fromTuple))
+    }
+  }
+
   test("SPARK-6315 regression test") {
     // Spark 1.1 and prior versions write Spark schema as case class string into Parquet metadata.
     // This has been deprecated by JSON format since 1.2.  Notice that, 1.3 further refactored data
