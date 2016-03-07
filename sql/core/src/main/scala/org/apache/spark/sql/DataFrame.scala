@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -26,7 +27,7 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.function.MapFunction
+import org.apache.spark.api.java.function.{FlatMapFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
@@ -38,8 +39,7 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, Queryable,
-  QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, Queryable, QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
@@ -1045,6 +1045,22 @@ class Dataset[T] private[sql](
 
   /**
    * (Scala-specific)
+   * Reduces the elements of this [[DS]] using the specified binary function. The given `func`
+   * must be commutative and associative or the result may be non-deterministic.
+   * @since 1.6.0
+   */
+  def reduce(func: (T, T) => T): T = rdd.reduce(func)
+
+  /**
+   * (Java-specific)
+   * Reduces the elements of this Dataset using the specified binary function.  The given `func`
+   * must be commutative and associative or the result may be non-deterministic.
+   * @since 1.6.0
+   */
+  def reduce(func: ReduceFunction[T]): T = reduce(func.call(_, _))
+
+  /**
+   * (Scala-specific)
    * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
    * @since 1.6.0
    */
@@ -1630,14 +1646,71 @@ class Dataset[T] private[sql](
    * }}}
    * @since 1.6.0
    */
-  def transform[U](t: DataFrame => DataFrame): DataFrame = t(toDF())
+  def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
+
+  /**
+   * (Scala-specific)
+   * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
+   * @since 1.6.0
+   */
+  def map[U : Encoder](func: T => U): Dataset[U] = mapPartitions(_.map(func))
+
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
+   * @since 1.6.0
+   */
+  def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] =
+    map(t => func.call(t))(encoder)
+
+  /**
+   * (Scala-specific)
+   * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
+   * @since 1.6.0
+   */
+  def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
+    new Dataset[U](
+      sqlContext,
+      MapPartitions[T, U](func, logicalPlan),
+      implicitly[Encoder[U]])
+  }
+
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
+   * @since 1.6.0
+   */
+  def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
+    mapPartitions(func)(encoder)
+  }
+
+  /**
+   * (Scala-specific)
+   * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
+   * and then flattening the results.
+   * @since 1.6.0
+   */
+  def flatMap[U : Encoder](func: T => TraversableOnce[U]): Dataset[U] =
+    mapPartitions(_.flatMap(func))
+
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
+   * and then flattening the results.
+   * @since 1.6.0
+   */
+  def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
+    val func: (T) => Iterator[U] = x => f.call(x).asScala
+    flatMap(func)(encoder)
+  }
 
   /**
    * Applies a function `f` to all rows.
    * @group rdd
    * @since 1.3.0
    */
-  def foreach(f: Row => Unit): Unit = withNewExecutionId {
+  def foreach(f: T => Unit): Unit = withNewExecutionId {
     rdd.foreach(f)
   }
 
@@ -1646,7 +1719,7 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def foreachPartition(f: Iterator[Row] => Unit): Unit = withNewExecutionId {
+  def foreachPartition(f: Iterator[T] => Unit): Unit = withNewExecutionId {
     rdd.foreachPartition(f)
   }
 
@@ -1856,12 +1929,11 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  lazy val rdd: RDD[Row] = {
+  lazy val rdd: RDD[T] = {
     // use a local variable to make sure the map closure doesn't capture the whole DataFrame
     val schema = this.schema
     queryExecution.toRdd.mapPartitions { rows =>
-      val converter = CatalystTypeConverters.createToScalaConverter(schema)
-      rows.map(converter(_).asInstanceOf[Row])
+      rows.map(boundTEncoder.fromRow)
     }
   }
 
@@ -1870,14 +1942,14 @@ class Dataset[T] private[sql](
    * @group rdd
    * @since 1.3.0
    */
-  def toJavaRDD: JavaRDD[Row] = rdd.toJavaRDD()
+  def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
    * Returns the content of the [[DataFrame]] as a [[JavaRDD]] of [[Row]]s.
    * @group rdd
    * @since 1.3.0
    */
-  def javaRDD: JavaRDD[Row] = toJavaRDD
+  def javaRDD: JavaRDD[T] = toJavaRDD
 
   /**
    * Registers this [[DataFrame]] as a temporary table using the given name.  The lifetime of this
