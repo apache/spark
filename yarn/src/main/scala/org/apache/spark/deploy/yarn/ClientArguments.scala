@@ -21,10 +21,15 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.config._
 import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
-private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
+private[spark] class ClientArguments(
+    args: Array[String],
+    sparkConf: SparkConf) {
+
   var addJars: String = null
   var files: String = null
   var archives: String = null
@@ -37,9 +42,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var executorMemory = 1024 // MB
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
-  var amQueue = sparkConf.get("spark.yarn.queue", "default")
-  var amMemory: Int = 512 // MB
-  var amCores: Int = 1
+  var amQueue = sparkConf.get(QUEUE_NAME)
+  var amMemory: Int = _
+  var amCores: Int = _
   var appName: String = "Spark"
   var priority = 0
   var principal: String = null
@@ -48,11 +53,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private var driverMemory: Int = Utils.DEFAULT_DRIVER_MEM_MB // MB
   private var driverCores: Int = 1
-  private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
-  private val amMemKey = "spark.yarn.am.memory"
-  private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
-  private val driverCoresKey = "spark.driver.cores"
-  private val amCoresKey = "spark.yarn.am.cores"
   private val isDynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(sparkConf)
 
   parseArgs(args.toList)
@@ -60,33 +60,33 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   validateArgs()
 
   // Additional memory to allocate to containers
-  val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
-  val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
-    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+  val amMemoryOverheadEntry = if (isClusterMode) DRIVER_MEMORY_OVERHEAD else AM_MEMORY_OVERHEAD
+  val amMemoryOverhead = sparkConf.get(amMemoryOverheadEntry).getOrElse(
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
 
-  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+  val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
     files = Option(files)
-      .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
+      .orElse(sparkConf.get(FILES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p)))
       .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
       .orNull
     archives = Option(archives)
-      .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
+      .orElse(sparkConf.get(ARCHIVES_TO_DISTRIBUTE).map(p => Utils.resolveURIs(p)))
       .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orNull
     // If dynamic allocation is enabled, start at the configured initial number of executors.
     // Default to minExecutors if no initialExecutors is set.
     numExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf, numExecutors)
     principal = Option(principal)
-      .orElse(sparkConf.getOption("spark.yarn.principal"))
+      .orElse(sparkConf.get(PRINCIPAL))
       .orNull
     keytab = Option(keytab)
-      .orElse(sparkConf.getOption("spark.yarn.keytab"))
+      .orElse(sparkConf.get(KEYTAB))
       .orNull
   }
 
@@ -103,13 +103,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
            |${getUsageMessage()}
          """.stripMargin)
     }
-    if (executorCores < sparkConf.getInt("spark.task.cpus", 1)) {
-      throw new SparkException("Executor cores must not be less than " +
-        "spark.task.cpus.")
+    if (executorCores < sparkConf.get(CPUS_PER_TASK)) {
+      throw new SparkException(s"Executor cores must not be less than ${CPUS_PER_TASK.key}.")
     }
     // scalastyle:off println
     if (isClusterMode) {
-      for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
+      for (key <- Seq(AM_MEMORY.key, AM_MEMORY_OVERHEAD.key, AM_CORES.key)) {
         if (sparkConf.contains(key)) {
           println(s"$key is set but does not apply in cluster mode.")
         }
@@ -117,17 +116,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       amMemory = driverMemory
       amCores = driverCores
     } else {
-      for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
+      for (key <- Seq(DRIVER_MEMORY_OVERHEAD.key, DRIVER_CORES.key)) {
         if (sparkConf.contains(key)) {
           println(s"$key is set but does not apply in client mode.")
         }
       }
-      sparkConf.getOption(amMemKey)
-        .map(Utils.memoryStringToMb)
-        .foreach { mem => amMemory = mem }
-      sparkConf.getOption(amCoresKey)
-        .map(_.toInt)
-        .foreach { cores => amCores = cores }
+      amMemory = sparkConf.get(AM_MEMORY).toInt
+      amCores = sparkConf.get(AM_CORES)
     }
     // scalastyle:on println
   }

@@ -17,13 +17,15 @@
 
 package org.apache.spark
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -71,6 +73,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     }
     logDeprecationWarning(key)
     settings.put(key, value)
+    this
+  }
+
+  private[spark] def set[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    set(entry.key, entry.stringConverter(value))
+    this
+  }
+
+  private[spark] def set[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    set(entry.key, entry.rawStringConverter(value))
     this
   }
 
@@ -148,6 +160,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  private[spark] def setIfMissing[T](entry: ConfigEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.stringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
+  private[spark] def setIfMissing[T](entry: OptionalConfigEntry[T], value: T): SparkConf = {
+    if (settings.putIfAbsent(entry.key, entry.rawStringConverter(value)) == null) {
+      logDeprecationWarning(entry.key)
+    }
+    this
+  }
+
   /**
    * Use Kryo serialization and register the given set of classes with Kryo.
    * If called multiple times, this will append the classes from all calls together.
@@ -196,6 +222,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Get a parameter, falling back to a default if not set */
   def get(key: String, defaultValue: String): String = {
     getOption(key).getOrElse(defaultValue)
+  }
+
+  /**
+   * Retrieves the value of a pre-defined configuration entry.
+   *
+   * - This is an internal Spark API.
+   * - The return type if defined by the configuration entry.
+   * - This will throw an exception is the config is not optional and the value is not set.
+   */
+  private[spark] def get[T](entry: ConfigEntry[T]): T = {
+    entry.readFrom(this)
   }
 
   /**
