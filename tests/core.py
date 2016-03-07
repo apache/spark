@@ -1287,6 +1287,28 @@ class SSHHookTest(unittest.TestCase):
             print("Closing tunnel")
 
 
+send_email_test = mock.Mock()
+
+
+class EmailTest(unittest.TestCase):
+
+    def setUp(self):
+        configuration.remove_option('email', 'EMAIL_BACKEND')
+
+    @mock.patch('airflow.utils.send_email_smtp')
+    def test_default_backend(self, mock_send_email):
+        res = utils.send_email('to', 'subject', 'content')
+        mock_send_email.assert_called_with('to', 'subject', 'content', files=None, dryrun=False)
+        assert res == mock_send_email.return_value
+
+    @mock.patch('airflow.utils.send_email_smtp')
+    def test_custom_backend(self, mock_send_email):
+        configuration.set('email', 'EMAIL_BACKEND', 'tests.core.send_email_test')
+        utils.send_email('to', 'subject', 'content')
+        send_email_test.assert_called_with('to', 'subject', 'content', files=None, dryrun=False)
+        assert not mock_send_email.called
+
+
 if 'AIRFLOW_RUNALL_TESTS' in os.environ:
 
 
