@@ -75,6 +75,22 @@ case class WindowSpecDefinition(
   override def nullable: Boolean = true
   override def foldable: Boolean = false
   override def dataType: DataType = throw new UnsupportedOperationException
+
+  override def sql: String = {
+    val partition = if (partitionSpec.isEmpty) {
+      ""
+    } else {
+      "PARTITION BY " + partitionSpec.map(_.sql).mkString(", ")
+    }
+
+    val order = if (orderSpec.isEmpty) {
+      ""
+    } else {
+      "ORDER BY " + orderSpec.map(_.sql).mkString(", ")
+    }
+
+    s"($partition $order ${frameSpecification.toString})"
+  }
 }
 
 /**
@@ -278,6 +294,7 @@ case class WindowExpression(
   override def nullable: Boolean = windowFunction.nullable
 
   override def toString: String = s"$windowFunction $windowSpec"
+  override def sql: String = windowFunction.sql + " OVER " + windowSpec.sql
 }
 
 /**

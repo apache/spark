@@ -1180,7 +1180,7 @@ class Analyzer(
 
       // Finally, we create a Project to output currentChild's output
       // newExpressionsWithWindowFunctions.
-      Project(currentChild.output ++ newExpressionsWithWindowFunctions, currentChild)
+      Project(child.output ++ newExpressionsWithWindowFunctions, currentChild)
     } // end of addWindow
 
     // We have to use transformDown at here to make sure the rule of

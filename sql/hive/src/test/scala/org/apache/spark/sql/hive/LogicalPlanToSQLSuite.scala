@@ -445,4 +445,19 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       "f1", "b[0].f1", "f1", "c[foo]", "d[0]"
     )
   }
+
+  test("window functions") {
+    checkHiveQl("SELECT a, SUM(b) OVER (PARTITION BY c ORDER BY d) AS sum FROM parquet_t2")
+    checkHiveQl(
+      """
+        |SELECT a + 1, SUM(b * 2) OVER (PARTITION BY c + d ORDER BY c - d) AS sum
+        |FROM parquet_t2
+      """.stripMargin)
+    checkHiveQl(
+      """
+        |SELECT a, SUM(b) OVER w1 AS sum, AVG(b) over w2 AS avg
+        |FROM parquet_t2
+        |WINDOW w1 AS (PARTITION BY c ORDER BY d), w2 AS (PARTITION BY d ORDER BY c)
+      """.stripMargin)
+  }
 }

@@ -42,7 +42,7 @@ case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable
 }
 
 /**
- * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this
+ * A builder class used to convert a resolved logical plan into a SQL query string.  Note that not
  * all resolved logical plan are convertible.  They either don't have corresponding SQL
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
@@ -102,6 +102,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     case p: Aggregate =>
       aggregateToSQL(p)
+
+    case w: Window =>
+      windowToSQL(w)
 
     case Limit(limitExpr, child) =>
       s"${toSQL(child)} LIMIT ${limitExpr.sql}"
@@ -179,7 +182,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       build(
         toSQL(p.child),
         if (p.global) "ORDER BY" else "SORT BY",
-        p.order.map { case SortOrder(e, dir) => s"${e.sql} ${dir.sql}" }.mkString(", ")
+        p.order.map(_.sql).mkString(", ")
       )
 
     case p: RepartitionByExpression =>
@@ -297,6 +300,15 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     )
   }
 
+  private def windowToSQL(w: Window): String = {
+    build(
+      "SELECT",
+      (w.child.output ++ w.windowExpressions).map(_.sql).mkString(", "),
+      if (w.child == OneRowRelation) "" else "FROM",
+      toSQL(w.child)
+    )
+  }
+
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
       Batch("Canonicalizer", FixedPoint(100),
@@ -340,6 +352,27 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
         case plan: Project =>
           wrapChildWithSubquery(plan)
+
+        case w @ Window(_, _, _, _,
+          _: SubqueryAlias
+            | _: Filter
+            | _: Join
+            | _: MetastoreRelation
+            | OneRowRelation
+            | _: LocalLimit
+            | _: GlobalLimit
+            | _: Sample
+        ) => w
+
+        case w: Window =>
+          val alias = SQLBuilder.newSubqueryName
+          val childAttributes = w.child.outputSet
+          val qualified = w.windowExpressions.map(_.transform {
+            case a: Attribute if childAttributes.contains(a) =>
+              a.withQualifiers(alias :: Nil)
+          }.asInstanceOf[NamedExpression])
+
+          w.copy(windowExpressions = qualified, child = SubqueryAlias(alias, w.child))
       }
 
       def wrapChildWithSubquery(project: Project): Project = project match {
