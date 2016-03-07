@@ -252,12 +252,20 @@ object JdbcUtils extends Logging {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     df.schema.fields foreach { field => {
-      val name = field.name
+      val name = dialect.quoteIdentifier(field.name)
       val typ: String = getJdbcType(field.dataType, dialect).databaseTypeDefinition
       val nullable = if (field.nullable) "" else "NOT NULL"
       sb.append(s", $name $typ $nullable")
     }}
     if (sb.length < 2) "" else sb.substring(2)
+  }
+  
+  /**
+   * Parse the table name string for this RDD.
+   */
+  def schemaQualifiedTableName(table: String, url: String): String = {
+    val dialect = JdbcDialects.get(url)
+    dialect.schemaQualifiedTableName(table)
   }
 
   /**

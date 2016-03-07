@@ -40,6 +40,34 @@ private case object MySQLDialect extends JdbcDialect {
   override def quoteIdentifier(colName: String): String = {
     s"`$colName`"
   }
+  
+  /**
+   * Process table name in case of containing special characters like dot seperating database name
+   * followed by table name (eg "some database"."some-table-name") or 
+   * in case it contains characters that require quotes (e.g. space).
+   */
+  override def schemaQualifiedTableName(tableName: String): String = {
+    //Removing quotes so that we can add them correctly.
+    val tableNameWithoutQuotes = tableName.replace("\"", "").replace("\'", "")
+    
+    //If block for addressing the case of . (eg "some database"."some-table-name")
+    if (tableNameWithoutQuotes.contains(".")) {
+      val tableNameList = tableNameWithoutQuotes.split('.')
+      tableNameList.foldLeft("") { (leftStr, rightStr) =>
+        if (!"".equals(rightStr.trim())) {
+          if ("".equals(leftStr.trim())) {
+            leftStr + s"`$rightStr`"
+          } else {
+            leftStr + "." + s"`$rightStr`"
+          }
+        } else {
+          leftStr
+        }
+      }
+    } else {
+      s"`$tableNameWithoutQuotes`"
+    }
+  }
 
   override def getTableExistsQuery(table: String): String = {
     s"SELECT 1 FROM $table LIMIT 1"

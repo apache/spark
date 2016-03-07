@@ -90,6 +90,13 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
+   * Returns table name
+   */
+  def schemaQualifiedTableName(tableName: String): String = {
+    s"$tableName"
+  }
+  
+  /**
    * Get the SQL query that should be used to find if the given table exists. Dialects can
    * override this method to return a query that works best in a particular database.
    * @param table  The name of the table.

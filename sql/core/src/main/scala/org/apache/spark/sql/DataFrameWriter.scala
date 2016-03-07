@@ -411,9 +411,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
     val conn = JdbcUtils.createConnectionFactory(url, props)()
+    var tableName = JdbcUtils.schemaQualifiedTableName(table, url)
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
+      var tableExists = JdbcUtils.tableExists(conn, url, tableName)
 
       if (mode == SaveMode.Ignore && tableExists) {
         return
@@ -424,14 +425,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       }
 
       if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
+        JdbcUtils.dropTable(conn, tableName)
         tableExists = false
       }
 
       // Create the table if the table didn't exist.
       if (!tableExists) {
         val schema = JdbcUtils.schemaString(df, url)
-        val sql = s"CREATE TABLE $table ($schema)"
+        val sql = s"CREATE TABLE $tableName ($schema)"
         val statement = conn.createStatement
         try {
           statement.executeUpdate(sql)
@@ -443,7 +444,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       conn.close()
     }
 
-    JdbcUtils.saveTable(df, url, table, props)
+    JdbcUtils.saveTable(df, url, tableName, props)
   }
 
   /**
