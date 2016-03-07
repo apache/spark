@@ -120,12 +120,8 @@ tableProperty
     ;
 
 tablePropertyKey
-    : tablePropertyKeyElement ('.' tablePropertyKeyElement)*
+    : looseIdentifier ('.' looseIdentifier)*
     | STRING
-    ;
-
-tablePropertyKeyElement
-    : (identifier | FROM | TO) // Move keywords to a special list?
     ;
 
 queryNoWith
@@ -165,7 +161,7 @@ sortItem
     ;
 
 querySpecification
-    : ((SELECT kind=(TRANSFORM | MAP | REDUCE)) '(' selectItem (',' selectItem)* ')'
+    : ((SELECT kind=(TRANSFORM | MAP | REDUCE)) '(' namedExpression (',' namedExpression)* ')'
        inRowFormat=rowFormat?
        USING script=STRING
        (AS (columnAliasList | colTypeList | ('(' (columnAliasList | colTypeList) ')')))?
@@ -173,7 +169,7 @@ querySpecification
        (RECORDREADER outRecordReader=STRING)?
        fromClause?
        (WHERE where=booleanExpression)?)
-    | (kind=SELECT setQuantifier? selectItem (',' selectItem)*
+    | (kind=SELECT setQuantifier? namedExpression (',' namedExpression)*
        fromClause?
        lateralView*
        (WHERE where=booleanExpression)?
@@ -205,12 +201,6 @@ lateralView
 setQuantifier
     : DISTINCT
     | ALL
-    ;
-
-selectItem
-    : namedExpression               #selectSingle
-    | qualifiedName '.' ASTERISK    #selectAll
-    | ASTERISK                      #selectAll
     ;
 
 relation
@@ -325,6 +315,8 @@ valueExpression
 
 primaryExpression
     : constant                                                                                 #constantDefault
+    | ASTERISK                                                                                 #star
+    | qualifiedName '.' ASTERISK                                                               #star
     | '(' expression (',' expression)+ ')'                                                     #rowConstructor
     | qualifiedName '(' (ASTERISK) ')' (OVER windowSpec)?                                      #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')' (OVER windowSpec)?  #functionCall
@@ -449,6 +441,14 @@ qualifiedName
     : identifier ('.' identifier)*
     ;
 
+// Identifier that also allows the use of a number of SQL keywords (mainly for backwards compatibility).
+looseIdentifier
+    : identifier
+    | FROM
+    | TO
+    | TABLE
+    ;
+
 identifier
     : IDENTIFIER             #unquotedIdentifier
     | quotedIdentifier       #quotedIdentifierAlternative
@@ -486,7 +486,7 @@ nonReserved
     | START | TRANSACTION | COMMIT | ROLLBACK | WORK | ISOLATION | LEVEL
     | SERIALIZABLE | REPEATABLE | COMMITTED | UNCOMMITTED | READ | WRITE | ONLY
     | CALL
-    | SORT | TABLE
+    | SORT | CLUSTER | DISTRIBUTE
     ;
 
 SELECT: 'SELECT';

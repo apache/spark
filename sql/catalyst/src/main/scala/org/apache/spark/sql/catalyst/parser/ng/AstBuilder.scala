@@ -272,7 +272,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
 
     // Expressions.
-    val expressions = selectItem.asScala.map(visit).map {
+    val expressions = namedExpression.asScala.map(visit).map {
       case e: Expression => UnresolvedAlias(e)
     }
 
@@ -668,7 +668,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
-  override def visitSelectAll(ctx: SelectAllContext): Expression = withOrigin(ctx) {
+  override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
     UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText)))
   }
 
