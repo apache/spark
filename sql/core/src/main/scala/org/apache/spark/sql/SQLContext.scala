@@ -458,25 +458,25 @@ class SQLContext private[sql](
   }
 
 
-  def createDataset[T : Encoder](data: Seq[T]): DS[T] = {
+  def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(attributes, encoded)
 
-    new DS[T](this, plan)
+    Dataset[T](this, plan)
   }
 
-  def createDataset[T : Encoder](data: RDD[T]): DS[T] = {
+  def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
     val encoded = data.map(d => enc.toRow(d))
     val plan = LogicalRDD(attributes, encoded)(self)
 
-    new DS[T](this, plan)
+    Dataset[T](this, plan)
   }
 
-  def createDataset[T : Encoder](data: java.util.List[T]): DS[T] = {
+  def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
 

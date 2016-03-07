@@ -72,8 +72,8 @@ abstract class QueryTest extends PlanTest {
    *    for cases where reordering is done on fields.  For such tests, user `checkDecoding` instead
    *    which performs a subset of the checks done by this function.
    */
-  protected def checkAnswer[T](
-      ds: DS[T],
+  protected def checkDataset[T](
+      ds: Dataset[T],
       expectedAnswer: T*): Unit = {
     checkAnswer(
       ds.toDF(),
@@ -83,7 +83,7 @@ abstract class QueryTest extends PlanTest {
   }
 
   protected def checkDecoding[T](
-      ds: => DS[T],
+      ds: => Dataset[T],
       expectedAnswer: T*): Unit = {
     val decoded = try ds.collect().toSet catch {
       case e: Exception =>

@@ -46,7 +46,7 @@ import org.apache.spark.util.Utils
  *   public static org.apache.spark.sql.TypedColumn<java.lang.Object, java.lang.Object> avg(...);
  * }}}
  *
- * This allows us to use the same functions both in typed [[DS]] operations and untyped
+ * This allows us to use the same functions both in typed [[Dataset]] operations and untyped
  * [[DataFrame]] operations when the return type for a given function is statically known.
  */
 private[sql] abstract class LegacyFunctions {

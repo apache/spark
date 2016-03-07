@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.sql.{DataFrame, DS, Encoder, TypedColumn}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder, TypedColumn}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 
 /**
- * A base class for user-defined aggregations, which can be used in [[DataFrame]] and [[DS]]
+ * A base class for user-defined aggregations, which can be used in [[DataFrame]] and [[Dataset]]
  * operations to take all of the elements of a group and reduce them to a single value.
  *
  * For example, the following aggregator extracts an `int` from a specific class and adds them up:
@@ -76,7 +76,7 @@ abstract class Aggregator[-I, B, O] extends Serializable {
   def finish(reduction: B): O
 
   /**
-   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[DS]] or [[DataFrame]]
+   * Returns this `Aggregator` as a [[TypedColumn]] that can be used in [[Dataset]] or [[DataFrame]]
    * operations.
    * @since 1.6.0
    */

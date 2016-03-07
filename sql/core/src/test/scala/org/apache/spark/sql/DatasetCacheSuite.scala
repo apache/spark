@@ -34,7 +34,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     // Make sure, the Dataset is indeed cached.
     assertCached(cached)
     // Check result.
-    checkAnswer(
+    checkDataset(
       cached,
       2, 3, 4)
     // Drop the cache.
@@ -52,7 +52,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assertCached(ds2)
 
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
-    checkAnswer(joined, ("2", 2))
+    checkDataset(joined, ("2", 2))
     assertCached(joined, 2)
 
     ds1.unpersist()
@@ -67,7 +67,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     val agged = grouped.mapGroups { case (g, iter) => (g, iter.map(_._2).sum) }
     agged.persist()
 
-    checkAnswer(
+    checkDataset(
       agged.filter(_._1 == "b"),
       ("b", 3))
     assertCached(agged.filter(_._1 == "b"))

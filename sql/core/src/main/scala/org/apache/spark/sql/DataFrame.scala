@@ -27,7 +27,7 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.api.java.function.{FlatMapFunction, MapFunction, MapPartitionsFunction, ReduceFunction}
+import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
@@ -54,6 +54,12 @@ private[sql] object DataFrame {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
     new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
+  }
+}
+
+private[sql] object Dataset {
+  def apply[T: Encoder](sqlContext: SQLContext, logicalPlan: LogicalPlan): Dataset[T] = {
+    new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
   }
 }
 
@@ -153,8 +159,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * An unresolved version of the internal encoder for the type of this [[DS]].  This one is
-   * marked implicit so that we can use it when constructing new [[DS]] objects that have the
+   * An unresolved version of the internal encoder for the type of this [[Dataset]].  This one is
+   * marked implicit so that we can use it when constructing new [[Dataset]] objects that have the
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(encoder)
@@ -162,13 +168,13 @@ class Dataset[T] private[sql](
     unresolvedTEncoder.validate(logicalPlan.output)
   }
 
-  /** The encoder for this [[DS]] that has been resolved to its output schema. */
+  /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
     unresolvedTEncoder.resolve(logicalPlan.output, OuterScopes.outerScopes)
 
   /**
    * The encoder where the expressions used to construct an object from an input row have been
-   * bound to the ordinals of this [[DS]]'s output schema.
+   * bound to the ordinals of this [[Dataset]]'s output schema.
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
@@ -227,13 +233,13 @@ class Dataset[T] private[sql](
 
   /**
    * :: Experimental ::
-   * Converts this [[DataFrame]] to a strongly-typed [[DS]] containing objects of the
+   * Converts this [[DataFrame]] to a strongly-typed [[Dataset]] containing objects of the
    * specified type, `U`.
    * @group basic
    * @since 1.6.0
    */
   @Experimental
-  def as[U : Encoder]: DS[U] = new DS[U](sqlContext, logicalPlan)
+  def as[U : Encoder]: Dataset[U] = Dataset[U](sqlContext, logicalPlan)
 
   /**
    * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
@@ -600,7 +606,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Joins this [[DS]] returning a [[Tuple2]] for each pair where `condition` evaluates to
+   * Joins this [[Dataset]] returning a [[Tuple2]] for each pair where `condition` evaluates to
    * true.
    *
    * This is similar to the relation `join` function with one important difference in the
@@ -644,7 +650,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Using inner equi-join to join this [[DS]] returning a [[Tuple2]] for each pair
+   * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
    * where `condition` evaluates to true.
    *
    * @param other Right side of the join.
@@ -828,7 +834,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DS]] by computing the given [[Column]] expression for each element.
+   * Returns a new [[Dataset]] by computing the given [[Column]] expression for each element.
    *
    * {{{
    *   val ds = Seq(1, 2, 3).toDS()
@@ -1045,7 +1051,7 @@ class Dataset[T] private[sql](
 
   /**
    * (Scala-specific)
-   * Reduces the elements of this [[DS]] using the specified binary function. The given `func`
+   * Reduces the elements of this [[Dataset]] using the specified binary function. The given `func`
    * must be commutative and associative or the result may be non-deterministic.
    * @since 1.6.0
    */
@@ -1233,6 +1239,8 @@ class Dataset[T] private[sql](
     CombineUnions(Union(logicalPlan, other.logicalPlan))
   }
 
+  def union(other: Dataset[T]): Dataset[T] = unionAll(other)
+
   /**
    * Returns a new [[DataFrame]] containing rows only in both this frame and another frame.
    * This is equivalent to `INTERSECT` in SQL.
@@ -1252,6 +1260,8 @@ class Dataset[T] private[sql](
   def except(other: Dataset[T]): Dataset[T] = withTypedPlan {
     Except(logicalPlan, other.logicalPlan)
   }
+
+  def subtract(other: Dataset[T]): Dataset[T] = except(other)
 
   /**
    * Returns a new [[DataFrame]] by sampling a fraction of rows.
@@ -1650,6 +1660,20 @@ class Dataset[T] private[sql](
 
   /**
    * (Scala-specific)
+   * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
+   * @since 1.6.0
+   */
+  def filter(func: T => Boolean): Dataset[T] = mapPartitions(_.filter(func))
+
+  /**
+   * (Java-specific)
+   * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
+   * @since 1.6.0
+   */
+  def filter(func: FilterFunction[T]): Dataset[T] = filter(t => func.call(t))
+
+  /**
+   * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    * @since 1.6.0
    */
@@ -1715,6 +1739,13 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * (Java-specific)
+   * Runs `func` on each element of this [[Dataset]].
+   * @since 1.6.0
+   */
+  def foreach(func: ForeachFunction[T]): Unit = foreach(func.call(_))
+
+  /**
    * Applies a function f to each partition of this [[DataFrame]].
    * @group rdd
    * @since 1.3.0
@@ -1722,6 +1753,14 @@ class Dataset[T] private[sql](
   def foreachPartition(f: Iterator[T] => Unit): Unit = withNewExecutionId {
     rdd.foreachPartition(f)
   }
+
+  /**
+   * (Java-specific)
+   * Runs `func` on each partition of this [[Dataset]].
+   * @since 1.6.0
+   */
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
+    foreachPartition(it => func.call(it.asJava))
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
