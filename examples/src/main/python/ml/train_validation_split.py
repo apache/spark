@@ -21,6 +21,7 @@ from pyspark.ml import Pipeline
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.regression import LinearRegression
 from pyspark.ml.tuning import ParamGridBuilder, TrainValidationSplit
+from pyspark.sql import SQLContext
 # $example off$
 
 """
