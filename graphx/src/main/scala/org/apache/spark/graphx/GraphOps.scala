@@ -17,15 +17,10 @@
 
 package org.apache.spark.graphx
 
-import scala.reflect.{classTag, ClassTag}
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.HashPartitioner
-import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
-import org.apache.spark.graphx.impl.EdgePartitionBuilder
-import org.apache.spark.graphx.impl.GraphImpl
 import org.apache.spark.graphx.lib._
 import org.apache.spark.rdd.RDD
 
@@ -284,7 +279,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       if (selectedVertices.count > 1) {
         found = true
         val collectedVertices = selectedVertices.collect()
-        retVal = collectedVertices(Random.nextInt(collectedVertices.size))
+        retVal = collectedVertices(Random.nextInt(collectedVertices.length))
       }
     }
    retVal

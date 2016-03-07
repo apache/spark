@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.internal.SQLConf
 
@@ -68,7 +69,7 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode {
+  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
@@ -86,10 +87,11 @@ package object debug {
     /**
      * A collection of metrics for each column of output.
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
-     *        causing the wrong data to be projected.
+     *                     causing the wrong data to be projected.
      */
     case class ColumnMetrics(
-        elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
+      elementTypes: Accumulator[HashSet[String]] = sparkContext.accumulator(HashSet.empty))
+
     val tupleCount: Accumulator[Int] = sparkContext.accumulator[Int](0)
 
     val numColumns: Int = child.output.size
@@ -98,7 +100,7 @@ package object debug {
     def dumpStats(): Unit = {
       logDebug(s"== ${child.simpleString} ==")
       logDebug(s"Tuples output: ${tupleCount.value}")
-      child.output.zip(columnStats).foreach { case(attr, metric) =>
+      child.output.zip(columnStats).foreach { case (attr, metric) =>
         val actualDataTypes = metric.elementTypes.value.mkString("{", ",", "}")
         logDebug(s" ${attr.name} ${attr.dataType}: $actualDataTypes")
       }
@@ -108,6 +110,7 @@ package object debug {
       child.execute().mapPartitions { iter =>
         new Iterator[InternalRow] {
           def hasNext: Boolean = iter.hasNext
+
           def next(): InternalRow = {
             val currentRow = iter.next()
             tupleCount += 1
@@ -123,6 +126,18 @@ package object debug {
           }
         }
       }
+    }
+
+    override def upstreams(): Seq[RDD[InternalRow]] = {
+      child.asInstanceOf[CodegenSupport].upstreams()
+    }
+
+    override def doProduce(ctx: CodegenContext): String = {
+      child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    }
+
+    override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+      consume(ctx, input)
     }
   }
 }

@@ -88,7 +88,7 @@ private object IDF {
       }
       doc match {
         case SparseVector(size, indices, values) =>
-          val nnz = indices.size
+          val nnz = indices.length
           var k = 0
           while (k < nnz) {
             if (values(k) > 0) {
@@ -97,7 +97,7 @@ private object IDF {
             k += 1
           }
         case DenseVector(values) =>
-          val n = values.size
+          val n = values.length
           var j = 0
           while (j < n) {
             if (values(j) > 0.0) {
@@ -211,7 +211,7 @@ private object IDFModel {
     val n = v.size
     v match {
       case SparseVector(size, indices, values) =>
-        val nnz = indices.size
+        val nnz = indices.length
         val newValues = new Array[Double](nnz)
         var k = 0
         while (k < nnz) {

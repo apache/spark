@@ -15,7 +15,7 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._

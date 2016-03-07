@@ -18,9 +18,9 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.{ContinuousQueryManager, SQLContext, UDFRegistration}
-import org.apache.spark.sql.catalyst.ParserInterface
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.{PreInsertCastAndRename, ResolveDataSource}

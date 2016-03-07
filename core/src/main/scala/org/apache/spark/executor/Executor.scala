@@ -292,11 +292,8 @@ private[spark] class Executor(
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
           } else if (resultSize >= maxRpcMessageSize) {
             val blockId = TaskResultBlockId(taskId)
-            val putSucceeded = env.blockManager.putBytes(
+            env.blockManager.putBytes(
               blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
-            if (putSucceeded) {
-              env.blockManager.releaseLock(blockId)
-            }
             logInfo(
               s"Finished $taskName (TID $taskId). $resultSize bytes result sent via BlockManager)")
             ser.serialize(new IndirectTaskResult[Any](blockId, resultSize))
@@ -478,9 +475,10 @@ private[spark] class Executor(
     } catch {
       case NonFatal(e) =>
         logWarning("Issue communicating with driver in heartbeater", e)
-        logError(s"Unable to send heartbeats to driver more than $HEARTBEAT_MAX_FAILURES times")
         heartbeatFailures += 1
         if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
+          logError(s"Exit as unable to send heartbeats to driver " +
+            s"more than $HEARTBEAT_MAX_FAILURES times")
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
     }
