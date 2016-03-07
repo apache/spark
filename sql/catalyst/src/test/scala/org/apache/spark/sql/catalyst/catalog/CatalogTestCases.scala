@@ -24,9 +24,9 @@ import org.apache.spark.sql.AnalysisException
 
 
 /**
- * A reasonable complete test suite (i.e. behaviors) for a [[Catalog]].
+ * A reasonable complete test suite (i.e. behaviors) for a [[ExternalCatalog]].
  *
- * Implementations of the [[Catalog]] interface can create test suites by extending this.
+ * Implementations of the [[ExternalCatalog]] interface can create test suites by extending this.
  */
 abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   private lazy val storageFormat = CatalogStorageFormat(
@@ -45,7 +45,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
   protected val tableOutputFormat: String = "org.apache.park.serde.MyOutputFormat"
   protected def newUriForDatabase(): String = "uri"
   protected def resetState(): Unit = { }
-  protected def newEmptyCatalog(): Catalog
+  protected def newEmptyCatalog(): ExternalCatalog
 
   // Clear all state after each test
   override def afterEach(): Unit = {
@@ -68,7 +68,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
    *     - part2
    *   - func1
    */
-  private def newBasicCatalog(): Catalog = {
+  private def newBasicCatalog(): ExternalCatalog = {
     val catalog = newEmptyCatalog()
     // When testing against a real catalog, the default database may already exist
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
@@ -104,7 +104,7 @@ abstract class CatalogTestCases extends SparkFunSuite with BeforeAndAfterEach {
    * Note: Hive sets some random serde things, so we just compare the specs here.
    */
   private def catalogPartitionsEqual(
-      catalog: Catalog,
+      catalog: ExternalCatalog,
       db: String,
       table: String,
       parts: Seq[CatalogTablePartition]): Boolean = {

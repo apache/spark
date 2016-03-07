@@ -192,14 +192,14 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       }
 
       markup("Checking pushed filters")
-      assert(SimpleTextRelation.pushedFilters === pushedFilters.toSet)
+      assert(pushedFilters.toSet.subsetOf(SimpleTextRelation.pushedFilters))
 
       val expectedInconvertibleFilters = inconvertibleFilters.map(_.expr).toSet
       val expectedUnhandledFilters = unhandledFilters.map(_.expr).toSet
       val expectedPartitioningFilters = partitioningFilters.map(_.expr).toSet
 
       markup("Checking unhandled and inconvertible filters")
-      assert(expectedInconvertibleFilters ++ expectedUnhandledFilters === nonPushedFilters)
+      assert((expectedInconvertibleFilters ++ expectedUnhandledFilters).subsetOf(nonPushedFilters))
 
       markup("Checking partitioning filters")
       val actualPartitioningFilters = splitConjunctivePredicates(filter.expr).filter {
