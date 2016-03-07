@@ -44,6 +44,6 @@ class HiveCatalogSuite extends CatalogTestCases {
 
   protected override def resetState(): Unit = client.reset()
 
-  protected override def newEmptyCatalog(): Catalog = new HiveCatalog(client)
+  protected override def newEmptyCatalog(): ExternalCatalog = new HiveCatalog(client)
 
 }

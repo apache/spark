@@ -26,12 +26,13 @@ import org.apache.spark.sql.AnalysisException
  * Interface for the system catalog (of columns, partitions, tables, and databases).
  *
  * This is only used for non-temporary items, and implementations must be thread-safe as they
- * can be accessed in multiple threads.
+ * can be accessed in multiple threads. This is an external catalog because it is expected to
+ * interact with external systems.
  *
  * Implementations should throw [[AnalysisException]] when table or database don't exist.
  */
-abstract class Catalog {
-  import Catalog._
+abstract class ExternalCatalog {
+  import ExternalCatalog._
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
@@ -198,7 +199,9 @@ case class CatalogColumn(
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
  */
-case class CatalogTablePartition(spec: Catalog.TablePartitionSpec, storage: CatalogStorageFormat)
+case class CatalogTablePartition(
+    spec: ExternalCatalog.TablePartitionSpec,
+    storage: CatalogStorageFormat)
 
 
 /**
@@ -263,7 +266,7 @@ case class CatalogDatabase(
     properties: Map[String, String])
 
 
-object Catalog {
+object ExternalCatalog {
   /**
    * Specifications of a table partition. Mapping column name to column value.
    */

@@ -132,7 +132,7 @@ private[hive] trait HiveClient {
   def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec]): Unit
+      specs: Seq[ExternalCatalog.TablePartitionSpec]): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.
@@ -140,8 +140,8 @@ private[hive] trait HiveClient {
   def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec],
-      newSpecs: Seq[Catalog.TablePartitionSpec]): Unit
+      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit
 
   /**
    * Alter one or more table partitions whose specs match the ones specified in `newParts`,
@@ -156,7 +156,7 @@ private[hive] trait HiveClient {
   final def getPartition(
       dbName: String,
       tableName: String,
-      spec: Catalog.TablePartitionSpec): CatalogTablePartition = {
+      spec: ExternalCatalog.TablePartitionSpec): CatalogTablePartition = {
     getPartitionOption(dbName, tableName, spec).getOrElse {
       throw new NoSuchPartitionException(dbName, tableName, spec)
     }
@@ -166,14 +166,14 @@ private[hive] trait HiveClient {
   final def getPartitionOption(
       db: String,
       table: String,
-      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition] = {
+      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = {
     getPartitionOption(getTable(db, table), spec)
   }
 
   /** Returns the specified partition or None if it does not exist. */
   def getPartitionOption(
       table: CatalogTable,
-      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition]
+      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition]
 
   /** Returns all partitions for the given table. */
   final def getAllPartitions(db: String, table: String): Seq[CatalogTablePartition] = {

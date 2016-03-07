@@ -25,10 +25,14 @@ import org.apache.spark.sql.AnalysisException
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
  *
+ * This is a dummy implementation that does not require setting up external systems.
+ * It is intended for testing or exploration purposes only and should not be used
+ * in production.
+ *
  * All public methods should be synchronized for thread-safety.
  */
-class InMemoryCatalog extends Catalog {
-  import Catalog._
+class InMemoryCatalog extends ExternalCatalog {
+  import ExternalCatalog._
 
   private class TableDesc(var table: CatalogTable) {
     val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
