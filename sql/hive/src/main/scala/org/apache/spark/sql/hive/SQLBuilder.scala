@@ -324,7 +324,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   /* This function handles the SQL generation when generators are specified in the
    * LATERAL VIEW clause. SQL generation of generators specified in projection lists
-   * are handled in projectToSQL.
+   * is handled in projectToSQL.
    * sample plan :
    *   +- Project [mycol2#192]
    *     +- Generate explode(myCol#191), true, false, Some(mytable2), [mycol2#192]
@@ -338,7 +338,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val outerClause = if (plan.outer) "OUTER" else ""
     build(
       toSQL(plan.child),
-      "LATERAL VIEW ",
+      "LATERAL VIEW",
       outerClause,
       plan.generator.sql,
       quoteIdentifier(generatorAlias),
