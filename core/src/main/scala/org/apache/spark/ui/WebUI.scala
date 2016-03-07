@@ -136,7 +136,8 @@ private[spark] abstract class WebUI(
     try {
       var host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
-      logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
+      logInfo("Bound %s to %s, and started at http://%s:%d".format(className, host,
+        publicHostName, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to bind %s".format(className), e)
