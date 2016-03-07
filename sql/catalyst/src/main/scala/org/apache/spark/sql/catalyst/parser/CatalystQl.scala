@@ -676,7 +676,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         rest = l
         true
       case _ => false
-    }) {}
+    }) {
+      // do nothing
+    }
     collected += rest
     collected.reverse
   }
