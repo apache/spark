@@ -61,7 +61,7 @@ public class JavaPolynomialExpansionExample {
     Dataset<Row> df = jsql.createDataFrame(data, schema);
     Dataset<Row> polyDF = polyExpansion.transform(df);
 
-    Row[] row = polyDF.select("polyFeatures").take(3);
+    Row[] row = polyDF.select("polyFeatures").takeRows(3);
     for (Row r : row) {
       System.out.println(r.get(0));
     }

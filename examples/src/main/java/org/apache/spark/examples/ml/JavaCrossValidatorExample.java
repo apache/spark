@@ -118,7 +118,7 @@ public class JavaCrossValidatorExample {
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     Dataset<Row> predictions = cvModel.transform(test);
-    for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collectRows()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
