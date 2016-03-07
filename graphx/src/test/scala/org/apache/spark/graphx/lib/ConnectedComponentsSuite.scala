@@ -28,8 +28,8 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
   test("Grid Connected Components") {
     withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
-      val ccGraph = gridGraph.connectedComponentsWithDegree()
-      val maxCCid = ccGraph.vertices.map { case (vid, (ccId, degree)) => ccId }.sum()
+      val ccGraph = gridGraph.connectedComponents()
+      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum()
       assert(maxCCid === 0)
     }
   } // end of Grid connected components
@@ -38,8 +38,8 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
   test("Reverse Grid Connected Components") {
     withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse
-      val ccGraph = gridGraph.connectedComponentsWithDegree()
-      val maxCCid = ccGraph.vertices.map { case (vid, (ccId, degree)) => ccId }.sum()
+      val ccGraph = gridGraph.connectedComponents()
+      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum()
       assert(maxCCid === 0)
     }
   } // end of Grid connected components
@@ -51,9 +51,9 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val chain2 = (10 until 20).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s, d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0)
-      val ccGraph = twoChains.connectedComponentsWithDegree()
+      val ccGraph = twoChains.connectedComponents()
       val vertices = ccGraph.vertices.collect()
-      for ((id, (cc, degree)) <- vertices) {
+      for ( (id, cc) <- vertices ) {
         if (id < 10) {
           assert(cc === 0)
         } else {
@@ -63,9 +63,9 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val ccMap = vertices.toMap
       for (id <- 0 until 20) {
         if (id < 10) {
-          assert(ccMap(id)._1 === 0)
+          assert(ccMap(id) === 0)
         } else {
-          assert(ccMap(id)._1 === 10)
+          assert(ccMap(id) === 10)
         }
       }
     }
@@ -77,9 +77,9 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val chain2 = (10 until 20).map(x => (x, x + 1))
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s, d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse
-      val ccGraph = twoChains.connectedComponentsWithDegree()
+      val ccGraph = twoChains.connectedComponents()
       val vertices = ccGraph.vertices.collect()
-      for ((id, (cc, degree)) <- vertices) {
+      for ( (id, cc) <- vertices ) {
         if (id < 10) {
           assert(cc === 0)
         } else {
@@ -87,11 +87,11 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
         }
       }
       val ccMap = vertices.toMap
-      for (id <- 0 until 20) {
+      for ( id <- 0 until 20 ) {
         if (id < 10) {
-          assert(ccMap(id)._1 === 0)
+          assert(ccMap(id) === 0)
         } else {
-          assert(ccMap(id)._1 === 10)
+          assert(ccMap(id) === 10)
         }
       }
     }
@@ -102,13 +102,13 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       // Create an RDD for the vertices
       val users: RDD[(VertexId, (String, String))] =
         sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
-          (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
-          (4L, ("peter", "student"))))
+                       (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
+                       (4L, ("peter", "student"))))
       // Create an RDD for edges
       val relationships: RDD[Edge[String]] =
         sc.parallelize(Array(Edge(3L, 7L, "collab"), Edge(5L, 3L, "advisor"),
-          Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
-          Edge(4L, 0L, "student"), Edge(5L, 0L, "colleague")))
+                       Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
+                       Edge(4L, 0L, "student"), Edge(5L, 0L, "colleague")))
       // Edges are:
       //   2 ---> 5 ---> 3
       //          | \
@@ -119,9 +119,9 @@ class ConnectedComponentsSuite extends SparkFunSuite with LocalSparkContext {
       val defaultUser = ("John Doe", "Missing")
       // Build the initial Graph
       val graph = Graph(users, relationships, defaultUser)
-      val ccGraph = graph.connectedComponentsWithDegree()
+      val ccGraph = graph.connectedComponents()
       val vertices = ccGraph.vertices.collect()
-      for ((id, (cc, dgree)) <- vertices) {
+      for ( (id, cc) <- vertices ) {
         assert(cc === 0)
       }
     }
