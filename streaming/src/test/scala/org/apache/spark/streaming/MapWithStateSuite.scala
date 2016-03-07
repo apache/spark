@@ -43,10 +43,10 @@ class MapWithStateSuite extends SparkFunSuite
   }
 
   after {
+    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
     if (checkpointDir != null) {
       Utils.deleteRecursively(checkpointDir)
     }
-    StreamingContext.getActive().foreach { _.stop(stopSparkContext = false) }
   }
 
   override def beforeAll(): Unit = {
