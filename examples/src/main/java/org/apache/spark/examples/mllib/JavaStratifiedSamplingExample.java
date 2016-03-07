@@ -59,9 +59,9 @@ public class JavaStratifiedSamplingExample {
 
     // Get an exact sample from each stratum
     JavaPairRDD<Integer, Character> approxSample =
-      data.sampleByKey(false, fractions); // JavaPairRDD<K, V>
+      data.sampleByKey(false, fractions);  // JavaPairRDD<K, V>
     JavaPairRDD<Integer, Character> exactSample =
-      data.sampleByKeyExact(false, fractions); // JavaPairRDD<K, V>
+      data.sampleByKeyExact(false, fractions);  // JavaPairRDD<K, V>
     // $example off$
 
     approxSample.foreach(new VoidFunction<Tuple2<Integer, Character>>() {
