@@ -89,9 +89,7 @@ case class Generate(
       generatorOutput.forall(_.resolved)
   }
 
-  // we don't want the gOutput to be taken as part of the expressions
-  // as that will cause exceptions like unresolved attributes etc.
-  override def expressions: Seq[Expression] = generator :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>

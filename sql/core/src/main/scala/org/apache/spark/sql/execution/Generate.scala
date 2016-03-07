@@ -58,7 +58,7 @@ case class Generate(
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
-  override def expressions: Seq[Expression] = generator :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   val boundGenerator = BindReferences.bindReference(generator, child.output)
 

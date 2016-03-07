@@ -288,6 +288,10 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.SQLConf$SQLConfEntry$")
+      ) ++ Seq(
+        // SPARK-12073: backpressure rate controller consumes events preferentially from lagging partitions
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.KafkaTestUtils.createTopic"),
+        ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.DirectKafkaInputDStream.maxMessagesPerPartition")
       )
     case v if v.startsWith("1.6") =>
       Seq(

@@ -56,8 +56,8 @@ object TwitterHashTagJoinSentiments {
     val wordSentimentFilePath = "data/streaming/AFINN-111.txt"
     val wordSentiments = ssc.sparkContext.textFile(wordSentimentFilePath).map { line =>
       val Array(word, happinessValue) = line.split("\t")
-      (word, happinessValue)
-    } cache()
+      (word, happinessValue.toInt)
+    }.cache()
 
     // Determine the hash tags with the highest sentiment values by joining the streaming RDD
     // with the static RDD inside the transform() method and then multiplying

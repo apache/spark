@@ -41,6 +41,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite, TestUtils}
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.{ResetSystemProperties, SparkConfWithEnv, Utils}
 
 class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
@@ -114,8 +115,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
 
   test("Local jar URIs") {
     val conf = new Configuration()
-    val sparkConf = new SparkConf().set(CONF_SPARK_JARS, SPARK)
-      .set("spark.yarn.user.classpath.first", "true")
+    val sparkConf = new SparkConf()
+      .set(SPARK_JARS, Seq(SPARK))
+      .set(USER_CLASS_PATH_FIRST, true)
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
@@ -136,14 +138,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   }
 
   test("Jar path propagation through SparkConf") {
-    val sparkConf = new SparkConf().set(CONF_SPARK_JARS, SPARK)
+    val sparkConf = new SparkConf().set(SPARK_JARS, Seq(SPARK))
     val client = createClient(sparkConf,
       args = Array("--jar", USER, "--addJars", ADDED))
 
     val tempDir = Utils.createTempDir()
     try {
       client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
-      sparkConf.getOption(CONF_SPARK_USER_JAR) should be (Some(USER))
+      sparkConf.get(APP_JAR) should be (Some(USER))
 
       // The non-local path should be propagated by name only, since it will end up in the app's
       // staging dir.
@@ -158,7 +160,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
         })
         .mkString(",")
 
-      sparkConf.getOption(CONF_SPARK_YARN_SECONDARY_JARS) should be (Some(expected))
+      sparkConf.get(SECONDARY_JARS) should be (Some(expected.split(",").toSeq))
     } finally {
       Utils.deleteRecursively(tempDir)
     }
@@ -167,9 +169,9 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
   test("Cluster path translation") {
     val conf = new Configuration()
     val sparkConf = new SparkConf()
-      .set(CONF_SPARK_JARS, "local:/localPath/spark.jar")
-      .set("spark.yarn.config.gatewayPath", "/localPath")
-      .set("spark.yarn.config.replacementPath", "/remotePath")
+      .set(SPARK_JARS, Seq("local:/localPath/spark.jar"))
+      .set(GATEWAY_ROOT_PATH, "/localPath")
+      .set(REPLACEMENT_ROOT_PATH, "/remotePath")
 
     getClusterPath(sparkConf, "/localPath") should be ("/remotePath")
     getClusterPath(sparkConf, "/localPath/1:/localPath/2") should be (
@@ -189,8 +191,8 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     // Spaces between non-comma strings should be preserved as single tags. Empty strings may or
     // may not be removed depending on the version of Hadoop being used.
     val sparkConf = new SparkConf()
-      .set(CONF_SPARK_YARN_APPLICATION_TAGS, ",tag1, dup,tag2 , ,multi word , dup")
-      .set("spark.yarn.maxAppAttempts", "42")
+      .set(APPLICATION_TAGS.key, ",tag1, dup,tag2 , ,multi word , dup")
+      .set(MAX_APP_ATTEMPTS, 42)
     val args = new ClientArguments(Array(
       "--name", "foo-test-app",
       "--queue", "staging-queue"), sparkConf)
@@ -228,16 +230,16 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
       s"${libs.getAbsolutePath()}/*",
       jar3.getPath(),
       s"local:${jar4.getPath()}",
-      s"local:${single.getAbsolutePath()}/*").mkString(",")
+      s"local:${single.getAbsolutePath()}/*")
 
-    val sparkConf = new SparkConf().set(CONF_SPARK_JARS, jarsConf)
+    val sparkConf = new SparkConf().set(SPARK_JARS, jarsConf)
     val client = createClient(sparkConf)
 
     val tempDir = Utils.createTempDir()
     client.prepareLocalResources(tempDir.getAbsolutePath(), Nil)
 
-    assert(sparkConf.get(CONF_SPARK_JARS) ===
-      Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*").mkString(","))
+    assert(sparkConf.get(SPARK_JARS) ===
+      Some(Seq(s"local:${jar4.getPath()}", s"local:${single.getAbsolutePath()}/*")))
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar1.toURI())), anyShort())
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(jar2.toURI())), anyShort())
@@ -254,14 +256,14 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val temp = Utils.createTempDir()
     val archive = TestUtils.createJarWithFiles(Map(), temp)
 
-    val sparkConf = new SparkConf().set(CONF_JARS_ARCHIVE, archive.getPath())
+    val sparkConf = new SparkConf().set(SPARK_ARCHIVE, archive.getPath())
     val client = createClient(sparkConf)
     client.prepareLocalResources(temp.getAbsolutePath(), Nil)
 
     verify(client).copyFileToRemote(any(classOf[Path]), meq(new Path(archive.toURI())), anyShort())
     classpath(client) should contain (buildPath(PWD, LOCALIZED_LIB_DIR, "*"))
 
-    sparkConf.set(CONF_JARS_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
+    sparkConf.set(SPARK_ARCHIVE, LOCAL_SCHEME + ":" + archive.getPath())
     intercept[IllegalArgumentException] {
       client.prepareLocalResources(temp.getAbsolutePath(), Nil)
     }
