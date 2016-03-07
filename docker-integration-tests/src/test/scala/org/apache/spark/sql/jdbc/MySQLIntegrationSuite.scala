@@ -59,6 +59,9 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO strings VALUES ('the', 'quick', 'brown', 'fox', " +
       "'jumps', 'over', 'the', 'lazy', 'dog')").executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE keywords (`from` INT, `interval` FLOAT)").executeUpdate()
+    conn.prepareStatement("INSERT INTO keywords VALUES (23, 25.5)").executeUpdate()
   }
 
   test("Basic test") {
@@ -146,8 +149,10 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     val df1 = sqlContext.read.jdbc(jdbcUrl, "numbers", new Properties)
     val df2 = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
     val df3 = sqlContext.read.jdbc(jdbcUrl, "strings", new Properties)
+    val df4 = sqlContext.read.jdbc(jdbcUrl, "keywords", new Properties)
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+    df4.write.jdbc(jdbcUrl, "keywordscopy", new Properties)
   }
 }
