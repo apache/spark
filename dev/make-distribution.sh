@@ -29,7 +29,7 @@ set -e
 set -x
 
 # Figure out where the Spark framework is installed
-SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
+SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 MAKE_TGZ=false
@@ -41,7 +41,7 @@ function exit_with_usage {
   echo ""
   echo "usage:"
   cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
-  echo "./make-distribution.sh $cl_options <maven build options>"
+  echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
@@ -104,7 +104,7 @@ fi
 if [ $(command -v git) ]; then
     GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
     if [ ! -z "$GITREV" ]; then
-	 GITREVSTRING=" (git revision $GITREV)"
+        GITREVSTRING=" (git revision $GITREV)"
     fi
     unset GITREV
 fi
