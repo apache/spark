@@ -17,10 +17,10 @@
 
 package org.apache.spark.repl
 
-import java.io.{BufferedReader, FileReader}
+import java.io.BufferedReader
 
 import Predef.{println => _, _}
-import scala.util.Properties.{jdkHome, javaVersion, versionString, javaVmName}
+import scala.util.Properties.{javaVersion, versionString, javaVmName}
 
 import scala.tools.nsc.interpreter.{JPrintWriter, ILoop}
 import scala.tools.nsc.Settings

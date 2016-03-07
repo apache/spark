@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils
 import org.apache.spark.sql.test.SharedSQLContext
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
@@ -47,7 +46,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
           assert(batch.column(0).getByte(i) == 1)
           assert(batch.column(1).getInt(i) == 2)
           assert(batch.column(2).getLong(i) == 3)
-          assert(ColumnVectorUtils.toString(batch.column(3).getByteArray(i)) == "abc")
+          assert(batch.column(3).getUTF8String(i).toString == "abc")
           i += 1
         }
         reader.close()

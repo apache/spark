@@ -53,6 +53,9 @@ private[spark] class TaskContextImpl(
   // Whether the task has completed.
   @volatile private var completed: Boolean = false
 
+  // Whether the task has failed.
+  @volatile private var failed: Boolean = false
+
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
     this
@@ -63,10 +66,13 @@ private[spark] class TaskContextImpl(
     this
   }
 
-  /** Marks the task as completed and triggers the failure listeners. */
+  /** Marks the task as failed and triggers the failure listeners. */
   private[spark] def markTaskFailed(error: Throwable): Unit = {
+    // failure callbacks should only be called once
+    if (failed) return
+    failed = true
     val errorMsgs = new ArrayBuffer[String](2)
-    // Process complete callbacks in the reverse order of registration
+    // Process failure callbacks in the reverse order of registration
     onFailureCallbacks.reverse.foreach { listener =>
       try {
         listener.onTaskFailure(this, error)
