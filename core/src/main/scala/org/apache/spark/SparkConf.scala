@@ -503,6 +503,31 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
         set("spark.executor.instances", value)
       }
     }
+
+    if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
+      val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
+        "instead use \"yarn\" with specified deploy mode."
+
+      get("spark.master") match {
+        case "yarn-cluster" =>
+          logWarning(warning)
+          set("spark.master", "yarn")
+          set("spark.submit.deployMode", "cluster")
+        case "yarn-client" =>
+          logWarning(warning)
+          set("spark.master", "yarn")
+          set("spark.submit.deployMode", "client")
+        case _ => // Any other unexpected master will be checked when creating scheduler backend.
+      }
+    }
+
+    if (contains("spark.submit.deployMode")) {
+      get("spark.submit.deployMode") match {
+        case "cluster" | "client" =>
+        case e => throw new SparkException("spark.submit.deployMode can only be \"cluster\" or " +
+          "\"client\".")
+      }
+    }
   }
 
   /**

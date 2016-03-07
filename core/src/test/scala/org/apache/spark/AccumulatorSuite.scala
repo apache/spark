@@ -34,6 +34,14 @@ import org.apache.spark.serializer.JavaSerializer
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
   import AccumulatorParam._
 
+  override def afterEach(): Unit = {
+    try {
+      Accumulators.clear()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
     new AccumulableParam[mutable.Set[A], A] {
       def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
@@ -268,7 +276,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val acc1 = new Accumulator(0, IntAccumulatorParam, Some("thing"), internal = false)
     val acc2 = new Accumulator(0L, LongAccumulatorParam, Some("thing2"), internal = false)
     val externalAccums = Seq(acc1, acc2)
-    val internalAccums = InternalAccumulator.create()
+    val internalAccums = InternalAccumulator.createAll()
     // Set some values; these should not be observed later on the "executors"
     acc1.setValue(10)
     acc2.setValue(20L)
@@ -339,7 +347,7 @@ private class SaveInfoListener extends SparkListener {
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
-    completedTaskInfos.get((stageId, stageAttemptId)).getOrElse(Seq.empty[TaskInfo])
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
 
   /**
    * If `jobCompletionCallback` is set, block until the next call has finished.

@@ -118,7 +118,7 @@ case class ExceptionFailure(
     description: String,
     stackTrace: Array[StackTraceElement],
     fullStackTrace: String,
-    exceptionWrapper: Option[ThrowableSerializationWrapper],
+    private val exceptionWrapper: Option[ThrowableSerializationWrapper],
     accumUpdates: Seq[AccumulableInfo] = Seq.empty[AccumulableInfo])
   extends TaskFailedReason {
 
@@ -248,7 +248,6 @@ case class ExecutorLostFailure(
     } else {
       "unrelated to the running tasks"
     }
-    s"ExecutorLostFailure (executor ${execId} exited due to an issue ${exitBehavior})"
     s"ExecutorLostFailure (executor ${execId} exited ${exitBehavior})" +
       reason.map { r => s" Reason: $r" }.getOrElse("")
   }

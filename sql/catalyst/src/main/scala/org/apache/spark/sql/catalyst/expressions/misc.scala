@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import java.security.{MessageDigest, NoSuchAlgorithmException}
 import java.util.zip.CRC32
 
+import scala.annotation.tailrec
+
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -143,11 +145,11 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
   override def inputTypes: Seq[DataType] = Seq(BinaryType)
 
   protected override def nullSafeEval(input: Any): Any =
-    UTF8String.fromString(DigestUtils.shaHex(input.asInstanceOf[Array[Byte]]))
+    UTF8String.fromString(DigestUtils.sha1Hex(input.asInstanceOf[Array[Byte]]))
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     defineCodeGen(ctx, ev, c =>
-      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.shaHex($c))"
+      s"UTF8String.fromString(org.apache.commons.codec.digest.DigestUtils.sha1Hex($c))"
     )
   }
 }
@@ -233,8 +235,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
   }
 
   override def prettyName: String = "hash"
-
-  override def sql: String = s"$prettyName(${children.map(_.sql).mkString(", ")}, $seed)"
 
   override def eval(input: InternalRow): Any = {
     var hash = seed
@@ -322,7 +322,6 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
-
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     ev.isNull = "false"
     val childrenHash = children.map { child =>
@@ -355,6 +354,7 @@ case class Murmur3Hash(children: Seq[Expression], seed: Int) extends Expression 
     }
   }
 
+  @tailrec
   private def computeHash(
       input: String,
       dataType: DataType,

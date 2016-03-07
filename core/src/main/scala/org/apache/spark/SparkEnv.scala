@@ -35,7 +35,7 @@ import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
-import org.apache.spark.serializer.Serializer
+import org.apache.spark.serializer.{JavaSerializer, Serializer}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.{RpcUtils, Utils}
@@ -56,7 +56,6 @@ class SparkEnv (
     private[spark] val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
-    val cacheManager: CacheManager,
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
@@ -277,8 +276,7 @@ object SparkEnv extends Logging {
       "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
     logDebug(s"Using serializer: ${serializer.getClass}")
 
-    val closureSerializer = instantiateClassFromConf[Serializer](
-      "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
+    val closureSerializer = new JavaSerializer(conf)
 
     def registerOrLookupEndpoint(
         name: String, endpointCreator: => RpcEndpoint):
@@ -334,8 +332,6 @@ object SparkEnv extends Logging {
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
-    val cacheManager = new CacheManager(blockManager)
-
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
       // We need to wait for the task scheduler to give us an app ID.
@@ -372,7 +368,6 @@ object SparkEnv extends Logging {
       rpcEnv,
       serializer,
       closureSerializer,
-      cacheManager,
       mapOutputTracker,
       shuffleManager,
       broadcastManager,

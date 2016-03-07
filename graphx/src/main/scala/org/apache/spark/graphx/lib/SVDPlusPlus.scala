@@ -40,17 +40,6 @@ object SVDPlusPlus {
     extends Serializable
 
   /**
-   * This method is now replaced by the updated version of `run()` and returns exactly
-   * the same result.
-   */
-  @deprecated("Call run()", "1.4.0")
-  def runSVDPlusPlus(edges: RDD[Edge[Double]], conf: Conf)
-    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
-  {
-    run(edges, conf)
-  }
-
-  /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
    * available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].

@@ -158,7 +158,7 @@ JavaReceiverInputDStream<String> lines = jssc.socketTextStream("localhost", 9999
 {% endhighlight %}
 
 This `lines` DStream represents the stream of data that will be received from the data
-server. Each record in this stream is a line of text. Then, we want to split the the lines by
+server. Each record in this stream is a line of text. Then, we want to split the lines by
 space into words.
 
 {% highlight java %}
@@ -798,7 +798,7 @@ Some of the common ones are as follows.
   <td> <b>reduce</b>(<i>func</i>) </td>
   <td> Return a new DStream of single-element RDDs by aggregating the elements in each RDD of the
   source DStream using a function <i>func</i> (which takes two arguments and returns one).
-  The function should be associative so that it can be computed in parallel. </td>
+  The function should be associative and commutative so that it can be computed in parallel. </td>
 </tr>
 <tr>
   <td> <b>countByValue</b>() </td>
@@ -872,10 +872,7 @@ val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
-the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
-[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
-/spark/examples/streaming/StatefulNetworkWordCount.scala).
+the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 </div>
 <div data-lang="java" markdown="1">
@@ -1072,7 +1069,7 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 <tr>
   <td> <b>reduceByWindow</b>(<i>func</i>, <i>windowLength</i>, <i>slideInterval</i>) </td>
   <td> Return a new single-element stream, created by aggregating elements in the stream over a
-  sliding interval using <i>func</i>. The function should be associative so that it can be computed
+  sliding interval using <i>func</i>. The function should be associative and commutative so that it can be computed
   correctly in parallel.
   </td>
 </tr>
@@ -2162,8 +2159,6 @@ In specific cases where the amount of data that needs to be retained for the str
 If the number of tasks launched per second is high (say, 50 or more per second), then the overhead
 of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
-
-* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task sizes, and therefore reduce the time taken to send them to the slaves. This is controlled by the ```spark.closure.serializer``` property. However, at this time, Kryo serialization cannot be enabled for closure serialization. This may be resolved in a future release.
 
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
   better task launch times than the fine-grained Mesos mode. Please refer to the

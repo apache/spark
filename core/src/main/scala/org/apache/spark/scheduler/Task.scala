@@ -64,6 +64,7 @@ private[spark] abstract class Task[T](
       taskAttemptId: Long,
       attemptNumber: Int,
       metricsSystem: MetricsSystem): T = {
+    SparkEnv.get.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(
       stageId,
       partitionId,
@@ -79,7 +80,12 @@ private[spark] abstract class Task[T](
     }
     try {
       runTask(context)
+    } catch { case e: Throwable =>
+      // Catch all errors; run task failure callbacks, and rethrow the exception.
+      context.markTaskFailed(e)
+      throw e
     } finally {
+      // Call the task completion callbacks.
       context.markTaskCompleted()
       try {
         Utils.tryLogNonFatalError {
