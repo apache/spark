@@ -32,6 +32,7 @@ object ScalaReflection extends ScalaReflection {
   // Since we are creating a runtime mirror usign the class loader of current thread,
   // we need to use def at here. So, every time we call mirror, it is using the
   // class loader of the current thread.
+  // SPARK-13640: Synchronize this because universe.runtimeMirror is not thread-safe in Scala 2.10.
   override def mirror: universe.Mirror = ScalaReflectionLock.synchronized {
     universe.runtimeMirror(Thread.currentThread().getContextClassLoader)
   }
@@ -666,6 +667,7 @@ trait ScalaReflection {
    *
    * @see SPARK-5281
    */
+  // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
   def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
     val tag = implicitly[TypeTag[T]]
     tag.in(mirror).tpe.normalize
