@@ -142,20 +142,24 @@ private[r] object SparkRWrappers {
     }
   }
 
+  /**
+   * Extract labels' names for NaiveBayesModel.
+   */
   def getNaiveBayesLabels(model: PipelineModel): Array[String] = {
     val lastModel = model.stages.last
     assert(lastModel.isInstanceOf[NaiveBayesModel],
       s"Naive Bayes model expected, ${lastModel.getClass.getName} found.")
-    val numOfStages = model.stages.length
-    assert(numOfStages == 2,
-      "The number of Pipeline stages does not match with the training phase.")
-    // If the original label column is a String column, the next to last stage should be a
-    // StringIndexerModel. Otherwise we transform the original label column to a String array.
+
     val rFormulaModel = model.stages.head.asInstanceOf[RFormulaModel]
 
+    // If RFormula reindex the labels with a StringIndexer, then we extract the original labels.
+    // Otherwise, we extract the labels out and sort them as what mllib.NaiveBayes does.
     rFormulaModel.getOriginalLabels match {
       case Some(labels) => labels
-      case None => lastModel.asInstanceOf[NaiveBayesModel].labels.toArray.map(_.toString)
+      case None =>
+        val summary = lastModel.asInstanceOf[NaiveBayesModel].summary
+        summary.predictions.select(summary.labelCol)
+          .distinct().map(_.getDouble(0)).collect().sorted.map(_.toString)
     }
   }
 
