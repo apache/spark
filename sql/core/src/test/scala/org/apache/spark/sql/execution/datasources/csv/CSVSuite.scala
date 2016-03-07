@@ -43,6 +43,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
+  private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
 
   private def testFile(fileName: String): String = {
@@ -116,6 +117,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = true, checkTypes = true)
+  }
+
+  test("test inferring booleans") {
+    val result = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(boolFile))
+
+    val expectedSchema = StructType(List(
+      StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
   }
 
   test("test with alternative delimiter and quote") {

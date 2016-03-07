@@ -30,6 +30,8 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(NullType, "3.5") == DoubleType)
     assert(CSVInferSchema.inferField(NullType, "test") == StringType)
     assert(CSVInferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
+    assert(CSVInferSchema.inferField(NullType, "True") == BooleanType)
+    assert(CSVInferSchema.inferField(NullType, "FAlSE") == BooleanType)
   }
 
   test("String fields types are inferred correctly from other types") {
@@ -40,12 +42,20 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(DoubleType, "test") == StringType)
     assert(CSVInferSchema.inferField(LongType, "2015-08-20 14:57:00") == TimestampType)
     assert(CSVInferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == TimestampType)
+    assert(CSVInferSchema.inferField(LongType, "True") == BooleanType)
+    assert(CSVInferSchema.inferField(IntegerType, "FALSE") == BooleanType)
+    assert(CSVInferSchema.inferField(TimestampType, "FALSE") == BooleanType)
   }
 
   test("Timestamp field types are inferred correctly from other types") {
     assert(CSVInferSchema.inferField(IntegerType, "2015-08-20 14") == StringType)
     assert(CSVInferSchema.inferField(DoubleType, "2015-08-20 14:10") == StringType)
     assert(CSVInferSchema.inferField(LongType, "2015-08 14:49:00") == StringType)
+  }
+
+  test("Boolean fields types are inferred correctly from other types") {
+    assert(CSVInferSchema.inferField(LongType, "Fale") == StringType)
+    assert(CSVInferSchema.inferField(DoubleType, "TRUEe") == StringType)
   }
 
   test("Type arrays are merged to highest common type") {
@@ -67,6 +77,7 @@ class InferSchemaSuite extends SparkFunSuite {
     assert(CSVInferSchema.inferField(IntegerType, "\\N", "\\N") == IntegerType)
     assert(CSVInferSchema.inferField(DoubleType, "\\N", "\\N") == DoubleType)
     assert(CSVInferSchema.inferField(TimestampType, "\\N", "\\N") == TimestampType)
+    assert(CSVInferSchema.inferField(BooleanType, "\\N", "\\N") == BooleanType)
   }
 
   test("Merging Nulltypes should yeild Nulltype.") {
