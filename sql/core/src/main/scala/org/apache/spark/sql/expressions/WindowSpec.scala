@@ -20,7 +20,6 @@ package org.apache.spark.sql.expressions
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.{catalyst, Column}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 
 /**
  * :: Experimental ::
