@@ -26,6 +26,7 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
@@ -1041,6 +1042,53 @@ class Dataset[T] private[sql](
     val colNames: Seq[String] = col1 +: cols
     GroupedData(toDF(), colNames.map(colName => resolve(colName)), GroupedData.GroupByType)
   }
+
+  /**
+   * (Scala-specific)
+   * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
+   * @since 1.6.0
+   */
+  def groupByKey[K: Encoder](func: T => K): GroupedDataset[K, T] = {
+    val inputPlan = logicalPlan
+    val withGroupingKey = AppendColumns(func, inputPlan)
+    val executed = sqlContext.executePlan(withGroupingKey)
+
+    new GroupedDataset(
+      encoderFor[K],
+      encoderFor[T],
+      executed,
+      inputPlan.output,
+      withGroupingKey.newColumns)
+  }
+
+  /**
+   * Returns a [[GroupedDataset]] where the data is grouped by the given [[Column]] expressions.
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def groupByKey(cols: Column*): GroupedDataset[Row, T] = {
+    val withKeyColumns = logicalPlan.output ++ cols.map(_.expr).map(UnresolvedAlias(_))
+    val withKey = Project(withKeyColumns, logicalPlan)
+    val executed = sqlContext.executePlan(withKey)
+
+    val dataAttributes = executed.analyzed.output.dropRight(cols.size)
+    val keyAttributes = executed.analyzed.output.takeRight(cols.size)
+
+    new GroupedDataset(
+      RowEncoder(keyAttributes.toStructType),
+      encoderFor[T],
+      executed,
+      dataAttributes,
+      keyAttributes)
+  }
+
+  /**
+   * (Java-specific)
+   * Returns a [[GroupedDataset]] where the data is grouped by the given key `func`.
+   * @since 1.6.0
+   */
+  def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): GroupedDataset[K, T] =
+    groupByKey(func.call(_))(encoder)
 
   /**
    * Create a multi-dimensional rollup for the current [[DataFrame]] using the specified columns,
