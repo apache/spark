@@ -66,8 +66,12 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
   }
 
   override def afterAll(): Unit = {
-    if (testUtils != null) {
-      testUtils.deleteStream()
+    try {
+      if (testUtils != null) {
+        testUtils.deleteStream()
+      }
+    } finally {
+      super.afterAll()
     }
   }
 
