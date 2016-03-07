@@ -57,7 +57,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   if (loadDefaults) {
     // Load any spark.* system properties
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
-      set(key, value)
+      set(key   ,   value)
     }
   }
 
