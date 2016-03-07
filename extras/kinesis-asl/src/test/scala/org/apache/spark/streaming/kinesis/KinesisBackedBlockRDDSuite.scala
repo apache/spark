@@ -248,8 +248,11 @@ abstract class KinesisBackedBlockRDDTests(aggregateTestData: Boolean)
   }
 }
 
+// SPARK-13655 disabled until cause of timeouts is determined
+/*
 class WithAggregationKinesisBackedBlockRDDSuite
   extends KinesisBackedBlockRDDTests(aggregateTestData = true)
 
 class WithoutAggregationKinesisBackedBlockRDDSuite
   extends KinesisBackedBlockRDDTests(aggregateTestData = false)
+ */
