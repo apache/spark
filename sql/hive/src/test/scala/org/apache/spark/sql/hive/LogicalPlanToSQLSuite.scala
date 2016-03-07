@@ -446,18 +446,88 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     )
   }
 
-  test("window functions") {
-    checkHiveQl("SELECT a, SUM(b) OVER (PARTITION BY c ORDER BY d) AS sum FROM parquet_t2")
+  test("window basic") {
+    checkHiveQl("SELECT MAX(value) OVER (PARTITION BY key % 3) FROM parquet_t1")
     checkHiveQl(
       """
-        |SELECT a + 1, SUM(b * 2) OVER (PARTITION BY c + d ORDER BY c - d) AS sum
-        |FROM parquet_t2
+         |SELECT key, value, ROUND(AVG(key) OVER (), 2)
+         |FROM parquet_t1 ORDER BY key
       """.stripMargin)
     checkHiveQl(
       """
-        |SELECT a, SUM(b) OVER w1 AS sum, AVG(b) over w2 AS avg
-        |FROM parquet_t2
-        |WINDOW w1 AS (PARTITION BY c ORDER BY d), w2 AS (PARTITION BY d ORDER BY c)
+         |SELECT value, MAX(key + 1) OVER (PARTITION BY key % 5 ORDER BY key % 7) AS max
+         |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("window with different window specification") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |DENSE_RANK() OVER (ORDER BY key, value) AS dr,
+         |MAX(value) OVER (PARTITION BY key ORDER BY key) AS max
+         |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("window with the same window specification with aggregate + having") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key) AS max
+         |FROM parquet_t1 GROUP BY key, value HAVING key > 5
+      """.stripMargin)
+  }
+
+  test("window with the same window specification with aggregate functions") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key) AS max
+         |FROM parquet_t1 GROUP BY key, value
+      """.stripMargin)
+  }
+
+  test("window with the same window specification with aggregate") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |DENSE_RANK() OVER (DISTRIBUTE BY key SORT BY key, value) AS dr,
+         |COUNT(key)
+         |FROM parquet_t1 GROUP BY key, value
+      """.stripMargin)
+  }
+
+  test("window with the same window specification without aggregate and filter") {
+    checkHiveQl(
+      """
+         |SELECT key, value,
+         |DENSE_RANK() OVER (DISTRIBUTE BY key SORT BY key, value) AS dr,
+         |COUNT(key) OVER(DISTRIBUTE BY key SORT BY key, value) AS ca
+         |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("window clause") {
+    checkHiveQl(
+      """
+         |SELECT key, MAX(value) OVER w1 AS MAX, MIN(value) OVER w2 AS min
+         |FROM parquet_t1
+         |WINDOW w1 AS (PARTITION BY key % 5 ORDER BY key), w2 AS (PARTITION BY key % 6)
+      """.stripMargin)
+  }
+
+  test("special window functions") {
+    checkHiveQl(
+      """
+        |SELECT
+        |  RANK() OVER w,
+        |  PERCENT_RANK() OVER w,
+        |  DENSE_RANK() OVER w,
+        |  ROW_NUMBER() OVER w,
+        |  CUME_DIST() OVER w
+        |FROM parquet_t1
+        |WINDOW w AS (PARTITION BY key % 5 ORDER BY key)
       """.stripMargin)
   }
 }
