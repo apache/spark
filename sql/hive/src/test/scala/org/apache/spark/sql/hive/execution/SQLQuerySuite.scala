@@ -92,6 +92,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
   }
 
+  test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
+    withTempTable("src") {
+      Seq(("id1", "value1")).toDF("key", "value").registerTempTable("src")
+      val query =
+        sql("SELECT genoutput.* FROM src " +
+          "LATERAL VIEW explode(map('key1', 100, 'key2', 200)) genoutput AS key, value")
+      checkAnswer(query, Row("key1", 100) :: Row("key2", 200) :: Nil)
+    }
+  }
+
   test("SPARK-6851: Self-joined converted parquet tables") {
     val orders = Seq(
       Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
