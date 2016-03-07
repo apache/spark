@@ -29,9 +29,9 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     sql("DROP TABLE IF EXISTS parquet_t0")
     sql("DROP TABLE IF EXISTS parquet_t1")
     sql("DROP TABLE IF EXISTS parquet_t2")
+    sql("DROP TABLE IF EXISTS parquet_t3")
     sql("DROP TABLE IF EXISTS t0")
-    sql("DROP TABLE IF EXISTS t3")
-    sql("DROP TABLE IF EXISTS t4")
+    sql("DROP TABLE IF EXISTS t1")
 
     val tuples: Seq[(String, String)] =
       ("1", """{"f1": "value1", "f2": "value2", "f3": 3, "f5": 5.23}""") ::
@@ -57,19 +57,17 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       .write
       .saveAsTable("parquet_t2")
 
-    sqlContext.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write.saveAsTable("t2")
-
-    tuples.toDF("key", "jstring").write.saveAsTable("t3")
-    sql("CREATE TABLE t4 as select key, array(value) as value from parquet_t1 limit 20")
+    tuples.toDF("key", "jstring").write.saveAsTable("parquet_t3")
+    sql("CREATE TABLE t1 as select key, array(value) as value from parquet_t1 limit 20")
   }
 
   override protected def afterAll(): Unit = {
     sql("DROP TABLE IF EXISTS parquet_t0")
     sql("DROP TABLE IF EXISTS parquet_t1")
     sql("DROP TABLE IF EXISTS parquet_t2")
+    sql("DROP TABLE IF EXISTS parquet_t3")
     sql("DROP TABLE IF EXISTS t0")
-    sql("DROP TABLE IF EXISTS t3")
-    sql("DROP TABLE IF EXISTS t4")
+    sql("DROP TABLE IF EXISTS t1")
   }
 
   private def checkHiveQl(hiveQl: String): Unit = {
@@ -589,24 +587,24 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("select explode(array(1,2,3)) AS gencol")
 
     // Explode with columns other than generated columns in projection list
-    checkHiveQl("SELECT key as c1, explode(array(1,2,3)) as c2, value as c3 FROM t4")
+    checkHiveQl("SELECT key as c1, explode(array(1,2,3)) as c2, value as c3 FROM t1")
 
     // Explode with a column reference as input to generator
-    checkHiveQl("SELECT key, value from t4 LATERAL VIEW explode(value) gentab")
+    checkHiveQl("SELECT key, value from t1 LATERAL VIEW explode(value) gentab")
 
     // json_tuple
-    checkHiveQl("SELECT key, json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5') FROM t3")
+    checkHiveQl("SELECT key, json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5') FROM parquet_t3")
 
     // udtf
-    checkHiveQl("SELECT key, gencol FROM t4 LATERAL VIEW udtf_count2(value) gentab AS gencol")
+    checkHiveQl("SELECT key, gencol FROM t1 LATERAL VIEW udtf_count2(value) gentab AS gencol")
 
     // udtf
-    checkHiveQl("SELECT udtf_count2(c1) FROM (SELECT 1 AS c1 FROM t4 LIMIT 3) g1")
+    checkHiveQl("SELECT udtf_count2(c1) FROM (SELECT 1 AS c1 FROM t1 LIMIT 3) g1")
 
     // Filter and OUTER clause
     checkHiveQl(
       """SELECT key, value
-        |FROM t4 LATERAL VIEW OUTER explode(value) gentab as gencol
+        |FROM t1 LATERAL VIEW OUTER explode(value) gentab as gencol
         |WHERE key = 1
       """.stripMargin
     )
@@ -614,7 +612,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     // single lateral view
     checkHiveQl(
       """SELECT *
-        |FROM t4 LATERAL VIEW explode(array(1,2,3)) gentab AS gencol
+        |FROM t1 LATERAL VIEW explode(array(1,2,3)) gentab AS gencol
         |SORT BY key ASC, gencol ASC LIMIT 1
       """.stripMargin
     )
@@ -622,7 +620,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     // multiple lateral views
     checkHiveQl(
       """SELECT gentab2.*
-        |FROM t4
+        |FROM t1
         |LATERAL VIEW explode(array(array(1,2,3))) gentab1 AS gencol1
         |LATERAL VIEW explode(gentab1.gencol1) gentab2 AS gencol2 LIMIT 3
       """.stripMargin
@@ -632,20 +630,20 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       """SELECT subq.gencol
         |FROM
-        |(SELECT * from t4 LATERAL VIEW explode(value) gentab AS gencol) subq
+        |(SELECT * from t1 LATERAL VIEW explode(value) gentab AS gencol) subq
       """.stripMargin)
 
     checkHiveQl(
       """SELECT subq.key
         |FROM
-        |(SELECT key, value from t4 LATERAL VIEW explode(value) gentab AS gencol) subq
+        |(SELECT key, value from t1 LATERAL VIEW explode(value) gentab AS gencol) subq
       """.stripMargin
     )
 
     checkHiveQl(
       """SELECT gentab.*
         |FROM
-        |t4 LATERAL VIEW explode(map('key1', 100, 'key2', 200)) gentab limit 2
+        |t1 LATERAL VIEW explode(map('key1', 100, 'key2', 200)) gentab limit 2
       """.stripMargin
     )
     sql("DROP TEMPORARY FUNCTION udtf_count2")
