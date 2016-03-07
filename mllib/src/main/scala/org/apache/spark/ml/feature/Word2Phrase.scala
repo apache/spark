@@ -196,7 +196,7 @@ class Word2PhraseModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
 
-    var mapBiGrams = udf((t: String) => bigram_list.foldLeft(t){case (z, r) => z.replaceAll("(?i)"+r, r.split(" ").mkString("_"))})
+    var mapBiGrams = udf((t: String) => bigram_list.foldLeft(t){case (z, r) => z.replaceAll(Regex.quote("(?i)"+r), r.split(" ").mkString("_"))})
     dataset.withColumn($(outputCol), mapBiGrams(dataset($(inputCol))))
   }
 
@@ -219,13 +219,13 @@ object Word2PhraseModel extends MLReadable[Word2PhraseModel] {
   private[Word2PhraseModel]
   class Word2PhraseModelWriter(instance: Word2PhraseModel) extends MLWriter {
 
-    //private case class Data(bigram_list: Array[(String, String)])
+    private case class Data(bigram_list: Seq[String])
 
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      //val data = new Data(instance.bigram_list)
+      val data = new Data(instance.bigram_list)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame((instance.bigram_list).toSeq).write.parquet(dataPath)
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -236,11 +236,12 @@ object Word2PhraseModel extends MLReadable[Word2PhraseModel] {
     override def load(path: String): Word2PhraseModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sqlContext.read.parquet(dataPath).select("bigram_list").head()
+      val bigram_list = data.getAs[Seq[String]](0).toArray
       //var holder = Array(("ok", "ok"), ("ok", "ok"), ("o", "oO"))
            // val model = new Word2PhraseModel(metadata.uid, data.map((bigram:String, bigram_broken:String) => (bigram, bigram_broken)).collect())
 
-      val model = new Word2PhraseModel(metadata.uid, data.map(row => (row(0).toString)).collect())
+      val model = new Word2PhraseModel(metadata.uid, bigram_list)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
