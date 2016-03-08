@@ -192,6 +192,7 @@ final class RandomForestRegressionModel private[ml] (
    *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
    */
+  @Since("1.5.0")
   lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */

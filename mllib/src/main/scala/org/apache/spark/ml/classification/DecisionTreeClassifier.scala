@@ -185,6 +185,7 @@ final class DecisionTreeClassificationModel private[ml] (
    *       correlated predictor variables. Consider using a [[RandomForestClassifier]]
    *       to determine feature importance instead.
    */
+  @Since("2.0.0")
   lazy val featureImportances: Vector = RandomForest.featureImportances(this, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */
