@@ -115,7 +115,7 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
 
   override def sample(): Int = {
     if (ub - lb <= 0.0) {
-      if (complement) true else false
+      if (complement) 1 else 0
     } else {
       if (complement) {
         val x = rng.nextDouble()
@@ -183,8 +183,11 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
-  private val gapSampling: GapSampling =
+  private val gapSampling: GapSampling = if (fraction > 0.0 && fraction < 1.0) {
     new GapSampling(fraction, rng, RandomSampler.rngEpsilon)
+  } else {
+    null
+  }
 
   override def sample(): Int = {
     if (fraction <= 0.0) {
@@ -252,8 +255,11 @@ class PoissonSampler[T: ClassTag](
     rngGap.setSeed(seed)
   }
 
-  private val gapSamplingReplacement =
+  private val gapSamplingReplacement = if (fraction > 0.0) {
     new GapSamplingReplacement(fraction, rngGap, RandomSampler.rngEpsilon)
+  } else {
+    null
+  }
 
   override def sample(): Int = {
     if (fraction <= 0.0) {
@@ -377,6 +383,9 @@ class GapSampling(
 
 private[spark]
 trait PoissonGE {
+  val f: Double
+  val rng: Random
+
   protected val q = math.exp(-f)
 
   /**
@@ -403,8 +412,8 @@ trait PoissonGE {
 private[spark]
 class GapSamplingReplacementIterator[T: ClassTag](
     var data: Iterator[T],
-    f: Double,
-    rng: Random = RandomSampler.newDefaultRNG,
+    val f: Double,
+    val rng: Random = RandomSampler.newDefaultRNG,
     epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] with PoissonGE {
 
   require(f > 0.0, s"Sampling fraction ($f) must be > 0")
@@ -468,21 +477,14 @@ class GapSamplingReplacementIterator[T: ClassTag](
 
 private[spark]
 class GapSamplingReplacement(
-    f: Double,
-    rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) {
+    val f: Double,
+    val rng: Random = RandomSampler.newDefaultRNG,
+    epsilon: Double = RandomSampler.rngEpsilon) extends PoissonGE {
 
   require(f > 0.0, s"Sampling fraction ($f) must be > 0")
   require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
 
   private var countForDropping: Int = 0
-
-  override def next(): T = {
-    val r = v
-    rep -= 1
-    if (rep <= 0) advance()
-    r
-  }
 
   def sample(): Int = {
     if (countForDropping > 0) {
