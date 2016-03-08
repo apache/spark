@@ -137,7 +137,7 @@ class OneHotEncoder(override val uid: String) extends Transformer
             assert(x <= Int.MaxValue,
               s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x")
             assert(x >= 0.0 && x == x.toInt,
-              s"Values e column $inputColName must be indices, but got $x.")
+              s"Values from column $inputColName must be indices, but got $x.")
             math.max(m, x)
           },
           (m0, m1) => {
