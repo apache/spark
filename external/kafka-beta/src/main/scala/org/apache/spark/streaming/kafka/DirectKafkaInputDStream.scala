@@ -89,13 +89,20 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
       .asInstanceOf[ConsumerRebalanceListener]
 
   private def assignPartitions(pa: PartitionAssignment): Unit = this.synchronized {
+    val reset = driverKafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String]
+      .toLowerCase
+    val resetMsg = "Dynamic topic subscriptions won't work well unless " +
+      ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is set"
+
     // using kc directly because consumer() calls this method
     pa match {
       case Assigned(partitions) =>
         kc.assign(partitions)
       case Subscribed(topics, className) =>
+        assert(reset == "earliest" || reset == "latest", resetMsg)
         kc.subscribe(topics, listenerFor(className))
       case PatternSubscribed(pattern, className) =>
+        assert(reset == "earliest" || reset == "latest", resetMsg)
         kc.subscribe(pattern, listenerFor(className))
       case Unassigned =>
     }
@@ -146,14 +153,9 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
     consumer.partitionsFor(topic)
   }
 
-  private val pollTimeout =
-    context.sparkContext.getConf.getLong("spark.streaming.kafka.consumer.poll.ms", 10)
-  /** Necessary to fetch metadata and update subscriptions, won't actually return useful data */
-  def poll(): Unit = poll(pollTimeout)
-
   /** Necessary to fetch metadata and update subscriptions, won't actually return useful data */
   def poll(timeout: Long): Unit = this.synchronized {
-    consumer.poll(pollTimeout)
+    consumer.poll(timeout)
   }
 
   def seek(partition: TopicPartition, offset: Long): Unit = this.synchronized {
@@ -224,7 +226,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
     val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {
       case Some(rate) =>
         val lagPerPartition = offsets.map { case (tp, offset) =>
-          tp -> Math.max(offset - currentOffsets.getOrElse(tp, offset), 0)
+          tp -> Math.max(offset - currentOffsets(tp), 0)
         }
         val totalLag = lagPerPartition.values.sum
 
@@ -249,12 +251,16 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
   protected var currentOffsets = Map[TopicPartition, Long]()
 
   protected def latestOffsets(): Map[TopicPartition, Long] = this.synchronized {
-    // TODO does this need a poll in order to maintain heartbeat / get topic updates
     val c = consumer
+    c.poll(0)
+    val parts = c.assignment().asScala
+    if (!partitionAssignment.isInstanceOf[Assigned]) {
+      // make sure new partitions are reflected in currentOffsets
+      val newPartitions = parts.diff(currentOffsets.keySet)
+      currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+    }
     c.seekToEnd()
-    c.assignment().asScala.map { tp =>
-      tp -> c.position(tp)
-    }.toMap
+    parts.map(tp => tp -> c.position(tp)).toMap
   }
 
   // limits the maximum number of messages per partition
@@ -264,7 +270,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
     maxMessagesPerPartition(offsets).map { mmp =>
       mmp.map { case (tp, messages) =>
           val uo = offsets(tp)
-          tp -> Math.min(currentOffsets.getOrElse(tp, uo) + messages, uo)
+          tp -> Math.min(currentOffsets(tp) + messages, uo)
       }
     }.getOrElse(offsets)
   }
@@ -272,7 +278,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
   override def compute(validTime: Time): Option[KafkaRDD[K, V]] = {
     val untilOffsets = clamp(latestOffsets())
     val offsetRanges = untilOffsets.map { case (tp, uo) =>
-      val fo = currentOffsets.getOrElse(tp, uo)
+      val fo = currentOffsets(tp)
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
 
@@ -301,7 +307,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
   override def start(): Unit = this.synchronized {
     assert(partitionAssignment != Unassigned, "Must call subscribe or assign before starting")
     val c = consumer
-    c.poll(pollTimeout)
+    c.poll(0)
     if (currentOffsets.isEmpty) {
       currentOffsets = c.assignment().asScala.map { tp =>
         tp -> c.position(tp)
@@ -332,7 +338,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
     override def cleanup(time: Time) { }
 
     override def restore() {
-      poll()
+      poll(0)
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
