@@ -310,10 +310,6 @@ object SQLConf {
       "nanoseconds field. This flag tells Spark SQL to interpret INT96 data as a timestamp to " +
       "provide compatibility with these systems.")
 
-  val PARQUET_CACHE_METADATA = booleanConf("spark.sql.parquet.cacheMetadata",
-    defaultValue = Some(true),
-    doc = "Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
-
   val PARQUET_COMPRESSION = enumConf("spark.sql.parquet.compression.codec",
     valueConverter = v => v.toLowerCase,
     validValues = Set("uncompressed", "snappy", "gzip", "lzo"),
@@ -537,8 +533,6 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
-
-  def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 

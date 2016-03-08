@@ -277,7 +277,6 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
       allFiles: Array[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow] = {
-    val useMetadataCache = sqlContext.getConf(SQLConf.PARQUET_CACHE_METADATA)
     val parquetFilterPushDown = sqlContext.conf.parquetFilterPushDown
     val assumeBinaryIsString = sqlContext.conf.isParquetBinaryAsString
     val assumeInt96IsTimestamp = sqlContext.conf.isParquetINT96AsTimestamp
@@ -294,7 +293,6 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
         filters,
         dataSchema,
         parquetBlockSize,
-        useMetadataCache,
         parquetFilterPushDown,
         assumeBinaryIsString,
         assumeInt96IsTimestamp) _
@@ -313,8 +311,6 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
         initLocalJobFuncOpt = Some(initLocalJobFuncOpt),
         inputFormatClass = classOf[ParquetInputFormat[InternalRow]],
         valueClass = classOf[InternalRow]) {
-
-        val cacheMetadata = useMetadataCache
 
         @transient val cachedStatuses = inputFiles.map { f =>
           // In order to encode the authority of a Path containing special characters such as '/'
@@ -337,7 +333,7 @@ private[sql] class DefaultSource extends FileFormat with DataSourceRegister with
         override def getPartitions: Array[SparkPartition] = {
           val inputFormat = new ParquetInputFormat[InternalRow] {
             override def listStatus(jobContext: JobContext): JList[FileStatus] = {
-              if (cacheMetadata) cachedStatuses.asJava else super.listStatus(jobContext)
+              cachedStatuses.asJava
             }
           }
 
@@ -435,7 +431,6 @@ private[sql] object ParquetRelation extends Logging {
       filters: Array[Filter],
       dataSchema: StructType,
       parquetBlockSize: Long,
-      useMetadataCache: Boolean,
       parquetFilterPushDown: Boolean,
       assumeBinaryIsString: Boolean,
       assumeInt96IsTimestamp: Boolean)(job: Job): Unit = {
@@ -461,9 +456,6 @@ private[sql] object ParquetRelation extends Logging {
     conf.set(
       CatalystWriteSupport.SPARK_ROW_SCHEMA,
       CatalystSchemaConverter.checkFieldNames(dataSchema).json)
-
-    // Tell FilteringParquetRowInputFormat whether it's okay to cache Parquet and FS metadata
-    conf.setBoolean(SQLConf.PARQUET_CACHE_METADATA.key, useMetadataCache)
 
     // Sets flags for `CatalystSchemaConverter`
     conf.setBoolean(SQLConf.PARQUET_BINARY_AS_STRING.key, assumeBinaryIsString)
