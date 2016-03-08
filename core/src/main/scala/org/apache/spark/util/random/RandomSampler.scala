@@ -509,4 +509,3 @@ class GapSamplingReplacement(
   /** advance to first sample as part of object construction. */
   advance()
 }
- 
