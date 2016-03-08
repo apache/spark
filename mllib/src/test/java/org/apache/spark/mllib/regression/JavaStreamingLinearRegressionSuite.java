@@ -71,7 +71,9 @@ public class JavaStreamingLinearRegressionSuite implements Serializable {
       attachTestInputStream(ssc, Arrays.asList(testBatch, testBatch), 2));
     StreamingLinearRegressionWithSGD slr = new StreamingLinearRegressionWithSGD()
       .setNumIterations(2)
-      .setInitialWeights(Vectors.dense(0.0));
+      .setInitialWeights(Vectors.dense(0.0))
+      .setDecayFactor(0.5)
+      .setTimeUnit("POINTS");
     slr.trainOn(training);
     JavaPairDStream<Integer, Double> prediction = slr.predictOnValues(test);
     attachTestOutputStream(prediction.count());

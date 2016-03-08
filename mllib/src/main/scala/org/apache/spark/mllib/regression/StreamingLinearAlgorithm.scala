@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.Logging
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 
@@ -38,6 +38,23 @@ import org.apache.spark.streaming.dstream.DStream
  * Initial weights must be set before calling trainOn or predictOn.
  * Only weights will be updated, not an intercept. If the model needs
  * an intercept, it should be manually appended to the input data.
+ *
+ * StreamingLinearAlgorithm use the forgetful algorithm
+ * to dynamically adjust for evolution of data source. For each batch of data,
+ * we update the model estimates by:
+ *
+ * $$ \theta_{t+1} = \frac{theta_t n_t \alpha + \beta_t m_t}{n_t \alpha + m_t} $$
+ * $$ n_{t+1} = n_t \alpha + m_t $$
+ *
+ * where $\theta_t$ is the model estimate before the data arriving at time t;
+ * $n_t$ is the cumulative contribution of data arriving before time t;
+ * $\beta_t$ is the estimate using data arriving at time t along;
+ * $\m_t$ is the number of data point for data arriving at time t along;
+ * $\alpha$ is the discount factor, $\alpha=0$ only the data from the
+ * most recent RDD will be used, $\alpha=0$ all data since the beginning
+ * of the DStream will be used with equal contributions.
+ *
+ * This updating rule is analogous to an exponentially-weighted moving average.
  *
  * For example usage, see `StreamingLinearRegressionWithSGD`.
  *
@@ -59,10 +76,14 @@ import org.apache.spark.streaming.dstream.DStream
 @DeveloperApi
 abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
-    A <: GeneralizedLinearAlgorithm[M]] extends Logging {
+    A <: GeneralizedLinearAlgorithm[M]]
+  extends StreamingDecay with Logging {
 
   /** The model to be updated and used for prediction. */
   protected var model: Option[M]
+
+  /** The weight estimated with data arriving before the current time unit. */
+  protected var previousDataWeight: Double = 0
 
   /** The algorithm to use for updating. */
   protected val algorithm: A
@@ -91,7 +112,22 @@ abstract class StreamingLinearAlgorithm[
     }
     data.foreachRDD { (rdd, time) =>
       if (!rdd.isEmpty) {
-        model = Some(algorithm.run(rdd, model.get.weights))
+        val newModel = algorithm.run(rdd, model.get.weights)
+
+        val numNewDataPoints = rdd.count()
+        val discount = getDiscount(numNewDataPoints)
+
+        val updatedDataWeight = previousDataWeight * discount + numNewDataPoints
+        // updatedDataWeight >= 1 because rdd is not empty;
+        // no need to check division by zero in below
+        val lambda = numNewDataPoints / updatedDataWeight
+
+        BLAS.scal(lambda, newModel.weights)
+        BLAS.axpy(1-lambda, model.get.weights, newModel.weights)
+
+        previousDataWeight = updatedDataWeight
+        model = Some(newModel)
+
         logInfo(s"Model updated at time ${time.toString}")
         val display = model.get.weights.size match {
           case x if x > 100 => model.get.weights.toArray.take(100).mkString("[", ",", "...")
