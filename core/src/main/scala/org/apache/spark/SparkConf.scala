@@ -355,7 +355,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     settings.containsKey(key) || {
       // try to find the settings in the alternatives
       val alts = configsWithAlternatives.get(key)
-      if (alts.isDefined) alts.get.exists { alt => contains(alt.key) } else false
+      alts.isDefined && alts.get.exists { alt => contains(alt.key) }
     }
   }
 
