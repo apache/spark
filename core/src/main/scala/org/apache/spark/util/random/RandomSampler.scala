@@ -41,6 +41,12 @@ trait RandomSampler[T, U] extends Pseudorandom with Cloneable with Serializable 
   /** take a random sample */
   def sample(items: Iterator[T]): Iterator[U]
 
+  /**
+   * Whether to sample the next item or not.
+   * Return how many times the next item will be sampled. Return 0 if it is not sampled.
+   */
+  def sample(): Int
+
   /** return a copy of the RandomSampler object */
   override def clone: RandomSampler[T, U] =
     throw new NotImplementedError("clone() is not implemented.")
@@ -107,6 +113,28 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
+  override def sample(): Int = {
+    if (ub - lb <= 0.0) {
+      if (complement) true else false
+    } else {
+      if (complement) {
+        val x = rng.nextDouble()
+        if ((x < lb) || (x >= ub)) {
+          1
+        } else {
+          0
+        }
+      } else {
+        val x = rng.nextDouble()
+        if ((x >= lb) && (x < ub)) {
+          1
+        } else {
+          0
+        }
+      }
+    }
+  }
+
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (ub - lb <= 0.0) {
       if (complement) items else Iterator.empty
@@ -155,6 +183,29 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 
+  private val gapSampling: GapSampling =
+    new GapSampling(fraction, rng, RandomSampler.rngEpsilon)
+
+  override def sample(): Int = {
+    if (fraction <= 0.0) {
+      0
+    } else if (fraction >= 1.0) {
+      1
+    } else if (fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
+      if (gapSampling.sample()) {
+        1
+      } else {
+        0
+      }
+    } else {
+      if (rng.nextDouble() <= fraction) {
+        1
+      } else {
+        0
+      }
+    }
+  }
+
   override def sample(items: Iterator[T]): Iterator[T] = {
     if (fraction <= 0.0) {
       Iterator.empty
@@ -199,6 +250,20 @@ class PoissonSampler[T: ClassTag](
   override def setSeed(seed: Long) {
     rng.reseedRandomGenerator(seed)
     rngGap.setSeed(seed)
+  }
+
+  private val gapSamplingReplacement =
+    new GapSamplingReplacement(fraction, rngGap, RandomSampler.rngEpsilon)
+
+  override def sample(): Int = {
+    if (fraction <= 0.0) {
+      0
+    } else if (useGapSamplingIfPossible &&
+               fraction <= RandomSampler.defaultMaxGapSamplingFraction) {
+      gapSamplingReplacement.sample()
+    } else {
+      rng.sample()
+    }
   }
 
   override def sample(items: Iterator[T]): Iterator[T] = {
@@ -274,11 +339,73 @@ class GapSamplingIterator[T: ClassTag](
 }
 
 private[spark]
+class GapSampling(
+    f: Double,
+    rng: Random = RandomSampler.newDefaultRNG,
+    epsilon: Double = RandomSampler.rngEpsilon) {
+
+  require(f > 0.0  &&  f < 1.0, s"Sampling fraction ($f) must reside on open interval (0, 1)")
+  require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
+
+  private val lnq = math.log1p(-f)
+
+  /** Return true if the next item should be sampled. Otherwise, return false. */
+  def sample(): Boolean = {
+    if (countForDropping > 0) {
+      countForDropping -= 1
+      false
+    } else {
+      advance()
+      true
+    }
+  }
+
+  private var countForDropping: Int = 0
+
+  /**
+   * Decide the number of elements that won't be sampled,
+   * according to geometric dist P(k) = (f)(1-f)^k.
+   */
+  private def advance(): Unit = {
+    val u = math.max(rng.nextDouble(), epsilon)
+    countForDropping = (math.log(u) / lnq).toInt
+  }
+
+  /** advance to first sample as part of object construction. */
+  advance()
+}
+
+private[spark]
+trait PoissonGE {
+  protected val q = math.exp(-f)
+
+  /**
+   * Sample from Poisson distribution, conditioned such that the sampled value is >= 1.
+   * This is an adaptation from the algorithm for Generating Poisson distributed random variables:
+   * http://en.wikipedia.org/wiki/Poisson_distribution
+   */
+  protected def poissonGE1: Int = {
+    // simulate that the standard poisson sampling
+    // gave us at least one iteration, for a sample of >= 1
+    var pp = q + ((1.0 - q) * rng.nextDouble())
+    var r = 1
+
+    // now continue with standard poisson sampling algorithm
+    pp *= rng.nextDouble()
+    while (pp > q) {
+      r += 1
+      pp *= rng.nextDouble()
+    }
+    r
+  }
+}
+
+private[spark]
 class GapSamplingReplacementIterator[T: ClassTag](
     var data: Iterator[T],
     f: Double,
     rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] {
+    epsilon: Double = RandomSampler.rngEpsilon) extends Iterator[T] with PoissonGE {
 
   require(f > 0.0, s"Sampling fraction ($f) must be > 0")
   require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
@@ -332,31 +459,52 @@ class GapSamplingReplacementIterator[T: ClassTag](
     }
   }
 
-  private val q = math.exp(-f)
-
-  /**
-   * Sample from Poisson distribution, conditioned such that the sampled value is >= 1.
-   * This is an adaptation from the algorithm for Generating Poisson distributed random variables:
-   * http://en.wikipedia.org/wiki/Poisson_distribution
-   */
-  private def poissonGE1: Int = {
-    // simulate that the standard poisson sampling
-    // gave us at least one iteration, for a sample of >= 1
-    var pp = q + ((1.0 - q) * rng.nextDouble())
-    var r = 1
-
-    // now continue with standard poisson sampling algorithm
-    pp *= rng.nextDouble()
-    while (pp > q) {
-      r += 1
-      pp *= rng.nextDouble()
-    }
-    r
-  }
-
   /** advance to first sample as part of object construction. */
   advance()
   // Attempting to invoke this closer to the top with other object initialization
   // was causing it to break in strange ways, so I'm invoking it last, which seems to
   // work reliably.
 }
+
+private[spark]
+class GapSamplingReplacement(
+    f: Double,
+    rng: Random = RandomSampler.newDefaultRNG,
+    epsilon: Double = RandomSampler.rngEpsilon) {
+
+  require(f > 0.0, s"Sampling fraction ($f) must be > 0")
+  require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
+
+  private var countForDropping: Int = 0
+
+  override def next(): T = {
+    val r = v
+    rep -= 1
+    if (rep <= 0) advance()
+    r
+  }
+
+  def sample(): Int = {
+    if (countForDropping > 0) {
+      countForDropping -= 1
+      0
+    } else {
+      advance()
+      poissonGE1
+    }
+  }
+
+  /**
+   * Skip elements with replication factor zero (i.e. elements that won't be sampled).
+   * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
+   * q is the probabililty of Poisson(0; f)
+   */
+  private def advance(): Unit = {
+    val u = math.max(rng.nextDouble(), epsilon)
+    countForDropping = (math.log(u) / (-f)).toInt
+  }
+
+  /** advance to first sample as part of object construction. */
+  advance()
+}
+ 
