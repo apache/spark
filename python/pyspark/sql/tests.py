@@ -369,9 +369,7 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(range(3)).map(lambda i: Row(a=i))
         schema = StructType([StructField("a", IntegerType()), StructField("b", StringType())])
         df = self.sqlCtx.createDataFrame(rdd, schema)
-        message = ".*Input row doesn't have expected number of values required by the schema.*"
-        with self.assertRaisesRegexp(Exception, message):
-            df.show()
+        self.assertRaises(Exception, lambda: df.show())
 
     def test_serialize_nested_array_and_map(self):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
@@ -1178,7 +1176,7 @@ class SQLTests(ReusedPySparkTestCase):
         # planner should not crash without a join
         broadcast(df1)._jdf.queryExecution().executedPlan()
 
-    def test_apply_schema(self):
+    def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = self.sc.parallelize(data, 5)
 

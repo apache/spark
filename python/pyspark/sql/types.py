@@ -749,7 +749,7 @@ def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
     to `DataType.simpleString`, except that top level struct type can omit the `struct<>` and
-    numeric types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
+    atomic types use `typeName()` as their format, e.g. use `byte` instead of `tinyint` for
     ByteType. We can also use `int` as a short name for IntegerType.
 
     >>> _parse_datatype_string("int ")
