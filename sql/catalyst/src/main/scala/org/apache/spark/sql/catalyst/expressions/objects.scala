@@ -485,7 +485,9 @@ case class MapObjects private(
  *
  * @param children A list of expression to use as content of the external row.
  */
-case class CreateExternalRow(children: Seq[Expression]) extends Expression with NonSQLExpression {
+case class CreateExternalRow(children: Seq[Expression], schema: StructType)
+  extends Expression with NonSQLExpression {
+
   override def dataType: DataType = ObjectType(classOf[Row])
 
   override def nullable: Boolean = false
@@ -494,8 +496,9 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression with 
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
-    val rowClass = classOf[GenericRow].getName
+    val rowClass = classOf[GenericRowWithSchema].getName
     val values = ctx.freshName("values")
+    val schemaField = ctx.addReferenceObj("schema", schema)
     s"""
       boolean ${ev.isNull} = false;
       final Object[] $values = new Object[${children.size}];
@@ -510,7 +513,7 @@ case class CreateExternalRow(children: Seq[Expression]) extends Expression with 
           }
          """
       }.mkString("\n") +
-      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values);"
+      s"final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);"
   }
 }
 

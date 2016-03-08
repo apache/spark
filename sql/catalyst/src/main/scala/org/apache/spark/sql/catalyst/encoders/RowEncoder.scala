@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
@@ -158,7 +158,7 @@ object RowEncoder {
         constructorFor(field)
       )
     }
-    CreateExternalRow(fields)
+    CreateExternalRow(fields, schema)
   }
 
   private def constructorFor(input: Expression): Expression = input.dataType match {
@@ -217,7 +217,7 @@ object RowEncoder {
         "toScalaMap",
         keyData :: valueData :: Nil)
 
-    case StructType(fields) =>
+    case schema @ StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         If(
           Invoke(input, "isNullAt", BooleanType, Literal(i) :: Nil),
@@ -226,6 +226,6 @@ object RowEncoder {
       }
       If(IsNull(input),
         Literal.create(null, externalDataTypeFor(input.dataType)),
-        CreateExternalRow(convertedFields))
+        CreateExternalRow(convertedFields, schema))
   }
 }
