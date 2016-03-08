@@ -18,8 +18,8 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
@@ -28,7 +28,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
-class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContext {
+class DecisionTreeRegressorSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeRegressorSuite.compareAPIs
 
@@ -120,7 +121,27 @@ class DecisionTreeRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: test("model save/load")   SPARK-6725
+  test("read/write") {
+    def checkModelData(
+        model: DecisionTreeRegressionModel,
+        model2: DecisionTreeRegressionModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
+    }
+
+    val dt = new DecisionTreeRegressor()
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val categoricalData: DataFrame =
+      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 0)
+    testEstimatorAndModelReadWrite(dt, categoricalData,
+      DecisionTreeRegressorSuite.allParamSettings, checkModelData)
+
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
+    testEstimatorAndModelReadWrite(dt, continuousData,
+      DecisionTreeRegressorSuite.allParamSettings, checkModelData)
+  }
 }
 
 private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
@@ -144,4 +165,11 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     TreeTests.checkEqual(oldTreeAsNew, newTree)
     assert(newTree.numFeatures === numFeatures)
   }
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = TreeTests.allParamSettings
 }

@@ -273,7 +273,23 @@ private[ml] object DefaultParamsReader {
       sparkVersion: String,
       params: JValue,
       metadata: JValue,
-      metadataJson: String)
+      metadataJson: String) {
+    def getParamValue(paramName: String): JValue = {
+      implicit val format = DefaultFormats
+      params match {
+        case JObject(pairs) =>
+          val values = pairs.filter { case (pName, jsonValue) =>
+            pName == paramName
+          }.map(_._2)
+          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
+            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
+          values.head
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: $metadataJson.")
+      }
+    }
+  }
 
   /**
    * Load metadata from file.
@@ -302,6 +318,7 @@ private[ml] object DefaultParamsReader {
   /**
    * Extract Params from metadata, and set them in the instance.
    * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   * TODO: Move to [[Metadata]] method
    */
   def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
     implicit val format = DefaultFormats

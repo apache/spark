@@ -18,11 +18,13 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
-import org.json4s.JsonAST.JValue
+import org.json4s.{DefaultFormats, JObject}
+import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
+import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -30,7 +32,8 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.DataFrame
+
 
 /**
  * :: Experimental ::
@@ -44,7 +47,7 @@ import org.apache.spark.sql.{Row, DataFrame}
 final class DecisionTreeClassifier @Since("1.4.0") (
     @Since("1.4.0") override val uid: String)
   extends ProbabilisticClassifier[Vector, DecisionTreeClassifier, DecisionTreeClassificationModel]
-  with DecisionTreeParams with TreeClassifierParams with DefaultParamsWritable {
+  with DecisionTreeClassifierParams with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("dtc"))
@@ -115,7 +118,7 @@ object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifi
   @Since("1.4.0")
   final val supportedImpurities: Array[String] = TreeClassifierParams.supportedImpurities
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): DecisionTreeClassifier = super.load(path)
 }
 
@@ -133,14 +136,15 @@ final class DecisionTreeClassificationModel private[ml] (
     @Since("1.6.0")override val numFeatures: Int,
     @Since("1.5.0")override val numClasses: Int)
   extends ProbabilisticClassificationModel[Vector, DecisionTreeClassificationModel]
-  with DecisionTreeModel with MLWritable with Serializable {
+  with DecisionTreeModel with DecisionTreeClassifierParams with MLWritable with Serializable {
 
   require(rootNode != null,
     "DecisionTreeClassificationModel given null rootNode, but it requires a non-null rootNode.")
 
   /**
    * Construct a decision tree classification model.
-   * @param rootNode  Root node of tree, with other nodes attached.
+    *
+    * @param rootNode  Root node of tree, with other nodes attached.
    */
   private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)
@@ -199,107 +203,29 @@ final class DecisionTreeClassificationModel private[ml] (
     new OldDecisionTreeModel(rootNode.toOld(1), OldAlgo.Classification)
   }
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def write: MLWriter =
     new DecisionTreeClassificationModel.DecisionTreeClassificationModelWriter(this)
 }
 
-@Since("1.6.0")
+@Since("2.0.0")
 object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassificationModel] {
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def read: MLReader[DecisionTreeClassificationModel] =
     new DecisionTreeClassificationModelReader
 
-  @Since("1.6.0")
+  @Since("2.0.0")
   override def load(path: String): DecisionTreeClassificationModel = super.load(path)
 
   private[DecisionTreeClassificationModel]
   class DecisionTreeClassificationModelWriter(instance: DecisionTreeClassificationModel)
     extends MLWriter {
 
-    import org.json4s.jackson.JsonMethods._
-    import org.json4s.JsonDSL._
-
-    /**
-     * Info for a [[org.apache.spark.ml.tree.Split]]
-     * @param featureIndex  Index of feature split on
-     * @param leftCategoriesOrThreshold  For categorical feature, set of leftCategories.
-     *                                   For continuous feature, threshold.
-     * @param numCategories  For categorical feature, number of categories.
-     *                       For continuous feature, -1.
-     */
-    private[ml] case class SplitData(
-      featureIndex: Int,
-      leftCategoriesOrThreshold: Array[Double],
-      numCategories: Int)
-
-    private[ml] object SplitData {
-      def apply(split: Split): SplitData = split match {
-        case s: CategoricalSplit =>
-          SplitData(s.featureIndex, s.leftCategories, s.numCategories)
-        case s: ContinuousSplit =>
-          SplitData(s.featureIndex, Array(s.threshold), -1)
-      }
-    }
-
-    /**
-     * Info for a [[Node]]
-     * @param id  Index used for tree reconstruction.  Indices follow an in-order traversal.
-     * @param impurityStats  Stats array.  Impurity type is stored in metadata.
-     * @param gain  Gain, or arbitrary value if leaf node.
-     * @param leftChild  Left child index, or arbitrary value if leaf node.
-     * @param rightChild  Right child index, or arbitrary value if leaf node.
-     * @param split  Split info, or arbitrary value if leaf node.
-     */
-    private[ml] case class NodeData(
-        id: Int,
-        prediction: Double,
-        impurity: Double,
-        impurityStats: Array[Double],
-        gain: Double,
-        leftChild: Int,
-        rightChild: Int,
-        split: SplitData)
-
-    private[ml] object NodeData {
-      /**
-       * Create [[NodeData]] instances for this node and all children.
-       * @param id  Current ID.  IDs are assigned via an in-order traversal.
-       * @return (sequence of nodes in preorder traversal order, largest ID in subtree)
-       *         The nodes are returned in preorder traversal (root first) so that it is easy to
-       *         get the ID of the subtree's root node.
-       */
-      def build(node: Node, id: Int): (Seq[NodeData], Int) = node match {
-        case n: InternalNode =>
-          val (leftNodeData, leftIdx) = build(n.leftChild, id)
-          val (rightNodeData, rightIdx) = build(n.rightChild, leftIdx + 2)
-          val thisNodeData = NodeData(leftIdx + 1, n.prediction, n.impurity, n.impurityStats.stats,
-            n.gain, leftNodeData.head.id, rightNodeData.head.id, SplitData(n.split))
-          (thisNodeData +: (leftNodeData ++ rightNodeData), rightIdx)
-        case _: LeafNode =>
-          (Seq(NodeData(id, node.prediction, node.impurity, node.impurityStats.stats,
-            -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
-            id)
-      }
-
-      def reconstruct(df: DataFrame): Node = {
-        val nodeDatas = df.select("id", "prediction", "impurity", "impurityStats", "gain",
-          "leftChild", "rightChild",
-          "split.featureIndex", "split.leftCategoriesOrThreshold", "split.numCategories")
-          .map {
-            case Row(id: Int, prediction: Double, impurity: Double, impurityStats: Seq[Double],
-                gain: Double, leftChild: Int, rightChild: Int, splitFeatureIndex: Int,
-                splitLeftCategoriesOrThreshold: Seq[Double], splitNumCategories: Int) =>
-              
-          }
-      }
-    }
-
     override protected def saveImpl(path: String): Unit = {
-      val extraMetadata: JValue = render(Map(
+      val extraMetadata: JObject = Map(
         "numFeatures" -> instance.numFeatures,
-        "numClasses" -> instance.numClasses))
+        "numClasses" -> instance.numClasses)
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
@@ -314,11 +240,14 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     private val className = classOf[DecisionTreeClassificationModel].getName
 
     override def load(path: String): DecisionTreeClassificationModel = {
+      implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
-      val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.format("parquet").load(dataPath)
-
+      val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
+      val numClasses = (metadata.metadata \ "numClasses").extract[Int]
+      val root = loadTreeNodes(path, metadata, sqlContext)
+      val model = new DecisionTreeClassificationModel(metadata.uid, root, numFeatures, numClasses)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
     }
   }
 

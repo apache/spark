@@ -18,10 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
@@ -30,7 +30,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 
-class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
+class DecisionTreeClassifierSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import DecisionTreeClassifierSuite.compareAPIs
 
@@ -338,25 +339,28 @@ class DecisionTreeClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
 
-  // TODO: Reinstate test once save/load are implemented   SPARK-6725
-  /*
-  test("model save/load") {
-    val tempDir = Utils.createTempDir()
-    val path = tempDir.toURI.toString
-
-    val oldModel = OldDecisionTreeSuite.createModel(OldAlgo.Classification)
-    val newModel = DecisionTreeClassificationModel.fromOld(oldModel)
-
-    // Save model, load it back, and compare.
-    try {
-      newModel.save(sc, path)
-      val sameNewModel = DecisionTreeClassificationModel.load(sc, path)
-      TreeTests.checkEqual(newModel, sameNewModel)
-    } finally {
-      Utils.deleteRecursively(tempDir)
+  test("read/write") {
+    def checkModelData(
+        model: DecisionTreeClassificationModel,
+        model2: DecisionTreeClassificationModel): Unit = {
+      TreeTests.checkEqual(model, model2)
+      assert(model.numFeatures === model2.numFeatures)
+      assert(model.numClasses === model2.numClasses)
     }
+
+    val dt = new DecisionTreeClassifier()
+    val rdd = TreeTests.getTreeReadWriteData(sc)
+
+    val categoricalData: DataFrame =
+      TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
+    testEstimatorAndModelReadWrite(dt, categoricalData,
+      DecisionTreeClassifierSuite.allParamSettings, checkModelData)
+
+    val continuousData: DataFrame =
+      TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
+    testEstimatorAndModelReadWrite(dt, continuousData,
+      DecisionTreeClassifierSuite.allParamSettings, checkModelData)
   }
-  */
 }
 
 private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
@@ -381,4 +385,12 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     TreeTests.checkEqual(oldTreeAsNew, newTree)
     assert(newTree.numFeatures === numFeatures)
   }
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] =
+    Map("impurity" -> "entropy") ++ TreeTests.allParamSettings
 }
