@@ -33,4 +33,6 @@ trait Source  {
    * Returns the next batch of data that is available after `start`, if any is available.
    */
   def getNextBatch(start: Option[Offset]): Option[Batch]
+
+  def stop(): Unit
 }

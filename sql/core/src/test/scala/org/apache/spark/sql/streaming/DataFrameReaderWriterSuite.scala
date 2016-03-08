@@ -43,6 +43,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     new Source {
       override def getNextBatch(start: Option[Offset]): Option[Batch] = None
       override def schema: StructType = StructType(StructField("a", IntegerType) :: Nil)
+      override def stop(): Unit = {}
     }
   }
 
