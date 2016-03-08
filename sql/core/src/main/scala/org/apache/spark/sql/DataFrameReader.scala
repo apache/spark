@@ -122,13 +122,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val resolved =
+    val dataSource =
       DataSource(
         sqlContext,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    DataFrame(sqlContext, LogicalRelation(resolved.resolveRelation()))
+    DataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -169,13 +169,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 2.0.0
    */
   def stream(): DataFrame = {
-    val resolved =
+    val dataSource =
       DataSource(
         sqlContext,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    DataFrame(sqlContext, StreamingRelation(resolved.streamingSource))
+    DataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
   }
 
   /**

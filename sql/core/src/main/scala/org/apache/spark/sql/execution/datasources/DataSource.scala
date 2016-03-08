@@ -51,8 +51,8 @@ import org.apache.spark.util.Utils
  *
  * @param paths A list of file system paths that hold data.  These will be globbed before and
  *              qualified. This option only works when reading from a [[FileFormat]].
- * @param userSpecifiedSchema An optional specification of the schema of the data. When given, this
- *                           willcause us to skip attempting to infer the schema.
+ * @param userSpecifiedSchema An optional specification of the schema of the data. When present
+ *                            we skip attempting to infer the schema.
  * @param partitionColumns A list of column names that the relation is partitioned by.  When this
  *                         list is empty, the relation is unpartitioned.
  * @param bucketSpec An optional specification for bucketing (hash-partitioning) of the data.
@@ -122,7 +122,7 @@ case class DataSource(
   }
 
   /** Returns a source that can be used to continually read data. */
-  def streamingSource(): Source = {
+  def createSource(): Source = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         s.createSource(sqlContext, userSpecifiedSchema, className, options)
