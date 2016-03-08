@@ -390,7 +390,6 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(stream);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 3, 3);
     Assert.assertEquals(expected, result);
-    jsc.stop();
   }
 
   @SuppressWarnings("unchecked")
