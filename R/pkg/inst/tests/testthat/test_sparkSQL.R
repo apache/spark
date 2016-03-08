@@ -1899,11 +1899,13 @@ test_that("Method str()", {
 
 test_that("Histogram", {
 
-  # If ggplot2 is not installed, install it
-  if (!("ggplot2" %in% installed.packages()[, 1])) {
-    install.packages("ggplot2", repos = "http://cran.us.r-project.org")
-  }
-  library(ggplot2)
+  suppressWarnings({
+    # If ggplot2 is not installed, install it
+    if (!("ggplot2" %in% installed.packages()[, 1])) {
+      install.packages("ggplot2", repos = "http://cran.us.r-project.org")
+    }
+    library(ggplot2)
+  })
 
   # Basic histogram test
   expect_equal(
