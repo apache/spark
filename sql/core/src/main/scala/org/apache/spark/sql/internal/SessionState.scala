@@ -18,15 +18,14 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.{ContinuousQueryManager, SQLContext, UDFRegistration}
-import org.apache.spark.sql.catalyst.ParserInterface
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, Catalog, FunctionRegistry, SimpleCatalog}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.datasources.{PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.util.ExecutionListenerManager
-
 
 /**
  * A class that holds all session-specific state in a given [[SQLContext]].
@@ -63,8 +62,9 @@ private[sql] class SessionState(ctx: SQLContext) {
     new Analyzer(catalog, functionRegistry, conf) {
       override val extendedResolutionRules =
         python.ExtractPythonUDFs ::
-          PreInsertCastAndRename ::
-          (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
+        PreInsertCastAndRename ::
+        DataSourceAnalysis ::
+        (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(datasources.PreWriteCheck(catalog))
     }

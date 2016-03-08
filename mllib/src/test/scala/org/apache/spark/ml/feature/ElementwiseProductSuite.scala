@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.ml.feature
 
-import java.nio.ByteBuffer
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-/**
- * Result of adding a block into a BlockStore. This case class contains a few things:
- *   (1) The estimated size of the put,
- *   (2) The values put if the caller asked for them to be returned (e.g. for chaining
- *       replication), and
- *   (3) A list of blocks dropped as a result of this put. This is always empty for DiskStore.
- */
-private[spark] case class PutResult(
-    size: Long,
-    data: Either[Iterator[_], ByteBuffer],
-    droppedBlocks: Seq[(BlockId, BlockStatus)] = Seq.empty)
+class ElementwiseProductSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  test("read/write") {
+    val ep = new ElementwiseProduct()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setScalingVec(Vectors.dense(0.1, 0.2))
+    testDefaultReadWrite(ep)
+  }
+}
