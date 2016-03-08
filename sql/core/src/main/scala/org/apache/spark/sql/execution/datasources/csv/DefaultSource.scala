@@ -165,8 +165,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sqlContext.sparkContext.textFile(location)
     } else {
       val charset = options.charset
+      val conf = sqlContext.sparkContext.hadoopConfiguration
+      conf.set(EncodingTextInputFormat.ENCODING_KEY, charset)
       sqlContext.sparkContext
-        .hadoopFile[LongWritable, Text, TextInputFormat](location)
+        .newAPIHadoopFile[LongWritable, Text, EncodingTextInputFormat](location)
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
     }
   }
