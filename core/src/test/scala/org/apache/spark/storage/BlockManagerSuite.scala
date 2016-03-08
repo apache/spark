@@ -585,36 +585,46 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("disk and memory storage") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getSingleAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = false)
   }
 
   test("disk and memory storage with getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getLocalBytesAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = true)
   }
 
   test("disk and memory storage with serialization") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getSingleAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = false)
   }
 
   test("disk and memory storage with serialization and getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getLocalBytesAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = true)
   }
 
   def testDiskAndMemoryStorage(
       storageLevel: StorageLevel,
-      accessMethod: BlockManager => BlockId => Option[_]): Unit = {
+      getAsBytes: Boolean): Unit = {
     store = makeBlockManager(12000)
+    val accessMethod =
+      if (getAsBytes) store.getLocalBytesAndReleaseLock else store.getSingleAndReleaseLock
     val a1 = new Array[Byte](4000)
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
     store.putSingle("a1", a1, storageLevel)
     store.putSingle("a2", a2, storageLevel)
     store.putSingle("a3", a3, storageLevel)
-    assert(accessMethod(store)("a2").isDefined, "a2 was not in store")
-    assert(accessMethod(store)("a3").isDefined, "a3 was not in store")
-    assert(store.memoryStore.getValues("a1").isEmpty, "a1 was in memory store")
-    assert(accessMethod(store)("a1").isDefined, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
+    assert(accessMethod("a2").isDefined, "a2 was not in store")
+    assert(accessMethod("a3").isDefined, "a3 was not in store")
+    assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
+    assert(accessMethod("a1").isDefined, "a1 was not in store")
+    val dataShouldHaveBeenCachedBackIntoMemory = {
+      if (storageLevel.deserialized) !getAsBytes
+      else getAsBytes
+    }
+    if (dataShouldHaveBeenCachedBackIntoMemory) {
+      assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
+    } else {
+      assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
+    }
   }
 
   test("LRU with mixed storage levels") {
@@ -1156,14 +1166,12 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Unroll with plenty of space. This should succeed and cache both blocks.
-    val result1 = memoryStore.putIterator("b1", smallIterator, memOnly, returnValues = true)
-    val result2 = memoryStore.putIterator("b2", smallIterator, memOnly, returnValues = true)
+    val result1 = memoryStore.putIterator("b1", smallIterator, memOnly)
+    val result2 = memoryStore.putIterator("b2", smallIterator, memOnly)
     assert(memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
-    assert(result1.size > 0) // unroll was successful
-    assert(result2.size > 0)
-    assert(result1.data.isLeft) // unroll did not drop this block to disk
-    assert(result2.data.isLeft)
+    assert(result1.isRight) // unroll was successful
+    assert(result2.isRight)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Re-put these two blocks so block manager knows about them too. Otherwise, block manager
@@ -1174,9 +1182,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putIterator("b2", smallIterator, memOnly)
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
-    val result3 = memoryStore.putIterator("b3", smallIterator, memOnly, returnValues = true)
-    assert(result3.size > 0)
-    assert(result3.data.isLeft)
+    val result3 = memoryStore.putIterator("b3", smallIterator, memOnly)
+    assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1185,9 +1192,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putIterator("b3", smallIterator, memOnly)
 
     // Unroll huge block with not enough space. This should fail and kick out b2 in the process.
-    val result4 = memoryStore.putIterator("b4", bigIterator, memOnly, returnValues = true)
-    assert(result4.size === 0) // unroll was unsuccessful
-    assert(result4.data.isLeft)
+    val result4 = memoryStore.putIterator("b4", bigIterator, memOnly)
+    assert(result4.isLeft) // unroll was unsuccessful
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1214,8 +1220,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     // Unroll with not enough space. This should succeed but kick out b1 in the process.
     // Memory store should contain b2 and b3, while disk store should contain only b1
-    val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk, returnValues = true)
-    assert(result3.size > 0)
+    val result3 = memoryStore.putIterator("b3", smallIterator, memAndDisk)
+    assert(result3.isRight)
     assert(!memoryStore.contains("b1"))
     assert(memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1229,9 +1235,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Unroll huge block with not enough space. This should fail and drop the new block to disk
     // directly in addition to kicking out b2 in the process. Memory store should contain only
     // b3, while disk store should contain b1, b2 and b4.
-    val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk, returnValues = true)
-    assert(result4.size > 0)
-    assert(result4.data.isRight) // unroll returned bytes from disk
+    val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk)
+    assert(result4.isRight)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
@@ -1252,28 +1257,28 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // All unroll memory used is released because unrollSafely returned an array
-    memoryStore.putIterator("b1", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b1", smallIterator, memOnly)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
-    memoryStore.putIterator("b2", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b2", smallIterator, memOnly)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
     // Unroll memory is not released because unrollSafely returned an iterator
     // that still depends on the underlying vector used in the process
-    memoryStore.putIterator("b3", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b3", smallIterator, memOnly)
     val unrollMemoryAfterB3 = memoryStore.currentUnrollMemoryForThisTask
     assert(unrollMemoryAfterB3 > 0)
 
     // The unroll memory owned by this thread builds on top of its value after the previous unrolls
-    memoryStore.putIterator("b4", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b4", smallIterator, memOnly)
     val unrollMemoryAfterB4 = memoryStore.currentUnrollMemoryForThisTask
     assert(unrollMemoryAfterB4 > unrollMemoryAfterB3)
 
     // ... but only to a certain extent (until we run out of free space to grant new unroll memory)
-    memoryStore.putIterator("b5", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b5", smallIterator, memOnly)
     val unrollMemoryAfterB5 = memoryStore.currentUnrollMemoryForThisTask
-    memoryStore.putIterator("b6", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b6", smallIterator, memOnly)
     val unrollMemoryAfterB6 = memoryStore.currentUnrollMemoryForThisTask
-    memoryStore.putIterator("b7", smallIterator, memOnly, returnValues = true)
+    memoryStore.putIterator("b7", smallIterator, memOnly)
     val unrollMemoryAfterB7 = memoryStore.currentUnrollMemoryForThisTask
     assert(unrollMemoryAfterB5 === unrollMemoryAfterB4)
     assert(unrollMemoryAfterB6 === unrollMemoryAfterB4)
@@ -1286,11 +1291,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockId = BlockId("rdd_3_10")
     store.blockInfoManager.lockNewBlockForWriting(
       blockId, new BlockInfo(StorageLevel.MEMORY_ONLY, tellMaster = false))
-    val result = memoryStore.putBytes(blockId, 13000, () => {
+    memoryStore.putBytes(blockId, 13000, () => {
       fail("A big ByteBuffer that cannot be put into MemoryStore should not be created")
     })
-    assert(result.size === 13000)
-    assert(result.data === null)
   }
 
   test("put a small ByteBuffer to MemoryStore") {
@@ -1298,12 +1301,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val memoryStore = store.memoryStore
     val blockId = BlockId("rdd_3_10")
     var bytes: ByteBuffer = null
-    val result = memoryStore.putBytes(blockId, 10000, () => {
+    memoryStore.putBytes(blockId, 10000, () => {
       bytes = ByteBuffer.allocate(10000)
       bytes
     })
-    assert(result.size === 10000)
-    assert(result.data === Right(bytes))
+    assert(memoryStore.getSize(blockId) === 10000)
   }
 
   test("read-locked blocks cannot be evicted from the MemoryStore") {
