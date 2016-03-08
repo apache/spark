@@ -167,6 +167,5 @@
         </module>
         <module name="CommentsIndentation"/>
         <module name="UnusedImports"/>
-        <module name="DiamondOperatorForVariableDefinition"/>
     </module>
 </module>
