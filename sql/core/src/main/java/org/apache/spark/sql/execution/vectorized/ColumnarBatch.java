@@ -22,6 +22,7 @@ import java.util.Iterator;
 import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
+import org.apache.spark.sql.Column;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -314,6 +315,17 @@ public final class ColumnarBatch {
    * Returns the column at `ordinal`.
    */
   public ColumnVector column(int ordinal) { return columns[ordinal]; }
+
+  /**
+   * Sets (replaces) the column at `ordinal` with column. This can be used to do very efficient
+   * projections.
+   */
+  public void setColumn(int ordinal, ColumnVector column) {
+    if (column instanceof OffHeapColumnVector) {
+      throw new NotImplementedException("Need to ref count columns.");
+    }
+    columns[ordinal] = column;
+  }
 
   /**
    * Returns the row in this batch at `rowId`. Returned row is reused across calls.

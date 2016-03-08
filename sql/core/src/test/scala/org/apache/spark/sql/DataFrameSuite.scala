@@ -889,7 +889,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .write.format("parquet").save("temp")
     }
     assert(e.getMessage.contains("Duplicate column(s)"))
-    assert(e.getMessage.contains("parquet"))
     assert(e.getMessage.contains("column1"))
     assert(!e.getMessage.contains("column2"))
 
@@ -900,7 +899,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .write.format("json").save("temp")
     }
     assert(f.getMessage.contains("Duplicate column(s)"))
-    assert(f.getMessage.contains("JSON"))
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))
