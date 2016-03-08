@@ -366,7 +366,7 @@ private[hive] class HiveClientImpl(
   override def dropPartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     specs.foreach { s => client.dropPartition(db, table, s.values.toList.asJava, true) }
   }
@@ -374,8 +374,8 @@ private[hive] class HiveClientImpl(
   override def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[Catalog.TablePartitionSpec],
-      newSpecs: Seq[Catalog.TablePartitionSpec]): Unit = withHiveState {
+      specs: Seq[ExternalCatalog.TablePartitionSpec],
+      newSpecs: Seq[ExternalCatalog.TablePartitionSpec]): Unit = withHiveState {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     val catalogTable = getTable(db, table)
     val hiveTable = toHiveTable(catalogTable)
@@ -397,7 +397,7 @@ private[hive] class HiveClientImpl(
 
   override def getPartitionOption(
       table: CatalogTable,
-      spec: Catalog.TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
+      spec: ExternalCatalog.TablePartitionSpec): Option[CatalogTablePartition] = withHiveState {
     val hiveTable = toHiveTable(table)
     val hivePartition = client.getPartition(hiveTable, spec.asJava, false)
     Option(hivePartition).map(fromHivePartition)

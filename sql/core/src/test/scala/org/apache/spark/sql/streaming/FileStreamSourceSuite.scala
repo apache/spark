@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, File, FileNotFoundException, InputStream}
 
 import com.google.common.base.Charsets.UTF_8
 
-import org.apache.spark.sql.StreamTest
+import org.apache.spark.sql.{AnalysisException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource._
@@ -112,7 +112,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 
   test("FileStreamSource schema: path doesn't exist") {
-    intercept[FileNotFoundException] {
+    intercept[AnalysisException] {
       createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
     }
   }
@@ -146,11 +146,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: parquet, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[AnalysisException] {
         createFileStreamSourceAndGetSchema(
           format = Some("parquet"), path = Some(new File(src, "1").getCanonicalPath), schema = None)
       }
-      assert("No schema specified" === e.getMessage)
+      assert("Unable to infer schema.  It must be specified manually.;" === e.getMessage)
     }
   }
 
@@ -177,11 +177,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: json, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[IllegalArgumentException] {
+      val e = intercept[AnalysisException] {
         createFileStreamSourceAndGetSchema(
           format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
       }
-      assert("No schema specified" === e.getMessage)
+      assert("Unable to infer schema.  It must be specified manually.;" === e.getMessage)
     }
   }
 
@@ -310,10 +310,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     createFileStreamSource("text", src.getCanonicalPath)
 
     // Both "json" and "parquet" require a schema if no existing file to infer
-    intercept[IllegalArgumentException] {
+    intercept[AnalysisException] {
       createFileStreamSource("json", src.getCanonicalPath)
     }
-    intercept[IllegalArgumentException] {
+    intercept[AnalysisException] {
       createFileStreamSource("parquet", src.getCanonicalPath)
     }
 

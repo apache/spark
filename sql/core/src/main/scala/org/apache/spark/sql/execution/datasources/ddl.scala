@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
 /**
@@ -92,7 +92,10 @@ case class CreateTempTableUsing(
 
   def run(sqlContext: SQLContext): Seq[Row] = {
     val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], bucketSpec = None, provider, options)
+      sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      provider = provider,
+      options = options)
     sqlContext.catalog.registerTable(
       tableIdent,
       DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)

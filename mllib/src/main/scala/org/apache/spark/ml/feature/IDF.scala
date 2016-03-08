@@ -79,7 +79,7 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
 
   override def fit(dataset: DataFrame): IDFModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).map { case Row(v: Vector) => v }
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
     val idf = new feature.IDF($(minDocFreq)).fit(input)
     copyValues(new IDFModel(uid, idf).setParent(this))
   }
