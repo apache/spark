@@ -38,7 +38,7 @@ object ALSSuite {
       negativeWeights: Boolean): (java.util.List[Rating], Array[Double], Array[Double]) = {
     val (sampledRatings, trueRatings, truePrefs) =
       generateRatings(users, products, features, samplingRate, implicitPrefs, negativeWeights)
-    (sampledRatings.asJava, trueRatings.data, truePrefs.data)
+    (sampledRatings.asJava, trueRatings.toArray, if (truePrefs == null) null else truePrefs.toArray)
   }
 
   def generateRatings(

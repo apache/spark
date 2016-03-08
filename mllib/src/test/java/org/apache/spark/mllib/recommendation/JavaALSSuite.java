@@ -67,7 +67,7 @@ public class JavaALSSuite implements Serializable {
     if (!implicitPrefs) {
       for (Rating r: predictedRatings) {
         double prediction = r.rating();
-        double correct = trueRatings[r.user() * products + r.product()];
+        double correct = trueRatings[r.product() * users + r.user()];
         Assert.assertTrue(String.format("Prediction=%2.4f not below match threshold of %2.2f",
           prediction, matchThreshold), Math.abs(prediction - correct) < matchThreshold);
       }
@@ -78,9 +78,9 @@ public class JavaALSSuite implements Serializable {
       double denom = 0.0;
       for (Rating r: predictedRatings) {
         double prediction = r.rating();
-        double truePref = truePrefs[r.user() * products + r.product()];
+        double truePref = truePrefs[r.product() * users + r.user()];
         double confidence = 1.0 +
-          /* alpha = */ 1.0 * Math.abs(trueRatings[r.user() * products + r.product()]);
+          /* alpha = 1.0 * ... */ Math.abs(trueRatings[r.product() * users + r.user()]);
         double err = confidence * (truePref - prediction) * (truePref - prediction);
         sqErr += err;
         denom += confidence;
