@@ -205,7 +205,9 @@ private[spark] class MemoryStore(
    * This method returns either an array with the contents of the entire block or an iterator
    * containing the values of the block (if the array would have exceeded available memory).
    */
-  def unrollSafely(blockId: BlockId, values: Iterator[Any]): Either[Array[Any], Iterator[Any]] = {
+  private def unrollSafely(
+      blockId: BlockId,
+      values: Iterator[Any]): Either[Array[Any], Iterator[Any]] = {
 
     // Number of elements unrolled so far
     var elementsUnrolled = 0
