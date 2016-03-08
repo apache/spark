@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
@@ -122,12 +122,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val resolved = ResolvedDataSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      provider = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, LogicalRelation(resolved.relation))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    DataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -152,12 +153,12 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       sqlContext.emptyDataFrame
     } else {
       sqlContext.baseRelationToDataFrame(
-        ResolvedDataSource.apply(
+        DataSource.apply(
           sqlContext,
           paths = paths,
           userSpecifiedSchema = userSpecifiedSchema,
-          provider = source,
-          options = extraOptions.toMap).relation)
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
     }
   }
 
@@ -168,12 +169,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 2.0.0
    */
   def stream(): DataFrame = {
-    val resolved = ResolvedDataSource.createSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      providerName = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, StreamingRelation(resolved))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    DataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
   }
 
   /**
