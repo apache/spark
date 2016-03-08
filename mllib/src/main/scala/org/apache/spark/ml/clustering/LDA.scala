@@ -786,7 +786,11 @@ class LDA @Since("1.6.0") (
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext, None)
     }
-    copyValues(newModel).setParent(this)
+    copyValues(newModel,
+      ParamMap(
+        docConcentration -> oldModel.docConcentration.toArray,
+        topicConcentration -> oldModel.topicConcentration))
+      .setParent(this)
   }
 
   @Since("1.6.0")
