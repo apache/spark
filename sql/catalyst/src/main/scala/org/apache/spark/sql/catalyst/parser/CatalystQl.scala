@@ -542,6 +542,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       // do nothing
     }
     collected += rest
+    // keep them in the same order as in SQL
     collected.reverse
   }
 
