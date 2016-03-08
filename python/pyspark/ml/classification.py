@@ -556,7 +556,7 @@ class GBTClassificationModel(TreeEnsembleModels):
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
-                 HasRawPredictionCol):
+                 HasRawPredictionCol, MLWritable, MLReadable):
     """
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. Multinomial NB
@@ -591,6 +591,17 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> model.transform(test1).head().prediction
     1.0
 
+    >>> nb_path = temp_path + "/nb"
+    >>> nb.save(nb_path)
+    >>> nb2 = NaiveBayes.load(nb_path)
+    >>> model_path = temp_path + "/nb_model"
+    >>> model.save(model_path)
+    >>> model2 = NaiveBayesModel.load(model_path)
+    >>> model.pi == model2.pi
+    True
+    >>> model.theta == model2.theta
+    True
+    
     .. versionadded:: 1.5.0
     """
 
@@ -663,7 +674,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel):
+class NaiveBayesModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -689,7 +700,7 @@ class NaiveBayesModel(JavaModel):
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed):
+                                     HasMaxIter, HasTol, HasSeed, MLWritable, MLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -794,7 +805,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel):
+class MultilayerPerceptronClassificationModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
