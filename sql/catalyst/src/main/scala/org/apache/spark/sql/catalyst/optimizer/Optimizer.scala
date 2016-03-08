@@ -340,7 +340,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
       mp.copy(child = prunedChild(child, mp.references))
 
-    // Prunes the unused columns from child of Aggregate/Window/Expand/Generate
+    // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
