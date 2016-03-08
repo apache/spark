@@ -125,18 +125,21 @@ private[spark] class MemoryStore(
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val size = {
-          if (level.deserialized) {
-            val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-            tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)
-            sizeEstimate
+        if (level.deserialized) {
+          val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
+          if (tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)) {
+            Right(sizeEstimate)
           } else {
-            val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-            tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-            bytes.limit()
+            Left(arrayValues.toIterator)
+          }
+        } else {
+          val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+          if (tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)) {
+            Right(bytes.limit())
+          } else {
+            Left(arrayValues.toIterator)
           }
         }
-        Right(size)
       case Right(iteratorValues) =>
         Left(iteratorValues)
     }
