@@ -27,14 +27,14 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.IntegerType
 
-class AddFilterOfNullForInnerJoinSuite extends PlanTest {
+class AddNullFilterForEquiJoinSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Subqueries", Once,
         EliminateSubqueryAliases) ::
       Batch("Add Filter", FixedPoint(100),
-        AddFilterOfNullForInnerJoin) :: Nil
+        AddNullFilterForEquiJoin) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)

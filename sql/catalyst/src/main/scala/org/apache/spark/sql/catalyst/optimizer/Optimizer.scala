@@ -58,8 +58,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", FixedPoint(100),
       RemoveLiteralFromGroupExpressions) ::
-    Batch("Join", FixedPoint(100),
-      AddFilterOfNullForInnerJoin) ::
     Batch("Operator Optimizations", FixedPoint(100),
       // Operator push down
       SetOperationPushDown,
@@ -72,6 +70,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       LimitPushDown,
       ColumnPruning,
+      AddNullFilterForEquiJoin,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -148,11 +147,11 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 }
 
 /**
- * Add Filter to left and right of an inner Join to filter out rows with null keys.
+ * Add Filter to left and right of a EquiJoin to filter out rows with null keys.
  * So we may not need to check nullability of keys while joining. Besides, by filtering
  * out keys with null, we can also reduce data size in Join.
  */
-object AddFilterOfNullForInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
+object AddNullFilterForEquiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
       val leftConditions = leftKeys.distinct.map { l =>
