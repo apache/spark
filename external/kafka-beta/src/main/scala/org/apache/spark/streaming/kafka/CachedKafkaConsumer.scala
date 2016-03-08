@@ -22,7 +22,7 @@ import java.{ util => ju }
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{ Logging, SparkConf }
 
 /** Consumer of single topicpartition, intended for cached reuse.
   * Underlying consumer is not threadsafe, so neither is this,
@@ -33,7 +33,7 @@ class CachedKafkaConsumer[K, V] private(
   val groupId: String,
   val topic: String,
   val partition: Int,
-  val kafkaParams: ju.Map[String, Object]) {
+  val kafkaParams: ju.Map[String, Object]) extends Logging {
 
   assert(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
     "groupId used for cache key must match the groupId in kafkaParams")
@@ -59,6 +59,7 @@ class CachedKafkaConsumer[K, V] private(
     var record = buffer.next()
 
     if (record.offset != offset) {
+      log.info(s"buffer miss for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
       record = buffer.next()
@@ -80,7 +81,7 @@ class CachedKafkaConsumer[K, V] private(
 }
 
 private[kafka]
-object CachedKafkaConsumer {
+object CachedKafkaConsumer extends Logging {
 
   private case class CacheKey(groupId: String, topic: String, partition: Int)
 
@@ -119,6 +120,7 @@ object CachedKafkaConsumer {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
       if (null == v) {
+        log.info(s"cache miss for $groupId $topic $partition")
         val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
         cache.put(k, c)
         c

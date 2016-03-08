@@ -51,7 +51,7 @@ import scala.collection.JavaConverters._
  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
  */
 
-class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
+class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
     _ssc: StreamingContext,
     val driverKafkaParams: ju.Map[String, Object],
     val executorKafkaParams: ju.Map[String, Object],
@@ -156,6 +156,18 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     consumer.poll(pollTimeout)
   }
 
+  def seek(partition: TopicPartition, offset: Long): Unit = this.synchronized {
+    consumer.seek(partition, offset)
+  }
+
+  def seekToBeginning(partitions: TopicPartition*): Unit = this.synchronized {
+    consumer.seekToBeginning(partitions: _*)
+  }
+
+  def seekToEnd(partitions: TopicPartition*): Unit = this.synchronized {
+    consumer.seekToEnd(partitions: _*)
+  }
+
   // TODO is there a better way to distinguish between
   // - want to use leader brokers (null map)
   // - don't care, use consistent executor (empty map)
@@ -237,6 +249,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
   protected var currentOffsets = Map[TopicPartition, Long]()
 
   protected def latestOffsets(): Map[TopicPartition, Long] = this.synchronized {
+    // TODO does this need a poll in order to maintain heartbeat / get topic updates
     val c = consumer
     c.seekToEnd()
     c.assignment().asScala.map { tp =>
@@ -289,9 +302,11 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     assert(partitionAssignment != Unassigned, "Must call subscribe or assign before starting")
     val c = consumer
     c.poll(pollTimeout)
-    currentOffsets = c.assignment().asScala.map { tp =>
-      tp -> c.position(tp)
-    }.toMap
+    if (currentOffsets.isEmpty) {
+      currentOffsets = c.assignment().asScala.map { tp =>
+        tp -> c.position(tp)
+      }.toMap
+    }
   }
 
   override def stop(): Unit = {
@@ -356,4 +371,11 @@ object DirectKafkaInputDStream {
   /** Not yet assigned */
   protected case object Unassigned extends PartitionAssignment
 
+  def apply[K: ClassTag, V: ClassTag](
+    ssc: StreamingContext,
+    driverKafkaParams: ju.Map[String, Object],
+    executorKafkaParams: ju.Map[String, Object],
+    preferredHosts: ju.Map[TopicPartition, String]): DirectKafkaInputDStream[K, V] = {
+    new DirectKafkaInputDStream[K, V](ssc, driverKafkaParams, executorKafkaParams, preferredHosts)
+  }
 }
