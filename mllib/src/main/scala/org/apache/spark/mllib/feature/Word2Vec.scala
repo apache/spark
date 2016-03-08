@@ -346,9 +346,9 @@ class Word2Vec extends Serializable with Logging {
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
             }
-            wc += sentence.size
+            wc += sentence.length
             var pos = 0
-            while (pos < sentence.size) {
+            while (pos < sentence.length) {
               val word = sentence(pos)
               val b = random.nextInt(window)
               // Train Skip-gram
@@ -356,7 +356,7 @@ class Word2Vec extends Serializable with Logging {
               while (a < window * 2 + 1 - b) {
                 if (a != window) {
                   val c = pos - window + a
-                  if (c >= 0 && c < sentence.size) {
+                  if (c >= 0 && c < sentence.length) {
                     val lastWord = sentence(c)
                     val l1 = lastWord * vectorSize
                     val neu1e = new Array[Float](vectorSize)
@@ -579,7 +579,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
   private def buildWordVectors(model: Map[String, Array[Float]]): Array[Float] = {
     require(model.nonEmpty, "Word2VecMap should be non-empty")
-    val (vectorSize, numWords) = (model.head._2.size, model.size)
+    val (vectorSize, numWords) = (model.head._2.length, model.size)
     val wordList = model.keys.toArray
     val wordVectors = new Array[Float](vectorSize * numWords)
     var i = 0
@@ -615,7 +615,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
       val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
 
-      val vectorSize = model.values.head.size
+      val vectorSize = model.values.head.length
       val numWords = model.size
       val metadata = compact(render(
         ("class" -> classNameV1_0) ~ ("version" -> formatVersionV1_0) ~
@@ -646,7 +646,7 @@ object Word2VecModel extends Loader[Word2VecModel] {
     (loadedClassName, loadedVersion) match {
       case (classNameV1_0, "1.0") =>
         val model = SaveLoadV1_0.load(sc, path)
-        val vectorSize = model.getVectors.values.head.size
+        val vectorSize = model.getVectors.values.head.length
         val numWords = model.getVectors.size
         require(expectedVectorSize == vectorSize,
           s"Word2VecModel requires each word to be mapped to a vector of size " +

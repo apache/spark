@@ -89,7 +89,8 @@
     <module>common/sketch</module>
     <module>common/network-common</module>
     <module>common/network-shuffle</module>
-    <module>tags</module>
+    <module>common/unsafe</module>
+    <module>common/tags</module>
     <module>core</module>
     <module>graphx</module>
     <module>mllib</module>
@@ -99,7 +100,6 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>docker-integration-tests</module>
-    <module>unsafe</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>
@@ -144,7 +144,6 @@
     <derby.version>10.10.1.1</derby.version>
     <parquet.version>1.7.0</parquet.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
-    <jblas.version>1.2.4</jblas.version>
     <jetty.version>8.1.14.v20131031</jetty.version>
     <orbit.version>3.0.0.v201112011016</orbit.version>
     <chill.version>0.7.4</chill.version>
@@ -1330,6 +1329,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1400,6 +1403,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1495,6 +1502,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1539,6 +1550,10 @@
           <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1587,6 +1602,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1812,6 +1831,7 @@
                         io.netty:netty and io.netty:netty-all.
                       -->
                       <exclude>org.jboss.netty</exclude>
+                      <exclude>org.codehaus.groovy</exclude>
                     </excludes>
                     <searchTransitive>true</searchTransitive>
                   </bannedDependencies>
@@ -2252,7 +2272,7 @@
           <failOnWarning>false</failOnWarning>
           <sourceDirectory>${basedir}/src/main/java</sourceDirectory>
           <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
-          <configLocation>checkstyle.xml</configLocation>
+          <configLocation>dev/checkstyle.xml</configLocation>
           <outputFile>${basedir}/target/checkstyle-output.xml</outputFile>
           <inputEncoding>${project.build.sourceEncoding}</inputEncoding>
           <outputEncoding>${project.reporting.outputEncoding}</outputEncoding>

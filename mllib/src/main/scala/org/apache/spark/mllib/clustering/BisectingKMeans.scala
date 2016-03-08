@@ -19,6 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.Logging
@@ -467,6 +468,7 @@ private[clustering] class ClusteringTreeNode private[clustering] (
    * @param cost the cost to the current center
    * @return (predicted leaf cluster index, cost)
    */
+  @tailrec
   private def predict(pointWithNorm: VectorWithNorm, cost: Double): (Int, Double) = {
     if (isLeaf) {
       (index, cost)

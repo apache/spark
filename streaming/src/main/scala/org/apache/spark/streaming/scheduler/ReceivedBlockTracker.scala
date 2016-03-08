@@ -30,7 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.streaming.Time
-import org.apache.spark.streaming.util.{BatchedWriteAheadLog, WriteAheadLog, WriteAheadLogUtils}
+import org.apache.spark.streaming.util.{WriteAheadLog, WriteAheadLogUtils}
 import org.apache.spark.util.{Clock, Utils}
 
 /** Trait representing any event in the ReceivedBlockTracker that updates its state. */
