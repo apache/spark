@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -39,7 +40,8 @@ sealed trait WindowSpec
 case class WindowSpecDefinition(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    frameSpecification: WindowFrame) extends Expression with WindowSpec with Unevaluable {
+    frameSpecification: WindowFrame,
+    excludeSpec: ExcludeClause = null) extends Expression with WindowSpec with Unevaluable {
 
   def validate: Option[String] = frameSpecification match {
     case UnspecifiedFrame =>
@@ -272,6 +274,43 @@ object SpecifiedWindowFrame {
       // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
       SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
     }
+  }
+}
+
+/**
+ * The trait used to represent an Exclude type .
+ */
+sealed trait ExcludeType
+
+/** Represent the type of Excluding Current Row  */
+case object ExcludeCurrentRow extends ExcludeType
+
+/** Specifies excluding the current row and all rows that are tied with it.
+  *  Ties occur when there is a match on the order column or columns*/
+case object ExcludeGroup extends ExcludeType
+
+/** Specifies excluding all rows that are tied with the current row (peer rows),
+  * but retaining the current row.*/
+case object ExcludeTies extends ExcludeType
+
+/** Specifies not excluding any rows. This value is the default if you specify no exclusion. */
+case object ExcludeNoOthers extends ExcludeType
+
+case class ExcludeClause (
+    excludeType: ExcludeType,
+    ordering: Ordering[InternalRow] = null,
+    toBeCompare: Projection = null) {
+
+  override def toString: String = excludeType match {
+    case ExcludeCurrentRow => s"EXCLUDE CURRENT ROW"
+    case ExcludeGroup => s"EXCLUDE GROUP"
+    case ExcludeTies => s"EXCLUDE TIES"
+    case ExcludeNoOthers => s"EXCLUDDE NO OTHERS"
+  }
+}
+object ExcludeClause {
+  def defaultExclude: ExcludeClause = {
+    ExcludeClause(ExcludeNoOthers)
   }
 }
 

@@ -1574,7 +1574,7 @@ class Analyzer(
             wf.withNewChildren(newChildren)
 
           // Extracts expressions from the partition spec and order spec.
-          case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _) =>
+          case wsc @ WindowSpecDefinition(partitionSpec, orderSpec, _, _) =>
             val newPartitionSpec = partitionSpec.map(extractExpr)
             val newOrderSpec = orderSpec.map { so =>
               val newChild = extractExpr(so.child)
@@ -1809,14 +1809,14 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformExpressions {
         case WindowExpression(wf: WindowFunction,
-        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
+        WindowSpecDefinition(_, _, f: SpecifiedWindowFrame, _))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
           failAnalysis(s"Window Frame $f must match the required frame ${wf.frame}")
         case WindowExpression(wf: WindowFunction,
-        s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
+        s @ WindowSpecDefinition(_, o, UnspecifiedFrame, _))
           if wf.frame != UnspecifiedFrame =>
           WindowExpression(wf, s.copy(frameSpecification = wf.frame))
-        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
+        case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame, _))
           if e.resolved =>
           val frame = SpecifiedWindowFrame.defaultWindowFrame(o.nonEmpty, acceptWindowFrame = true)
           we.copy(windowSpec = s.copy(frameSpecification = frame))

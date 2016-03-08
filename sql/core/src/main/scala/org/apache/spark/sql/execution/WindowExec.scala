@@ -153,18 +153,27 @@ case class WindowExec(
     }
   }
 
+  private[this] def createOrdering(): Ordering[InternalRow]= {
+    val sortExprs = orderSpec.zipWithIndex.map { case (e, i) =>
+      SortOrder(BoundReference(i, e.dataType, e.nullable), e.direction)
+    }
+    newOrdering(sortExprs, Nil)
+  }
+
+
   /**
    * Collection containing an entry for each window frame to process. Each entry contains a frames'
    * WindowExpressions and factory function for the WindowFrameFunction.
    */
   private[this] lazy val windowFrameExpressionFactoryPairs = {
-    type FrameKey = (String, FrameType, Option[Int], Option[Int])
+    type FrameKey = (String, FrameType, Option[Int], Option[Int], ExcludeType)
     type ExpressionBuffer = mutable.Buffer[Expression]
     val framedFunctions = mutable.Map.empty[FrameKey, (ExpressionBuffer, ExpressionBuffer)]
 
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
-      val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd))
+      val key = (tpe, fr.frameType, FrameBoundary(fr.frameStart), FrameBoundary(fr.frameEnd),
+        e.asInstanceOf[WindowExpression].windowSpec.excludeSpec.excludeType)
       val (es, fns) = framedFunctions.getOrElseUpdate(
         key, (ArrayBuffer.empty[Expression], ArrayBuffer.empty[Expression]))
       es += e
@@ -204,7 +213,7 @@ case class WindowExec(
         // Create the factory
         val factory = key match {
           // Offset Frame
-          case ("OFFSET", RowFrame, Some(offset), Some(h)) if offset == h =>
+          case ("OFFSET", RowFrame, Some(offset), Some(h), _) if offset == h =>
             target: MutableRow =>
               new OffsetWindowFunctionFrame(
                 target,
@@ -217,37 +226,46 @@ case class WindowExec(
                 offset)
 
           // Growing Frame.
-          case ("AGGREGATE", frameType, None, Some(high)) =>
+          case ("AGGREGATE", frameType, None, Some(high), excludeType) =>
             target: MutableRow => {
+              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
               new UnboundedPrecedingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, high))
+                createBoundOrdering(frameType, high),
+                ExcludeClause(excludeType, createOrdering(), toBeCompare)
+              )
             }
 
           // Shrinking Frame.
-          case ("AGGREGATE", frameType, Some(low), None) =>
+          case ("AGGREGATE", frameType, Some(low), None, excludeType) =>
             target: MutableRow => {
+              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
               new UnboundedFollowingWindowFunctionFrame(
                 target,
                 processor,
-                createBoundOrdering(frameType, low))
+                createBoundOrdering(frameType, low),
+                ExcludeClause(excludeType, createOrdering(),toBeCompare ))
             }
 
           // Moving Frame.
-          case ("AGGREGATE", frameType, Some(low), Some(high)) =>
+          case ("AGGREGATE", frameType, Some(low), Some(high), excludeType) =>
             target: MutableRow => {
+              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
               new SlidingWindowFunctionFrame(
                 target,
                 processor,
                 createBoundOrdering(frameType, low),
-                createBoundOrdering(frameType, high))
+                createBoundOrdering(frameType, high),
+                ExcludeClause(excludeType, createOrdering(),toBeCompare))
             }
 
           // Entire Partition Frame.
-          case ("AGGREGATE", frameType, None, None) =>
+          case ("AGGREGATE", frameType, None, None, excludeType) =>
             target: MutableRow => {
-              new UnboundedWindowFunctionFrame(target, processor)
+              val toBeCompare = newMutableProjection(orderSpec.map(_.child), child.output)()
+              new UnboundedWindowFunctionFrame(target, processor,
+                ExcludeClause(excludeType, createOrdering(),toBeCompare))
             }
         }
 
@@ -463,6 +481,9 @@ private[execution] abstract class RowBuffer {
 
   /** Return a new RowBuffer that has the same rows. */
   def copy(): RowBuffer
+
+  /** reset the cursor */
+  def reset(): Unit
 }
 
 /**
@@ -493,6 +514,11 @@ private[execution] class ArrayRowBuffer(buffer: ArrayBuffer[UnsafeRow]) extends 
   /** Return a new RowBuffer that has the same rows. */
   def copy(): RowBuffer = {
     new ArrayRowBuffer(buffer)
+  }
+
+  /** reset cursor to before begining */
+  def reset(): Unit = {
+    cursor = -1
   }
 }
 
@@ -532,6 +558,10 @@ private[execution] class ExternalRowBuffer(sorter: UnsafeExternalSorter, numFiel
   /** Return a new RowBuffer that has the same rows. */
   def copy(): RowBuffer = {
     new ExternalRowBuffer(sorter, numFields)
+  }
+
+  def reset(): Unit = {
+    // not implemented
   }
 }
 
@@ -649,7 +679,8 @@ private[execution] final class SlidingWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor,
     lbound: BoundOrdering,
-    ubound: BoundOrdering) extends WindowFunctionFrame {
+    ubound: BoundOrdering,
+    excludeSpec: ExcludeClause) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
   private[this] var input: RowBuffer = null
@@ -707,7 +738,20 @@ private[execution] final class SlidingWindowFunctionFrame(
       processor.initialize(input.size)
       val iter = buffer.iterator()
       while (iter.hasNext) {
-        processor.update(iter.next())
+        val next = iter.next()
+        excludeSpec.excludeType match{
+          case ExcludeCurrentRow if next == current =>
+          case ExcludeGroup if excludeSpec.ordering.compare(
+            excludeSpec.toBeCompare(next).copy(),
+            excludeSpec.toBeCompare(current).copy()) == 0 =>
+          case ExcludeTies if excludeSpec.ordering.compare(
+            excludeSpec.toBeCompare(next).copy(),
+            excludeSpec.toBeCompare(current).copy()) == 0 =>
+            if (next == current)
+              processor.update(next)
+          case _ =>
+            processor.update(next)
+        }
       }
       processor.evaluate(target)
     }
@@ -727,15 +771,21 @@ private[execution] final class SlidingWindowFunctionFrame(
  */
 private[execution] final class UnboundedWindowFunctionFrame(
     target: MutableRow,
-    processor: AggregateProcessor) extends WindowFunctionFrame {
+    processor: AggregateProcessor,
+    excludeSpec: ExcludeClause) extends WindowFunctionFrame {
+
+  /** The rows within current sliding window. */
+  private[this] val buffer = new util.ArrayList[InternalRow]()
 
   /** Prepare the frame for calculating a new partition. Process all rows eagerly. */
   override def prepare(rows: RowBuffer): Unit = {
     val size = rows.size()
+    buffer.clear()
     processor.initialize(size)
     var i = 0
     while (i < size) {
-      processor.update(rows.next())
+      buffer.add(i, rows.next())
+      // processor.update(rows.next())
       i += 1
     }
   }
@@ -744,6 +794,43 @@ private[execution] final class UnboundedWindowFunctionFrame(
   override def write(index: Int, current: InternalRow): Unit = {
     // Unfortunately we cannot assume that evaluation is deterministic. So we need to re-evaluate
     // for each row.
+    processor.initialize(buffer.size)
+    excludeSpec.excludeType match {
+      case ExcludeCurrentRow =>
+        val iter = buffer.iterator()
+        while (iter.hasNext) {
+          val next = iter.next()
+          if (next != current)
+            processor.update(next)
+        }
+      case ExcludeGroup =>
+        val iter = buffer.iterator()
+        while (iter.hasNext) {
+          val next = iter.next()
+          val leftRow = excludeSpec.toBeCompare(next).copy
+          val rightRow = excludeSpec.toBeCompare(current).copy
+          if (excludeSpec.ordering.compare(leftRow,rightRow) != 0)
+            processor.update(next)
+        }
+      case ExcludeTies =>
+        val iter = buffer.iterator()
+        while (iter.hasNext) {
+          val next = iter.next()
+          if (next == current)
+            processor.update(next)
+          else {
+            val leftRow = excludeSpec.toBeCompare(next).copy
+            val rightRow = excludeSpec.toBeCompare(current).copy
+            if (excludeSpec.ordering.compare(leftRow, rightRow) != 0)
+              processor.update(next)
+          }
+        }
+      case _ =>
+        val iter = buffer.iterator()
+        while (iter.hasNext) {
+          processor.update(iter.next)
+        }
+    }
     processor.evaluate(target)
   }
 }
@@ -765,7 +852,8 @@ private[execution] final class UnboundedWindowFunctionFrame(
 private[execution] final class UnboundedPrecedingWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor,
-    ubound: BoundOrdering) extends WindowFunctionFrame {
+    ubound: BoundOrdering,
+    excludeSpec: ExcludeClause) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
   private[this] var input: RowBuffer = null
@@ -779,31 +867,79 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
    */
   private[this] var inputIndex = 0
 
+  /** The rows within current sliding window. */
+  private[this] val buffer = new util.ArrayDeque[InternalRow]()
+
   /** Prepare the frame for calculating a new partition. */
   override def prepare(rows: RowBuffer): Unit = {
     input = rows
     nextRow = rows.next()
     inputIndex = 0
     processor.initialize(input.size)
+    buffer.clear()
   }
 
   /** Write the frame columns for the current row to the given target row. */
   override def write(index: Int, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
 
-    // Add all rows to the aggregates for which the input row value is equal to or less than
-    // the output row upper bound.
-    while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
-      processor.update(nextRow)
-      nextRow = input.next()
-      inputIndex += 1
-      bufferUpdated = true
+    excludeSpec.excludeType match {
+      case ExcludeCurrentRow =>
+        while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) < 0) {
+          processor.update(nextRow)
+          nextRow = input.next()
+          inputIndex += 1
+          bufferUpdated = true
+        }
+
+      case ExcludeGroup =>
+        while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) < 0 ){
+          val leftRow = excludeSpec.toBeCompare(nextRow).copy
+          val rightRow = excludeSpec.toBeCompare(current).copy
+          if (excludeSpec.ordering.compare(leftRow,rightRow) == 0) {
+            buffer.add(nextRow)
+          } else {
+            while (buffer.size() > 0) {
+              processor.update(buffer.pop())
+            }
+            processor.update(nextRow)
+            bufferUpdated = true
+          }
+          nextRow = input.next()
+          inputIndex += 1
+        }
+      case ExcludeTies =>
+        while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) < 0 ){
+          val leftRow = excludeSpec.toBeCompare(nextRow).copy
+          val rightRow = excludeSpec.toBeCompare(current).copy
+          if (excludeSpec.ordering.compare(leftRow,rightRow) == 0) {
+            buffer.add(nextRow)
+          } else {
+            while (buffer.size() > 0) {
+              processor.update(buffer.pop())
+            }
+            processor.update(nextRow)
+            bufferUpdated = true
+          }
+          nextRow = input.next()
+          inputIndex += 1
+        }
+      case _ =>
+        // Add all rows to the aggregates for which the input row value is equal to or less than
+        // the output row upper bound.
+        while (nextRow != null && ubound.compare(nextRow, inputIndex, current, index) <= 0) {
+          processor.update(nextRow)
+          nextRow = input.next()
+          inputIndex += 1
+          bufferUpdated = true
+        }
     }
 
     // Only recalculate and update when the buffer changes.
     if (bufferUpdated) {
       processor.evaluate(target)
     }
+
   }
 }
 
@@ -826,7 +962,8 @@ private[execution] final class UnboundedPrecedingWindowFunctionFrame(
 private[execution] final class UnboundedFollowingWindowFunctionFrame(
     target: MutableRow,
     processor: AggregateProcessor,
-    lbound: BoundOrdering) extends WindowFunctionFrame {
+    lbound: BoundOrdering,
+    excludeSpec: ExcludeClause) extends WindowFunctionFrame {
 
   /** Rows of the partition currently being processed. */
   private[this] var input: RowBuffer = null
@@ -864,7 +1001,14 @@ private[execution] final class UnboundedFollowingWindowFunctionFrame(
     if (bufferUpdated) {
       processor.initialize(input.size)
       while (nextRow != null) {
-        processor.update(nextRow)
+        excludeSpec.excludeType match{
+          case ExcludeCurrentRow if nextRow == current =>
+          case ExcludeGroup if excludeSpec.ordering.compare(
+            excludeSpec.toBeCompare(nextRow).copy(),
+            excludeSpec.toBeCompare(current).copy()) == 0 =>
+          case _ =>
+            processor.update(nextRow)
+        }
         nextRow = tmp.next()
       }
       processor.evaluate(target)
