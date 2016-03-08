@@ -200,13 +200,17 @@ class Dataset[T] private[sql](
    */
   override private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
-    val takeResult = toDF().take(numRows + 1)
+    val takeResult = take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
-    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
+      case r: Row => r
+      case tuple: Product => Row.fromTuple(tuple)
+      case o => Row(o)
+    }.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
