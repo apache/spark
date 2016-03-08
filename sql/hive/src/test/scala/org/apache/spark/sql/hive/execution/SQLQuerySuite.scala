@@ -264,7 +264,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Row(1) :: Row(2) :: Row(3) :: Nil)
 
     checkAnswer(
-      sql("SELECT `weird``tab`.`weird``col` FROM nestedArray LATERAL VIEW explode(a.b) `weird``tab` AS `weird``col`"),
+      sql(
+        """SELECT `weird``tab`.`weird``col`
+          |FROM nestedArray LATERAL VIEW explode(a.b) `weird``tab` AS `weird``col`
+        """.stripMargin),
       Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
