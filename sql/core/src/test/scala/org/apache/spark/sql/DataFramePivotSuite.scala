@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
-import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
