@@ -165,32 +165,27 @@ class DDLCommandSuite extends PlanTest {
     val parsed3 = parser.parsePlan(sql3)
     val parsed4 = parser.parsePlan(sql4)
     val parsed5 = parser.parsePlan(sql5)
+    val tableIdent = TableIdentifier("table_name", None)
     val expected1 = AlterTableStoreProperties(
-      TableIdentifier("table_name", None),
+      tableIdent,
       Some(BucketSpec(10, List("dt", "country"), List(), List())),
-      noClustered = false,
-      noSorted = false)(sql1)
+      clustered = true,
+      sorted = true)(sql1)
     val expected2 = AlterTableStoreProperties(
-      TableIdentifier("table_name", None),
-      Some(BucketSpec(10, List("dt", "country"), List("dt", "country"),
-        List(Ascending, Descending))),
-      noClustered = false,
-      noSorted = false)(sql2)
+      tableIdent,
+      Some(BucketSpec(
+        10, List("dt", "country"), List("dt", "country"), List(Ascending, Descending))),
+      clustered = true,
+      sorted = true)(sql2)
     val expected3 = AlterTableStoreProperties(
-      TableIdentifier("table_name", None),
+      tableIdent,
       Some(BucketSpec(20, List(), List(), List())),
-      noClustered = false,
-      noSorted = false)(sql3)
+      clustered = true,
+      sorted = true)(sql3)
     val expected4 = AlterTableStoreProperties(
-      TableIdentifier("table_name", None),
-      None,
-      noClustered = true,
-      noSorted = false)(sql4)
+      tableIdent, None, clustered = false, sorted = true)(sql4)
     val expected5 = AlterTableStoreProperties(
-      TableIdentifier("table_name", None),
-      None,
-      noClustered = false,
-      noSorted = true)(sql5)
+      tableIdent, None, clustered = true, sorted = false)(sql5)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)

@@ -117,7 +117,6 @@ object AlterTableCommandParser {
         // When SET SERDE serde_classname WITH SERDEPROPERTIES, this is None
         val serdeProperties: Option[Map[String, Option[String]]] =
           serdeArgs.headOption.map(extractTableProps)
-
         AlterTableSerDeProperties(
           tableIdent,
           Some(cleanAndUnquoteString(serdeClassName)),
@@ -126,15 +125,14 @@ object AlterTableCommandParser {
 
       case Token("TOK_ALTERTABLE_SERDEPROPERTIES", args) :: _ =>
         val serdeProperties: Map[String, Option[String]] = extractTableProps(args.head)
-
         AlterTableSerDeProperties(
           tableIdent,
           None,
           Some(serdeProperties),
           partition)(node.source)
 
-      case Token("TOK_ALTERTABLE_CLUSTER_SORT", clusterAndSoryByArgs :: Nil) :: _ =>
-        val (buckets, noClustered, noSorted) = clusterAndSoryByArgs match {
+      case Token("TOK_ALTERTABLE_CLUSTER_SORT", clusterSortArgs :: Nil) :: _ =>
+        clusterSortArgs match {
           case Token("TOK_ALTERTABLE_BUCKETS", bucketArgsHead :: bucketArgs) =>
             val bucketCols = bucketArgsHead.children.map(_.text)
             val (sortCols, sortDirections, numBuckets) = {
@@ -150,18 +148,18 @@ object AlterTableCommandParser {
                 (Nil, Nil, bucketArgs.head.text.toInt)
               }
             }
-            val bucketSpec = BucketSpec(numBuckets, bucketCols, sortCols, sortDirections)
-            (Some(bucketSpec), false, false)
+            AlterTableStoreProperties(
+              tableIdent,
+              Some(BucketSpec(numBuckets, bucketCols, sortCols, sortDirections)),
+              clustered = true,
+              sorted = true)(node.source)
           case Token("TOK_NOT_CLUSTERED", Nil) =>
-            (None, true, false)
+            AlterTableStoreProperties(
+              tableIdent, None, clustered = false, sorted = true)(node.source)
           case Token("TOK_NOT_SORTED", Nil) =>
-            (None, false, true)
+            AlterTableStoreProperties(
+              tableIdent, None, clustered = true, sorted = false)(node.source)
         }
-        AlterTableStoreProperties(
-          tableIdent,
-          buckets,
-          noClustered,
-          noSorted)(node.source)
 
       case Token("TOK_ALTERTABLE_BUCKETS", Token(bucketNum, Nil) :: Nil) :: _ =>
         val num = bucketNum.toInt
@@ -169,8 +167,8 @@ object AlterTableCommandParser {
         AlterTableStoreProperties(
           tableIdent,
           buckets,
-          noClustered = false,
-          noSorted = false)(node.source)
+          clustered = true,
+          sorted = true)(node.source)
 
       case Token("TOK_ALTERTABLE_SKEWED", Nil) :: _ =>
         // ALTER TABLE table_name NOT SKEWED
