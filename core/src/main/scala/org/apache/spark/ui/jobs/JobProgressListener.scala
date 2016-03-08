@@ -388,15 +388,16 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             (Some(e.toErrorString), Seq.empty[AccumulableInfo])
         }
 
-      if (metrics.nonEmpty) {
+      val taskMetrics: Option[TaskMetrics] = if (metrics.nonEmpty) Option(TaskMetrics.
+        fromAccumulatorUpdates(metrics)) else None
+      taskMetrics.foreach{m =>
         val oldMetrics = stageData.taskData.get(info.taskId).flatMap(_.taskMetrics)
-        updateAggregateMetrics(stageData, info.executorId,
-          TaskMetrics.fromAccumulatorUpdates(metrics), oldMetrics)
+        updateAggregateMetrics(stageData, info.executorId, m, oldMetrics)
       }
+
       val taskData = stageData.taskData.getOrElseUpdate(info.taskId, new TaskUIData(info))
       taskData.taskInfo = info
-      taskData.taskMetrics = if (metrics.nonEmpty) Option(TaskMetrics.
-        fromAccumulatorUpdates(metrics)) else None
+      taskData.taskMetrics = taskMetrics
       taskData.errorMessage = errorMessage
 
       for (
