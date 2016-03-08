@@ -1924,6 +1924,7 @@ test_that("Histogram", {
 
   # Test when there are zero counts
   df <- as.DataFrame(sqlContext, data.frame(x=c(1,2,3,4,100)))
+  expect_equal(histogram(df, "x")$data$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
 unlink(parquetPath)
 unlink(jsonPath)
