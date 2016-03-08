@@ -352,14 +352,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = {
-    if (settings.containsKey(key)) {
-      true
-    } else {
+    settings.containsKey(key) ||
       // try to find the settings in the alternatives
       configsWithAlternatives.get(key).flatMap { alts =>
         alts.collectFirst { case alt if contains(alt.key) => true }
       }.isDefined
-    }
   }
 
   /** Copy this object */
