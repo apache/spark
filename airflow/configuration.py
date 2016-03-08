@@ -105,6 +105,9 @@ defaults = {
         'default_queue': 'default',
         'flower_port': '5555'
     },
+    'email': {
+        'email_backend': 'airflow.utils.send_email_smtp',
+    },
     'smtp': {
         'smtp_starttls': True,
         'smtp_ssl': False,
@@ -217,6 +220,9 @@ authenticate = False
 
 # Filter the list of dags by owner name (requires authentication to be enabled)
 filter_by_owner = False
+
+[email]
+email_backend = airflow.utils.send_email_smtp
 
 [smtp]
 # If you want airflow to send emails on retries, failure, and you want to
@@ -337,6 +343,9 @@ fernet_key = {FERNET_KEY}
 base_url = http://localhost:8080
 web_server_host = 0.0.0.0
 web_server_port = 8080
+
+[email]
+email_backend = airflow.utils.send_email_smtp
 
 [smtp]
 smtp_host = localhost
