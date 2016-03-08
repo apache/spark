@@ -89,7 +89,7 @@ private[spark] class Client(
       }
     }
   }
-  private val fireAndForget = isClusterMode && sparkConf.get(WAIT_FOR_APP_COMPLETION)
+  private val fireAndForget = isClusterMode && !sparkConf.get(WAIT_FOR_APP_COMPLETION)
 
   private var appId: ApplicationId = null
 
