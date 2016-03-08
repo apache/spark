@@ -567,16 +567,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin)
   }
 
-  test("SQL generation for generate") {
-    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
-    // The function source code can be found at:
-    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
-    sql(
-      """
-        |CREATE TEMPORARY FUNCTION udtf_count2
-        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-      """.stripMargin)
-
+  test("SQL generator for explode in projection list") {
     // Basic Explode
     checkHiveQl("SELECT explode(array(1,2,3)) FROM src")
 
@@ -586,21 +577,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     // Explode without FROM
     checkHiveQl("select explode(array(1,2,3)) AS gencol")
 
-    // Explode with columns other than generated columns in projection list
+    // non-generated columns in projection list
     checkHiveQl("SELECT key as c1, explode(array(1,2,3)) as c2, value as c3 FROM t1")
+  }
 
-    // Explode with a column reference as input to generator
-    checkHiveQl("SELECT key, value from t1 LATERAL VIEW explode(value) gentab")
-
-    // json_tuple
+  test("SQL generation for json_tuple as generator") {
     checkHiveQl("SELECT key, json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5') FROM parquet_t3")
+  }
 
-    // udtf
-    checkHiveQl("SELECT key, gencol FROM t1 LATERAL VIEW udtf_count2(value) gentab AS gencol")
-
-    // udtf
-    checkHiveQl("SELECT udtf_count2(c1) FROM (SELECT 1 AS c1 FROM t1 LIMIT 3) g1")
-
+  test("SQL generation for lateral views") {
     // Filter and OUTER clause
     checkHiveQl(
       """SELECT key, value
@@ -626,6 +611,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin
     )
 
+    // No generated column aliases
+    checkHiveQl(
+      """SELECT gentab.*
+        |FROM
+        |t1 LATERAL VIEW explode(map('key1', 100, 'key2', 200)) gentab limit 2
+      """.stripMargin
+    )
+  }
+
+  test("SQL generation for lateral views in subquery") {
     // Subquries in FROM clause using Generate
     checkHiveQl(
       """SELECT subq.gencol
@@ -639,13 +634,23 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |(SELECT key, value from t1 LATERAL VIEW explode(value) gentab AS gencol) subq
       """.stripMargin
     )
+  }
 
-    checkHiveQl(
-      """SELECT gentab.*
-        |FROM
-        |t1 LATERAL VIEW explode(map('key1', 100, 'key2', 200)) gentab limit 2
-      """.stripMargin
-    )
+  test("SQL generation for UDTF") {
+    sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}")
+
+    // The function source code can be found at:
+    // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
+    sql(
+      """
+        |CREATE TEMPORARY FUNCTION udtf_count2
+        |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+      """.stripMargin)
+
+    checkHiveQl("SELECT key, gencol FROM t1 LATERAL VIEW udtf_count2(value) gentab AS gencol")
+
+    checkHiveQl("SELECT udtf_count2(c1) FROM (SELECT 1 AS c1 FROM t1 LIMIT 3) g1")
+
     sql("DROP TEMPORARY FUNCTION udtf_count2")
   }
 }
