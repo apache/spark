@@ -135,12 +135,12 @@ class DecisionTreeRegressorSuite
     val categoricalData: DataFrame =
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 0)
     testEstimatorAndModelReadWrite(dt, categoricalData,
-      DecisionTreeRegressorSuite.allParamSettings, checkModelData)
+      TreeTests.allParamSettings, checkModelData)
 
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(dt, continuousData,
-      DecisionTreeRegressorSuite.allParamSettings, checkModelData)
+      TreeTests.allParamSettings, checkModelData)
   }
 }
 
@@ -165,11 +165,4 @@ private[ml] object DecisionTreeRegressorSuite extends SparkFunSuite {
     TreeTests.checkEqual(oldTreeAsNew, newTree)
     assert(newTree.numFeatures === numFeatures)
   }
-
-  /**
-   * Mapping from all Params to valid settings which differ from the defaults.
-   * This is useful for tests which need to exercise all Params, such as save/load.
-   * This excludes input columns to simplify some tests.
-   */
-  val allParamSettings: Map[String, Any] = TreeTests.allParamSettings
 }

@@ -32,8 +32,7 @@ private[ml] object TreeTests extends SparkFunSuite {
 
   /**
    * Convert the given data to a DataFrame, and set the features and label metadata.
-    *
-    * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
+   * @param data  Dataset.  Categorical features and labels must already have 0-based indices.
    *              This must be non-empty.
    * @param categoricalFeatures  Map: categorical feature index -> number of distinct values
    * @param numClasses  Number of classes label can take.  If 0, mark as continuous.
@@ -129,8 +128,7 @@ private[ml] object TreeTests extends SparkFunSuite {
   /**
    * Helper method for constructing a tree for testing.
    * Given left, right children, construct a parent node.
-    *
-    * @param split  Split for parent node
+   * @param split  Split for parent node
    * @return  Parent node with children attached
    */
   def buildParentNode(left: Node, right: Node, split: Split): Node = {

@@ -274,6 +274,12 @@ private[ml] object DefaultParamsReader {
       params: JValue,
       metadata: JValue,
       metadataJson: String) {
+
+    /**
+     * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
+     * This can be useful for getting a Param value before an instance of [[Params]]
+     * is available.
+     */
     def getParamValue(paramName: String): JValue = {
       implicit val format = DefaultFormats
       params match {

@@ -64,8 +64,7 @@ private[ml] trait DecisionTreeModel {
 
   /**
    * Trace down the tree, and return the largest feature index used in any split.
-    *
-    * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
+   * @return  Max feature index used in a split, or -1 if there are no splits (single leaf node).
    */
   private[ml] def maxSplitFeatureIndex(): Int = rootNode.maxSplitFeatureIndex()
 }

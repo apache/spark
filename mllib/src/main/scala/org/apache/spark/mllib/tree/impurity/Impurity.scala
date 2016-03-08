@@ -182,6 +182,12 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
 
 private[spark] object ImpurityCalculator {
 
+  /**
+    * Create
+    * @param impurity
+    * @param stats
+    * @return
+    */
   def getCalculator(impurity: String, stats: Array[Double]): ImpurityCalculator = {
     impurity match {
       case "gini" => new GiniCalculator(stats)

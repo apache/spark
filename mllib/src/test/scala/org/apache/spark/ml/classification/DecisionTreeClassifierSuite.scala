@@ -351,15 +351,15 @@ class DecisionTreeClassifierSuite
     val dt = new DecisionTreeClassifier()
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
+    val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
+
     val categoricalData: DataFrame =
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
-    testEstimatorAndModelReadWrite(dt, categoricalData,
-      DecisionTreeClassifierSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings, checkModelData)
 
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
-    testEstimatorAndModelReadWrite(dt, continuousData,
-      DecisionTreeClassifierSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings, checkModelData)
   }
 }
 
@@ -385,12 +385,4 @@ private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {
     TreeTests.checkEqual(oldTreeAsNew, newTree)
     assert(newTree.numFeatures === numFeatures)
   }
-
-  /**
-   * Mapping from all Params to valid settings which differ from the defaults.
-   * This is useful for tests which need to exercise all Params, such as save/load.
-   * This excludes input columns to simplify some tests.
-   */
-  val allParamSettings: Map[String, Any] =
-    Map("impurity" -> "entropy") ++ TreeTests.allParamSettings
 }

@@ -143,8 +143,7 @@ final class DecisionTreeClassificationModel private[ml] (
 
   /**
    * Construct a decision tree classification model.
-    *
-    * @param rootNode  Root node of tree, with other nodes attached.
+   * @param rootNode  Root node of tree, with other nodes attached.
    */
   private[ml] def this(rootNode: Node, numFeatures: Int, numClasses: Int) =
     this(Identifiable.randomUID("dtc"), rootNode, numFeatures, numClasses)
@@ -251,7 +250,7 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
     }
   }
 
-  /** (private[ml]) Convert a model from the old API */
+  /** Convert a model from the old API */
   private[ml] def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeClassifier,

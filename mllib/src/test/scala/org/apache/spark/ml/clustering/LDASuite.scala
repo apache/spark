@@ -236,29 +236,25 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("read/write LocalLDAModel") {
-    def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
-      assert(model.vocabSize === model2.vocabSize)
-      assert(Vectors.dense(model.topicsMatrix.toArray) ~==
-        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
-      model.getDocConcentration
-      model2.getDocConcentration
-      assert(Vectors.dense(model.getDocConcentration) ~==
-        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
-    }
     val lda = new LDA()
-    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, LDASuite.checkModelData)
   }
 
   test("read/write DistributedLDAModel") {
-    def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
-      assert(model.vocabSize === model2.vocabSize)
-      assert(Vectors.dense(model.topicsMatrix.toArray) ~==
-        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
-      assert(Vectors.dense(model.getDocConcentration) ~==
-        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
-    }
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
-      LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"), LDASuite.checkModelData)
+  }
+}
+
+object LDASuite extends SparkFunSuite {
+
+  /** Compare 2 models for persistence tests */
+  def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
+    assert(model.vocabSize === model2.vocabSize)
+    assert(Vectors.dense(model.topicsMatrix.toArray) ~==
+      Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
+    assert(model.estimatedDocConcentration ~==
+      model2.estimatedDocConcentration absTol 1e-6)
   }
 }

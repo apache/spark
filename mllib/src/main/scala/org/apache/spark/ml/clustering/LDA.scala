@@ -786,11 +786,16 @@ class LDA @Since("1.6.0") (
       case m: OldDistributedLDAModel =>
         new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext, None)
     }
+    copyValues(newModel).setParent(this)
+    // We copy the docConcentration, topicConcentration explicitly to handle their
+    // special default behavior when not set by the user.
+    /*
     copyValues(newModel,
       ParamMap(
         docConcentration -> oldModel.docConcentration.toArray,
         topicConcentration -> oldModel.topicConcentration))
       .setParent(this)
+      */
   }
 
   @Since("1.6.0")

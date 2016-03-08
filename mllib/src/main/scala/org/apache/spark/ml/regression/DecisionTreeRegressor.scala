@@ -117,8 +117,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
  * :: Experimental ::
  * [[http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree]] model for regression.
  * It supports both continuous and categorical features.
-  *
-  * @param rootNode  Root of the decision tree
+ * @param rootNode  Root of the decision tree
  */
 @Since("1.4.0")
 @Experimental
@@ -250,8 +249,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     }
   }
 
-  /** (private[ml]) Convert a model from the old API */
-  def fromOld(
+  /** Convert a model from the old API */
+  private[ml] def fromOld(
       oldModel: OldDecisionTreeModel,
       parent: DecisionTreeRegressor,
       categoricalFeatures: Map[Int, Int],
