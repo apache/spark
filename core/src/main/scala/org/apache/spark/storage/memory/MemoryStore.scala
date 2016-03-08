@@ -461,11 +461,11 @@ private[spark] class MemoryStore(
   /**
    * Release pending unroll memory of current unroll successful block used by this task
    */
-  def releasePendingUnrollMemoryForThisTask(memory: Long = Long.MaxValue): Unit = {
+  def releasePendingUnrollMemoryForThisTask(): Unit = {
     val taskAttemptId = currentTaskAttemptId()
     memoryManager.synchronized {
       if (pendingUnrollMemoryMap.contains(taskAttemptId)) {
-        val memoryToRelease = math.min(memory, pendingUnrollMemoryMap(taskAttemptId))
+        val memoryToRelease = pendingUnrollMemoryMap(taskAttemptId)
         if (memoryToRelease > 0) {
           pendingUnrollMemoryMap(taskAttemptId) -= memoryToRelease
           if (pendingUnrollMemoryMap(taskAttemptId) == 0) {
