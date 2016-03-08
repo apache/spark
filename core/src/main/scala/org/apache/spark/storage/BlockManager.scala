@@ -688,15 +688,13 @@ private[spark] class BlockManager(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
-      tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
+      tellMaster: Boolean = true): Boolean = {
     require(values != null, "Values is null")
     val result = doPut(
       blockId,
       IteratorValues(() => values),
       level,
-      tellMaster,
-      effectiveStorageLevel)
+      tellMaster)
     result == DoPutSucceeded
   }
 
@@ -726,10 +724,9 @@ private[spark] class BlockManager(
       blockId: BlockId,
       bytes: ByteBuffer,
       level: StorageLevel,
-      tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
+      tellMaster: Boolean = true): Boolean = {
     require(bytes != null, "Bytes is null")
-    val result = doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
+    val result = doPut(blockId, ByteBufferValues(bytes), level, tellMaster)
     result == DoPutSucceeded
   }
 
@@ -739,9 +736,6 @@ private[spark] class BlockManager(
    *
    * If the block already exists, this method will not overwrite it.
    *
-   * @param effectiveStorageLevel the level according to which the block will actually be handled.
-   *                              This allows the caller to specify an alternate behavior of doPut
-   *                              while preserving the original level specified by the user.
    * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
    *                     block already exists). If false, this method will hold no locks when it
    *                     returns.
@@ -754,14 +748,10 @@ private[spark] class BlockManager(
       data: BlockValues,
       level: StorageLevel,
       tellMaster: Boolean = true,
-      effectiveStorageLevel: Option[StorageLevel] = None,
       keepReadLock: Boolean = false): DoPutResult = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
-    effectiveStorageLevel.foreach { level =>
-      require(level != null && level.isValid, "Effective StorageLevel is null or invalid")
-    }
 
     /* Remember the block's storage level so that we can correctly drop it to disk if it needs
      * to be dropped right after it got put into memory. Note, however, that other threads will
@@ -785,19 +775,16 @@ private[spark] class BlockManager(
     // Size of the block in bytes
     var size = 0L
 
-    // The level we actually use to put the block
-    val putLevel = effectiveStorageLevel.getOrElse(level)
-
     // If we're storing bytes, then initiate the replication before storing them locally.
     // This is faster as data is already serialized and ready to send.
     val replicationFuture = data match {
-      case b: ByteBufferValues if putLevel.replication > 1 =>
+      case b: ByteBufferValues if level.replication > 1 =>
         // Duplicate doesn't copy the bytes, but just creates a wrapper
         val bufferView = b.buffer.duplicate()
         Future {
           // This is a blocking action and should run in futureExecutionContext which is a cached
           // thread pool
-          replicate(blockId, bufferView, putLevel)
+          replicate(blockId, bufferView, level)
         }(futureExecutionContext)
       case _ => null
     }
@@ -806,12 +793,12 @@ private[spark] class BlockManager(
     var iteratorFromFailedMemoryStorePut: Option[Iterator[Any]] = None
 
     try {
-      if (putLevel.useMemory) {
+      if (level.useMemory) {
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
         data match {
           case IteratorValues(iterator) =>
-            memoryStore.putIterator(blockId, iterator(), putLevel) match {
+            memoryStore.putIterator(blockId, iterator(), level) match {
               case Right(s) =>
                 size = s
               case Left(iter) =>
@@ -840,7 +827,7 @@ private[spark] class BlockManager(
               diskStore.putBytes(blockId, bytes)
             }
         }
-      } else if (putLevel.useDisk) {
+      } else if (level.useDisk) {
         data match {
           case IteratorValues(iterator) =>
             diskStore.put(blockId) { fileOutputStream =>
@@ -853,7 +840,7 @@ private[spark] class BlockManager(
             diskStore.putBytes(blockId, bytes)
         }
       } else {
-        assert(putLevel == StorageLevel.NONE)
+        assert(level == StorageLevel.NONE)
         throw new BlockException(
           blockId, s"Attempted to put block $blockId without specifying storage level!")
       }
@@ -888,11 +875,11 @@ private[spark] class BlockManager(
     if (replicationFuture != null) {
       // Wait for asynchronous replication to finish
       Await.ready(replicationFuture, Duration.Inf)
-    } else if (putLevel.replication > 1 && blockWasSuccessfullyStored) {
+    } else if (level.replication > 1 && blockWasSuccessfullyStored) {
       val remoteStartTime = System.currentTimeMillis
       val bytesToReplicate = doGetLocalBytes(blockId, putBlockInfo)
       try {
-        replicate(blockId, bytesToReplicate, putLevel)
+        replicate(blockId, bytesToReplicate, level)
       } finally {
         BlockManager.dispose(bytesToReplicate)
       }
@@ -900,7 +887,7 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
     }
 
-    if (putLevel.replication > 1) {
+    if (level.replication > 1) {
       logDebug("Putting block %s with replication took %s"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     } else {
