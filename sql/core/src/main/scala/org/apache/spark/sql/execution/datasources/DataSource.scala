@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  * Many of the arguments to this class are optional, though depending on the specific API being used
  * these optional arguments might be filled in during resolution using either inference or external
  * metadata.  For example, when reading a partitioned table from a file system, partition columns
- * will be infered from the directory layout even if they are not specified.
+ * will be inferred from the directory layout even if they are not specified.
  *
  * @param paths A list of file system paths that hold data.  These will be globbed before and
  *              qualified. This option only works when reading from a [[FileFormat]].
@@ -332,6 +332,7 @@ case class DataSource(
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
 
-    resolveRelation()
+    // We replace the schema with that of the DataFrame we just wrote out to avoid re-inferring it.
+    copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
   }
 }
