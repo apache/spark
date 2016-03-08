@@ -18,14 +18,11 @@
 package org.apache.spark.ml.tree
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.impl.TreeTests
-import org.apache.spark.ml.tree.{ContinuousSplit, DecisionTreeModel, LeafNode, Node}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.GiniCalculator
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.util.collection.OpenHashMap
 
 /**
  * Test suite for [[CodeGenerationDecisionTreeModel]].
@@ -78,6 +75,43 @@ class CodeGenerationDecisionTreeModelSuite extends SparkFunSuite with MLlibTestS
     vectorExpectations.foreach{ case (v, e) =>
       val r = predictor(v)
       assert(e ~== r absTol 1E-5)
+    }
+  }
+
+  test("categorical tree conversion") {
+    /* Tree structure borrowed from RandomForestSuite */
+    /* Build tree for testing, with this structure:
+          parent
+      left     right
+     */
+    val leftImp = new GiniCalculator(Array(3.0, 2.0, 1.0))
+    val left = new LeafNode(0.0, leftImp.calculate(), leftImp)
+
+    val rightImp = new GiniCalculator(Array(1.0, 2.0, 5.0))
+    val right = new LeafNode(2.0, rightImp.calculate(), rightImp)
+
+    // Generate with and without set complement and in-line and regular
+    val categories = List(
+      (Array(1.0, 3.0), 5),
+      (Array(0.0, 1.0, 3.0), 4),
+      (3.to(250).map(_.toDouble).toArray :+ 1.0, 256)
+    )
+    val parents = categories.map{case (cats, numCats) =>
+      TreeTests.buildParentNode(left, right,
+        new CategoricalSplit(0, cats, numCats))}
+    val vectorExpectations = List(
+      (Vectors.dense(1.0, 1.2), 0.0), // left
+      (Vectors.dense(2.0, 1.2), 2.0) // right
+    )
+
+    val predictors = parents.map{parent =>
+      CodeGenerationDecisionTreeModel.getScorer(parent)
+    }
+    vectorExpectations.foreach{ case (v, e) =>
+      predictors.foreach{ predictor =>
+        val r = predictor(v)
+        assert(e ~== r absTol 1E-5)
+      }
     }
   }
 }

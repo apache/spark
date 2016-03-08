@@ -50,7 +50,9 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
     evaluator.setClassName(clName)
     evaluator.setDefaultImports(Array(
       "org.apache.spark.mllib.linalg.Vectors",
-      "org.apache.spark.mllib.linalg.Vector"
+      "org.apache.spark.mllib.linalg.Vector",
+      "java.util.Arrays",
+      "java.util.HashSet"
     ))
     evaluator.cook(s"${clName}.java", code)
     val clazz = evaluator.getClazz()
@@ -73,6 +75,23 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
    * functions.
    */
   def nodeToTree(root: Node, depth: Int): (String, String) = {
+    // Generate the conditional for provide categories
+    def categoryMatchConditional(split: CategoricalSplit) = {
+      if (split.categories.size < 64) {
+        def generateCondition(categoryValue: Double) = {
+          s"${categoryValue} == fValue"
+        }
+        s"""
+        Double fValue = input.apply(${split.featureIndex});
+        if (${split.categories.map(generateCondition).mkString(" || ")}) {
+        """
+      } else {
+        s"""
+        HashSet<Double> categories = new HashSet(Arrays.asList(${split.categories.mkString(" ,")}));
+        if (categories.contains(input.apply(${split.featureIndex}))) {
+        """
+      }
+    }
     // Handle the different types of nodes
     root match {
       case node: InternalNode => {
@@ -89,19 +108,20 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
             val (rightSubCode, rightSubFunction) = nodeToTree(node.rightChild, depth + 1)
             val subCode = nodeSplit match {
               case split: CategoricalSplit => {
+
                 val isLeft = split.isLeft
                 isLeft match {
                   case true => s"""
-                              if (categories.contains(input.apply(${split.featureIndex}))) {
+                              ${categoryMatchConditional(split)}
                                 ${leftSubCode}
                               } else {
                                 ${rightSubCode}
                               }"""
                   case false => s"""
-                               if (categories.contains(input.apply(${split.featureIndex}))) {
-                                 ${leftSubCode}
-                               } else {
+                               ${categoryMatchConditional(split)}
                                  ${rightSubCode}
+                               } else {
+                                 ${leftSubCode}
                                }"""
                 }
               }
