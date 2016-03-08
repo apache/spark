@@ -29,20 +29,27 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
   import ParserUtils._
 
   /** Check if a command should not be explained. */
-  protected def isNoExplainCommand(command: String): Boolean =
+  protected def isNoExplainCommand(command: String): Boolean = {
     "TOK_DESCTABLE" == command || "TOK_ALTERTABLE" == command
+  }
 
   protected def extractProps(
       node: ASTNode,
-      firstLevelNodeStr: String,
-      secondLevelNodeStr: String): Seq[(String, String)] = node match {
-    case Token(firstLevelNodeStr, options) =>
-      options.map {
-        case Token(secondLevelNodeStr, keysAndValue) =>
-          val key = keysAndValue.init.map(x => unquoteString(x.text)).mkString(".")
-          val value = unquoteString(keysAndValue.last.text)
-          (key, value)
-      }
+      firstLevelProp: String,
+      secondLevelProp: String): Seq[(String, String)] = {
+    node match {
+      case Token(x, options) if x == firstLevelProp =>
+        options.map {
+          case Token(y, keysAndValue) if y == secondLevelProp =>
+            val key = keysAndValue.init.map(x => unquoteString(x.text)).mkString(".")
+            val value = unquoteString(keysAndValue.last.text)
+            (key, value)
+          case _ =>
+            throw new AnalysisException(s"Expected property '$secondLevelProp' in '${node.text}'")
+        }
+      case _ =>
+        throw new AnalysisException(s"Expected property '$firstLevelProp' in '${node.text}'")
+    }
   }
 
   protected override def nodeToPlan(node: ASTNode): LogicalPlan = {
@@ -100,7 +107,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
             propList.flatMap(extractProps(_, "TOK_DBPROPLIST", "TOK_TABLEPROPERTY"))
         }.toMap
 
-        CreateDataBase(databaseName, allowExisting.isDefined, location, comment, props)(node.source)
+        CreateDatabase(databaseName, allowExisting.isDefined, location, comment, props)(node.source)
 
       case Token("TOK_CREATEFUNCTION", func :: as :: createFuncArgs) =>
         val funcName = func.map(x => unquoteString(x.text)).mkString(".")
@@ -137,12 +144,12 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           Some(Token("TOK_TABLEPROVIDER", providerNameParts)),
           tableOpts,
           tableAs) = getClauses(Seq(
-          "TEMPORARY",
-          "TOK_IFNOTEXISTS",
-          "TOK_TABNAME", "TOK_TABCOLLIST",
-          "TOK_TABLEPROVIDER",
-          "TOK_TABLEOPTIONS",
-          "TOK_QUERY"), createTableArgs)
+            "TEMPORARY",
+            "TOK_IFNOTEXISTS",
+            "TOK_TABNAME", "TOK_TABCOLLIST",
+            "TOK_TABLEPROVIDER",
+            "TOK_TABLEOPTIONS",
+            "TOK_QUERY"), createTableArgs)
 
         val tableIdent: TableIdentifier = extractTableIdent(tabName)
 
@@ -156,7 +163,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
 
         val options: Map[String, String] =
           tableOpts.toSeq.flatMap(extractProps(_, "TOK_TABLEOPTIONS", "TOK_TABLEOPTION")).toMap
-        val asClause = tableAs.map(nodeToPlan(_))
+        val asClause = tableAs.map(nodeToPlan)
 
         if (temp.isDefined && allowExisting.isDefined) {
           throw new AnalysisException(
