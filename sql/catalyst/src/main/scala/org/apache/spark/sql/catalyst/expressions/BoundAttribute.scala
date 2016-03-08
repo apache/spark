@@ -62,9 +62,10 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
-      ev.isNull = ctx.currentVars(ordinal).isNull
-      ev.value = ctx.currentVars(ordinal).value
-      ""
+      val oev = ctx.currentVars(ordinal)
+      ev.isNull = oev.isNull
+      ev.value = oev.value
+      oev.code
     } else if (nullable) {
       s"""
         boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);

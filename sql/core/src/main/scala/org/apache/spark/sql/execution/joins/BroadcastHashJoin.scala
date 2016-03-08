@@ -190,40 +190,38 @@ case class BroadcastHashJoin(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    val checkCondition = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // filter the output via condition
+      ctx.currentVars = input ++ buildVars
+      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
+      s"""
+         |$eval
+         |${ev.code}
+         |if (${ev.isNull} || !${ev.value}) continue;
+       """.stripMargin
+    } else {
+      ""
+    }
+
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-    val numOutput = metricTerm(ctx, "numOutputRows")
-
-    val outputCode = if (condition.isDefined) {
-      // filter the output via condition
-      ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
-      s"""
-         |${ev.code}
-         |if (!${ev.isNull} && ${ev.value}) {
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
-         |}
-       """.stripMargin
-    } else {
-      s"""
-         |$numOutput.add(1);
-         |${consume(ctx, resultVars)}
-       """.stripMargin
-    }
-
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched != null) {
-         |  ${buildVars.map(_.code).mkString("\n")}
-         |  $outputCode
-         |}
+         |if ($matched == null) continue;
+         |$checkCondition
+         |$numOutput.add(1);
+         |${consume(ctx, resultVars)}
        """.stripMargin
 
     } else {
@@ -236,13 +234,13 @@ case class BroadcastHashJoin(
          |${keyEv.code}
          |// find matches from HashRelation
          |$bufferType $matches = $anyNull ? null : ($bufferType)$relationTerm.get(${keyEv.value});
-         |if ($matches != null) {
-         |  int $size = $matches.size();
-         |  for (int $i = 0; $i < $size; $i++) {
-         |    UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
-         |    ${buildVars.map(_.code).mkString("\n")}
-         |    $outputCode
-         |  }
+         |if ($matches == null) continue;
+         |int $size = $matches.size();
+         |for (int $i = 0; $i < $size; $i++) {
+         |  UnsafeRow $matched = (UnsafeRow) $matches.apply($i);
+         |  $checkCondition
+         |  $numOutput.add(1);
+         |  ${consume(ctx, resultVars)}
          |}
        """.stripMargin
     }
@@ -257,21 +255,21 @@ case class BroadcastHashJoin(
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
-    val resultVars = buildSide match {
-      case BuildLeft => buildVars ++ input
-      case BuildRight => input ++ buildVars
-    }
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
     val conditionPassed = ctx.freshName("conditionPassed")
     val checkCondition = if (condition.isDefined) {
-      ctx.currentVars = resultVars
-      val ev = BindReferences.bindReference(condition.get, this.output).gen(ctx)
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      ctx.currentVars = input ++ buildVars
+      val ev = BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).gen(ctx)
       s"""
          |boolean $conditionPassed = true;
+         |${eval.trim}
+         |${ev.code}
          |if ($matched != null) {
-         |  ${ev.code}
          |  $conditionPassed = !${ev.isNull} && ${ev.value};
          |}
        """.stripMargin
@@ -279,17 +277,21 @@ case class BroadcastHashJoin(
       s"final boolean $conditionPassed = true;"
     }
 
+    val resultVars = buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
     if (broadcastRelation.value.isInstanceOf[UniqueHashedRelation]) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |${buildVars.map(_.code).mkString("\n")}
          |${checkCondition.trim}
          |if (!$conditionPassed) {
-         |  // reset to null
-         |  ${buildVars.map(v => s"${v.isNull} = true;").mkString("\n")}
+         |  $matched = null;
+         |  // reset the variables those are already evaluated.
+         |  ${buildVars.filter(_.code == "").map(v => s"${v.isNull} = true;").mkString("\n")}
          |}
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
@@ -311,13 +313,11 @@ case class BroadcastHashJoin(
          |// the last iteration of this loop is to emit an empty row if there is no matched rows.
          |for (int $i = 0; $i <= $size; $i++) {
          |  UnsafeRow $matched = $i < $size ? (UnsafeRow) $matches.apply($i) : null;
-         |  ${buildVars.map(_.code).mkString("\n")}
          |  ${checkCondition.trim}
-         |  if ($conditionPassed && ($i < $size || !$found)) {
-         |    $found = true;
-         |    $numOutput.add(1);
-         |    ${consume(ctx, resultVars)}
-         |  }
+         |  if (!$conditionPassed || ($i == $size && $found)) continue;
+         |  $found = true;
+         |  $numOutput.add(1);
+         |  ${consume(ctx, resultVars)}
          |}
        """.stripMargin
     }
