@@ -82,7 +82,8 @@ class StringIndexer(override val uid: String) extends Estimator[StringIndexerMod
 
 
   override def fit(dataset: DataFrame): StringIndexerModel = {
-    val counts = dataset.select(col($(inputCol)).cast(StringType))
+    val counts = dataset.select(col($(inputCol)).cast(StringType) as $(inputCol))
+      .na.replace($(inputCol) :: Nil, Map("" -> "EMPTY_STRING"))
       .rdd
       .map(_.getString(0))
       .countByValue()
