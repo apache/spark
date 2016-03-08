@@ -495,10 +495,9 @@ private[spark] class BlockManager(
         }
       } else {
         // Otherwise, we also have to store something in the memory store
-        if (!level.deserialized || !asBlockResult) {
+        if (!level.deserialized && !asBlockResult) {
           /* We'll store the bytes in memory if the block's storage level includes
-           * "memory serialized", or if it should be cached as objects in memory
-           * but we only requested its serialized bytes. */
+           * "memory serialized" and we requested its serialized bytes. */
           memoryStore.putBytes(blockId, bytes.limit, () => {
             // https://issues.apache.org/jira/browse/SPARK-6076
             // If the file size is bigger than the free memory, OOM will happen. So if we cannot

@@ -585,36 +585,46 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("disk and memory storage") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getSingleAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = false)
   }
 
   test("disk and memory storage with getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, _.getLocalBytesAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK, getAsBytes = true)
   }
 
   test("disk and memory storage with serialization") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getSingleAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = false)
   }
 
   test("disk and memory storage with serialization and getLocalBytes") {
-    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, _.getLocalBytesAndReleaseLock)
+    testDiskAndMemoryStorage(StorageLevel.MEMORY_AND_DISK_SER, getAsBytes = true)
   }
 
   def testDiskAndMemoryStorage(
       storageLevel: StorageLevel,
-      accessMethod: BlockManager => BlockId => Option[_]): Unit = {
+      getAsBytes: Boolean): Unit = {
     store = makeBlockManager(12000)
+    val accessMethod =
+      if (getAsBytes) store.getLocalBytesAndReleaseLock else store.getSingleAndReleaseLock
     val a1 = new Array[Byte](4000)
     val a2 = new Array[Byte](4000)
     val a3 = new Array[Byte](4000)
     store.putSingle("a1", a1, storageLevel)
     store.putSingle("a2", a2, storageLevel)
     store.putSingle("a3", a3, storageLevel)
-    assert(accessMethod(store)("a2").isDefined, "a2 was not in store")
-    assert(accessMethod(store)("a3").isDefined, "a3 was not in store")
-    assert(store.memoryStore.getValues("a1").isEmpty, "a1 was in memory store")
-    assert(accessMethod(store)("a1").isDefined, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
+    assert(accessMethod("a2").isDefined, "a2 was not in store")
+    assert(accessMethod("a3").isDefined, "a3 was not in store")
+    assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
+    assert(accessMethod("a1").isDefined, "a1 was not in store")
+    val dataShouldHaveBeenCachedBackIntoMemory = {
+      if (storageLevel.deserialized) !getAsBytes
+      else getAsBytes
+    }
+    if (dataShouldHaveBeenCachedBackIntoMemory) {
+      assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
+    } else {
+      assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
+    }
   }
 
   test("LRU with mixed storage levels") {
