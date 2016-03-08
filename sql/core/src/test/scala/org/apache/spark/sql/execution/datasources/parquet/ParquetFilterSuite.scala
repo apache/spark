@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.HadoopFsRelation
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -59,9 +60,9 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           .select(output.map(e => Column(e)): _*)
           .where(Column(predicate))
 
-        var maybeRelation: Option[ParquetRelation] = None
+        var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: ParquetRelation, _, _)) =>
+          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -74,10 +75,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         selectedFilters.foreach { pred =>
           val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
           assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-          maybeFilter.foreach { f =>
-            // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-            assert(f.getClass === filterClass)
-          }
+          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+          maybeFilter.exists(_.getClass === filterClass)
         }
         checker(stripSparkFilter(query), expected)
       }
