@@ -298,12 +298,10 @@ class Analyzer(
           }.asInstanceOf[NamedExpression]
         }
 
-        val child = Project(x.child.output ++ groupByAliases, x.child)
-
         Aggregate(
           groupByAttributes :+ VirtualColumn.groupingIdAttribute,
           aggregations,
-          Expand(x.bitmasks, groupByAttributes, gid, child))
+          Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
     }
   }
 
