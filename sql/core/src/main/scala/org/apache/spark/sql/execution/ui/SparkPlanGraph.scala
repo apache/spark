@@ -55,6 +55,8 @@ private[ui] case class SparkPlanGraph(
 
 private[sql] object SparkPlanGraph {
 
+  def escapeQuotes(str: String): String = str.replace("\"", "\\\"")
+
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
    */
@@ -145,7 +147,7 @@ private[ui] class SparkPlanGraphNode(
       builder ++= values.mkString("\\n")
     }
 
-    s"""  $id [label="${builder.toString()}"];"""
+    s"""  $id [label="${SparkPlanGraph.escapeQuotes(builder.toString())}"];"""
   }
 }
 
@@ -162,7 +164,7 @@ private[ui] class SparkPlanGraphCluster(
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     s"""
        |  subgraph cluster${id} {
-       |    label=${name};
+       |    label="${SparkPlanGraph.escapeQuotes(name)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
      """.stripMargin
