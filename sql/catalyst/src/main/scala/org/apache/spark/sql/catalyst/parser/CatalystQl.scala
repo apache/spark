@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.sql.Date
 
+import scala.collection.mutable.ArrayBuffer
+import scala.util.matching.Regex
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
@@ -523,6 +526,39 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       noParseRule("Select", node)
   }
 
+  /**
+   * Flattens the left deep tree with the specified pattern into a list.
+   */
+  private def flattenLeftDeepTree(node: ASTNode, pattern: Regex): Seq[ASTNode] = {
+    val collected = ArrayBuffer[ASTNode]()
+    var rest = node
+    while (rest match {
+      case Token(pattern(), l :: r :: Nil) =>
+        collected += r
+        rest = l
+        true
+      case _ => false
+    }) {
+      // do nothing
+    }
+    collected += rest
+    // keep them in the same order as in SQL
+    collected.reverse
+  }
+
+  /**
+   * Creates a balanced tree that has similar number of nodes on left and right.
+   *
+   * This help to reduce the depth of the tree to prevent StackOverflow in analyzer/optimizer.
+   */
+  private def balancedTree(
+      expr: Seq[Expression],
+      f: (Expression, Expression) => Expression): Expression = expr.length match {
+    case 1 => expr.head
+    case 2 => f(expr.head, expr(1))
+    case l => f(balancedTree(expr.slice(0, l / 2), f), balancedTree(expr.slice(l / 2, l), f))
+  }
+
   protected def nodeToExpr(node: ASTNode): Expression = node match {
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL", Token(name, Nil) :: Nil) =>
@@ -635,8 +671,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       }
 
     /* Boolean Logic */
-    case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
-    case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
+    case Token(AND(), left :: right:: Nil) =>
+      balancedTree(flattenLeftDeepTree(node, AND).map(nodeToExpr), And)
+    case Token(OR(), left :: right:: Nil) =>
+      balancedTree(flattenLeftDeepTree(node, OR).map(nodeToExpr), Or)
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
     case Token("!", child :: Nil) => Not(nodeToExpr(child))
 
