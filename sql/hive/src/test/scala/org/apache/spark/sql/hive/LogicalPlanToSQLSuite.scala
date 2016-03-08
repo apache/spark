@@ -139,7 +139,6 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin)
   }
 
-
   test("intersect") {
     checkHiveQl("SELECT * FROM t0 INTERSECT SELECT * FROM t0")
   }
@@ -367,9 +366,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT * FROM parquet_t0 TABLESAMPLE(0.1 PERCENT) WHERE 1=0")
   }
 
-  // TODO Enable this
-  // Query plans transformed by DistinctAggregationRewriter are not recognized yet
-  ignore("multi-distinct columns") {
+  test("multi-distinct columns") {
     checkHiveQl("SELECT a, COUNT(DISTINCT b), COUNT(DISTINCT c), SUM(d) FROM parquet_t2 GROUP BY a")
   }
 
