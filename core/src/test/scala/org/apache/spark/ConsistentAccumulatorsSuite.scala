@@ -27,7 +27,7 @@ import org.apache.spark.scheduler._
 class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
   test("single partition") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val a = sc.parallelize(1 to 20, 1)
@@ -38,7 +38,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test("map + cache + first + count") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val a = sc.parallelize(1 to 20, 10)
@@ -51,7 +51,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test ("basic accumulation"){
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val d = sc.parallelize(1 to 20)
@@ -65,7 +65,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test ("basic accumulation flatMap"){
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val d = sc.parallelize(1 to 20)
@@ -87,7 +87,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test("map + map + count") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val a = sc.parallelize(1 to 20, 10)
@@ -98,7 +98,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test("first + count") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val a = sc.parallelize(1 to 20, 10)
@@ -109,7 +109,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test("map + count + count + map + count") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val a = sc.parallelize(1 to 20, 10)
@@ -124,7 +124,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
   }
 
   test ("map + toLocalIterator + count"){
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
     val a = sc.parallelize(1 to 100, 10)
@@ -147,7 +147,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
 
   test ("garbage collection") {
     // Create an accumulator and let it go out of scope to test that it's properly garbage collected
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[2]", "test")
     var acc: Accumulator[Int] = sc.accumulator(0, consistent = true)
     val accId = acc.id
     val ref = WeakReference(acc)
