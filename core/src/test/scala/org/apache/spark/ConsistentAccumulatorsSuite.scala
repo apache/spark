@@ -50,6 +50,26 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (210)
   }
 
+  test("filter + cache + first + count") {
+    sc = new SparkContext("local[2]", "test")
+    val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
+
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.filter{x =>
+      if (x % 2 == 0) {
+        acc += 1
+        true
+      } else {
+        false
+      }
+    }
+    b.cache()
+    b.first()
+    acc.value should be > (0)
+    b.collect()
+    acc.value should be (10)
+  }
+
   test ("basic accumulation"){
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
