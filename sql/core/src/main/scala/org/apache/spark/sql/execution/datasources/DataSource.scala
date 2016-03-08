@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
  * acting as the canonical set of parameters that can describe a Data Source, this class is used to
  * resolve a description to a concrete implementation that can be used in a query plan
- * (either batch or streaming) or to write out out data using an external library.
+ * (either batch or streaming) or to write out data using an external library.
  *
  * From an end user's perspective a DataSource description can be created explicitly using
  * [[org.apache.spark.sql.DataFrameReader]] or CREATE TABLE USING DDL.  Additionally, this class is
