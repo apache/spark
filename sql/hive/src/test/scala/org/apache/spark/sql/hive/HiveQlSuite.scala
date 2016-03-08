@@ -217,4 +217,13 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
         |LATERAL VIEW explode(`gentab1`.`gencol1`) `gentab2` AS `gencol2`
       """.stripMargin)
   }
+
+  test("use escaped backticks in output of Generator") {
+    val plan = parser.parsePlan(
+      """SELECT `gen``tab2`.`gen``col2`
+        |FROM `default`.`src`
+        |LATERAL VIEW explode(array(array(1, 2, 3))) `gen``tab1` AS `gen``col1`
+        |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
+      """.stripMargin)
+  }
 }
