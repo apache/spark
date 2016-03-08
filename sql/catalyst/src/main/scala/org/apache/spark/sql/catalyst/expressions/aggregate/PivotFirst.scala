@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import scala.collection.immutable.HashMap
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
-
-import scala.collection.immutable.HashMap
-
 
 object PivotFirst {
 
