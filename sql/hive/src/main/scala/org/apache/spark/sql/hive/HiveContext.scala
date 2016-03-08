@@ -21,6 +21,7 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
@@ -580,10 +581,46 @@ class HiveContext private[hive](
     Thread.currentThread().setContextClassLoader(executionHive.clientLoader.classLoader)
     super.addJar(path)
   }
+
+  HiveContext.setLastInstantiatedContext(self)
 }
 
 
-private[hive] object HiveContext {
+object HiveContext {
+  /**
+    * Reference to the last created SQLContext.
+    */
+  @transient private val instantiatedContext = new AtomicReference[HiveContext]()
+
+  /**
+    * Get the singleton SQLContext if it exists or create a new one using the given configuration.
+    * This function can be used to create a singleton SQLContext object that can be shared across
+    * the JVM.
+    */
+  def getOrCreate(sparkContext: SparkContext): HiveContext = synchronized {
+    val ctx = instantiatedContext.get()
+    if (ctx == null || ctx.sparkContext.isStopped) {
+      new HiveContext(sparkContext)
+    } else {
+      ctx
+    }
+  }
+
+  private[hive] def getInstantiatedContextOption(): Option[HiveContext] = synchronized {
+    Option(instantiatedContext.get())
+  }
+
+  private[hive] def clearLastInstantiatedContext(): Unit = synchronized {
+    instantiatedContext.set(null)
+  }
+
+  private[hive] def setLastInstantiatedContext(hiveContext: HiveContext): Unit = synchronized {
+    val ctx = instantiatedContext.get()
+    if (ctx == null || ctx.sparkContext.isStopped) {
+      instantiatedContext.set(hiveContext)
+    }
+  }
+
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
