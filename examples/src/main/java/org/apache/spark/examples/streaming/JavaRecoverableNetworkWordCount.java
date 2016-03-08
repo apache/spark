@@ -213,6 +213,5 @@ public final class JavaRecoverableNetworkWordCount {
     JavaStreamingContext ssc = JavaStreamingContext.getOrCreate(checkpointDirectory, createContextFunc);
     ssc.start();
     ssc.awaitTermination();
-    ssc.close();
   }
 }

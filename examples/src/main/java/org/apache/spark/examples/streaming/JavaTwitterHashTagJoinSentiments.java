@@ -171,6 +171,5 @@ public class JavaTwitterHashTagJoinSentiments {
 
     jssc.start();
     jssc.awaitTermination();
-    jssc.close();
   }
 }

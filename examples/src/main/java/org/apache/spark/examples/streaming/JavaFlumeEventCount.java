@@ -71,6 +71,5 @@ public final class JavaFlumeEventCount {
 
     ssc.start();
     ssc.awaitTermination();
-    ssc.close();
   }
 }

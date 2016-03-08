@@ -108,6 +108,5 @@ public final class JavaKafkaWordCount {
     wordCounts.print();
     jssc.start();
     jssc.awaitTermination();
-    jssc.close();
   }
 }

@@ -94,7 +94,6 @@ public class JavaCustomReceiver extends Receiver<String> {
     wordCounts.print();
     ssc.start();
     ssc.awaitTermination();
-    ssc.close();
   }
 
   // ============= Receiver code that receives data over a socket ==============
