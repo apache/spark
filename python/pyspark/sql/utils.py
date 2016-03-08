@@ -33,6 +33,12 @@ class AnalysisException(CapturedException):
     """
 
 
+class ParseException(CapturedException):
+    """
+    Failed to parse a SQL command.
+    """
+
+
 class IllegalArgumentException(CapturedException):
     """
     Passed an illegal or inappropriate argument.
@@ -49,6 +55,8 @@ def capture_sql_exception(f):
                                              e.java_exception.getStackTrace()))
             if s.startswith('org.apache.spark.sql.AnalysisException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.parser.ng.ParseException: '):
+                raise ParseException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('java.lang.IllegalArgumentException: '):
                 raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
             raise
