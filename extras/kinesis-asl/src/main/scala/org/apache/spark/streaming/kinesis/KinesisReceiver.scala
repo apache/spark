@@ -41,6 +41,66 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
   override def getAWSSecretKey: String = secretKey
 }
 
+private[kinesis]
+object Utilities {
+    def createCredentials(awsAccessKey: String, awsSecretKey: String) : Option[SerializableAWSCredentials] = {
+        if(awsAccessKey != null && awsSecretKey != null)
+            Some(new SerializableAWSCredentials(awsAccessKey, awsSecretKey))
+        else
+            None
+    }
+}
+
+case class AWSCredentialPool(
+     kinesisCredentials: Option[SerializableAWSCredentials], 
+     dynamoDBCredentials: Option[SerializableAWSCredentials], 
+     cloudWatchCredentials: Option[SerializableAWSCredentials]) extends Object with Logging {
+  
+  def this() {
+    this(None, None, None);
+  }
+
+  def this(kinesisAwsAccessKey: String, kinesisAwsSecretKey: String, 
+           dynamoDBAwsAccessKey: String, dynamoDBAwsSecretKey: String,
+           cloudWatchAwsAccessKey: String, cloudWatchAwsSecretKey: String) {
+    this(Utilities.createCredentials(kinesisAwsAccessKey, kinesisAwsSecretKey),
+         Utilities.createCredentials(dynamoDBAwsAccessKey, dynamoDBAwsSecretKey),
+         Utilities.createCredentials(cloudWatchAwsAccessKey, cloudWatchAwsSecretKey));
+  }
+  
+  def getKinesisCredentials() = kinesisCredentials
+
+	/**
+   * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
+   * Otherwise, return the DefaultAWSCredentialsProviderChain.
+   */
+  private def resolveAWSCredentialsProvider(credentialsName: String, credentials: Option[SerializableAWSCredentials]): AWSCredentialsProvider = {
+    credentials match {
+      case Some(awsCredentials) =>
+        logInfo("Using provided AWS credentials for " + credentialsName)
+        new AWSCredentialsProvider {
+          override def getCredentials: AWSCredentials = awsCredentials
+          override def refresh(): Unit = { }
+        }
+      case None =>
+        logInfo("Using DefaultAWSCredentialsProviderChain for " + credentialsName)
+        new DefaultAWSCredentialsProviderChain()
+    }
+  }
+	 
+  def getKinesisCredentialsProvider() = {
+       resolveAWSCredentialsProvider("kinesis", kinesisCredentials)
+  }
+
+  def getDynamoDbCredentialsProvider() = {
+      resolveAWSCredentialsProvider("dynamoDb", dynamoDBCredentials)
+  }
+
+  def getCloudWatchCredentialsProvider() = {
+      resolveAWSCredentialsProvider("cloudWatch", cloudWatchCredentials)
+  }
+}
+
 /**
  * Custom AWS Kinesis-specific implementation of Spark Streaming's Receiver.
  * This implementation relies on the Kinesis Client Library (KCL) Worker as described here:
@@ -78,8 +138,7 @@ case class SerializableAWSCredentials(accessKeyId: String, secretKey: String)
  *                            See the Kinesis Spark Streaming documentation for more
  *                            details on the different types of checkpoints.
  * @param storageLevel Storage level to use for storing the received objects
- * @param awsCredentialsOption Optional AWS credentials, used when user directly specifies
- *                             the credentials
+ * @param awsCredentialPool CredentialPool which contains the optional SerializableAWSCredentials for Kinesis, DynamoDb and CloudWatch.
  */
 private[kinesis] class KinesisReceiver[T](
     val streamName: String,
@@ -90,7 +149,7 @@ private[kinesis] class KinesisReceiver[T](
     checkpointInterval: Duration,
     storageLevel: StorageLevel,
     messageHandler: Record => T,
-    awsCredentialsOption: Option[SerializableAWSCredentials])
+    awsCredentialPool: AWSCredentialPool)
   extends Receiver[T](storageLevel) with Logging { receiver =>
 
   /*
@@ -148,9 +207,11 @@ private[kinesis] class KinesisReceiver[T](
 
     kinesisCheckpointer = new KinesisCheckpointer(receiver, checkpointInterval, workerId)
     // KCL config instance
-    val awsCredProvider = resolveAWSCredentialsProvider()
+    val kinesisCredProvider = awsCredentialPool.getKinesisCredentialsProvider()
+    val dynamoDbCredProvider = awsCredentialPool.getDynamoDbCredentialsProvider()
+    val cloudWatchCredProvider = awsCredentialPool.getCloudWatchCredentialsProvider()
     val kinesisClientLibConfiguration =
-      new KinesisClientLibConfiguration(checkpointAppName, streamName, awsCredProvider, workerId)
+      new KinesisClientLibConfiguration(checkpointAppName, streamName, kinesisCredProvider, dynamoDbCredProvider, cloudWatchCredProvider, workerId)
       .withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream)
       .withTaskBackoffTimeMillis(500)
@@ -298,25 +359,6 @@ private[kinesis] class KinesisReceiver[T](
       shardIdToLatestStoredSeqNum.put(range.shardId, range.toSeqNumber)
     }
   }
-
-  /**
-   * If AWS credential is provided, return a AWSCredentialProvider returning that credential.
-   * Otherwise, return the DefaultAWSCredentialsProviderChain.
-   */
-  private def resolveAWSCredentialsProvider(): AWSCredentialsProvider = {
-    awsCredentialsOption match {
-      case Some(awsCredentials) =>
-        logInfo("Using provided AWS credentials")
-        new AWSCredentialsProvider {
-          override def getCredentials: AWSCredentials = awsCredentials
-          override def refresh(): Unit = { }
-        }
-      case None =>
-        logInfo("Using DefaultAWSCredentialsProviderChain")
-        new DefaultAWSCredentialsProviderChain()
-    }
-  }
-
 
   /**
    * Class to handle blocks generated by this receiver's block generator. Specifically, in

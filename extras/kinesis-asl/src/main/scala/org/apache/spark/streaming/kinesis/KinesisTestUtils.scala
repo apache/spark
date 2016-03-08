@@ -19,20 +19,18 @@ package org.apache.spark.streaming.kinesis
 
 import java.nio.ByteBuffer
 import java.util.concurrent.TimeUnit
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.{Failure, Random, Success, Try}
-
-import com.amazonaws.auth.{AWSCredentials, DefaultAWSCredentialsProviderChain}
+import scala.util.{ Failure, Random, Success, Try }
+import com.amazonaws.auth.{ AWSCredentials, DefaultAWSCredentialsProviderChain }
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
 import com.amazonaws.services.dynamodbv2.document.DynamoDB
 import com.amazonaws.services.kinesis.AmazonKinesisClient
 import com.amazonaws.services.kinesis.model._
-
 import org.apache.spark.Logging
+import com.amazonaws.auth.profile.ProfileCredentialsProvider
 
 /**
  * Shared utility methods for performing Kinesis tests that actually transfer data.
@@ -62,6 +60,12 @@ private[kinesis] class KinesisTestUtils extends Logging {
 
   private lazy val dynamoDB = {
     val dynamoDBClient = new AmazonDynamoDBClient(new DefaultAWSCredentialsProviderChain())
+    dynamoDBClient.setRegion(RegionUtils.getRegion(regionName))
+    new DynamoDB(dynamoDBClient)
+  }
+
+  private lazy val profileDynamoDb = {
+    val dynamoDBClient = new AmazonDynamoDBClient(KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.DYNAMODB_PROFILE))
     dynamoDBClient.setRegion(RegionUtils.getRegion(regionName))
     new DynamoDB(dynamoDBClient)
   }
@@ -131,6 +135,14 @@ private[kinesis] class KinesisTestUtils extends Logging {
       val table = dynamoDB.getTable(tableName)
       table.delete()
       table.waitForDelete()
+      val defaultAccountAccessKeyId = KinesisTestUtils.getAWSCredentials().getAWSAccessKeyId;
+      val profileAccountAccessKeyId = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.DYNAMODB_PROFILE).getAWSAccessKeyId;
+      if (!defaultAccountAccessKeyId.equals(profileAccountAccessKeyId)) {
+        logInfo(s"Deleting tables in AWS account with profile name $KinesisTestUtils.DYNAMODB_PROFILE");
+        val table = profileDynamoDb.getTable(tableName)
+        table.delete()
+        table.waitForDelete()
+      }
     } catch {
       case e: Exception =>
         logWarning(s"Could not delete DynamoDB table $tableName")
@@ -179,6 +191,10 @@ private[kinesis] object KinesisTestUtils {
   val envVarNameForEnablingTests = "ENABLE_KINESIS_TESTS"
   val endVarNameForEndpoint = "KINESIS_TEST_ENDPOINT_URL"
   val defaultEndpointUrl = "https://kinesis.us-west-2.amazonaws.com"
+  val envVarNameForCredentialPoolTests = "ENABLE_CREDENTIAL_POOL_TESTS"
+  final val DYNAMODB_PROFILE = "dynamoDB"
+  final val CLOUDWATCH_PROFILE = "cloudWatch"
+  var cleanUpProfileDynamoTables = false
 
   lazy val shouldRunTests = {
     val isEnvSet = sys.env.get(envVarNameForEnablingTests) == Some("1")
@@ -221,11 +237,49 @@ private[kinesis] object KinesisTestUtils {
       case Failure(e) =>
         throw new Exception(
           s"""
-             |Kinesis tests enabled using environment variable $envVarNameForEnablingTests
-             |but could not find AWS credentials. Please follow instructions in AWS documentation
-             |to set the credentials in your system such that the DefaultAWSCredentialsProviderChain
-             |can find the credentials.
+              |Kinesis tests that actually send data has been enabled by setting the environment
+              |variable $envVarNameForEnablingTests to 1. This will create Kinesis Streams and
+              |DynamoDB tables in AWS. Please be aware that this may incur some AWS costs.
+              |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis streams.
+              |To change this endpoint URL to a different region, you can set the environment variable
+              |$endVarNameForEndpoint to the desired endpoint URL
+              |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
            """.stripMargin)
+    }
+  }
+
+  def getAWSProfileCredentials(profile: String): AWSCredentials = {
+    Try { new ProfileCredentialsProvider(profile).getCredentials() } match {
+      case Success(cred) => {
+        if (profile.equals(KinesisTestUtils.DYNAMODB_PROFILE)) {
+          KinesisTestUtils.cleanUpProfileDynamoTables = true;
+        }
+        cred
+      }
+      case Failure(e) =>
+        println(
+          s"""
+            |Could not load the AWS credentials for profile $profile.
+            |
+            |Credentialpool tests verify the ability to uses Kinesis stream, Dynamo DB and CloudWatch Metrics in
+            |separate AWS accounts. This requires a separate set of AWS credentials to be stored in system with the profile
+            |names "dynamoDB" and "cloudWatch" along with the default credentials.
+            |In absence of these credentials only the underlying API will be tested. 
+            """)
+        Try { new DefaultAWSCredentialsProviderChain().getCredentials() } match {
+          case Success(cred) => cred
+          case Failure(e) =>
+            throw new Exception(
+              s"""
+              |Kinesis tests that actually send data has been enabled by setting the environment
+              |variable $envVarNameForEnablingTests to 1. This will create Kinesis Streams and
+              |DynamoDB tables in AWS. Please be aware that this may incur some AWS costs.
+              |By default, the tests use the endpoint URL $defaultEndpointUrl to create Kinesis streams.
+              |To change this endpoint URL to a different region, you can set the environment variable
+              |$endVarNameForEndpoint to the desired endpoint URL
+              |(e.g. $endVarNameForEndpoint="https://kinesis.us-west-2.amazonaws.com").
+           """.stripMargin)
+        }
     }
   }
 }

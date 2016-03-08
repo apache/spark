@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.kinesis;
 
-import com.amazonaws.services.kinesis.model.Record;
-import org.junit.Test;
+import static org.junit.Assert.assertNotNull;
 
+import com.amazonaws.services.kinesis.model.Record;
+
+import org.junit.Test;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
@@ -40,8 +42,43 @@ public class JavaKinesisStreamSuite extends LocalJavaStreamingContext {
     JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "mySparkStream",
         "https://kinesis.us-west-2.amazonaws.com", new Duration(2000),
         InitialPositionInStream.LATEST, StorageLevel.MEMORY_AND_DISK_2());
-
+    assertNotNull(kinesisStream);
     ssc.stop();
+  }
+
+  @Test
+  public void testKinesisStreamWithSimpleAwsCredentials() {
+      // Tests the API, does not actually test data receiving
+      JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
+          "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+          new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, String.class,
+          "accessKey", "secretKey");
+      assertNotNull(kinesisStream);
+      ssc.stop();
+  }
+
+  @Test
+  public void testKinesisStreamWithNullSimpleAwsCredentials() {
+      // Tests the API, does not actually test data receiving
+      JavaDStream<String> kinesisStream = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
+          "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+          new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), handler, String.class,
+          null, null);
+      assertNotNull(kinesisStream);
+      ssc.stop();
+  }
+
+  @Test
+  public void testKinesisStreamWithAwsCredentialsPool() {
+      // Tests the API, does not actually test data receiving
+      AWSCredentialPool pool = new AWSCredentialPool("kinesisAwsAccessKey", "kinesisAwsSecretKey", 
+                                                     "dynamoDBAwsAccessKey", "dynamoDBAwsSecretKey",
+                                                     "cloudWatchAwsAccessKey", "cloudWatchAwsSecretKey");
+      JavaDStream<byte[]> kinesisStream = KinesisUtils.createStream(ssc, "myAppName", "mySparkStream",
+          "https://kinesis.us-west-2.amazonaws.com", "us-west-2", InitialPositionInStream.LATEST,
+          new Duration(2000), StorageLevel.MEMORY_AND_DISK_2(), pool);
+      assertNotNull(kinesisStream);
+      ssc.stop();
   }
 
 

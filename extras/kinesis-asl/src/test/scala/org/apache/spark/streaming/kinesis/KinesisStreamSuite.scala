@@ -21,14 +21,12 @@ import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
-
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -39,6 +37,7 @@ import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
+import org.apache.spark.streaming.util.FileBasedWriteAheadLog.LogInfo
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
@@ -52,7 +51,6 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
   private val dummyRegionName = RegionUtils.getRegionByEndpoint(dummyEndpointUrl).getName()
   private val dummyAWSAccessKey = "dummyAccessKey"
   private val dummyAWSSecretKey = "dummySecretKey"
-
   private var testUtils: KinesisTestUtils = null
   private var ssc: StreamingContext = null
   private var sc: SparkContext = null
@@ -195,16 +193,54 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     ssc.stop(stopSparkContext = false)
   }
 
+   /**
+   * Test the stream by sending data to a Kinesis stream and receiving from it.
+   * This test is not run by default as it requires AWS credentials that the test
+   * environment may not have. Even if there is AWS credentials available, the user
+   * may not want to run these tests to avoid the Kinesis costs. To enable this test,
+   * you must have AWS credentials available through the default AWS provider chain,
+   * and you have to set the system environment variable RUN_KINESIS_TESTS=1 .
+   * This test uses the credential pool to set different AWS account credentials for Kinesis, Dynamo DB and cloudWatch 
+   */
+    testIfEnabled("Multiple AWS account setup with Credentialpool") ({
+    logInfo(" Multiple AWS Account setup test with Credentialpool")
+    def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
+    val awsKinesisCredentials = KinesisTestUtils.getAWSCredentials()
+    val awsDynamoDBCredentials = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.DYNAMODB_PROFILE)
+    val awsCloudWatchCredentials = KinesisTestUtils.getAWSProfileCredentials(KinesisTestUtils.CLOUDWATCH_PROFILE)
+    val serializedKinesisCred = SerializableAWSCredentials(awsKinesisCredentials.getAWSAccessKeyId,awsKinesisCredentials.getAWSSecretKey)
+    val serializedDynamoDbCred = SerializableAWSCredentials(awsDynamoDBCredentials.getAWSAccessKeyId,awsDynamoDBCredentials.getAWSSecretKey)
+    val serializedCloudWatchCred = SerializableAWSCredentials(awsCloudWatchCredentials.getAWSAccessKeyId,awsCloudWatchCredentials.getAWSSecretKey)
+    val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
+      testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
+      Seconds(10), StorageLevel.MEMORY_ONLY,addFive _,
+      new AWSCredentialPool(Some(serializedKinesisCred),Some(serializedDynamoDbCred),Some(serializedCloudWatchCred)))
+
+    val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
+    stream.foreachRDD { rdd =>
+      collected ++= rdd.collect()
+      logInfo("Collected = " + collected.mkString(", "))
+    }
+    ssc.start()
+
+    val testData = 1 to 10
+    eventually(timeout(120 seconds), interval(10 second)) {
+      testUtils.pushData(testData, aggregateTestData)
+      val modData = testData.map(_ + 5)
+      assert(collected === modData.toSet, "\nData received does not match data sent")
+    }
+    ssc.stop(stopSparkContext = false)
+  })
+  
   testIfEnabled("custom message handling") {
     val awsCredentials = KinesisTestUtils.getAWSCredentials()
     def addFive(r: Record): Int = JavaUtils.bytesToString(r.getData).toInt + 5
     val stream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
-      Seconds(10), StorageLevel.MEMORY_ONLY, addFive,
+      Seconds(10), StorageLevel.MEMORY_ONLY, addFive _,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
     stream shouldBe a [ReceiverInputDStream[_]]
-
     val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
     stream.foreachRDD { rdd =>
       collected ++= rdd.collect()
