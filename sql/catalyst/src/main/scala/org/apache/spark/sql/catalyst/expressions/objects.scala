@@ -388,6 +388,8 @@ case class MapObjects private(
     case a: ArrayType => (i: String) => s".getArray($i)"
     case _: MapType => (i: String) => s".getMap($i)"
     case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
+    case DecimalType.Fixed(p, s) => (i: String) => s".getDecimal($i, $p, $s)"
+    case DateType => (i: String) => s".getInt($i)"
   }
 
   private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
