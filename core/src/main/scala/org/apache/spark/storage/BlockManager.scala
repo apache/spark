@@ -478,6 +478,12 @@ private[spark] class BlockManager(
     }
   }
 
+  /**
+   * Get block from the local block manager as serialized bytes.
+   *
+   * Must be called while holding a read lock on the block.
+   * Releases the read lock upon exception; keeps the read lock upon successful return.
+   */
   private def doGetLocalBytes(blockId: BlockId, info: BlockInfo): ByteBuffer = {
     val level = info.level
     logDebug(s"Level for block $blockId is $level")
