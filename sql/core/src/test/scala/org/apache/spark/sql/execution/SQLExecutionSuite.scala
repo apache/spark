@@ -49,6 +49,18 @@ class SQLExecutionSuite extends SparkFunSuite {
     }
   }
 
+  test("concurrent query execution with fork-join pool (SPARK-13747)") {
+    val sc = new SparkContext("local[*]", "test")
+    try {
+      // Should not throw IllegalArgumentException
+      (1 to 100).par.foreach { _ =>
+        sc.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b").count()
+      }
+    } finally {
+      sc.stop()
+    }
+  }
+
   /**
    * Trigger SPARK-10548 by mocking a parent and its child thread executing queries concurrently.
    */
