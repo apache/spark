@@ -82,6 +82,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    *  - Explicitly set Params, and train model
    *  - Test save/load using [[testDefaultReadWrite()]] on Estimator and Model
    *  - Check Params on Estimator and Model
+   *  - Compare model data
    *
    * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
    * @param estimator  Estimator to test
@@ -117,6 +118,8 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
       val param = model.getParam(p)
       assert(model.get(param).get === model2.get(param).get)
     }
+
+    checkModelData(model, model2)
   }
 }
 
