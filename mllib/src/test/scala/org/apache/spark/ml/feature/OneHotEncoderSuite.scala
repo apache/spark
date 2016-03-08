@@ -130,7 +130,7 @@ class OneHotEncoderSuite
         .setDropLast(false)
       val encoded = encoder.transform(dfWithTypes)
 
-      val output = encoded.select("id", "labelVec").map { r =>
+      val output = encoded.select("id", "labelVec").rdd.map { r =>
         val vec = r.getAs[Vector](1)
         (r.getInt(0), vec(0), vec(1), vec(2))
       }.collect().toSet
