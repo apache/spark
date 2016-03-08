@@ -253,10 +253,6 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def toString: String = s"$child AS $names"
 
-  override def sql: String = {
-    val aliasNames = names.map(quoteIdentifier(_)).mkString(",")
-    s"${child.sql} AS ($aliasNames)"
-  }
 }
 
 /**

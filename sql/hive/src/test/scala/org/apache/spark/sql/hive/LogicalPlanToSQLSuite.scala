@@ -588,23 +588,28 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   test("SQL generation for lateral views") {
     // Filter and OUTER clause
     checkHiveQl(
-      """SELECT key, value
-        |FROM t1 LATERAL VIEW OUTER explode(value) gentab as gencol
+      """
+        |SELECT key, value
+        |FROM t1
+        |LATERAL VIEW OUTER explode(value) gentab as gencol
         |WHERE key = 1
       """.stripMargin
     )
 
     // single lateral view
     checkHiveQl(
-      """SELECT *
-        |FROM t1 LATERAL VIEW explode(array(1,2,3)) gentab AS gencol
+      """
+        |SELECT *
+        |FROM t1
+        |LATERAL VIEW explode(array(1,2,3)) gentab AS gencol
         |SORT BY key ASC, gencol ASC LIMIT 1
       """.stripMargin
     )
 
     // multiple lateral views
     checkHiveQl(
-      """SELECT gentab2.*
+      """
+        |SELECT gentab2.*
         |FROM t1
         |LATERAL VIEW explode(array(array(1,2,3))) gentab1 AS gencol1
         |LATERAL VIEW explode(gentab1.gencol1) gentab2 AS gencol2 LIMIT 3
@@ -614,8 +619,8 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     // No generated column aliases
     checkHiveQl(
       """SELECT gentab.*
-        |FROM
-        |t1 LATERAL VIEW explode(map('key1', 100, 'key2', 200)) gentab limit 2
+        |FROM t1
+        |LATERAL VIEW explode(map('key1', 100, 'key2', 200)) gentab limit 2
       """.stripMargin
     )
   }
@@ -623,13 +628,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   test("SQL generation for lateral views in subquery") {
     // Subquries in FROM clause using Generate
     checkHiveQl(
-      """SELECT subq.gencol
+      """
+        |SELECT subq.gencol
         |FROM
         |(SELECT * from t1 LATERAL VIEW explode(value) gentab AS gencol) subq
       """.stripMargin)
 
     checkHiveQl(
-      """SELECT subq.key
+      """
+        |SELECT subq.key
         |FROM
         |(SELECT key, value from t1 LATERAL VIEW explode(value) gentab AS gencol) subq
       """.stripMargin

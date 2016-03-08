@@ -24,7 +24,6 @@ import scala.util.control.NonFatal
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -95,7 +94,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case Distinct(p: Project) =>
       projectToSQL(p, isDistinct = true)
 
-    case g : Generate =>
+    case p@ Project(_, g: Generate) =>
+      generateToSQL(p)
+
+    case g: Generate =>
       generateToSQL(g)
 
     case p: Project =>
@@ -212,34 +214,13 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
-    val (projectListExprs, planToProcess) = getProjectListExprs(plan)
     build(
       "SELECT",
       if (isDistinct) "DISTINCT" else "",
-      projectListExprs.map(_.sql).mkString(", "),
-      if (planToProcess == OneRowRelation) "" else "FROM",
-      toSQL(planToProcess)
+      plan.projectList.map(_.sql).mkString(", "),
+      if (plan.child == OneRowRelation) "" else "FROM",
+      toSQL(plan.child)
     )
-  }
-
-  private def getProjectListExprs(plan: Project): (Seq[NamedExpression], LogicalPlan) = {
-    plan match {
-      case p @ Project(_, g: Generate) if g.qualifier.isEmpty =>
-        // Only keep the first generated column in the list so that we can
-        // transform it to a Generator expression in the following step.
-        val projList = p.projectList.filter {
-          case e: Expression if g.generatorOutput.tail.exists(_.semanticEquals(e)) => false
-          case _ => true
-        }
-        val exprs = projList.map {
-          case e: Expression if g.generatorOutput.exists(_.semanticEquals(e)) =>
-            val names = g.generatorOutput.map(_.name)
-            MultiAlias(g.generator, names)
-          case other => other
-        }
-        (exprs, g.child)
-      case _ => (plan.projectList, plan.child)
-    }
   }
 
   private def aggregateToSQL(plan: Aggregate): String = {
@@ -332,9 +313,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       toSQL(w.child)
   }
 
-  /* This function handles the SQL generation when generators are specified in the
-   * LATERAL VIEW clause. SQL generation of generators specified in projection lists
-   * is handled in projectToSQL.
+  /* This function handles the SQL generation for generators.
    * sample plan :
    *   +- Project [mycol2#192]
    *     +- Generate explode(myCol#191), true, false, Some(mytable2), [mycol2#192]
@@ -347,13 +326,44 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val generatorAlias = if (plan.qualifier.isEmpty) "" else plan.qualifier.get
     val outerClause = if (plan.outer) "OUTER" else ""
     build(
-      toSQL(plan.child),
+      if (plan.child == OneRowRelation) s"(SELECT 1) ${SQLBuilder.newSubqueryName}" else toSQL(plan.child),
       "LATERAL VIEW",
       outerClause,
       plan.generator.sql,
       quoteIdentifier(generatorAlias),
       "AS",
       columnAliases
+    )
+  }
+
+  private def generateToSQL(plan: Project): String = {
+    // assert if child is a generate or not.
+    val generate = plan.child.asInstanceOf[Generate]
+    // Generators that appear in projection list will be expressed as LATERAL VIEW.
+    // A qualifier is needed for a LATERAL VIEw.
+    val generatorAlias: String = generate.qualifier.getOrElse(SQLBuilder.newGeneratorName)
+
+    // Qualify the attributes in projection list.
+    val newProjList = plan.projectList.map {
+      case a if generate.generatorOutput.exists(_.semanticEquals(a)) =>
+        a.toAttribute.withQualifiers(Seq(generatorAlias))
+      case o => o
+    }
+
+    //If Generate is missing the qualifier (its in projection list) , add one here.
+    val planToProcess =
+      if (generate.qualifier.isEmpty) {
+        generate.copy(qualifier = Some(generatorAlias))
+      }
+      else {
+        generate
+      }
+
+    build(
+      "SELECT",
+      newProjList.map(a => a.sql).mkString(","),
+      "FROM",
+      toSQL(planToProcess)
     )
   }
 
@@ -461,4 +471,8 @@ object SQLBuilder {
   private val nextSubqueryId = new AtomicLong(0)
 
   private def newSubqueryName: String = s"gen_subquery_${nextSubqueryId.getAndIncrement()}"
+
+  private val nextGeneratorId = new AtomicLong(0)
+
+  private def newGeneratorName: String = s"gen_generator_${nextGeneratorId.getAndIncrement()}"
 }
