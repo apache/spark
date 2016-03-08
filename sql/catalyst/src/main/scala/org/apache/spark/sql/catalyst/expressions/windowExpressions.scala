@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
@@ -30,6 +31,7 @@ sealed trait WindowSpec
 
 /**
  * The specification for a window function.
+ *
  * @param partitionSpec It defines the way that input rows are partitioned.
  * @param orderSpec It defines the ordering of rows in a partition.
  * @param frameSpecification It defines the window frame in a partition.
@@ -518,12 +520,25 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindowFunction {
   def this() = this(Literal(1))
 
+  override def children: Seq[Expression] = Seq(buckets)
+
   // Validate buckets. Note that this could be relaxed, the bucket value only needs to constant
   // for each partition.
-  buckets.eval() match {
-    case b: Int if b > 0 => // Ok
-    case x => throw new AnalysisException(
-      "Buckets expression must be a foldable positive integer expression: $x")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!buckets.foldable) {
+      return TypeCheckFailure(s"Buckets expression must be foldable, but got $buckets")
+    }
+
+    if (buckets.dataType != IntegerType) {
+      return TypeCheckFailure(s"Buckets expression must be integer type, but got $buckets")
+    }
+
+    val i = buckets.eval().asInstanceOf[Int]
+    if (i > 0) {
+      TypeCheckSuccess
+    } else {
+      TypeCheckFailure(s"Buckets expression must be positive, but got: $i")
+    }
   }
 
   private val bucket = AttributeReference("bucket", IntegerType, nullable = false)()
