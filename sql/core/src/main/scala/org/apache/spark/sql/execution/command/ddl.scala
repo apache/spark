@@ -82,6 +82,7 @@ case class AlterTableSerDeProperties(
 case class AlterTableStoreProperties(
     tableName: TableIdentifier,
     buckets: Option[BucketSpec],
+    // TODO: use `clustered` and `sorted` instead for simplicity
     noClustered: Boolean,
     noSorted: Boolean)(sql: String)
   extends NativeDDLCommands(sql) with Logging

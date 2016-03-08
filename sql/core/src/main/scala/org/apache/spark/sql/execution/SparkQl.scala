@@ -95,7 +95,6 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           "TOK_DATABASELOCATION",
           "TOK_DATABASECOMMENT",
           "TOK_DATABASEPROPERTIES"), createDatabaseArgs)
-
         val location = dbLocation.map {
           case Token("TOK_DATABASELOCATION", Token(loc, Nil) :: Nil) => unquoteString(loc)
         }
@@ -106,7 +105,6 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           case Token("TOK_DATABASEPROPERTIES", propList) =>
             propList.flatMap(extractProps(_, "TOK_DBPROPLIST", "TOK_TABLEPROPERTY"))
         }.toMap
-
         CreateDatabase(databaseName, allowExisting.isDefined, location, comment, props)(node.source)
 
       case Token("TOK_CREATEFUNCTION", func :: as :: createFuncArgs) =>
@@ -117,7 +115,6 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           temp) = getClauses(Seq(
           "TOK_RESOURCE_LIST",
           "TOK_TEMPORARY"), createFuncArgs)
-
         val resourcesMap: Map[String, String] = rList.toSeq.flatMap {
           case Token("TOK_RESOURCE_LIST", resources) =>
             resources.map {
@@ -144,12 +141,12 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
           Some(Token("TOK_TABLEPROVIDER", providerNameParts)),
           tableOpts,
           tableAs) = getClauses(Seq(
-            "TEMPORARY",
-            "TOK_IFNOTEXISTS",
-            "TOK_TABNAME", "TOK_TABCOLLIST",
-            "TOK_TABLEPROVIDER",
-            "TOK_TABLEOPTIONS",
-            "TOK_QUERY"), createTableArgs)
+          "TEMPORARY",
+          "TOK_IFNOTEXISTS",
+          "TOK_TABNAME", "TOK_TABCOLLIST",
+          "TOK_TABLEPROVIDER",
+          "TOK_TABLEOPTIONS",
+          "TOK_QUERY"), createTableArgs)
 
         val tableIdent: TableIdentifier = extractTableIdent(tabName)
 
