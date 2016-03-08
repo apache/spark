@@ -1341,6 +1341,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = sqlContext.range(100)
     val agg1 = df.groupBy().count()
     val agg2 = df.groupBy().count()
+    // two aggregates with different ExprId within them should have same result
     agg1.queryExecution.executedPlan.sameResult(agg2.queryExecution.executedPlan)
   }
 

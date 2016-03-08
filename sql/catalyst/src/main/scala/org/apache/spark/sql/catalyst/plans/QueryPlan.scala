@@ -239,9 +239,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   override def innerChildren: Seq[PlanType] = subqueries
 
   /**
-   * Cleaned copy of this query plan.
+   * Canonicalized copy of this query plan.
    */
-  protected lazy val cleaned: PlanType = this
+  protected lazy val canonicalized: PlanType = this
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.
@@ -257,8 +257,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * can do better should override this function.
    */
   def sameResult(plan: PlanType): Boolean = {
-    val cleanLeft = this.cleaned
-    val cleanRight = plan.cleaned
+    val cleanLeft = this.canonicalized
+    val cleanRight = plan.canonicalized
     cleanLeft.getClass == cleanRight.getClass &&
       cleanLeft.children.size == cleanRight.children.size &&
       cleanLeft.cleanArgs == cleanRight.cleanArgs &&

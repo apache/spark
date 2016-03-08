@@ -104,12 +104,12 @@ case class ShuffleExchange(
   /**
    * Caches the created ShuffleRowRDD so we can reuse that.
    */
-  private var shuffleRDD: ShuffledRowRDD = null
+  private var cachedShuffleRDD: ShuffledRowRDD = null
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
-    if (shuffleRDD == null) {
-      shuffleRDD = coordinator match {
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = coordinator match {
         case Some(exchangeCoordinator) =>
           val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
           assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
@@ -119,7 +119,7 @@ case class ShuffleExchange(
           preparePostShuffleRDD(shuffleDependency)
       }
     }
-    shuffleRDD
+    cachedShuffleRDD
   }
 }
 

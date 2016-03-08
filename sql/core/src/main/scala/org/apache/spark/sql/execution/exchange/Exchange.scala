@@ -37,8 +37,9 @@ abstract class Exchange extends UnaryNode {
 }
 
 /**
- * A wrapper for reused exchange to have different output, which is required to resolve the
- * attributes in following plans.
+ * A wrapper for reused exchange to have different output, because two exchanges which produce
+ * logically identical output will have distinct sets of output attribute ids, so we need to
+ * preserve the original ids because they're what downstream operators are expecting.
  */
 case class ReusedExchange(override val output: Seq[Attribute], child: Exchange) extends LeafNode {
 
@@ -73,6 +74,7 @@ private[sql] case class ReuseExchange(sqlContext: SQLContext) extends Rule[Spark
     val exchanges = mutable.HashMap[StructType, ArrayBuffer[Exchange]]()
     plan.transformUp {
       case exchange: Exchange =>
+        // the exchanges that have same results usually also have same schemas (same column names).
         val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
         val samePlan = sameSchema.find { e =>
           exchange.sameResult(e)
@@ -80,8 +82,7 @@ private[sql] case class ReuseExchange(sqlContext: SQLContext) extends Rule[Spark
         if (samePlan.isDefined) {
           // Keep the output of this exchange, the following plans require that to resolve
           // attributes.
-          val reused = ReusedExchange(exchange.output, samePlan.get)
-          reused
+          ReusedExchange(exchange.output, samePlan.get)
         } else {
           sameSchema += exchange
           exchange

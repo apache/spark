@@ -114,7 +114,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  override lazy val cleaned: LogicalPlan = EliminateSubqueryAliases(this)
+  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child

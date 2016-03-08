@@ -35,6 +35,8 @@ class SparkPlanInfo(
     val metrics: Seq[SQLMetricInfo]) {
 
   override def hashCode(): Int = {
+    // hashCode of simpleString should be good enough to distinguish the plans from each other
+    // within a plan
     simpleString.hashCode
   }
 

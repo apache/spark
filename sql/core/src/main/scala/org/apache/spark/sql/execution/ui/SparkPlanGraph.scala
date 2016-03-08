@@ -104,8 +104,7 @@ private[sql] object SparkPlanGraph {
         } else {
           subgraph.nodes += node
         }
-        // ShuffleExchange or BroadcastExchange
-        if (name.endsWith("Exchange")) {
+        if (name == "ShuffleExchange" || name == "BroadcastExchange") {
           exchanges += planInfo -> node
         }
 
