@@ -208,8 +208,6 @@ case class CoGroup(
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectOperator {
 
-  override def producedAttributes: AttributeSet = outputSet
-
   override def deserializers: Seq[(Expression, Seq[Attribute])] =
     // The `leftGroup` and `rightGroup` are guaranteed te be of same schema, so it's safe to resolve
     // the `keyDeserializer` based on either of them, here we pick the left one.

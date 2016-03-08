@@ -17,12 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.hadoop.mapreduce.TaskAttemptContext
-
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.sources.{HadoopFsRelation, HadoopFsRelationProvider, OutputWriter, OutputWriterFactory}
-import org.apache.spark.sql.types.StructType
-
 /**
  * A container for bucketing information.
  * Bucketing is a technology for decomposing data sets into more manageable parts, and the number
@@ -36,24 +30,6 @@ private[sql] case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
     sortColumnNames: Seq[String])
-
-private[sql] trait BucketedHadoopFsRelationProvider extends HadoopFsRelationProvider {
-  final override def createRelation(
-      sqlContext: SQLContext,
-      paths: Array[String],
-      dataSchema: Option[StructType],
-      partitionColumns: Option[StructType],
-      parameters: Map[String, String]): HadoopFsRelation =
-    throw new UnsupportedOperationException("use the overload version with bucketSpec parameter")
-}
-
-private[sql] abstract class BucketedOutputWriterFactory extends OutputWriterFactory {
-  final override def newInstance(
-      path: String,
-      dataSchema: StructType,
-      context: TaskAttemptContext): OutputWriter =
-    throw new UnsupportedOperationException("use the overload version with bucketSpec parameter")
-}
 
 private[sql] object BucketingUtils {
   // The file name of bucketed data should have 3 parts:
