@@ -183,13 +183,25 @@ package object config {
 
   private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
     .intConf
-    .optional
+    .withDefault(1)
 
   private[spark] val DRIVER_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.driver.memoryOverhead")
     .bytesConf(ByteUnit.MiB)
     .optional
 
+  private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+    .bytesConf(ByteUnit.MiB)
+    .withDefaultString("1g")
+
   /* Executor configuration. */
+
+  private[spark] val EXECUTOR_CORES = ConfigBuilder("spark.executor.cores")
+    .intConf
+    .withDefault(1)
+
+  private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
+    .bytesConf(ByteUnit.MiB)
+    .withDefaultString("1g")
 
   private[spark] val EXECUTOR_MEMORY_OVERHEAD = ConfigBuilder("spark.yarn.executor.memoryOverhead")
     .bytesConf(ByteUnit.MiB)
@@ -245,5 +257,11 @@ package object config {
     .stringConf
     .toSequence
     .optional
+
+  private[spark] val PY_FILES = ConfigBuilder("spark.submit.pyFiles")
+    .internal
+    .stringConf
+    .toSequence
+    .withDefault(Nil)
 
 }
