@@ -33,8 +33,38 @@ object PivotFirst {
     PivotFirst(pivotColumn, valueColumn, pivotIndex)
   }
 
-  val supportedDataTypes = DoubleType :: IntegerType :: LongType :: FloatType :: BooleanType ::
-    ShortType :: ByteType :: DecimalType :: Nil
+  def supportsDataType(dataType: DataType): Boolean = {
+    try {
+      updateFunction(dataType)
+      true
+    } catch {
+      case _: UnsupportedOperationException => false
+    }
+  }
+
+  // UnsafeRow.update throws UnsupportedOperationException so we need to explicitly support each
+  // DataType.
+  private def updateFunction(dataType: DataType): (MutableRow, Int, Any) => Unit = dataType match {
+    case DoubleType =>
+      (row, offset, value) => row.setDouble(offset, value.asInstanceOf[Double])
+    case IntegerType =>
+      (row, offset, value) => row.setInt(offset, value.asInstanceOf[Int])
+    case LongType =>
+      (row, offset, value) => row.setLong(offset, value.asInstanceOf[Long])
+    case FloatType =>
+      (row, offset, value) => row.setFloat(offset, value.asInstanceOf[Float])
+    case BooleanType =>
+      (row, offset, value) => row.setBoolean(offset, value.asInstanceOf[Boolean])
+    case ShortType =>
+      (row, offset, value) => row.setShort(offset, value.asInstanceOf[Short])
+    case ByteType =>
+      (row, offset, value) => row.setByte(offset, value.asInstanceOf[Byte])
+    case d: DecimalType =>
+      (row, offset, value) => row.setDecimal(offset, value.asInstanceOf[Decimal], d.precision)
+    case _ => throw new UnsupportedOperationException(
+      s"Unsupported datatype ($dataType) used in PivotFirst, this is a bug."
+    )
+  }
 }
 
 case class PivotFirst(pivotColumn: Expression,
@@ -43,7 +73,7 @@ case class PivotFirst(pivotColumn: Expression,
                       mutableAggBufferOffset: Int = 0,
                       inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
 
-  lazy val valueDataType = valueColumn.dataType
+  val valueDataType = valueColumn.dataType
   val indexSize = pivotIndex.size
 
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
@@ -97,7 +127,7 @@ case class PivotFirst(pivotColumn: Expression,
 
 
   override lazy val aggBufferAttributes: Seq[AttributeReference] =
-    (0 until indexSize).map(i => AttributeReference("agg_" + i, valueDataType)())
+    pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
 
   override lazy val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
@@ -108,27 +138,10 @@ case class PivotFirst(pivotColumn: Expression,
 
   override val nullable: Boolean = false
 
-  override lazy val dataType: DataType = ArrayType(valueDataType)
+  override val dataType: DataType = ArrayType(valueDataType)
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
-  // Partial Aggregation for this is wastefull
-  override val supportsPartial = false
-
-  // UnsafeRow.update throws UnsupportedOperationException so we need to do this
-  private def updateRow(row: MutableRow, offset: Int, value: Any): Unit = valueDataType match {
-    case null => {} // this should not happen, but lets do nothing anyway
-    case DoubleType => row.setDouble(offset, value.asInstanceOf[Double])
-    case IntegerType => row.setInt(offset, value.asInstanceOf[Int])
-    case LongType => row.setLong(offset, value.asInstanceOf[Long])
-    case FloatType => row.setFloat(offset, value.asInstanceOf[Float])
-    case BooleanType => row.setBoolean(offset, value.asInstanceOf[Boolean])
-    case ShortType => row.setShort(offset, value.asInstanceOf[Short])
-    case ByteType => row.setByte(offset, value.asInstanceOf[Byte])
-    case d: DecimalType => row.setDecimal(offset, value.asInstanceOf[Decimal], d.precision)
-    case _ => throw new UnsupportedOperationException(
-      s"Unsupported datatype ($valueDataType) used in ${PivotFirst.toString}, this is a bug."
-    )
-  }
+  private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 }
 

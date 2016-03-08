@@ -314,7 +314,7 @@ class Analyzer(
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
         if (singleAgg && pivotValues.length >= 10
-          && aggregates.forall(a => PivotFirst.supportedDataTypes.contains(a.dataType))) {
+          && aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
           val namedAggExp: NamedExpression = Alias(aggregates.head, "agg")()

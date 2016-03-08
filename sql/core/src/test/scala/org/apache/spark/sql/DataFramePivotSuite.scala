@@ -18,9 +18,12 @@
 package org.apache.spark.sql
 
 
+import org.apache.spark.sql.catalyst.expressions.aggregate.PivotFirst
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   import testImplicits._
@@ -96,7 +99,17 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
     )
   }
 
-  // optimized pivot (repeated aggregate) tests
+  // optimized pivot (with PivotFirst) below
+  test("optimized pivot planned") {
+    val df = courseSales.groupBy("year")
+      // pivot wtith extra columns to trigger optimization
+      .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+      .agg(sum($"earnings"))
+    val queryExecution = sqlContext.executePlan(df.queryExecution.logical)
+    assert(queryExecution.simpleString.contains("pivotfirst"))
+  }
+
+
   test("optimized pivot courses with literals") {
     checkAnswer(
       courseSales.groupBy("year")
@@ -128,5 +141,28 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
         .select("course", "2012", "2013"),
       Row("dotNET", 15000.0, 48000.0) :: Row("Java", 20000.0, 30000.0) :: Nil
     )
+  }
+
+  test("optimized pivot DecimalType") {
+    val df = courseSales.select($"course", $"year", $"earnings".cast(DecimalType(10,2)))
+      .groupBy("year")
+      // pivot wtith extra columns to trigger optimization
+      .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
+      .agg(sum($"earnings"))
+      .select("year", "dotNET", "Java")
+    println(df.schema)
+    checkAnswer(df, Row(2012, Decimal(1500000,20,2), Decimal(2000000,20,2)) ::
+      Row(2013, Decimal(4800000,20,2), Decimal(3000000,20,2)) :: Nil)
+  }
+
+  test("PivotFirst supported datatypes") {
+    val supportedDataTypes: Seq[DataType] = DoubleType :: IntegerType :: LongType :: FloatType ::
+      BooleanType :: ShortType :: ByteType :: Nil
+    for (datatype <- supportedDataTypes) {
+      assertResult(true)(PivotFirst.supportsDataType(datatype))
+    }
+    assertResult(true)(PivotFirst.supportsDataType(DecimalType(10, 1)))
+    assertResult(false)(PivotFirst.supportsDataType(null))
+    assertResult(false)(PivotFirst.supportsDataType(ArrayType(IntegerType)))
   }
 }
