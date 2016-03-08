@@ -511,7 +511,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
       val parquetRelation = cached.getOrElse {
         val paths = new Path(metastoreRelation.table.storage.locationUri.get) :: Nil
-        val fileCatalog = new HiveFileCatalog(hive, paths, partitionSpec)
+        val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
         val format = new DefaultSource()
         val inferredSchema = format.inferSchema(hive, parquetOptions, fileCatalog.allFiles())
 
@@ -749,7 +749,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
  * An override of the standard HDFS listing based catalog, that overrides the partition spec with
  * the information from the metastore.
  */
-class HiveFileCatalog(
+class MetaStoreFileCatalog(
     hive: HiveContext,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)

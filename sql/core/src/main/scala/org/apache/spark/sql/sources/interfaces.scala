@@ -422,7 +422,7 @@ case class HadoopFsRelation(
 }
 
 /**
- * Used to read a write data in files to [[InternalRow]] format.
+ * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
 trait FileFormat {
   /**
