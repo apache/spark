@@ -66,11 +66,13 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(
              LeftSemi, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         joins.BroadcastLeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
+          leftKeys, rightKeys, planLater(left), planLater(right),
+          reorderPredicates(condition)) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         joins.LeftSemiJoinHash(
-          leftKeys, rightKeys, planLater(left), planLater(right), condition) :: Nil
+          leftKeys, rightKeys, planLater(left), planLater(right),
+          reorderPredicates(condition)) :: Nil
       case _ => Nil
     }
   }
@@ -111,33 +113,39 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, Inner, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, Inner, BuildRight, reorderPredicates(condition),
+          planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, Inner, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, Inner, BuildLeft, reorderPredicates(condition), planLater(left),
+          planLater(right)))
 
       case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeJoin(
-          leftKeys, rightKeys, condition, planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, reorderPredicates(condition), planLater(left),
+          planLater(right)) :: Nil
 
       // --- Outer joins --------------------------------------------------------------------------
 
       case ExtractEquiJoinKeys(
           LeftOuter, leftKeys, rightKeys, condition, left, CanBroadcast(right)) =>
         Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, LeftOuter, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, LeftOuter, BuildRight, reorderPredicates(condition),
+          planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(
           RightOuter, leftKeys, rightKeys, condition, CanBroadcast(left), right) =>
         Seq(joins.BroadcastHashJoin(
-          leftKeys, rightKeys, RightOuter, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, RightOuter, BuildLeft, reorderPredicates(condition),
+          planLater(left), planLater(right)))
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeOuterJoin(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, joinType, reorderPredicates(condition), planLater(left),
+          planLater(right)) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 
@@ -252,10 +260,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case j @ logical.Join(CanBroadcast(left), right, Inner | RightOuter, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joins.BuildLeft, j.joinType, condition) :: Nil
+          planLater(left), planLater(right), joins.BuildLeft, j.joinType,
+          reorderPredicates(condition)) :: Nil
       case j @ logical.Join(left, CanBroadcast(right), Inner | LeftOuter | LeftSemi, condition) =>
         execution.joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), joins.BuildRight, j.joinType, condition) :: Nil
+          planLater(left), planLater(right), joins.BuildRight, j.joinType,
+          reorderPredicates(condition)) :: Nil
       case _ => Nil
     }
   }
@@ -265,7 +275,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Join(left, right, Inner, None) =>
         execution.joins.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
-        execution.Filter(condition,
+        execution.Filter(reorderPredicates(condition),
           execution.joins.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
     }
@@ -282,7 +292,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         // This join could be very slow or even hang forever
         joins.BroadcastNestedLoopJoin(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+          planLater(left), planLater(right), buildSide, joinType,
+          reorderPredicates(condition)) :: Nil
       case _ => Nil
     }
   }
@@ -341,7 +352,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
-        execution.Filter(condition, planLater(child)) :: Nil
+        execution.Filter(reorderPredicates(condition), planLater(child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.Expand(e.projections, e.output, planLater(child)) :: Nil
       case logical.Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
