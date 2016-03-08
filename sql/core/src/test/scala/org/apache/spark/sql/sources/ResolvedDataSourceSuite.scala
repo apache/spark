@@ -21,7 +21,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.DataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
-  
   private def getProvidingClass(name: String): Class[_] =
     DataSource(sqlContext = null, className = name).providingClass
 
