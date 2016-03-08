@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
-import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
@@ -81,6 +80,9 @@ private[hive] case class CreateViewAsSelect(
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging {
+  import ParseUtils._
+  import ParserUtils._
+
   protected val nativeCommands = Seq(
     "TOK_ALTERDATABASE_OWNER",
     "TOK_ALTERDATABASE_PROPERTIES",
