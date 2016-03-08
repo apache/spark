@@ -138,13 +138,11 @@ private[ui] class SparkPlanGraphNode(
     }
 
     if (values.nonEmpty) {
-      // If there are metrics, display each entry in a separate line. We should use an escaped
-      // "\n" here to follow the dot syntax.
-      //
+      // If there are metrics, display each entry in a separate line.
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      builder ++= "\\n \\n"
-      builder ++= values.mkString("\\n")
+      builder ++= "\n \n"
+      builder ++= values.mkString("\n")
     }
 
     s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
