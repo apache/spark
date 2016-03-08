@@ -32,15 +32,11 @@ private[sql] class ResolveDataSource(sqlContext: SQLContext) extends Rule[Logica
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case u: UnresolvedRelation if u.tableIdentifier.database.isDefined =>
       try {
-        val resolved = ResolvedDataSource(
+        val dataSource = DataSource(
           sqlContext,
-          paths = Seq.empty,
-          userSpecifiedSchema = None,
-          partitionColumns = Array(),
-          bucketSpec = None,
-          provider = u.tableIdentifier.database.get,
-          options = Map("path" -> u.tableIdentifier.table))
-        val plan = LogicalRelation(resolved.relation)
+          paths = u.tableIdentifier.table :: Nil,
+          className = u.tableIdentifier.database.get)
+        val plan = LogicalRelation(dataSource.resolveRelation())
         u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
       } catch {
         case e: ClassNotFoundException => u
@@ -143,7 +139,7 @@ private[sql] case class PreWriteCheck(catalog: Catalog) extends (LogicalPlan => 
         }
 
         PartitioningUtils.validatePartitionColumnDataTypes(
-          r.schema, part.keySet.toArray, catalog.conf.caseSensitiveAnalysis)
+          r.schema, part.keySet.toSeq, catalog.conf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
         val srcRelations = query.collect {

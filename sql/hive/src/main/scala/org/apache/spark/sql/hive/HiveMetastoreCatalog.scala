@@ -176,17 +176,17 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         }
 
         val options = table.storage.serdeProperties
-        val resolvedRelation =
-          ResolvedDataSource(
+        val dataSource =
+          DataSource(
             hive,
             userSpecifiedSchema = userSpecifiedSchema,
-            partitionColumns = partitionColumns.toArray,
+            partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
-            provider = table.properties("spark.sql.sources.provider"),
+            className = table.properties("spark.sql.sources.provider"),
             options = options)
 
         LogicalRelation(
-          resolvedRelation.relation,
+          dataSource.resolveRelation(),
           metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
       }
     }
@@ -283,12 +283,12 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
     val maybeSerDe = HiveSerDe.sourceToSerDe(provider, hive.hiveconf)
     val dataSource =
-      ResolvedDataSource(
+      DataSource(
         hive,
         userSpecifiedSchema = userSpecifiedSchema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        provider = provider,
+        className = provider,
         options = options)
 
     def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
@@ -334,7 +334,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.relation) match {
+    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
@@ -511,7 +511,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
 
       val parquetRelation = cached.getOrElse {
         val paths = new Path(metastoreRelation.table.storage.locationUri.get) :: Nil
-        val fileCatalog = new HiveFileCatalog(hive, paths, partitionSpec)
+        val fileCatalog = new MetaStoreFileCatalog(hive, paths, partitionSpec)
         val format = new DefaultSource()
         val inferredSchema = format.inferSchema(hive, parquetOptions, fileCatalog.allFiles())
 
@@ -541,12 +541,12 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
       val parquetRelation = cached.getOrElse {
         val created =
           LogicalRelation(
-            ResolvedDataSource(
+            DataSource(
               sqlContext = hive,
               paths = paths,
               userSpecifiedSchema = Some(metastoreRelation.schema),
               options = parquetOptions,
-              provider = "parquet").relation)
+              className = "parquet").resolveRelation())
 
         cachedDataSourceTables.put(tableIdentifier, created)
         created
@@ -749,7 +749,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
  * An override of the standard HDFS listing based catalog, that overrides the partition spec with
  * the information from the metastore.
  */
-class HiveFileCatalog(
+class MetaStoreFileCatalog(
     hive: HiveContext,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)

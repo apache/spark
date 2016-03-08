@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.command.RunnableCommand
-import org.apache.spark.sql.execution.datasources.{BucketSpec, LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, LogicalRelation}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -148,12 +148,12 @@ case class CreateMetastoreDataSource(
       }
 
     // Create the relation to validate the arguments before writing the metadata to the metastore.
-    ResolvedDataSource(
+    DataSource(
       sqlContext = sqlContext,
       userSpecifiedSchema = userSpecifiedSchema,
-      provider = provider,
+      className = provider,
       bucketSpec = None,
-      options = optionsWithPath)
+      options = optionsWithPath).resolveRelation()
 
     hiveContext.catalog.createDataSourceTable(
       tableIdent,
@@ -220,15 +220,16 @@ case class CreateMetastoreDataSourceAsSelect(
           return Seq.empty[Row]
         case SaveMode.Append =>
           // Check if the specified data source match the data source of the existing table.
-          val resolved = ResolvedDataSource(
+          val dataSource = DataSource(
             sqlContext = sqlContext,
             userSpecifiedSchema = Some(query.schema.asNullable),
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
-            provider = provider,
+            className = provider,
             options = optionsWithPath)
           // TODO: Check that options from the resolved relation match the relation that we are
           // inserting into (i.e. using the same compression).
+
           EliminateSubqueryAliases(sqlContext.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               existingSchema = Some(l.schema)
@@ -248,19 +249,19 @@ case class CreateMetastoreDataSourceAsSelect(
     val data = DataFrame(hiveContext, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
-      case Some(schema) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, schema)
+      case Some(s) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, s)
       case None => data
     }
 
     // Create the relation based on the data of df.
-    val resolved = ResolvedDataSource(
+    val dataSource = DataSource(
       sqlContext,
-      provider,
-      partitionColumns,
-      bucketSpec,
-      mode,
-      optionsWithPath,
-      df)
+      className = provider,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
+      options = optionsWithPath)
+
+    val result = dataSource.write(mode, df)
 
     if (createMetastoreTable) {
       // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -268,7 +269,7 @@ case class CreateMetastoreDataSourceAsSelect(
       // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
       hiveContext.catalog.createDataSourceTable(
         tableIdent,
-        Some(resolved.relation.schema),
+        Some(result.schema),
         partitionColumns,
         bucketSpec,
         provider,
