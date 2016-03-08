@@ -26,12 +26,6 @@ import scala.collection.immutable.HashMap
 
 
 object PivotFirst {
-  def apply(pivotColumn: Expression,
-            valueColumn: Expression,
-            pivotValues: Seq[Any]): PivotFirst = {
-    val pivotIndex = HashMap(pivotValues.zipWithIndex: _*)
-    PivotFirst(pivotColumn, valueColumn, pivotIndex)
-  }
 
   def supportsDataType(dataType: DataType): Boolean = {
     try {
@@ -69,10 +63,11 @@ object PivotFirst {
 
 case class PivotFirst(pivotColumn: Expression,
                       valueColumn: Expression,
-                      pivotIndex: Map[Any, Int],
+                      pivotValues: Seq[Any],
                       mutableAggBufferOffset: Int = 0,
                       inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
 
+  val pivotIndex = HashMap(pivotValues.zipWithIndex: _*)
   val valueDataType = valueColumn.dataType
   val indexSize = pivotIndex.size
 

@@ -144,15 +144,19 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   }
 
   test("optimized pivot DecimalType") {
-    val df = courseSales.select($"course", $"year", $"earnings".cast(DecimalType(10,2)))
+    val df = courseSales.select($"course", $"year", $"earnings".cast(DecimalType(10, 2)))
       .groupBy("year")
-      // pivot wtith extra columns to trigger optimization
+      // pivot with extra columns to trigger optimization
       .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
       .agg(sum($"earnings"))
       .select("year", "dotNET", "Java")
-    println(df.schema)
-    checkAnswer(df, Row(2012, Decimal(1500000,20,2), Decimal(2000000,20,2)) ::
-      Row(2013, Decimal(4800000,20,2), Decimal(3000000,20,2)) :: Nil)
+
+    assertResult(IntegerType)(df.schema("year").dataType)
+    assertResult(DecimalType(20, 2))(df.schema("Java").dataType)
+    assertResult(DecimalType(20, 2))(df.schema("dotNET").dataType)
+
+    checkAnswer(df, Row(2012, BigDecimal(1500000, 2), BigDecimal(2000000, 2)) ::
+      Row(2013, BigDecimal(4800000, 2), BigDecimal(3000000, 2)) :: Nil)
   }
 
   test("PivotFirst supported datatypes") {
