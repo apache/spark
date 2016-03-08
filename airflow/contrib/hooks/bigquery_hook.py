@@ -149,7 +149,7 @@ class BigQueryBaseCursor(object):
         self.service = service
         self.project_id = project_id
 
-    def run_query(self, bql, destination_dataset_table = False, write_disposition = 'WRITE_EMPTY', allow_large_results=False):
+    def run_query(self, bql, destination_dataset_table = False, write_disposition = 'WRITE_EMPTY', allow_large_results=False, udf_config = False):
         """
         Executes a BigQuery SQL query. Optionally persists results in a BigQuery
         table. See here:
@@ -166,6 +166,9 @@ class BigQueryBaseCursor(object):
             BigQuery.
         :param allow_large_results: Whether to allow large results.
         :type allow_large_results: boolean
+        :param udf_config: The User Defined Function configuration for the query.
+            See https://cloud.google.com/bigquery/user-defined-functions for details.
+        :type udf_config: list
         """
         configuration = {
             'query': {
@@ -185,6 +188,11 @@ class BigQueryBaseCursor(object):
                     'datasetId': destination_dataset,
                     'tableId': destination_table,
                 }
+            })
+        if udf_config:
+            assert isinstance(udf_config, list)
+            configuration['query'].update({
+                'userDefinedFunctionResources': udf_config
             })
 
         return self.run_with_configuration(configuration)
