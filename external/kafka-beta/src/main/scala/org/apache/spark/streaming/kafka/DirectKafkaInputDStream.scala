@@ -69,7 +69,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
 
   assert(false ==
     driverKafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
-    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
+    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG +
       " must be set to false for driver kafka params, else offsets may commit before processing")
 
   @transient private var kc: KafkaConsumer[K, V] = null
@@ -351,7 +351,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
   }
 }
 
-object DirectKafkaInputDStream {
+object DirectKafkaInputDStream extends Logging {
   protected val defaultListener =
     "org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener"
   /** There are several different ways of specifying partition assignment,
@@ -376,6 +376,28 @@ object DirectKafkaInputDStream {
     driverKafkaParams: ju.Map[String, Object],
     executorKafkaParams: ju.Map[String, Object],
     preferredHosts: ju.Map[TopicPartition, String]): DirectKafkaInputDStream[K, V] = {
-    new DirectKafkaInputDStream[K, V](ssc, driverKafkaParams, executorKafkaParams, preferredHosts)
+    val dkp = new ju.HashMap[String, Object](driverKafkaParams)
+    val ekp = new ju.HashMap[String, Object](executorKafkaParams)
+
+    log.warn(s"overriding ${ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG} to 1 for driver")
+    dkp.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 1: Integer)
+
+    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for driver")
+    dkp.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+
+    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
+    ekp.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+
+    log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
+    ekp.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
+
+    // this probably doesnt matter since executors are manually assigned partitions, but just in case
+    if (null != ekp.get(ConsumerConfig.GROUP_ID_CONFIG)) {
+      val id = ekp.get(ConsumerConfig.GROUP_ID_CONFIG) + "-executor"
+      log.warn(s"overriding ${ConsumerConfig.GROUP_ID_CONFIG} to ${id} for executor")
+      ekp.put(ConsumerConfig.GROUP_ID_CONFIG, id)
+    }
+
+    new DirectKafkaInputDStream[K, V](ssc, dkp, ekp, preferredHosts)
   }
 }
