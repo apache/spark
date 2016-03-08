@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -54,8 +56,6 @@ private[ui] case class SparkPlanGraph(
 }
 
 private[sql] object SparkPlanGraph {
-
-  def escapeQuotes(str: String): String = str.replace("\"", "\\\"")
 
   /**
    * Build a SparkPlanGraph from the root of a SparkPlan tree.
@@ -147,7 +147,7 @@ private[ui] class SparkPlanGraphNode(
       builder ++= values.mkString("\\n")
     }
 
-    s"""  $id [label="${SparkPlanGraph.escapeQuotes(builder.toString())}"];"""
+    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
@@ -164,7 +164,7 @@ private[ui] class SparkPlanGraphCluster(
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     s"""
        |  subgraph cluster${id} {
-       |    label="${SparkPlanGraph.escapeQuotes(name)}";
+       |    label="${StringEscapeUtils.escapeJava(name)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
      """.stripMargin
