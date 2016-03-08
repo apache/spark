@@ -36,8 +36,8 @@ object PivotFirst {
     }
   }
 
-  // UnsafeRow.update throws UnsupportedOperationException so we need to explicitly support each
-  // DataType.
+  // Currently UnsafeRow does not support the generic update method (throws
+  // UnsupportedOperationException), so we need to explicitly support each DataType.
   private def updateFunction(dataType: DataType): (MutableRow, Int, Any) => Unit = dataType match {
     case DoubleType =>
       (row, offset, value) => row.setDouble(offset, value.asInstanceOf[Double])
@@ -63,13 +63,17 @@ object PivotFirst {
 
 case class PivotFirst(pivotColumn: Expression,
                       valueColumn: Expression,
-                      pivotValues: Seq[Any],
+                      pivotColumnValues: Seq[Any],
                       mutableAggBufferOffset: Int = 0,
                       inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
 
-  val pivotIndex = HashMap(pivotValues.zipWithIndex: _*)
+  val pivotIndex = HashMap(pivotColumnValues.zipWithIndex: _*)
+
   val valueDataType = valueColumn.dataType
+
   val indexSize = pivotIndex.size
+
+  private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 
   override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
@@ -78,7 +82,6 @@ case class PivotFirst(pivotColumn: Expression,
       if (index >= 0) {
         val value = valueColumn.eval(inputRow)
         if (value != null) {
-          // Can't do this with UnsafeRow: mutableAggBuffer.update(index, value)
           updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
         }
       }
@@ -89,7 +92,6 @@ case class PivotFirst(pivotColumn: Expression,
     for (i <- 0 until indexSize) {
       if (!inputAggBuffer.isNullAt(inputAggBufferOffset + i)) {
         val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
-        // Can't do this with UnsafeRow: mutableAggBuffer.update(mutableAggBufferOffset + i, value)
         updateRow(mutableAggBuffer, mutableAggBufferOffset + i, value)
       }
     }
@@ -136,7 +138,5 @@ case class PivotFirst(pivotColumn: Expression,
   override val dataType: DataType = ArrayType(valueDataType)
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
-
-  private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 }
 

@@ -313,27 +313,32 @@ class Analyzer(
         | !p.groupByExprs.forall(_.resolved) | !p.pivotColumn.resolved => p
       case Pivot(groupByExprs, pivotColumn, pivotValues, aggregates, child) =>
         val singleAgg = aggregates.size == 1
-        if (singleAgg && pivotValues.length >= 10
+        def outputName(value: Literal, aggregate: Expression): String = {
+          if (singleAgg) value.toString else value + "_" + aggregate.sql
+        }
+        if (pivotValues.length >= 10
           && aggregates.forall(a => PivotFirst.supportsDataType(a.dataType))) {
           // Since evaluating |pivotValues| if statements for each input row can get slow this is an
           // alternate plan that instead uses two steps of aggregation.
-          val namedAggExp: NamedExpression = Alias(aggregates.head, "agg")()
+          val namedAggExps: Seq[NamedExpression] = aggregates.map(a => Alias(a, a.sql)())
           val namedPivotCol = pivotColumn match {
             case n: NamedExpression => n
             case _ => Alias(pivotColumn, "__pivot_col")()
           }
           val bigGroup = groupByExprs :+ namedPivotCol
-          val firstAgg = Aggregate(bigGroup, bigGroup :+ namedAggExp, child)
+          val firstAgg = Aggregate(bigGroup, bigGroup ++ namedAggExps, child)
           val castPivotValues = pivotValues.map(Cast(_, pivotColumn.dataType).eval(EmptyRow))
-          val pivotAgg = Alias(
-            PivotFirst(namedPivotCol.toAttribute, namedAggExp.toAttribute, castPivotValues)
+          val pivotAggs = namedAggExps.map { a =>
+            Alias(PivotFirst(namedPivotCol.toAttribute, a.toAttribute, castPivotValues)
               .toAggregateExpression()
-            , "__pivot")()
-          val secondAgg =
-            Aggregate(groupByExprs, groupByExprs :+ pivotAgg, firstAgg)
-          val pivotAggAttribute = pivotAgg.toAttribute
-          val pivotOutputs = pivotValues.zipWithIndex.map { case (Literal(label, _), i) =>
-            Alias(ExtractValue(pivotAggAttribute, Literal(i), resolver), label.toString)()
+            , "__pivot_" + a.sql)()
+          }
+          val secondAgg = Aggregate(groupByExprs, groupByExprs ++ pivotAggs, firstAgg)
+          val pivotAggAttribute = pivotAggs.map(_.toAttribute)
+          val pivotOutputs = pivotValues.zipWithIndex.flatMap { case (value, i) =>
+            aggregates.zip(pivotAggAttribute).map { case (aggregate, pivotAtt) =>
+              Alias(ExtractValue(pivotAtt, Literal(i), resolver), outputName(value, aggregate))()
+            }
           }
           Project(groupByExprs ++ pivotOutputs, secondAgg)
         } else {
@@ -357,8 +362,7 @@ class Analyzer(
                 throw new AnalysisException(
                   s"Aggregate expression required for pivot, found '$aggregate'")
               }
-              val name = if (singleAgg) value.toString else value + "_" + aggregate.sql
-              Alias(filteredAggregate, name)()
+              Alias(filteredAggregate, outputName(value, aggregate))()
             }
           }
           Aggregate(groupByExprs, groupByExprs ++ pivotAggregates, child)
