@@ -84,7 +84,6 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       SimplifyConditionals,
       RemoveDispensableExpressions,
       PruneFilters,
-      SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -770,11 +769,21 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove all the deterministic conditions in a [[Filter]] that are guaranteed to be true
- * given the constraints on the child's output.
+ * Removes filters that can be evaluated trivially.  This can be done through the following ways:
+ * 1) by eliding the filter for cases where it will always evaluate to `true`.
+ * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
+ * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
 object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // If the filter condition always evaluate to true, remove the filter.
+    case Filter(Literal(true, BooleanType), child) => child
+    // If the filter condition always evaluate to null or false,
+    // replace the input with an empty relation.
+    case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
+    case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
+    // If any deterministic condition is guaranteed to be true given the constraints on the child's
+    // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
       val (prunedPredicates, remainingPredicates) =
         splitConjunctivePredicates(fc).partition { cond =>
@@ -788,22 +797,6 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
         val newCond = remainingPredicates.reduce(And)
         Filter(newCond, p)
       }
-  }
-}
-
-/**
- * Removes filters that can be evaluated trivially.  This is done either by eliding the filter for
- * cases where it will always evaluate to `true`, or substituting a dummy empty relation when the
- * filter will always evaluate to `false`.
- */
-object SimplifyFilters extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // If the filter condition always evaluate to true, remove the filter.
-    case Filter(Literal(true, BooleanType), child) => child
-    // If the filter condition always evaluate to null or false,
-    // replace the input with an empty relation.
-    case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
-    case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
   }
 }
 
