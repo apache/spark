@@ -2638,3 +2638,114 @@ setMethod("sort_array",
             jc <- callJStatic("org.apache.spark.sql.functions", "sort_array", x@jc, asc)
             column(jc)
           })
+
+#' This function renders a histogram for a given SparkR Column. Note: This function depends on the ggplot2 package.
+#' 
+#' @name histogram
+#' @title Histogram
+#' @param nbins the number of bins (optional). The default is 10.
+#' @param df the DataFrame containing the Column to build the histogram from.
+#' @param colname the name of the column to build the histogram from.
+#' @return a ggplot object with the histogram
+#' @examples \dontrun{
+#' 
+#' # Create a DataFrame from the Irijjs dataset
+#' irisDF <- createDataFrame(sqlContext, iris)
+#' 
+#' # Render a histogram for the Sepal_Length column 
+#' histogram(irisDF, "Sepal_Length", nbins=12)
+#' }
+# TODO: the name of this function will be changed to hist to match R's after SPARK-9325 is fixed
+setMethod("histogram",
+          signature(df="DataFrame"),
+          function (df, colname, nbins) {
+            # Require ggplot library
+            require(ggplot2)
+
+            # Compute statistics for the histogram
+            if (missing(nbins)) {
+              histData <- hist.stats(df, colname)
+            } else {
+              histData <- hist.stats(df, colname, nbins)
+            }
+
+            # Get the target column name
+            targetColname <- histData[[1]]
+
+            # Get the input data for the plot
+            histStats <- histData[[2]]
+
+            # Render the plot from the stats. Add axis labels.
+            plot <- ggplot(histStats, aes(x = centroids, y = counts))
+            plot <- plot + geom_histogram(data = histStats, stat = "identity", binwidth = 100)
+            plot <- plot + xlab(targetColname) + ylab("Frequency")
+
+            return(plot)
+         })
+
+#' This function computes statistics to render a histogram. These are 
+#' centroids and counts.
+#' 
+#' @name hist.stats
+#' @title Compute histogram statistics
+#' @param formula a formula or a bigr.vector specifying the data source
+#' @param nbins the number of bins (optional)
+#' @param data optional bigr.frame. If specified, this serves as the 
+#'   environment for column references in the formula that don't have an
+#'   explicit bigr.frame.
+#' @return a data.frame with the computed statistics
+#' @seealso \link{bigr.histogram}
+hist.stats <- function(df, colname=NULL, nbins=10) {
+  # Validate nbins
+  if (nbins < 2) {
+    stop("The number of bins must be a positive integer number greater than 1.")
+  }
+
+  # Validate colname
+  if (is.null(colname) | is.na(colname)) {
+    stop("colname must be specified.")
+  }
+  if (!colname %in% colnames(df)) {
+    stop("Specified colname does not belong to the given DataFrame.")
+  }
+
+  # Filter null values (i.e., NA's) in all grouping columns as well as in the target column
+  df <- na.omit(df[, colname])
+
+  # TODO: This will be when improved SPARK-9325 or SPARK-13436 are fixed
+  x <- eval(parse(text=paste0("df$", colname)))
+
+  stats <- collect(describe(df[, colname]))
+  min <- as.numeric(stats[4,2])
+  max <- as.numeric(stats[5,2])
+
+  # Normalize the data
+  xnorm <- (x - min) / (max - min)
+
+  # Round the data to 4 significant digits. This is to avoid rounding issues.
+  xnorm <- cast(xnorm * 10000, "integer") / 10000.0
+
+  # Since min = 0, max = 1 (data is already normalized)
+  normBinSize <- 1 / nbins
+  binsize <- (max - min) / nbins
+  approxBins <- xnorm / normBinSize
+
+  # Adjust values that are equal to the upper bound of each bin
+  bins <- cast(approxBins -
+                     ifelse(approxBins == cast(approxBins, "integer") & x != min, 1, 0), "integer")
+
+  df$bins <- bins
+  histStats <- collect(count(groupBy(df, "bins")))
+  names(histStats) <- c("bins", "counts")
+
+  # Fill bins with zero counts
+  y <- data.frame("bins"=seq(0, nbins - 1))
+  histStats <- merge(histStats, y, all.x=T, all.y=T)
+  histStats[is.na(histStats$count), 2] <- 0
+
+  # Compute centroids
+  histStats$centroids <- histStats$bins * binsize + min + binsize / 2
+
+  # Return the statistics
+  return(list(colname, histStats))
+}
