@@ -805,87 +805,82 @@ private[spark] class BlockManager(
     var blockWasSuccessfullyStored = false
     var iteratorFromFailedMemoryStorePut: Option[Iterator[Any]] = None
 
-    putBlockInfo.synchronized {
-      logTrace("Put for block %s took %s to get into synchronized block"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-
-      try {
-        if (putLevel.useMemory) {
-          // Put it in memory first, even if it also has useDisk set to true;
-          // We will drop it to disk later if the memory store can't hold it.
-          data match {
-            case IteratorValues(iterator) =>
-              memoryStore.putIterator(blockId, iterator(), putLevel) match {
-                case Right(s) =>
-                  size = s
-                case Left(iter) =>
-                  // Not enough space to unroll this block; drop to disk if applicable
-                  if (level.useDisk) {
-                    logWarning(s"Persisting block $blockId to disk instead.")
-                    diskStore.put(blockId) { fileOutputStream =>
-                      dataSerializeStream(blockId, fileOutputStream, iter)
-                    }
-                    Right(diskStore.getSize(blockId))
-                  } else {
-                    iteratorFromFailedMemoryStorePut = Some(iter)
+    try {
+      if (putLevel.useMemory) {
+        // Put it in memory first, even if it also has useDisk set to true;
+        // We will drop it to disk later if the memory store can't hold it.
+        data match {
+          case IteratorValues(iterator) =>
+            memoryStore.putIterator(blockId, iterator(), putLevel) match {
+              case Right(s) =>
+                size = s
+              case Left(iter) =>
+                // Not enough space to unroll this block; drop to disk if applicable
+                if (level.useDisk) {
+                  logWarning(s"Persisting block $blockId to disk instead.")
+                  diskStore.put(blockId) { fileOutputStream =>
+                    dataSerializeStream(blockId, fileOutputStream, iter)
                   }
-              }
-            case ByteBufferValues(bytes) =>
-              bytes.rewind()
-              size = bytes.limit()
-              val putSucceeded = if (level.deserialized) {
-                val values = dataDeserialize(blockId, bytes.duplicate())
-                memoryStore.putIterator(blockId, values, level).isRight
-              } else {
-                memoryStore.putBytes(blockId, size, () => bytes)
-              }
-              if (!putSucceeded && level.useDisk) {
-                logWarning(s"Persisting block $blockId to disk instead.")
-                diskStore.putBytes(blockId, bytes)
-              }
-          }
-        } else if (putLevel.useDisk) {
-          data match {
-            case IteratorValues(iterator) =>
-              diskStore.put(blockId) { fileOutputStream =>
-                dataSerializeStream(blockId, fileOutputStream, iterator())
-              }
-              size = diskStore.getSize(blockId)
-            case ByteBufferValues(bytes) =>
-              bytes.rewind()
-              size = bytes.limit()
+                  Right(diskStore.getSize(blockId))
+                } else {
+                  iteratorFromFailedMemoryStorePut = Some(iter)
+                }
+            }
+          case ByteBufferValues(bytes) =>
+            bytes.rewind()
+            size = bytes.limit()
+            val putSucceeded = if (level.deserialized) {
+              val values = dataDeserialize(blockId, bytes.duplicate())
+              memoryStore.putIterator(blockId, values, level).isRight
+            } else {
+              memoryStore.putBytes(blockId, size, () => bytes)
+            }
+            if (!putSucceeded && level.useDisk) {
+              logWarning(s"Persisting block $blockId to disk instead.")
               diskStore.putBytes(blockId, bytes)
-          }
-        } else {
-          assert(putLevel == StorageLevel.NONE)
-          throw new BlockException(
-            blockId, s"Attempted to put block $blockId without specifying storage level!")
+            }
         }
+      } else if (putLevel.useDisk) {
+        data match {
+          case IteratorValues(iterator) =>
+            diskStore.put(blockId) { fileOutputStream =>
+              dataSerializeStream(blockId, fileOutputStream, iterator())
+            }
+            size = diskStore.getSize(blockId)
+          case ByteBufferValues(bytes) =>
+            bytes.rewind()
+            size = bytes.limit()
+            diskStore.putBytes(blockId, bytes)
+        }
+      } else {
+        assert(putLevel == StorageLevel.NONE)
+        throw new BlockException(
+          blockId, s"Attempted to put block $blockId without specifying storage level!")
+      }
 
-        val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-        blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
-        if (blockWasSuccessfullyStored) {
-          // Now that the block is in either the memory, externalBlockStore, or disk store,
-          // let other threads read it, and tell the master about it.
-          putBlockInfo.size = size
-          if (tellMaster) {
-            reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
-          }
-          Option(TaskContext.get()).foreach { c =>
-            c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
-          }
+      val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
+      blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
+      if (blockWasSuccessfullyStored) {
+        // Now that the block is in either the memory, externalBlockStore, or disk store,
+        // let other threads read it, and tell the master about it.
+        putBlockInfo.size = size
+        if (tellMaster) {
+          reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
         }
-      } finally {
-        if (blockWasSuccessfullyStored) {
-          if (keepReadLock) {
-            blockInfoManager.downgradeLock(blockId)
-          } else {
-            blockInfoManager.unlock(blockId)
-          }
+        Option(TaskContext.get()).foreach { c =>
+          c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
+        }
+      }
+    } finally {
+      if (blockWasSuccessfullyStored) {
+        if (keepReadLock) {
+          blockInfoManager.downgradeLock(blockId)
         } else {
-          blockInfoManager.removeBlock(blockId)
-          logWarning(s"Putting block $blockId failed")
+          blockInfoManager.unlock(blockId)
         }
+      } else {
+        blockInfoManager.removeBlock(blockId)
+        logWarning(s"Putting block $blockId failed")
       }
     }
     logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
