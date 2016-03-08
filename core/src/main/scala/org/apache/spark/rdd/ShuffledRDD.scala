@@ -44,7 +44,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     part: Partitioner)
   extends RDD[(K, C)](prev.context, Nil) {
 
-  private var serializer: Option[Serializer] = None
+  private var serializer: Serializer = SparkEnv.get.serializer
 
   private var keyOrdering: Option[Ordering[K]] = None
 
@@ -54,7 +54,7 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): ShuffledRDD[K, V, C] = {
-    this.serializer = Option(serializer)
+    this.serializer = serializer
     this
   }
 
