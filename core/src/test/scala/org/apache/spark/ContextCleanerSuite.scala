@@ -577,21 +577,22 @@ class CleanerTester(
     }
   }
 
-  private def uncleanedResourcesToString = synchronized {
+  private def uncleanedResourcesToString = {
     s"""
-      |\tRDDs = ${toBeCleanedRDDIds.toSeq.sorted.mkString("[", ", ", "]")}
-      |\tShuffles = ${toBeCleanedShuffleIds.toSeq.sorted.mkString("[", ", ", "]")}
-      |\tBroadcasts = ${toBeCleanedBroadcstIds.toSeq.sorted.mkString("[", ", ", "]")}
+       |\tRDDs = ${toBeCleanedRDDIds.synchronized
+         {toBeCleanedRDDIds.toSeq.sorted.mkString("[", ", ", "]")}}
+        |\tShuffles = ${toBeCleanedShuffleIds.synchronized
+          {toBeCleanedShuffleIds.toSeq.sorted.mkString("[", ", ", "]")}}
+        |\tBroadcasts = ${toBeCleanedBroadcstIds.synchronized
+          {toBeCleanedBroadcstIds.toSeq.sorted.mkString("[", ", ", "]")}}
     """.stripMargin
   }
 
   private def isAllCleanedUp =
-    synchronized {
-      toBeCleanedRDDIds.isEmpty &&
-      toBeCleanedShuffleIds.isEmpty &&
-      toBeCleanedBroadcstIds.isEmpty &&
-      toBeCheckpointIds.isEmpty
-    }
+    toBeCleanedRDDIds.synchronized { toBeCleanedRDDIds.isEmpty } &&
+    toBeCleanedShuffleIds.synchronized { toBeCleanedShuffleIds.isEmpty } &&
+    toBeCleanedBroadcstIds.synchronized { toBeCleanedBroadcstIds.isEmpty } &&
+    toBeCheckpointIds.synchronized { toBeCheckpointIds.isEmpty }
 
   private def getRDDBlocks(rddId: Int): Seq[BlockId] = {
     blockManager.master.getMatchingBlockIds( _ match {
