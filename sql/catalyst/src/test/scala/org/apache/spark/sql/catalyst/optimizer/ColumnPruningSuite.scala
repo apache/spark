@@ -284,5 +284,19 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
   }
 
+  test("Eliminate the Project with no references to its child") {
+    val expectedInput = OneRowRelation
+    val expected = Project(Literal(1).as("1") :: Nil, expectedInput).analyze
+
+    val input = LocalRelation('key.int, 'value.string)
+    val query1 =
+      Project(Literal(1).as("1") :: Nil, Project(Literal(1).as("1") :: Nil, input)).analyze
+    comparePlans(Optimize.execute(query1), expected)
+
+    val query2 =
+      Project(Literal(1).as("1") :: Nil, Project(Nil, input)).analyze
+    comparePlans(Optimize.execute(query2), expected)
+  }
+
   // todo: add more tests for column pruning
 }
