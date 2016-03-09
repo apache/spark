@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, SortDirection}
@@ -51,10 +50,6 @@ object AlterTableCommandParser {
 
   private def cleanAndUnquoteString(s: String): String = {
     cleanIdentifier(unquoteString(s))
-  }
-
-  private def parseFailed(msg: String, node: ASTNode): Nothing = {
-    throw new AnalysisException(s"$msg: '${node.source}")
   }
 
   /**

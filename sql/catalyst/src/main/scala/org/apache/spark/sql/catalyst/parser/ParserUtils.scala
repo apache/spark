@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.types._
@@ -78,6 +79,10 @@ object ParserUtils {
       case escapedIdentifier(i) => i
       case plainIdent => plainIdent
     }
+  }
+
+  def parseFailed(msg: String, node: ASTNode): Nothing = {
+    throw new AnalysisException(s"$msg: '${node.source}")
   }
 
   def getClauses(
