@@ -223,43 +223,29 @@ private[spark] class MemoryStore(
         // Values are fully unrolled in memory, so store them as an array
         if (level.deserialized) {
           val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-          val tryToPutResult = {
-            if (acquireStorageMemory(blockId, sizeEstimate)) {
-              // We acquired enough memory for the block, so go ahead and put it
-              val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
-              entries.synchronized {
-                entries.put(blockId, entry)
-              }
-              logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
-                blockId, Utils.bytesToString(sizeEstimate), Utils.bytesToString(blocksMemoryUsed)))
-              true
-            } else {
-              false
+          if (acquireStorageMemory(blockId, sizeEstimate)) {
+            // We acquired enough memory for the block, so go ahead and put it
+            val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
+            entries.synchronized {
+              entries.put(blockId, entry)
             }
-          }
-          if (tryToPutResult) {
+            logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
+              blockId, Utils.bytesToString(sizeEstimate), Utils.bytesToString(blocksMemoryUsed)))
             Right(sizeEstimate)
           } else {
             Left(arrayValues.toIterator)
           }
         } else {
           val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-          val tryToPutResult = {
-            if (acquireStorageMemory(blockId, bytes.limit)) {
-              // We acquired enough memory for the block, so go ahead and put it
-              val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
-              entries.synchronized {
-                entries.put(blockId, entry)
-              }
-              logInfo("Block %s stored asb bytes in memory (estimated size %s, free %s)".format(
-                blockId, Utils.bytesToString(bytes.limit), Utils.bytesToString(blocksMemoryUsed)))
-              true
-            } else {
-              false
+          if (acquireStorageMemory(blockId, bytes.limit)) {
+            // We acquired enough memory for the block, so go ahead and put it
+            val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
+            entries.synchronized {
+              entries.put(blockId, entry)
             }
-          }
-          if (tryToPutResult) {
-            Right(bytes.limit())
+            logInfo("Block %s stored asb bytes in memory (estimated size %s, free %s)".format(
+              blockId, Utils.bytesToString(bytes.limit), Utils.bytesToString(blocksMemoryUsed)))
+            Right(bytes.limit)
           } else {
             Left(arrayValues.toIterator)
           }
