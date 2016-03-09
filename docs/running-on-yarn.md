@@ -480,14 +480,19 @@ If you need a reference to the proper location to put log files in the YARN so t
 # Running in a secure YARN cluster
 
 As covered in [security](security.html), Kerberos is used in a secure YARN cluster to
-authenticate principals with services —and so access these services and
-their data. These services issue 'hadoop tokens' to grant access to the service and data,
-tokens which are then supplied over Hadoop IPC and REST/Web APIs as proof of access rights.
-For YARN applications to interact with HDFS, HBase and Hive, the application must request tokens
-using the kerberos credentials of the user launching the cluster (the principal).
+authenticate principals associated with services and clients. This allows clients to
+make requests of these authenticated services; the services to grant rights
+to the authenticated principals.
 
-This is normally done at launch time: Spark will automatically obtain a token for the cluster's
-HDFS filesystem, and optionally HBase and Hive.
+Hadoop services issue *hadoop tokens* to grant access to the services and data,
+tokens which the client must supply over Hadoop IPC and REST/Web APIs as proof of access rights.
+For Spark applications launched in a YARN cluster to interact with HDFS, HBase and Hive,
+the application must acquire the relevant tokens
+using the Kerberos credentials of the user launching the application —that is, the principal whose
+identity will become that of the launched Spark application.
+
+This is normally done at launch time: in a secure cluster Spark will automatically obtain a
+token for the cluster's HDFS filesystem, and, if required, HBase and Hive.
 
 If an application needs to interact with other secure HDFS clusters, then
 the tokens needed to access these clusters must be explicitly requested at
@@ -497,19 +502,19 @@ launch time. This is done by listing them in the `spark.yarn.access.namenodes` p
 spark.yarn.access.namenodes hdfs://ireland.emea.example.org:8020/,hdfs://frankfurt.emea.example.org:8020/
 ```
 
-Hadoop tokens expire. They can be renewed "for a while"; the Spark Application Master will automatically
-do this. However, eventually, they will stop being renewable —after which all attempts to
+Hadoop tokens expire. They can be renewed "for a while";
+However, eventually, they will stop being renewable —after which all attempts to
 access secure data will fail. The only way to avoid that is for the application to be launched
-with the secrets needed to log in to Kerberos directly: a keytab.
+with the secrets needed to log in to Kerberos directly: a "keytab". Consult
+the [Spark Property](#Spark Properties) `spark.yarn.keytab` for the specifics.
 
 ## Launching your application with Apache Oozie
 
 Apache Oozie can launch Spark.
-In a secure cluster, the launched application will need the relevant
-tokens to access the cluster's services.
-If Spark is launched with a keytab, this is automatic.
-However, if Spark is to be launched without a keytab, the responsibility for setting up security must be handed
-over to Oozie.
+In a secure cluster, such an application will need the relevant tokens to access the cluster's
+services. If Spark is launched with a keytab, this is automatic.
+However, if Spark is to be launched without a keytab, the responsibility for setting up security
+must be handed over to Oozie.
 
 The details of configuring Oozie for secure clusters and obtaining
 credentials for a job can be found on the [Oozie web site](http://oozie.apache.org/)
