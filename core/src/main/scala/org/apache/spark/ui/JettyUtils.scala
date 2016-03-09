@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.server.{Connector, Request, Server}
+import org.eclipse.jetty.server.{AbstractConnector, Connector, Request, Server}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.server.nio.SelectChannelConnector
 import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
@@ -270,9 +270,19 @@ private[spark] object JettyUtils extends Logging {
 
       gzipHandlers.foreach(collection.addHandler)
       connectors.foreach(_.setHost(hostName))
+      // As each Acceptor will use one thread, the number of threads should at least be the number
+      // of acceptors plus 1. (See SPARK-13776)
+      var minThreads = 1
+      connectors.collect { case c: AbstractConnector => c }.foreach { c =>
+        // Limit the max acceptor number to 8 so that we don't waste a lot of threads
+        c.setAcceptors(Math.min(c.getAcceptors, 8))
+        minThreads += c.getAcceptors
+      }
       server.setConnectors(connectors.toArray)
 
       val pool = new QueuedThreadPool
+      pool.setMaxThreads(Math.max(pool.getMaxThreads, minThreads))
+      pool.setMinThreads(Math.min(pool.getMinThreads, pool.getMaxThreads))
       pool.setDaemon(true)
       server.setThreadPool(pool)
       val errorHandler = new ErrorHandler()
