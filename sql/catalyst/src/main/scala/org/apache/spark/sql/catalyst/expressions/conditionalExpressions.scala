@@ -86,7 +86,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
  * @param elseValue optional value for the else branch
  */
 case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[Expression] = None)
-  extends Expression {
+  extends Expression with CodegenFallback {
 
   override def children: Seq[Expression] = branches.flatMap(b => b._1 :: b._2 :: Nil) ++ elseValue
 
@@ -155,6 +155,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     //     }
     //   }
     // }
+
     val cases = branches.map { case (condExpr, valueExpr) =>
       val cond = condExpr.gen(ctx)
       val res = valueExpr.gen(ctx)
@@ -182,11 +183,16 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 
     generatedCode += "}\n" * cases.size
 
-    s"""
+    // Methods that are too long cannot be compiled, so fall back to interpreting
+    if (generatedCode.length > 1000) {
+      super.genCode(ctx, ev)
+    } else {
+      s"""
       boolean ${ev.isNull} = true;
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
       $generatedCode
-    """
+      """
+    }
   }
 
   override def toString: String = {
