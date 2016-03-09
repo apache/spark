@@ -28,8 +28,6 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 
-import java.nio.ByteBuffer;
-
 /**
  * Demonstrate the use of the KinesisUtils Java API
  */

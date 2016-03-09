@@ -93,5 +93,7 @@ public class JavaRecommendationExample {
     MatrixFactorizationModel sameModel = MatrixFactorizationModel.load(jsc.sc(),
       "target/tmp/myCollaborativeFilter");
     // $example off$
+
+    jsc.stop();
   }
 }

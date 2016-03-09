@@ -95,5 +95,7 @@ public class JavaDecisionTreeClassificationExample {
       (DecisionTreeClassificationModel) (model.stages()[2]);
     System.out.println("Learned classification tree model:\n" + treeModel.toDebugString());
     // $example off$
+
+    jsc.stop();
   }
 }

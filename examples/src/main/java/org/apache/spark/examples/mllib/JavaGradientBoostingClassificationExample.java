@@ -87,6 +87,8 @@ public class JavaGradientBoostingClassificationExample {
     GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(jsc.sc(),
       "target/tmp/myGradientBoostingClassificationModel");
     // $example off$
+
+    jsc.stop();
   }
 
 }

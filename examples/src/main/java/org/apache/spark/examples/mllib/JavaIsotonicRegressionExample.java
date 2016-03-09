@@ -82,5 +82,7 @@ public class JavaIsotonicRegressionExample {
     model.save(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
     IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
     // $example off$
+
+    jsc.stop();
   }
 }
