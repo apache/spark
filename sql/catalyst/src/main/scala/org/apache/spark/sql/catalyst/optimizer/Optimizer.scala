@@ -86,7 +86,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       BooleanSimplification,
       SimplifyConditionals,
       RemoveDispensableExpressions,
-      SimplifyFilters,
+      PruneFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       EliminateSerialization) ::
@@ -827,11 +827,12 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes filters that can be evaluated trivially.  This is done either by eliding the filter for
- * cases where it will always evaluate to `true`, or substituting a dummy empty relation when the
- * filter will always evaluate to `false`.
+ * Removes filters that can be evaluated trivially.  This can be done through the following ways:
+ * 1) by eliding the filter for cases where it will always evaluate to `true`.
+ * 2) by substituting a dummy empty relation when the filter will always evaluate to `false`.
+ * 3) by eliminating the always-true conditions given the constraints on the child's output.
  */
-object SimplifyFilters extends Rule[LogicalPlan] {
+object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // If the filter condition always evaluate to true, remove the filter.
     case Filter(Literal(true, BooleanType), child) => child
@@ -839,6 +840,21 @@ object SimplifyFilters extends Rule[LogicalPlan] {
     // replace the input with an empty relation.
     case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
     case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
+    // If any deterministic condition is guaranteed to be true given the constraints on the child's
+    // output, remove the condition
+    case f @ Filter(fc, p: LogicalPlan) =>
+      val (prunedPredicates, remainingPredicates) =
+        splitConjunctivePredicates(fc).partition { cond =>
+          cond.deterministic && p.constraints.contains(cond)
+        }
+      if (prunedPredicates.isEmpty) {
+        f
+      } else if (remainingPredicates.isEmpty) {
+        p
+      } else {
+        val newCond = remainingPredicates.reduce(And)
+        Filter(newCond, p)
+      }
   }
 }
 
