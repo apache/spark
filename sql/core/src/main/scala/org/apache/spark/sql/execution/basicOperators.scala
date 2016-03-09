@@ -75,14 +75,29 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 
 
 case class Filter(condition: Expression, child: SparkPlan)
-  extends UnaryNode with CodegenSupport with PredicateHelper  {
-  override def output: Seq[Attribute] = child.output
+  extends UnaryNode with CodegenSupport with PredicateHelper {
+
+  // Split out all the IsNotNulls from condition.
+  private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
+    case IsNotNull(a) if child.output.contains(a) => true
+    case _ => false
+  }
+
+  // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
+  @transient private val notNullAttributes = notNullPreds.flatMap(_.references)
+
+  override def output: Seq[Attribute] = {
+    child.output.map { a =>
+      if (a.nullable && notNullAttributes.contains(a)) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
+  }
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
-
-  override protected def validConstraints: Set[Expression] =
-    child.constraints.union(splitConjunctivePredicates(condition).toSet)
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].upstreams()
@@ -95,35 +110,16 @@ case class Filter(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // Find out the columns that is nullable and all the `null` will be filtered out by condition,
-    // this help to simplify the generated code for condition.
-    val filterNullColumns = child.output.filter { case e =>
-      e.nullable && constraints.contains(IsNotNull(e)) && !child.constraints.contains(IsNotNull(e))
-    }
-    val filterOutNullColumn = filterNullColumns.map { a =>
-      val i = child.output.indexOf(a)
-      s"if (${input(i).isNull}) continue;"
+    // filter out the nulls
+    val filterOutNull = notNullAttributes.map { a =>
+      val idx = child.output.indexOf(a)
+      s"if (${input(idx).isNull}) continue;"
     }.mkString("\n")
 
-    // Change the nullability for those columns to simplify generated code of condition
-    val newInput = child.output.map { a =>
-      if (filterNullColumns.contains(a)) {
-        a.withNullability(false)
-      } else {
-        a
-      }
-    }
-
-    // Split the conjunctive predicates, so we can check them one by one.
-    // Also filter out the predicate of `IsNotNull`
-    val conjPredicates = splitConjunctivePredicates(condition).filter {
-      case IsNotNull(a) if filterNullColumns.contains(a) => false
-      case _ => true
-    }
     ctx.currentVars = input
-    val predicates = conjPredicates.map { e =>
+    val predicates = otherPreds.map { e =>
       val bound = ExpressionCanonicalizer.execute(
-        BindReferences.bindReference(e, newInput))
+        BindReferences.bindReference(e, output))
       val ev = bound.gen(ctx)
       val nullCheck = if (bound.nullable) {
         s"${ev.isNull} || "
@@ -136,11 +132,18 @@ case class Filter(condition: Expression, child: SparkPlan)
        """.stripMargin
     }.mkString("\n")
 
+    // Reset the isNull to false for the not-null columns.
+    val resultVars = input.zipWithIndex.map { case (ev, i) =>
+      if (notNullAttributes.contains(child.output(i))) {
+        ev.isNull = "false"
+      }
+      ev
+    }
     s"""
-       |$filterOutNullColumn
+       |$filterOutNull
        |$predicates
        |$numOutput.add(1);
-       |${consume(ctx, input)}
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
