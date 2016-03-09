@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregati
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
-import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -71,6 +71,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughAggregate,
       LimitPushDown,
       ColumnPruning,
+      AddNullFilterForEquiJoin,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -143,6 +144,56 @@ object EliminateSerialization extends Rule[LogicalPlan] {
       m.copy(
         deserializer = childWithoutSerialization.output.head,
         child = childWithoutSerialization)
+  }
+}
+
+/**
+ * Add Filter to left and right of a EquiJoin to filter out rows with null keys.
+ * So we may not need to check nullability of keys while joining. Besides, by filtering
+ * out keys with null, we can also reduce data size in Join.
+ */
+object AddNullFilterForEquiJoin extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right) =>
+      val leftConditions = leftKeys.distinct.map { l =>
+        IsNotNull(l)
+      }.reduceLeft(And)
+
+      val rightConditions = rightKeys.distinct.map { r =>
+        IsNotNull(r)
+      }.reduceLeft(And)
+
+      val keysConditions = ExpressionSet(leftKeys.zip(rightKeys).map { lr =>
+        EqualTo(lr._2, lr._1)
+      }).reduceLeft(And)
+
+      val finalConditions = if (condition.isDefined) {
+        And(keysConditions, condition.get)
+      } else {
+        keysConditions
+      }
+
+      val leftHasAllNotNullPredicate = left.constraints.nonEmpty &&
+        left.constraints.filter(_.isInstanceOf[IsNotNull])
+          .forall(expr => leftConditions.references.intersect(expr.references).nonEmpty)
+
+      val rightHasAllNotNullPredicate = right.constraints.nonEmpty &&
+        right.constraints.filter(_.isInstanceOf[IsNotNull])
+          .forall(expr => rightConditions.references.intersect(expr.references).nonEmpty)
+
+      val newLeft = if (leftHasAllNotNullPredicate) {
+        left
+      } else {
+        Filter(leftConditions, left)
+      }
+
+      val newRight = if (rightHasAllNotNullPredicate) {
+        right
+      } else {
+        Filter(rightConditions, right)
+      }
+
+      Join(newLeft, newRight, Inner, Some(finalConditions))
   }
 }
 
