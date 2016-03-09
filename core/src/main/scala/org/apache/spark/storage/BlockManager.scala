@@ -521,16 +521,9 @@ private[spark] class BlockManager(
    * This does not acquire a lock on this block in this JVM.
    */
   def getRemote(blockId: BlockId): Option[BlockResult] = {
-    logDebug(s"Getting remote block $blockId")
-    doGetRemote(blockId, asBlockResult = true).asInstanceOf[Option[BlockResult]]
-  }
-
-  /**
-   * Get block from remote block managers as serialized bytes.
-   */
-  def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
-    logDebug(s"Getting remote block $blockId as bytes")
-    doGetRemote(blockId, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+    getRemoteBytes(blockId).map { data =>
+      new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.limit())
+    }
   }
 
   /**
@@ -543,7 +536,11 @@ private[spark] class BlockManager(
     preferredLocs ++ otherLocs
   }
 
-  private def doGetRemote(blockId: BlockId, asBlockResult: Boolean): Option[Any] = {
+  /**
+   * Get block from remote block managers as serialized bytes.
+   */
+  def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
+    logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
     val locations = getLocations(blockId)
     var numFetchFailures = 0
@@ -568,14 +565,7 @@ private[spark] class BlockManager(
       }
 
       if (data != null) {
-        if (asBlockResult) {
-          return Some(new BlockResult(
-            dataDeserialize(blockId, data),
-            DataReadMethod.Network,
-            data.limit()))
-        } else {
-          return Some(data)
-        }
+        return Some(data)
       }
       logDebug(s"The value of block $blockId is null")
     }
