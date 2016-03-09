@@ -257,12 +257,12 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * can do better should override this function.
    */
   def sameResult(plan: PlanType): Boolean = {
-    val cleanLeft = this.canonicalized
-    val cleanRight = plan.canonicalized
-    cleanLeft.getClass == cleanRight.getClass &&
-      cleanLeft.children.size == cleanRight.children.size &&
-      cleanLeft.cleanArgs == cleanRight.cleanArgs &&
-      (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
+    val canonicalizedLeft = this.canonicalized
+    val canonicalizedRight = plan.canonicalized
+    canonicalizedLeft.getClass == canonicalizedRight.getClass &&
+      canonicalizedLeft.children.size == canonicalizedRight.children.size &&
+      canonicalizedLeft.cleanArgs == canonicalizedRight.cleanArgs &&
+      (canonicalizedLeft.children, canonicalizedRight.children).zipped.forall(_ sameResult _)
   }
 
   /**
@@ -291,7 +291,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     productIterator.map {
       // Children are checked using sameResult above.
       case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanExpression(e)
+      case e: Expression => cleanArg(e)
       case s: Option[_] => s.map(cleanArg)
       case s: Seq[_] => s.map(cleanArg)
       case m: Map[_, _] => m.mapValues(cleanArg)

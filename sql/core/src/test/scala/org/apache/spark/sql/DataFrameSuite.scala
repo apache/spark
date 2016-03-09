@@ -1337,12 +1337,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("same result on aggregate") {
+  test("sameResult() on aggregate") {
     val df = sqlContext.range(100)
     val agg1 = df.groupBy().count()
     val agg2 = df.groupBy().count()
     // two aggregates with different ExprId within them should have same result
-    agg1.queryExecution.executedPlan.sameResult(agg2.queryExecution.executedPlan)
+    assert(agg1.queryExecution.executedPlan.sameResult(agg2.queryExecution.executedPlan))
+    val agg3 = df.groupBy().sum()
+    assert(!agg1.queryExecution.executedPlan.sameResult(agg3.queryExecution.executedPlan))
+    val df2 = sqlContext.range(101)
+    val agg4 = df2.groupBy().count()
+    assert(!agg1.queryExecution.executedPlan.sameResult(agg4.queryExecution.executedPlan))
   }
 
   test("SPARK-12512: support `.` in column name for withColumn()") {
