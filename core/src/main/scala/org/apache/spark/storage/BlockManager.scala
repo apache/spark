@@ -781,7 +781,6 @@ private[spark] class BlockManager(
       if (level.useMemory) {
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
-
         val putSucceeded = if (level.deserialized) {
           val values = dataDeserialize(blockId, bytes.duplicate())
           memoryStore.putIterator(blockId, values, level).isRight
@@ -794,10 +793,6 @@ private[spark] class BlockManager(
         }
       } else if (level.useDisk) {
         diskStore.putBytes(blockId, bytes)
-      } else {
-        assert(level == StorageLevel.NONE)
-        throw new BlockException(
-          blockId, s"Attempted to put block $blockId without specifying storage level!")
       }
 
       val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
@@ -911,10 +906,6 @@ private[spark] class BlockManager(
           dataSerializeStream(blockId, fileOutputStream, iterator())
         }
         size = diskStore.getSize(blockId)
-      } else {
-        assert(level == StorageLevel.NONE)
-        throw new BlockException(
-          blockId, s"Attempted to put block $blockId without specifying storage level!")
       }
 
       val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
