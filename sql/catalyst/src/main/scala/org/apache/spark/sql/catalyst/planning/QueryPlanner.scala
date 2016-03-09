@@ -18,8 +18,6 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, IsNotNull, PredicateHelper}
-import org.apache.spark.sql.catalyst.plans
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
@@ -28,28 +26,8 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
  * be used for execution. If this strategy does not apply to the give logical operation then an
  * empty list should be returned.
  */
-abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]]
-  extends PredicateHelper with Logging {
-
+abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
-
-  // Attempts to re-order the individual conjunctive predicates in an expression to short circuit
-  // the evaluation of relatively cheaper checks (e.g., checking for nullability) before others.
-  protected def reorderPredicates(expr: Expression): Expression = {
-    splitConjunctivePredicates(expr)
-      .sortWith((x, _) => x.isInstanceOf[IsNotNull])
-      .reduce(And)
-  }
-
-  // Wrapper around reorderPredicates(expr: Expression) to reorder optional conditions in joins
-  protected def reorderPredicates(exprOpt: Option[Expression]): Option[Expression] = {
-    exprOpt match {
-      case Some(expr) =>
-        Option(reorderPredicates(expr))
-      case None =>
-        exprOpt
-    }
-  }
 }
 
 /**
