@@ -320,7 +320,23 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // `ResolveAggregateFunctions` rule)
         AddSubquery,
         // Previous rule will add extra sub-queries, this rule is used to re-propagate and update
-        // the qualifiers bottom up.
+        // the qualifiers bottom up, e.g.:
+        //
+        // Sort
+        //   ordering = t1.a
+        //   Project
+        //     projectList = [t1.a, t1.b]
+        //     Subquery gen_subquery
+        //       child ...
+        //
+        // will be transformed to:
+        //
+        // Sort
+        //   ordering = gen_subquery.a
+        //   Project
+        //     projectList = [gen_subquery.a, gen_subquery.b]
+        //     Subquery gen_subquery
+        //       child ...
         UpdateQualifiers
       )
     )
@@ -355,6 +371,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
         case plan: Project => wrapChildWithSubquery(plan)
 
+        // We will generate "SELECT ... FROM ..." for Window operator, so its child operator should
+        // be able to put in the FROM clause, or we wrap it with a subquery.
         case w @ Window(_, _, _, _,
           _: SubqueryAlias
             | _: Filter

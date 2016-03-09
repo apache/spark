@@ -463,12 +463,29 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       """.stripMargin)
   }
 
+  test("multiple window functions in one expression") {
+    checkHiveQl(
+      """
+        |SELECT
+        |  MAX(key) OVER (ORDER BY key DESC, value) / MIN(key) OVER (PARTITION BY key % 3)
+        |FROM parquet_t1
+      """.stripMargin)
+  }
+
+  test("regular expressions and window functions in one expression") {
+    checkHiveQl("SELECT MAX(key) OVER (PARTITION BY key % 3) + key FROM parquet_t1")
+  }
+
+  test("aggregate functions and window functions in one expression") {
+    checkHiveQl("SELECT MAX(c) + COUNT(a) OVER () FROM parquet_t2 GROUP BY a, b")
+  }
+
   test("window with different window specification") {
     checkHiveQl(
       """
          |SELECT key, value,
          |DENSE_RANK() OVER (ORDER BY key, value) AS dr,
-         |MAX(value) OVER (PARTITION BY key ORDER BY key) AS max
+         |MAX(value) OVER (PARTITION BY key ORDER BY key ASC) AS max
          |FROM parquet_t1
       """.stripMargin)
   }
@@ -477,7 +494,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl(
       """
          |SELECT key, value,
-         |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key) AS max
+         |MAX(value) OVER (PARTITION BY key % 5 ORDER BY key DESC) AS max
          |FROM parquet_t1 GROUP BY key, value HAVING key > 5
       """.stripMargin)
   }
@@ -528,7 +545,10 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |  PERCENT_RANK() OVER w,
         |  DENSE_RANK() OVER w,
         |  ROW_NUMBER() OVER w,
-        |  CUME_DIST() OVER w
+        |  NTILE(10) OVER w,
+        |  CUME_DIST() OVER w,
+        |  LAG(key, 2) OVER w,
+        |  LEAD(key, 2) OVER w
         |FROM parquet_t1
         |WINDOW w AS (PARTITION BY key % 5 ORDER BY key)
       """.stripMargin)
