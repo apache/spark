@@ -88,7 +88,7 @@ public final class JavaPageRank {
       @Override
       public Tuple2<String, String> call(String s) {
         String[] parts = SPACES.split(s);
-        return new Tuple2<String, String>(parts[0], parts[1]);
+        return new Tuple2<>(parts[0], parts[1]);
       }
     }).distinct().groupByKey().cache();
 

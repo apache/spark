@@ -136,7 +136,7 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConfig, batchInterval);
 
     // Create the Kinesis DStreams
-    List<JavaDStream<byte[]>> streamsList = new ArrayList<JavaDStream<byte[]>>(numStreams);
+    List<JavaDStream<byte[]>> streamsList = new ArrayList<>(numStreams);
     for (int i = 0; i < numStreams; i++) {
       streamsList.add(
           KinesisUtils.createStream(jssc, kinesisAppName, streamName, endpointUrl, regionName,

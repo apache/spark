@@ -82,7 +82,7 @@ public class JavaCustomReceiver extends Receiver<String> {
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
       new PairFunction<String, String, Integer>() {
         @Override public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(new Function2<Integer, Integer, Integer>() {
         @Override

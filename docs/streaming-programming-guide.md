@@ -186,7 +186,7 @@ Next, we want to count these words.
 JavaPairDStream<String, Integer> pairs = words.mapToPair(
   new PairFunction<String, String, Integer>() {
     @Override public Tuple2<String, Integer> call(String s) {
-      return new Tuple2<String, Integer>(s, 1);
+      return new Tuple2<>(s, 1);
     }
   });
 JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
@@ -2095,7 +2095,7 @@ unifiedStream.print()
 <div data-lang="java" markdown="1">
 {% highlight java %}
 int numStreams = 5;
-List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<JavaPairDStream<String, String>>(numStreams);
+List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<>(numStreams);
 for (int i = 0; i < numStreams; i++) {
   kafkaStreams.add(KafkaUtils.createStream(...));
 }

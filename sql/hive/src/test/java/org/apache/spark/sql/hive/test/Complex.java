@@ -50,7 +50,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
   private static final org.apache.thrift.protocol.TField LINT_STRING_FIELD_DESC = new org.apache.thrift.protocol.TField("lintString", org.apache.thrift.protocol.TType.LIST, (short)5);
   private static final org.apache.thrift.protocol.TField M_STRING_STRING_FIELD_DESC = new org.apache.thrift.protocol.TField("mStringString", org.apache.thrift.protocol.TType.MAP, (short)6);
 
-  private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<Class<? extends IScheme>, SchemeFactory>();
+  private static final Map<Class<? extends IScheme>, SchemeFactory> schemes = new HashMap<>();
   static {
     schemes.put(StandardScheme.class, new ComplexStandardSchemeFactory());
     schemes.put(TupleScheme.class, new ComplexTupleSchemeFactory());
@@ -72,7 +72,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
     LINT_STRING((short)5, "lintString"),
     M_STRING_STRING((short)6, "mStringString");
 
-    private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+    private static final Map<String, _Fields> byName = new HashMap<>();
 
     static {
       for (_Fields field : EnumSet.allOf(_Fields.class)) {
@@ -141,7 +141,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
   private byte __isset_bitfield = 0;
   public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
   static {
-    Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+    Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<>(_Fields.class);
     tmpMap.put(_Fields.AINT, new org.apache.thrift.meta_data.FieldMetaData("aint", org.apache.thrift.TFieldRequirementType.DEFAULT,
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
     tmpMap.put(_Fields.A_STRING, new org.apache.thrift.meta_data.FieldMetaData("aString", org.apache.thrift.TFieldRequirementType.DEFAULT,
@@ -194,28 +194,28 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       this.aString = other.aString;
     }
     if (other.isSetLint()) {
-      List<Integer> __this__lint = new ArrayList<Integer>();
+      List<Integer> __this__lint = new ArrayList<>();
       for (Integer other_element : other.lint) {
         __this__lint.add(other_element);
       }
       this.lint = __this__lint;
     }
     if (other.isSetLString()) {
-      List<String> __this__lString = new ArrayList<String>();
+      List<String> __this__lString = new ArrayList<>();
       for (String other_element : other.lString) {
         __this__lString.add(other_element);
       }
       this.lString = __this__lString;
     }
     if (other.isSetLintString()) {
-      List<IntString> __this__lintString = new ArrayList<IntString>();
+      List<IntString> __this__lintString = new ArrayList<>();
       for (IntString other_element : other.lintString) {
         __this__lintString.add(new IntString(other_element));
       }
       this.lintString = __this__lintString;
     }
     if (other.isSetMStringString()) {
-      Map<String,String> __this__mStringString = new HashMap<String,String>();
+      Map<String,String> __this__mStringString = new HashMap<>();
       for (Map.Entry<String, String> other_element : other.mStringString.entrySet()) {
 
         String other_element_key = other_element.getKey();
@@ -339,7 +339,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
 
   public void addToLString(String elem) {
     if (this.lString == null) {
-      this.lString = new ArrayList<String>();
+      this.lString = new ArrayList<>();
     }
     this.lString.add(elem);
   }
@@ -411,7 +411,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
 
   public void putToMStringString(String key, String val) {
     if (this.mStringString == null) {
-      this.mStringString = new HashMap<String,String>();
+      this.mStringString = new HashMap<>();
     }
     this.mStringString.put(key, val);
   }
@@ -876,7 +876,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
                 org.apache.thrift.protocol.TList _list0 = iprot.readListBegin();
-                struct.lint = new ArrayList<Integer>(_list0.size);
+                struct.lint = new ArrayList<>(_list0.size);
                 for (int _i1 = 0; _i1 < _list0.size; ++_i1)
                 {
                   int _elem2; // required
@@ -894,7 +894,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
                 org.apache.thrift.protocol.TList _list3 = iprot.readListBegin();
-                struct.lString = new ArrayList<String>(_list3.size);
+                struct.lString = new ArrayList<>(_list3.size);
                 for (int _i4 = 0; _i4 < _list3.size; ++_i4)
                 {
                   String _elem5; // required
@@ -912,7 +912,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
             if (schemeField.type == org.apache.thrift.protocol.TType.LIST) {
               {
                 org.apache.thrift.protocol.TList _list6 = iprot.readListBegin();
-                struct.lintString = new ArrayList<IntString>(_list6.size);
+                struct.lintString = new ArrayList<>(_list6.size);
                 for (int _i7 = 0; _i7 < _list6.size; ++_i7)
                 {
                   IntString _elem8; // required
@@ -1114,7 +1114,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(2)) {
         {
           org.apache.thrift.protocol.TList _list21 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.I32, iprot.readI32());
-          struct.lint = new ArrayList<Integer>(_list21.size);
+          struct.lint = new ArrayList<>(_list21.size);
           for (int _i22 = 0; _i22 < _list21.size; ++_i22)
           {
             int _elem23; // required
@@ -1127,7 +1127,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(3)) {
         {
           org.apache.thrift.protocol.TList _list24 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-          struct.lString = new ArrayList<String>(_list24.size);
+          struct.lString = new ArrayList<>(_list24.size);
           for (int _i25 = 0; _i25 < _list24.size; ++_i25)
           {
             String _elem26; // required
@@ -1140,7 +1140,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(4)) {
         {
           org.apache.thrift.protocol.TList _list27 = new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, iprot.readI32());
-          struct.lintString = new ArrayList<IntString>(_list27.size);
+          struct.lintString = new ArrayList<>(_list27.size);
           for (int _i28 = 0; _i28 < _list27.size; ++_i28)
           {
             IntString _elem29; // required
@@ -1154,7 +1154,7 @@ public class Complex implements org.apache.thrift.TBase<Complex, Complex._Fields
       if (incoming.get(5)) {
         {
           org.apache.thrift.protocol.TMap _map30 = new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, iprot.readI32());
-          struct.mStringString = new HashMap<String,String>(2*_map30.size);
+          struct.mStringString = new HashMap<>(2*_map30.size);
           for (int _i31 = 0; _i31 < _map30.size; ++_i31)
           {
             String _key32; // required

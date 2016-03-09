@@ -760,7 +760,7 @@ JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
 String schemaString = "name age";
 
 // Generate the schema based on the string of schema
-List<StructField> fields = new ArrayList<StructField>();
+List<StructField> fields = new ArrayList<>();
 for (String fieldName: schemaString.split(" ")) {
   fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
@@ -1935,7 +1935,7 @@ val jdbcDF = sqlContext.read.format("jdbc").options(
 
 {% highlight java %}
 
-Map<String, String> options = new HashMap<String, String>();
+Map<String, String> options = new HashMap<>();
 options.put("url", "jdbc:postgresql:dbserver");
 options.put("dbtable", "schema.tablename");
 

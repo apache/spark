@@ -66,7 +66,7 @@ public abstract class AbstractBytesToBytesMapSuite {
   private TaskMemoryManager taskMemoryManager;
   private static final long PAGE_SIZE_BYTES = 1L << 26; // 64 megabytes
 
-  final LinkedList<File> spillFilesCreated = new LinkedList<File>();
+  final LinkedList<File> spillFilesCreated = new LinkedList<>();
   File tempDir;
 
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
@@ -397,7 +397,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final int size = 65536;
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size, PAGE_SIZE_BYTES);
     try {
       // Fill the map to 90% full so that we can trigger probing
@@ -453,7 +453,7 @@ public abstract class AbstractBytesToBytesMapSuite {
     final BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, 64, pageSizeBytes);
     // Java arrays' hashCodes() aren't based on the arrays' contents, so we need to wrap arrays
     // into ByteBuffers in order to use them as keys here.
-    final Map<ByteBuffer, byte[]> expected = new HashMap<ByteBuffer, byte[]>();
+    final Map<ByteBuffer, byte[]> expected = new HashMap<>();
     try {
       for (int i = 0; i < 1000; i++) {
         final byte[] key = getRandomByteArray(rand.nextInt(128));

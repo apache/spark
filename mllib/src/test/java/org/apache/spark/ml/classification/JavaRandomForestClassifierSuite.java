@@ -57,7 +57,7 @@ public class JavaRandomForestClassifierSuite implements Serializable {
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
-    Map<Integer, Integer> categoricalFeatures = new HashMap<Integer, Integer>();
+    Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
     // This tests setters. Training with various options is tested in Scala.

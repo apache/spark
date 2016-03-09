@@ -52,7 +52,7 @@ public class JavaElementwiseProductExample {
       RowFactory.create("b", Vectors.dense(4.0, 5.0, 6.0))
     ));
 
-    List<StructField> fields = new ArrayList<StructField>(2);
+    List<StructField> fields = new ArrayList<>(2);
     fields.add(DataTypes.createStructField("id", DataTypes.StringType, false));
     fields.add(DataTypes.createStructField("vector", new VectorUDT(), false));
 

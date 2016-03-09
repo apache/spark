@@ -147,7 +147,7 @@ class CommandBuilderUtils {
    * Output: [ "ab cd", "efgh", "i \" j" ]
    */
   static List<String> parseOptionString(String s) {
-    List<String> opts = new ArrayList<String>();
+    List<String> opts = new ArrayList<>();
     StringBuilder opt = new StringBuilder();
     boolean inOpt = false;
     boolean inSingleQuote = false;

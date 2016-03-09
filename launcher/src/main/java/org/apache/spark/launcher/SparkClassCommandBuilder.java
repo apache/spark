@@ -44,7 +44,7 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
 
   @Override
   public List<String> buildCommand(Map<String, String> env) throws IOException {
-    List<String> javaOptsKeys = new ArrayList<String>();
+    List<String> javaOptsKeys = new ArrayList<>();
     String memKey = null;
     String extraClassPath = null;
 
