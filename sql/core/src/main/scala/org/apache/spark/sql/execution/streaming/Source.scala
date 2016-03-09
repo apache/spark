@@ -23,6 +23,9 @@ import org.apache.spark.sql.types.StructType
  * A source of continually arriving data for a streaming query. A [[Source]] must have a
  * monotonically increasing notion of progress that can be represented as an [[Offset]]. Spark
  * will regularly query each [[Source]] to see if any more data is available.
+ *
+ * The implementation should be thread-safe because it can be called in multiple threads from
+ * different [[org.apache.spark.sql.ContinuousQuery ContinuousQuery]].
  */
 trait Source  {
 

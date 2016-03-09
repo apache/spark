@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io._
+import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.HashMap
 import scala.io.Codec
 
 import com.google.common.base.Charsets.UTF_8
@@ -31,7 +32,9 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
- * A very simple source that reads text files from the given directory as they appear.
+ * A very simple source that reads text files from the given directory as they appear. This class is
+ * thread-safe and can be called in multiple threads from different
+ * [[org.apache.spark.sql.ContinuousQuery ContinuousQuery]].
  *
  * TODO Clean up the metadata files periodically
  */
@@ -44,10 +47,16 @@ class FileStreamSource(
     dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
 
   private val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
+
+  // The following mutable fields must be updated only in `advanceToNextBatch` so that if any
+  // exception happens in `getNextBatch`, we won't change any of these fields.
+  @GuardedBy("this")
   private var maxBatchId = -1
+  @GuardedBy("this")
   private val seenFiles = new OpenHashSet[String]
 
   /** Map of batch id to files. This map is also stored in `metadataPath`. */
+  @GuardedBy("this")
   private val batchToMetadata = new HashMap[Long, Seq[String]]
 
   {
@@ -93,29 +102,14 @@ class FileStreamSource(
 
   /**
    * Returns the maximum offset that can be retrieved from the source.
-   *
-   * `synchronized` on this method is for solving race conditions in tests. In the normal usage,
-   * there is no race here, so the cost of `synchronized` should be rare.
    */
-  private def fetchMaxOffset(): LongOffset = synchronized {
+  private def fetchNewFiles(): Seq[String] = {
     val filesPresent = fetchAllFiles()
-    val newFiles = new ArrayBuffer[String]()
-    filesPresent.foreach { file =>
-      if (!seenFiles.contains(file)) {
-        logDebug(s"new file: $file")
-        newFiles.append(file)
-        seenFiles.add(file)
-      } else {
-        logDebug(s"old file: $file")
-      }
-    }
-
+    val newFiles = filesPresent.filter(file => !seenFiles.contains(file))
     if (newFiles.nonEmpty) {
-      maxBatchId += 1
-      writeBatch(maxBatchId, newFiles)
+      writeBatch(maxBatchId + 1, newFiles)
     }
-
-    new LongOffset(maxBatchId)
+    newFiles
   }
 
   /**
@@ -134,22 +128,34 @@ class FileStreamSource(
   /**
    * Returns the next batch of data that is available after `start`, if any is available.
    */
-  override def getNextBatch(start: Option[Offset]): Option[Batch] = {
+  override def getNextBatch(start: Option[Offset]): Option[Batch] = synchronized {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
-    val end = fetchMaxOffset()
-    val endId = end.offset
-
+    val newFiles = fetchNewFiles()
+    // Only increase the batch id when finding new files
+    val endId = if (newFiles.isEmpty) maxBatchId else maxBatchId + 1
     if (startId + 1 <= endId) {
       val files = (startId + 1 to endId).filter(_ >= 0).flatMap { batchId =>
           batchToMetadata.getOrElse(batchId, Nil)
-        }.toArray
+        }.toArray ++ newFiles
       logDebug(s"Return files from batches ${startId + 1}:$endId")
       logDebug(s"Streaming ${files.mkString(", ")}")
-      Some(new Batch(end, dataFrameBuilder(files)))
+      val batch = Some(new Batch(LongOffset(endId), dataFrameBuilder(files)))
+      if (newFiles.nonEmpty) {
+        // We should only update the status before returning so that if any exception happens in
+        // `getNextBatch`, no status will be changed.
+        advanceToNextBatch(maxBatchId + 1, files)
+      }
+      batch
     }
     else {
       None
     }
+  }
+
+  private def advanceToNextBatch(id: Int, files: Seq[String]): Unit = {
+    batchToMetadata(id) = files
+    files.foreach(seenFiles.add)
+    maxBatchId = id
   }
 
   private def fetchAllBatchFiles(): Seq[FileStatus] = {
@@ -195,7 +201,6 @@ class FileStreamSource(
     } finally {
       writer.close()
     }
-    batchToMetadata(id) = files
   }
 
   /** Read the file names of the specified batch id from the metadata file */
