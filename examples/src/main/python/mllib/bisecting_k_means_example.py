@@ -28,11 +28,11 @@ from pyspark.mllib.clustering import BisectingKMeans, BisectingKMeansModel
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="BisectingKMeansExample")  # SparkContext
+    sc = SparkContext(appName="PythonBisectingKMeansExample")  # SparkContext
 
     # $example on$
     # Load and parse the data
-    data = sc.textFile("data/mllib/bisecting_kmeans_data.txt")
+    data = sc.textFile("data/mllib/kmeans_data.txt")
     parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
     # Build the model (cluster the data)

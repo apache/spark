@@ -17,15 +17,12 @@
 
 from __future__ import print_function
 
-import sys
-import re
-
-import numpy as np
 from pyspark import SparkContext
+# $example on$
 from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
 from pyspark.mllib.linalg import VectorUDT, _convert_to_vector, Vectors
+# $example off$
 from pyspark.sql import SQLContext
-from pyspark.sql.types import Row, StructField, StructType
 
 """
 A simple example demonstrating a bisecting k-means clustering.
