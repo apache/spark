@@ -157,6 +157,14 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(query), expected)
   }
 
+  test("Eliminate the Project with an empty projectList") {
+    val input = OneRowRelation
+    val query =
+      Project(Literal(1).as("1") :: Nil, Project(Literal(1).as("1") :: Nil, input)).analyze
+    val expected = Project(Literal(1).as("1") :: Nil, input).analyze
+    comparePlans(Optimize.execute(query), expected)
+  }
+
   test("column pruning for group") {
     val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
     val originalQuery =
