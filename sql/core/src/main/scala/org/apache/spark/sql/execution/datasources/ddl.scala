@@ -17,22 +17,24 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
+ *
  * @param table The table to be described.
  * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
  *                   It is effective only when the table is a Hive table.
  */
 case class DescribeCommand(
     table: LogicalPlan,
-    isExtended: Boolean) extends LogicalPlan with Command {
+    isExtended: Boolean) extends LogicalPlan with logical.Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty
 
@@ -42,13 +44,14 @@ case class DescribeCommand(
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("data_type", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = false,
+    AttributeReference("comment", StringType, nullable = true,
       new MetadataBuilder().putString("comment", "comment of the column").build())()
   )
 }
 
 /**
   * Used to represent the operation of create table using a data source.
+ *
   * @param allowExisting If it is true, we will do nothing when the table already exists.
   *                      If it is false, an exception will be thrown
   */
@@ -59,7 +62,7 @@ case class CreateTableUsing(
     temporary: Boolean,
     options: Map[String, String],
     allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends LogicalPlan with Command {
+    managedIfNoPath: Boolean) extends LogicalPlan with logical.Command {
 
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -67,8 +70,8 @@ case class CreateTableUsing(
 
 /**
  * A node used to support CTAS statements and saveAsTable for the data source API.
- * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
- * can analyze the logical plan that will be used to populate the table.
+ * This node is a [[logical.UnaryNode]] instead of a [[logical.Command]] because we want the
+ * analyzer can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
 case class CreateTableUsingAsSelect(
@@ -76,9 +79,10 @@ case class CreateTableUsingAsSelect(
     provider: String,
     temporary: Boolean,
     partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends logical.UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
@@ -89,11 +93,14 @@ case class CreateTempTableUsing(
     options: Map[String, String]) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
+    val dataSource = DataSource(
+      sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      options = options)
     sqlContext.catalog.registerTable(
       tableIdent,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+      DataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan)
 
     Seq.empty[Row]
   }
@@ -109,10 +116,16 @@ case class CreateTempTableUsingAsSelect(
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
     val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
+    val dataSource = DataSource(
+      sqlContext,
+      className = provider,
+      partitionColumns = partitionColumns,
+      bucketSpec = None,
+      options = options)
+    val result = dataSource.write(mode, df)
     sqlContext.catalog.registerTable(
       tableIdent,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+      DataFrame(sqlContext, LogicalRelation(result)).logicalPlan)
 
     Seq.empty[Row]
   }
@@ -161,8 +174,3 @@ class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
 
   override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
 }
-
-/**
- * The exception thrown from the DDL parser.
- */
-class DDLException(message: String) extends RuntimeException(message)

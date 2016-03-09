@@ -25,10 +25,11 @@ import scala.util.Random
 import com.amazonaws.regions.RegionUtils
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -38,7 +39,6 @@ import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext}
 
 abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFunSuite
   with Eventually with BeforeAndAfter with BeforeAndAfterAll {
@@ -137,8 +137,8 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     // Verify that the generated KinesisBackedBlockRDD has the all the right information
     val blockInfos = Seq(blockInfo1, blockInfo2)
     val nonEmptyRDD = kinesisStream.createBlockRDD(time, blockInfos)
-    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
-    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
+    nonEmptyRDD shouldBe a [KinesisBackedBlockRDD[_]]
+    val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[_]]
     assert(kinesisRDD.regionName === dummyRegionName)
     assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
     assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
@@ -203,7 +203,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
       Seconds(10), StorageLevel.MEMORY_ONLY, addFive,
       awsCredentials.getAWSAccessKeyId, awsCredentials.getAWSSecretKey)
 
-    stream shouldBe a [ReceiverInputDStream[Int]]
+    stream shouldBe a [ReceiverInputDStream[_]]
 
     val collected = new mutable.HashSet[Int] with mutable.SynchronizedSet[Int]
     stream.foreachRDD { rdd =>
@@ -230,7 +230,6 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     val awsCredentials = KinesisTestUtils.getAWSCredentials()
     val collectedData = new mutable.HashMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
-      with mutable.SynchronizedMap[Time, (Array[SequenceNumberRanges], Seq[Int])]
 
     val kinesisStream = KinesisUtils.createStream(ssc, appName, testUtils.streamName,
       testUtils.endpointUrl, testUtils.regionName, InitialPositionInStream.LATEST,
@@ -241,13 +240,16 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     kinesisStream.foreachRDD((rdd: RDD[Array[Byte]], time: Time) => {
       val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
       val data = rdd.map { bytes => new String(bytes).toInt }.collect().toSeq
-      collectedData(time) = (kRdd.arrayOfseqNumberRanges, data)
+      collectedData.synchronized {
+        collectedData(time) = (kRdd.arrayOfseqNumberRanges, data)
+      }
     })
 
     ssc.remember(Minutes(60)) // remember all the batches so that they are all saved in checkpoint
     ssc.start()
 
-    def numBatchesWithData: Int = collectedData.count(_._2._2.nonEmpty)
+    def numBatchesWithData: Int =
+      collectedData.synchronized { collectedData.count(_._2._2.nonEmpty) }
 
     def isCheckpointPresent: Boolean = Checkpoint.getCheckpointFiles(checkpointDir).nonEmpty
 
@@ -268,21 +270,23 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
 
     // Verify that the recomputed RDDs are KinesisBackedBlockRDDs with the same sequence ranges
     // and return the same data
-    val times = collectedData.keySet
-    times.foreach { time =>
-      val (arrayOfSeqNumRanges, data) = collectedData(time)
-      val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
-      rdd shouldBe a [KinesisBackedBlockRDD[Array[Byte]]]
+    collectedData.synchronized {
+      val times = collectedData.keySet
+      times.foreach { time =>
+        val (arrayOfSeqNumRanges, data) = collectedData(time)
+        val rdd = recoveredKinesisStream.getOrCompute(time).get.asInstanceOf[RDD[Array[Byte]]]
+        rdd shouldBe a[KinesisBackedBlockRDD[_]]
 
-      // Verify the recovered sequence ranges
-      val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
-      assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
-      arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
-        assert(expected.ranges.toSeq === found.ranges.toSeq)
+        // Verify the recovered sequence ranges
+        val kRdd = rdd.asInstanceOf[KinesisBackedBlockRDD[Array[Byte]]]
+        assert(kRdd.arrayOfseqNumberRanges.size === arrayOfSeqNumRanges.size)
+        arrayOfSeqNumRanges.zip(kRdd.arrayOfseqNumberRanges).foreach { case (expected, found) =>
+          assert(expected.ranges.toSeq === found.ranges.toSeq)
+        }
+
+        // Verify the recovered data
+        assert(rdd.map { bytes => new String(bytes).toInt }.collect().toSeq === data)
       }
-
-      // Verify the recovered data
-      assert(rdd.map { bytes => new String(bytes).toInt }.collect().toSeq === data)
     }
     ssc.stop()
   }

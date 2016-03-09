@@ -23,8 +23,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{Vector, DenseVector, Vectors}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -37,11 +37,14 @@ class LinearRegressionSuite
   @transient var datasetWithDenseFeatureWithoutIntercept: DataFrame = _
   @transient var datasetWithSparseFeature: DataFrame = _
   @transient var datasetWithWeight: DataFrame = _
+  @transient var datasetWithWeightConstantLabel: DataFrame = _
+  @transient var datasetWithWeightZeroLabel: DataFrame = _
 
   /*
      In `LinearRegressionSuite`, we will make sure that the model trained by SparkML
      is the same as the one trained by R's glmnet package. The following instruction
      describes how to reproduce the data in R.
+     In a spark-shell, use the following code:
 
      import org.apache.spark.mllib.util.LinearDataGenerator
      val data =
@@ -90,6 +93,29 @@ class LinearRegressionSuite
         Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
         Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
         Instance(29.0, 4.0, Vectors.dense(3.0, 13.0))
+      ), 2))
+
+    /*
+       R code:
+
+       A <- matrix(c(0, 1, 2, 3, 5, 7, 11, 13), 4, 2)
+       b.const <- c(17, 17, 17, 17)
+       w <- c(1, 2, 3, 4)
+       df.const.label <- as.data.frame(cbind(A, b.const))
+     */
+    datasetWithWeightConstantLabel = sqlContext.createDataFrame(
+      sc.parallelize(Seq(
+        Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+        Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
+        Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
+        Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
+      ), 2))
+    datasetWithWeightZeroLabel = sqlContext.createDataFrame(
+      sc.parallelize(Seq(
+        Instance(0.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
+        Instance(0.0, 2.0, Vectors.dense(1.0, 7.0)),
+        Instance(0.0, 3.0, Vectors.dense(2.0, 11.0)),
+        Instance(0.0, 4.0, Vectors.dense(3.0, 13.0))
       ), 2))
   }
 
@@ -184,15 +210,15 @@ class LinearRegressionSuite
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)         .
-         as.numeric.data.V2. 6.995908
-         as.numeric.data.V3. 5.275131
+         as.numeric.data.V2. 6.973403
+         as.numeric.data.V3. 5.284370
        */
-      val coefficientsR = Vectors.dense(6.995908, 5.275131)
+      val coefficientsR = Vectors.dense(6.973403, 5.284370)
 
-      assert(model1.intercept ~== 0 absTol 1E-3)
-      assert(model1.coefficients ~= coefficientsR relTol 1E-3)
-      assert(model2.intercept ~== 0 absTol 1E-3)
-      assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+      assert(model1.intercept ~== 0 absTol 1E-2)
+      assert(model1.coefficients ~= coefficientsR relTol 1E-2)
+      assert(model2.intercept ~== 0 absTol 1E-2)
+      assert(model2.coefficients ~= coefficientsR relTol 1E-2)
 
       /*
          Then again with the data with no intercept:
@@ -235,14 +261,14 @@ class LinearRegressionSuite
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                     s0
-           (Intercept)         6.24300
-           as.numeric.data.V2. 4.024821
-           as.numeric.data.V3. 6.679841
+           (Intercept)       6.242284
+           as.numeric.d1.V2. 4.019605
+           as.numeric.d1.V3. 6.679538
          */
-        val interceptR1 = 6.24300
-        val coefficientsR1 = Vectors.dense(4.024821, 6.679841)
-        assert(model1.intercept ~== interceptR1 relTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        val interceptR1 = 6.242284
+        val coefficientsR1 = Vectors.dense(4.019605, 6.679538)
+        assert(model1.intercept ~== interceptR1 relTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 1.0,
@@ -296,14 +322,14 @@ class LinearRegressionSuite
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
            (Intercept)          .
-           as.numeric.data.V2. 6.299752
-           as.numeric.data.V3. 4.772913
+           as.numeric.data.V2. 6.272927
+           as.numeric.data.V3. 4.782604
          */
         val interceptR1 = 0.0
-        val coefficientsR1 = Vectors.dense(6.299752, 4.772913)
+        val coefficientsR1 = Vectors.dense(6.272927, 4.782604)
 
-        assert(model1.intercept ~== interceptR1 absTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 absTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 1.0,
@@ -312,14 +338,14 @@ class LinearRegressionSuite
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
            (Intercept)         .
-           as.numeric.data.V2. 6.232193
-           as.numeric.data.V3. 4.764229
+           as.numeric.data.V2. 6.207817
+           as.numeric.data.V3. 4.775780
          */
         val interceptR2 = 0.0
-        val coefficientsR2 = Vectors.dense(6.232193, 4.764229)
+        val coefficientsR2 = Vectors.dense(6.207817, 4.775780)
 
-        assert(model2.intercept ~== interceptR2 absTol 1E-3)
-        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+        assert(model2.intercept ~== interceptR2 absTol 1E-2)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -347,15 +373,15 @@ class LinearRegressionSuite
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-         (Intercept)         5.269376
-         as.numeric.data.V2. 3.736216
-         as.numeric.data.V3. 5.712356)
+         (Intercept)       5.260103
+         as.numeric.d1.V2. 3.725522
+         as.numeric.d1.V3. 5.711203
        */
-      val interceptR1 = 5.269376
-      val coefficientsR1 = Vectors.dense(3.736216, 5.712356)
+      val interceptR1 = 5.260103
+      val coefficientsR1 = Vectors.dense(3.725522, 5.711203)
 
-      assert(model1.intercept ~== interceptR1 relTol 1E-3)
-      assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+      assert(model1.intercept ~== interceptR1 relTol 1E-2)
+      assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
       /*
          coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -363,15 +389,15 @@ class LinearRegressionSuite
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-         (Intercept)         5.791109
-         as.numeric.data.V2. 3.435466
-         as.numeric.data.V3. 5.910406
+         (Intercept)       5.790885
+         as.numeric.d1.V2. 3.432373
+         as.numeric.d1.V3. 5.919196
        */
-      val interceptR2 = 5.791109
-      val coefficientsR2 = Vectors.dense(3.435466, 5.910406)
+      val interceptR2 = 5.790885
+      val coefficientsR2 = Vectors.dense(3.432373, 5.919196)
 
-      assert(model2.intercept ~== interceptR2 relTol 1E-3)
-      assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+      assert(model2.intercept ~== interceptR2 relTol 1E-2)
+      assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -398,15 +424,15 @@ class LinearRegressionSuite
          > coefficients
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
-         (Intercept)         .
-         as.numeric.data.V2. 5.522875
-         as.numeric.data.V3. 4.214502
+         (Intercept)       .
+         as.numeric.d1.V2. 5.493430
+         as.numeric.d1.V3. 4.223082
        */
       val interceptR1 = 0.0
-      val coefficientsR1 = Vectors.dense(5.522875, 4.214502)
+      val coefficientsR1 = Vectors.dense(5.493430, 4.223082)
 
-      assert(model1.intercept ~== interceptR1 absTol 1E-3)
-      assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+      assert(model1.intercept ~== interceptR1 absTol 1E-2)
+      assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
       /*
          coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.0, lambda = 2.3,
@@ -415,14 +441,14 @@ class LinearRegressionSuite
           3 x 1 sparse Matrix of class "dgCMatrix"
                                    s0
          (Intercept)         .
-         as.numeric.data.V2. 5.263704
-         as.numeric.data.V3. 4.187419
+         as.numeric.d1.V2. 5.244324
+         as.numeric.d1.V3. 4.203106
        */
       val interceptR2 = 0.0
-      val coefficientsR2 = Vectors.dense(5.263704, 4.187419)
+      val coefficientsR2 = Vectors.dense(5.244324, 4.203106)
 
-      assert(model2.intercept ~== interceptR2 absTol 1E-3)
-      assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+      assert(model2.intercept ~== interceptR2 absTol 1E-2)
+      assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
       model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
         case Row(features: DenseVector, prediction1: Double) =>
@@ -457,15 +483,15 @@ class LinearRegressionSuite
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-           (Intercept)         6.324108
-           as.numeric.data.V2. 3.168435
-           as.numeric.data.V3. 5.200403
+           (Intercept)       5.689855
+           as.numeric.d1.V2. 3.661181
+           as.numeric.d1.V3. 6.000274
          */
-        val interceptR1 = 5.696056
-        val coefficientsR1 = Vectors.dense(3.670489, 6.001122)
+        val interceptR1 = 5.689855
+        val coefficientsR1 = Vectors.dense(3.661181, 6.000274)
 
-        assert(model1.intercept ~== interceptR1 relTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 relTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.3, lambda = 1.6
@@ -473,15 +499,15 @@ class LinearRegressionSuite
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
-           (Intercept)         6.114723
-           as.numeric.data.V2. 3.409937
-           as.numeric.data.V3. 6.146531
+           (Intercept)       6.113890
+           as.numeric.d1.V2. 3.407021
+           as.numeric.d1.V3. 6.152512
          */
-        val interceptR2 = 6.114723
-        val coefficientsR2 = Vectors.dense(3.409937, 6.146531)
+        val interceptR2 = 6.113890
+        val coefficientsR2 = Vectors.dense(3.407021, 6.152512)
 
-        assert(model2.intercept ~== interceptR2 relTol 1E-3)
-        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+        assert(model2.intercept ~== interceptR2 relTol 1E-2)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -518,15 +544,15 @@ class LinearRegressionSuite
            > coefficients
             3 x 1 sparse Matrix of class "dgCMatrix"
                                       s0
-           (Intercept)         .
-           as.numeric.dataM.V2. 5.673348
-           as.numeric.dataM.V3. 4.322251
+           (Intercept)       .
+           as.numeric.d1.V2. 5.643748
+           as.numeric.d1.V3. 4.331519
          */
         val interceptR1 = 0.0
-        val coefficientsR1 = Vectors.dense(5.673348, 4.322251)
+        val coefficientsR1 = Vectors.dense(5.643748, 4.331519)
 
-        assert(model1.intercept ~== interceptR1 absTol 1E-3)
-        assert(model1.coefficients ~= coefficientsR1 relTol 1E-3)
+        assert(model1.intercept ~== interceptR1 absTol 1E-2)
+        assert(model1.coefficients ~= coefficientsR1 relTol 1E-2)
 
         /*
            coefficients <- coef(glmnet(features, label, family="gaussian", alpha = 0.3,
@@ -535,14 +561,15 @@ class LinearRegressionSuite
             3 x 1 sparse Matrix of class "dgCMatrix"
                                      s0
            (Intercept)         .
-           as.numeric.data.V2. 5.477988
-           as.numeric.data.V3. 4.297622
+           as.numeric.d1.V2. 5.455902
+           as.numeric.d1.V3. 4.312266
+
          */
         val interceptR2 = 0.0
-        val coefficientsR2 = Vectors.dense(5.477988, 4.297622)
+        val coefficientsR2 = Vectors.dense(5.455902, 4.312266)
 
-        assert(model2.intercept ~== interceptR2 absTol 1E-3)
-        assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
+        assert(model2.intercept ~== interceptR2 absTol 1E-2)
+        assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
         model1.transform(datasetWithDenseFeature).select("features", "prediction")
           .collect().foreach {
@@ -552,6 +579,86 @@ class LinearRegressionSuite
                 model1.intercept
             assert(prediction1 ~== prediction2 relTol 1E-5)
         }
+      }
+    }
+  }
+
+  test("linear regression model with constant label") {
+    /*
+       R code:
+       for (formula in c(b.const ~ . -1, b.const ~ .)) {
+         model <- lm(formula, data=df.const.label, weights=w)
+         print(as.vector(coef(model)))
+       }
+      [1] -9.221298  3.394343
+      [1] 17  0  0
+    */
+    val expected = Seq(
+      Vectors.dense(0.0, -9.221298, 3.394343),
+      Vectors.dense(17.0, 0.0, 0.0))
+
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      var idx = 0
+      for (fitIntercept <- Seq(false, true)) {
+        val model1 = new LinearRegression()
+          .setFitIntercept(fitIntercept)
+          .setWeightCol("weight")
+          .setSolver(solver)
+          .fit(datasetWithWeightConstantLabel)
+        val actual1 = Vectors.dense(model1.intercept, model1.coefficients(0),
+            model1.coefficients(1))
+        assert(actual1 ~== expected(idx) absTol 1e-4)
+
+        val model2 = new LinearRegression()
+          .setFitIntercept(fitIntercept)
+          .setWeightCol("weight")
+          .setSolver(solver)
+          .fit(datasetWithWeightZeroLabel)
+        val actual2 = Vectors.dense(model2.intercept, model2.coefficients(0),
+            model2.coefficients(1))
+        assert(actual2 ~==  Vectors.dense(0.0, 0.0, 0.0) absTol 1e-4)
+        idx += 1
+      }
+    }
+  }
+
+  test("regularized linear regression through origin with constant label") {
+    // The problem is ill-defined if fitIntercept=false, regParam is non-zero.
+    // An exception is thrown in this case.
+    Seq("auto", "l-bfgs", "normal").foreach { solver =>
+      for (standardization <- Seq(false, true)) {
+        val model = new LinearRegression().setFitIntercept(false)
+          .setRegParam(0.1).setStandardization(standardization).setSolver(solver)
+        intercept[IllegalArgumentException] {
+          model.fit(datasetWithWeightConstantLabel)
+        }
+      }
+    }
+  }
+
+  test("linear regression with l-bfgs when training is not needed") {
+    // When label is constant, l-bfgs solver returns results without training.
+    // There are two possibilities: If the label is non-zero but constant,
+    // and fitIntercept is true, then the model return yMean as intercept without training.
+    // If label is all zeros, then all coefficients are zero regardless of fitIntercept, so
+    // no training is needed.
+    for (fitIntercept <- Seq(false, true)) {
+      for (standardization <- Seq(false, true)) {
+        val model1 = new LinearRegression()
+          .setFitIntercept(fitIntercept)
+          .setStandardization(standardization)
+          .setWeightCol("weight")
+          .setSolver("l-bfgs")
+          .fit(datasetWithWeightConstantLabel)
+        if (fitIntercept) {
+          assert(model1.summary.objectiveHistory(0) ~== 0.0 absTol 1e-4)
+        }
+        val model2 = new LinearRegression()
+          .setFitIntercept(fitIntercept)
+          .setWeightCol("weight")
+          .setSolver("l-bfgs")
+          .fit(datasetWithWeightZeroLabel)
+        assert(model2.summary.objectiveHistory(0) ~== 0.0 absTol 1e-4)
       }
     }
   }
@@ -579,34 +686,61 @@ class LinearRegressionSuite
 
       // Residuals in [[LinearRegressionResults]] should equal those manually computed
       val expectedResiduals = datasetWithDenseFeature.select("features", "label")
+        .rdd
         .map { case Row(features: DenseVector, label: Double) =>
-        val prediction =
-          features(0) * model.coefficients(0) + features(1) * model.coefficients(1) +
-            model.intercept
-        label - prediction
-      }
-        .zip(model.summary.residuals.map(_.getDouble(0)))
+          val prediction =
+            features(0) * model.coefficients(0) + features(1) * model.coefficients(1) +
+              model.intercept
+          label - prediction
+        }
+        .zip(model.summary.residuals.rdd.map(_.getDouble(0)))
         .collect()
         .foreach { case (manualResidual: Double, resultResidual: Double) =>
-        assert(manualResidual ~== resultResidual relTol 1E-5)
-      }
+          assert(manualResidual ~== resultResidual relTol 1E-5)
+        }
 
       /*
-         Use the following R code to generate model training results.
+         # Use the following R code to generate model training results.
 
-         predictions <- predict(fit, newx=features)
-         residuals <- label - predictions
-         > mean(residuals^2) # MSE
-         [1] 0.009720325
-         > mean(abs(residuals)) # MAD
-         [1] 0.07863206
-         > cor(predictions, label)^2# r^2
-                 [,1]
-         s0 0.9998749
+         # path/part-00000 is the file generated by running LinearDataGenerator.generateLinearInput
+         # as described before the beforeAll() method.
+         d1 <- read.csv("path/part-00000", header=FALSE, stringsAsFactors=FALSE)
+         fit <- glm(V1 ~ V2 + V3, data = d1, family = "gaussian")
+         names(f1)[1] = c("V2")
+         names(f1)[2] = c("V3")
+         f1 <- data.frame(as.numeric(d1$V2), as.numeric(d1$V3))
+         predictions <- predict(fit, newdata=f1)
+         l1 <- as.numeric(d1$V1)
+
+         residuals <- l1 - predictions
+         > mean(residuals^2)           # MSE
+         [1] 0.00985449
+         > mean(abs(residuals))        # MAD
+         [1] 0.07961668
+         > cor(predictions, l1)^2   # r^2
+         [1] 0.9998737
+
+         > summary(fit)
+
+          Call:
+          glm(formula = V1 ~ V2 + V3, family = "gaussian", data = d1)
+
+          Deviance Residuals:
+               Min        1Q    Median        3Q       Max
+          -0.47082  -0.06797   0.00002   0.06725   0.34635
+
+          Coefficients:
+                       Estimate Std. Error t value Pr(>|t|)
+          (Intercept) 6.3022157  0.0018600    3388   <2e-16 ***
+          V2          4.6982442  0.0011805    3980   <2e-16 ***
+          V3          7.1994344  0.0009044    7961   <2e-16 ***
+          ---
+
+          ....
        */
-      assert(model.summary.meanSquaredError ~== 0.00972035 relTol 1E-5)
-      assert(model.summary.meanAbsoluteError ~== 0.07863206 relTol 1E-5)
-      assert(model.summary.r2 ~== 0.9998749 relTol 1E-5)
+      assert(model.summary.meanSquaredError ~== 0.00985449 relTol 1E-4)
+      assert(model.summary.meanAbsoluteError ~== 0.07961668 relTol 1E-4)
+      assert(model.summary.r2 ~== 0.9998737 relTol 1E-4)
 
       // Normal solver uses "WeightedLeastSquares". This algorithm does not generate
       // objective history because it does not run through iterations.
@@ -621,14 +755,14 @@ class LinearRegressionSuite
         // To clalify that the normal solver is used here.
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
-        val devianceResidualsR = Array(-0.35566, 0.34504)
-        val seCoefR = Array(0.0011756, 0.0009032, 0.0018489)
-        val tValsR = Array(3998, 7971, 3407)
+        val devianceResidualsR = Array(-0.47082, 0.34635)
+        val seCoefR = Array(0.0011805, 0.0009044, 0.0018600)
+        val tValsR = Array(3980, 7961, 3388)
         val pValsR = Array(0, 0, 0)
         model.summary.devianceResiduals.zip(devianceResidualsR).foreach { x =>
-          assert(x._1 ~== x._2 absTol 1E-5) }
+          assert(x._1 ~== x._2 absTol 1E-4) }
         model.summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
-          assert(x._1 ~== x._2 absTol 1E-5) }
+          assert(x._1 ~== x._2 absTol 1E-4) }
         model.summary.tValues.map(_.round).zip(tValsR).foreach{ x => assert(x._1 === x._2) }
         model.summary.pValues.map(_.round).zip(pValsR).foreach{ x => assert(x._1 === x._2) }
       }
@@ -823,7 +957,7 @@ class LinearRegressionSuite
        V1  -3.7271     2.9032  -1.284   0.3279
        V2   3.0100     0.6022   4.998   0.0378 *
        ---
-       Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+       Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
        (Dispersion parameter for gaussian family taken to be 17.4376)
 

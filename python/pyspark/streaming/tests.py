@@ -279,8 +279,10 @@ class BasicOperationTests(PySparkStreamingTestCase):
 
         def func(dstream):
             return dstream.countByValue()
-        expected = [[4], [4], [3]]
-        self._test_func(input, func, expected)
+        expected = [[(1, 2), (2, 2), (3, 2), (4, 2)],
+                    [(5, 2), (6, 2), (7, 1), (8, 1)],
+                    [("a", 2), ("b", 1), ("", 1)]]
+        self._test_func(input, func, expected, sort=True)
 
     def test_groupByKey(self):
         """Basic operation test for DStream.groupByKey."""
@@ -400,6 +402,26 @@ class BasicOperationTests(PySparkStreamingTestCase):
             return dstream.updateStateByKey(updater)
 
         expected = [[0], [0, 1], [0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
+        expected = [[('k', v)] for v in expected]
+        self._test_func(input, func, expected)
+
+    def test_update_state_by_key_initial_rdd(self):
+
+        def updater(vs, s):
+            if not s:
+                s = []
+            s.extend(vs)
+            return s
+
+        initial = [('k', [0, 1])]
+        initial = self.sc.parallelize(initial, 1)
+
+        input = [[('k', i)] for i in range(2, 5)]
+
+        def func(dstream):
+            return dstream.updateStateByKey(updater, initialRDD=initial)
+
+        expected = [[0, 1, 2], [0, 1, 2, 3], [0, 1, 2, 3, 4]]
         expected = [[('k', v)] for v in expected]
         self._test_func(input, func, expected)
 
@@ -631,7 +653,16 @@ class WindowFunctionTests(PySparkStreamingTestCase):
         def func(dstream):
             return dstream.countByValueAndWindow(2.5, .5)
 
-        expected = [[1], [2], [3], [4], [5], [6], [6], [6], [6], [6]]
+        expected = [[(0, 1)],
+                    [(0, 2), (1, 1)],
+                    [(0, 3), (1, 2), (2, 1)],
+                    [(0, 4), (1, 3), (2, 2), (3, 1)],
+                    [(0, 5), (1, 4), (2, 3), (3, 2), (4, 1)],
+                    [(0, 5), (1, 5), (2, 4), (3, 3), (4, 2), (5, 1)],
+                    [(0, 4), (1, 4), (2, 4), (3, 3), (4, 2), (5, 1)],
+                    [(0, 3), (1, 3), (2, 3), (3, 3), (4, 2), (5, 1)],
+                    [(0, 2), (1, 2), (2, 2), (3, 2), (4, 2), (5, 1)],
+                    [(0, 1), (1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]]
         self._test_func(input, func, expected)
 
     def test_group_by_key_and_window(self):
@@ -982,11 +1013,11 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.setup()
 
     def tearDown(self):
+        super(KafkaStreamTests, self).tearDown()
+
         if self._kafkaTestUtils is not None:
             self._kafkaTestUtils.teardown()
             self._kafkaTestUtils = None
-
-        super(KafkaStreamTests, self).tearDown()
 
     def _randomTopic(self):
         return "topic-%d" % random.randint(0, 10000)
@@ -1604,6 +1635,7 @@ kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
 if __name__ == "__main__":
+    from pyspark.streaming.tests import *
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
     mqtt_assembly_jar = search_mqtt_assembly_jar()

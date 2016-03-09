@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, ArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -26,7 +26,12 @@ import org.apache.spark.sql.types._
  * @param y y coordinate
  */
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
-private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable
+private[sql] class ExamplePoint(val x: Double, val y: Double) extends Serializable {
+  override def equals(other: Any): Boolean = other match {
+    case that: ExamplePoint => this.x == that.x && this.y == that.y
+    case _ => false
+  }
+}
 
 /**
  * User-defined type for [[ExamplePoint]].

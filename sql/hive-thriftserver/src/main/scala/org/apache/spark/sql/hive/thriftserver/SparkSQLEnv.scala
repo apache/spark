@@ -21,9 +21,9 @@ import java.io.PrintStream
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */

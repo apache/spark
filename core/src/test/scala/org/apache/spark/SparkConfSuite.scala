@@ -17,17 +17,18 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Try, Random}
+import scala.util.{Random, Try}
+
+import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
-import com.esotericsoftware.kryo.Kryo
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -236,7 +237,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set(newName, "4")
     assert(conf.get(newName) === "4")
 
-    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    val count = conf.getAll.count { case (k, v) => k.startsWith("spark.history.") }
     assert(count === 4)
 
     conf.set("spark.yarn.applicationMaster.waitTries", "42")

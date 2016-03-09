@@ -67,20 +67,9 @@ import org.apache.spark.util.Utils
  * At this point spark has multiple communication protocols that need to be secured and
  * different underlying mechanisms are used depending on the protocol:
  *
- *  - Akka -> The only option here is to use the Akka Remote secure-cookie functionality.
- *            Akka remoting allows you to specify a secure cookie that will be exchanged
- *            and ensured to be identical in the connection handshake between the client
- *            and the server. If they are not identical then the client will be refused
- *            to connect to the server. There is no control of the underlying
- *            authentication mechanism so its not clear if the password is passed in
- *            plaintext or uses DIGEST-MD5 or some other mechanism.
- *
- *            Akka also has an option to turn on SSL, this option is currently supported (see
- *            the details below).
- *
  *  - HTTP for broadcast and file server (via HttpServer) ->  Spark currently uses Jetty
  *            for the HttpServer. Jetty supports multiple authentication mechanisms -
- *            Basic, Digest, Form, Spengo, etc. It also supports multiple different login
+ *            Basic, Digest, Form, Spnego, etc. It also supports multiple different login
  *            services - Hash, JAAS, Spnego, JDBC, etc.  Spark currently uses the HashLoginService
  *            to authenticate using DIGEST-MD5 via a single user and the shared secret.
  *            Since we are using DIGEST-MD5, the shared secret is not passed on the wire
@@ -168,16 +157,16 @@ import org.apache.spark.util.Utils
  *  denote the global configuration for all the supported protocols. In order to override the global
  *  configuration for the particular protocol, the properties must be overwritten in the
  *  protocol-specific namespace. Use `spark.ssl.yyy.xxx` settings to overwrite the global
- *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be either `akka` for
- *  Akka based connections or `fs` for broadcast and file server.
+ *  configuration for particular protocol denoted by `yyy`. Currently `yyy` can be only`fs` for
+ *  broadcast and file server.
  *
  *  Refer to [[org.apache.spark.SSLOptions]] documentation for the list of
  *  options that can be specified.
  *
  *  SecurityManager initializes SSLOptions objects for different protocols separately. SSLOptions
  *  object parses Spark configuration at a given namespace and builds the common representation
- *  of SSL settings. SSLOptions is then used to provide protocol-specific configuration like
- *  TypeSafe configuration for Akka or SSLContextFactory for Jetty.
+ *  of SSL settings. SSLOptions is then used to provide protocol-specific SSLContextFactory for
+ *  Jetty.
  *
  *  SSL must be configured on each node and configured for each component involved in
  *  communication using the particular protocol. In YARN clusters, the key-store can be prepared on
@@ -244,14 +233,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
 
-  // SSL configuration for different communication layers - they can override the default
-  // configuration at a specified namespace. The namespace *must* start with spark.ssl.
-  val fileServerSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.fs", Some(defaultSSLOptions))
-  val akkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.akka", Some(defaultSSLOptions))
-
-  logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
-  logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
-
+  // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
+  val fileServerSSLOptions = getSSLOptions("fs")
   val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =
       for (trustStore <- fileServerSSLOptions.trustStore) yield {
@@ -290,6 +273,12 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     (Some(sslContext.getSocketFactory), Some(hostVerifier))
   } else {
     (None, None)
+  }
+
+  def getSSLOptions(module: String): SSLOptions = {
+    val opts = SSLOptions.parse(sparkConf, s"spark.ssl.$module", Some(defaultSSLOptions))
+    logDebug(s"Created SSL options for $module: $opts")
+    opts
   }
 
   /**

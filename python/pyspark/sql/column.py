@@ -27,8 +27,7 @@ from pyspark.context import SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.types import *
 
-__all__ = ["DataFrame", "Column", "SchemaRDD", "DataFrameNaFunctions",
-           "DataFrameStatFunctions"]
+__all__ = ["DataFrame", "Column", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
 
 def _create_column_from_literal(literal):
@@ -220,17 +219,17 @@ class Column(object):
         >>> from pyspark.sql import Row
         >>> df = sc.parallelize([Row(r=Row(a=1, b="b"))]).toDF()
         >>> df.select(df.r.getField("b")).show()
-        +----+
-        |r[b]|
-        +----+
-        |   b|
-        +----+
+        +---+
+        |r.b|
+        +---+
+        |  b|
+        +---+
         >>> df.select(df.r.a).show()
-        +----+
-        |r[a]|
-        +----+
-        |   1|
-        +----+
+        +---+
+        |r.a|
+        +---+
+        |  1|
+        +---+
         """
         return self[name]
 
@@ -271,23 +270,6 @@ class Column(object):
         return Column(jc)
 
     __getslice__ = substr
-
-    @ignore_unicode_prefix
-    @since(1.3)
-    def inSet(self, *cols):
-        """
-        A boolean expression that is evaluated to true if the value of this
-        expression is contained by the evaluated values of the arguments.
-
-        >>> df[df.name.inSet("Bob", "Mike")].collect()
-        [Row(age=5, name=u'Bob')]
-        >>> df[df.age.inSet([1, 2, 3])].collect()
-        [Row(age=2, name=u'Alice')]
-
-        .. note:: Deprecated in 1.5, use :func:`Column.isin` instead.
-        """
-        warnings.warn("inSet is deprecated. Use isin() instead.")
-        return self.isin(*cols)
 
     @ignore_unicode_prefix
     @since(1.5)
@@ -364,12 +346,12 @@ class Column(object):
         expression is between the given columns.
 
         >>> df.select(df.name, df.age.between(2, 4)).show()
-        +-----+--------------------------+
-        | name|((age >= 2) && (age <= 4))|
-        +-----+--------------------------+
-        |Alice|                      true|
-        |  Bob|                     false|
-        +-----+--------------------------+
+        +-----+---------------------------+
+        | name|((age >= 2) AND (age <= 4))|
+        +-----+---------------------------+
+        |Alice|                       true|
+        |  Bob|                      false|
+        +-----+---------------------------+
         """
         return (self >= lowerBound) & (self <= upperBound)
 
@@ -386,12 +368,12 @@ class Column(object):
 
         >>> from pyspark.sql import functions as F
         >>> df.select(df.name, F.when(df.age > 4, 1).when(df.age < 3, -1).otherwise(0)).show()
-        +-----+--------------------------------------------------------+
-        | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0|
-        +-----+--------------------------------------------------------+
-        |Alice|                                                      -1|
-        |  Bob|                                                       1|
-        +-----+--------------------------------------------------------+
+        +-----+------------------------------------------------------------+
+        | name|CASE WHEN (age > 4) THEN 1 WHEN (age < 3) THEN -1 ELSE 0 END|
+        +-----+------------------------------------------------------------+
+        |Alice|                                                          -1|
+        |  Bob|                                                           1|
+        +-----+------------------------------------------------------------+
         """
         if not isinstance(condition, Column):
             raise TypeError("condition should be a Column")
@@ -411,12 +393,12 @@ class Column(object):
 
         >>> from pyspark.sql import functions as F
         >>> df.select(df.name, F.when(df.age > 3, 1).otherwise(0)).show()
-        +-----+---------------------------------+
-        | name|CASE WHEN (age > 3) THEN 1 ELSE 0|
-        +-----+---------------------------------+
-        |Alice|                                0|
-        |  Bob|                                1|
-        +-----+---------------------------------+
+        +-----+-------------------------------------+
+        | name|CASE WHEN (age > 3) THEN 1 ELSE 0 END|
+        +-----+-------------------------------------+
+        |Alice|                                    0|
+        |  Bob|                                    1|
+        +-----+-------------------------------------+
         """
         v = value._jc if isinstance(value, Column) else value
         jc = self._jc.otherwise(v)

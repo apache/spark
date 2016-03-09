@@ -17,8 +17,8 @@
 package org.apache.spark.streaming.flume.sink
 
 import java.net.InetSocketAddress
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{TimeUnit, CountDownLatch, Executors}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}

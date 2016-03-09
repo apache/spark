@@ -17,8 +17,8 @@
 
 package org.apache.spark.graphx.lib
 
-import scala.reflect.ClassTag
 import scala.language.postfixOps
+import scala.reflect.ClassTag
 
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
@@ -138,7 +138,7 @@ object PageRank extends Logging {
       // edge partitions.
       prevRankGraph = rankGraph
       val rPrb = if (personalized) {
-        (src: VertexId , id: VertexId) => resetProb * delta(src, id)
+        (src: VertexId, id: VertexId) => resetProb * delta(src, id)
       } else {
         (src: VertexId, id: VertexId) => resetProb
       }

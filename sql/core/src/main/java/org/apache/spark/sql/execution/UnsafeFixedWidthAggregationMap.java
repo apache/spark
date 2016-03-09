@@ -29,7 +29,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
-import org.apache.spark.unsafe.memory.MemoryLocation;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -61,7 +60,7 @@ public final class UnsafeFixedWidthAggregationMap {
   /**
    * Re-used pointer to the current aggregation buffer
    */
-  private final UnsafeRow currentAggregationBuffer = new UnsafeRow();
+  private final UnsafeRow currentAggregationBuffer;
 
   private final boolean enablePerfMetrics;
 
@@ -98,6 +97,7 @@ public final class UnsafeFixedWidthAggregationMap {
       long pageSizeBytes,
       boolean enablePerfMetrics) {
     this.aggregationBufferSchema = aggregationBufferSchema;
+    this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
     this.groupingKeySchema = groupingKeySchema;
     this.map =
@@ -120,19 +120,24 @@ public final class UnsafeFixedWidthAggregationMap {
     return getAggregationBufferFromUnsafeRow(unsafeGroupingKeyRow);
   }
 
-  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow unsafeGroupingKeyRow) {
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key) {
+    return getAggregationBufferFromUnsafeRow(key, key.hashCode());
+  }
+
+  public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash) {
     // Probe our map using the serialized key
     final BytesToBytesMap.Location loc = map.lookup(
-      unsafeGroupingKeyRow.getBaseObject(),
-      unsafeGroupingKeyRow.getBaseOffset(),
-      unsafeGroupingKeyRow.getSizeInBytes());
+      key.getBaseObject(),
+      key.getBaseOffset(),
+      key.getSizeInBytes(),
+      hash);
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
       boolean putSucceeded = loc.putNewKey(
-        unsafeGroupingKeyRow.getBaseObject(),
-        unsafeGroupingKeyRow.getBaseOffset(),
-        unsafeGroupingKeyRow.getSizeInBytes(),
+        key.getBaseObject(),
+        key.getBaseOffset(),
+        key.getSizeInBytes(),
         emptyAggregationBuffer,
         Platform.BYTE_ARRAY_OFFSET,
         emptyAggregationBuffer.length
@@ -143,11 +148,9 @@ public final class UnsafeFixedWidthAggregationMap {
     }
 
     // Reset the pointer to point to the value that we just stored or looked up:
-    final MemoryLocation address = loc.getValueAddress();
     currentAggregationBuffer.pointTo(
-      address.getBaseObject(),
-      address.getBaseOffset(),
-      aggregationBufferSchema.length(),
+      loc.getValueBase(),
+      loc.getValueOffset(),
       loc.getValueLength()
     );
     return currentAggregationBuffer;
@@ -165,25 +168,21 @@ public final class UnsafeFixedWidthAggregationMap {
 
       private final BytesToBytesMap.MapIterator mapLocationIterator =
         map.destructiveIterator();
-      private final UnsafeRow key = new UnsafeRow();
-      private final UnsafeRow value = new UnsafeRow();
+      private final UnsafeRow key = new UnsafeRow(groupingKeySchema.length());
+      private final UnsafeRow value = new UnsafeRow(aggregationBufferSchema.length());
 
       @Override
       public boolean next() {
         if (mapLocationIterator.hasNext()) {
           final BytesToBytesMap.Location loc = mapLocationIterator.next();
-          final MemoryLocation keyAddress = loc.getKeyAddress();
-          final MemoryLocation valueAddress = loc.getValueAddress();
           key.pointTo(
-            keyAddress.getBaseObject(),
-            keyAddress.getBaseOffset(),
-            groupingKeySchema.length(),
+            loc.getKeyBase(),
+            loc.getKeyOffset(),
             loc.getKeyLength()
           );
           value.pointTo(
-            valueAddress.getBaseObject(),
-            valueAddress.getBaseOffset(),
-            aggregationBufferSchema.length(),
+            loc.getValueBase(),
+            loc.getValueOffset(),
             loc.getValueLength()
           );
           return true;

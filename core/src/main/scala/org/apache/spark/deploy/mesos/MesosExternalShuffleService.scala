@@ -65,7 +65,7 @@ private[mesos] class MesosExternalShuffleBlockHandler(transportConf: TransportCo
   /**
    * On connection termination, clean up shuffle files written by the associated application.
    */
-  override def connectionTerminated(client: TransportClient): Unit = {
+  override def channelInactive(client: TransportClient): Unit = {
     val address = client.getSocketAddress
     if (connectedApps.contains(address)) {
       val appId = connectedApps(address)

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Naive Bayes - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Naive Bayes
+title: Naive Bayes - spark.mllib
+displayTitle: Naive Bayes - spark.mllib
 ---
 
 [Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) is a simple
@@ -12,7 +12,7 @@ distribution of each feature given label, and then it applies Bayes' theorem to
 compute the conditional probability distribution of label given an observation
 and use it for prediction.
 
-MLlib supports [multinomial naive
+`spark.mllib` supports [multinomial naive
 Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier#Multinomial_naive_Bayes)
 and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
 These models are typically used for [document classification](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html).

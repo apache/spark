@@ -18,13 +18,13 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import com.twitter.algebird.HyperLogLogMonoid
 import com.twitter.algebird.HyperLogLog._
+import com.twitter.algebird.HyperLogLogMonoid
 
+import org.apache.spark.SparkConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.twitter._
-import org.apache.spark.SparkConf
 
 // scalastyle:off
 /**
@@ -62,7 +62,7 @@ object TwitterAlgebirdHLL {
     var userSet: Set[Long] = Set()
 
     val approxUsers = users.mapPartitions(ids => {
-      ids.map(id => hll(id))
+      ids.map(id => hll.create(id))
     }).reduce(_ + _)
 
     val exactUsers = users.map(id => Set(id)).reduce(_ ++ _)

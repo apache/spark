@@ -53,7 +53,7 @@ private[spark] class WholeTextFileInputFormat
    */
   def setMinPartitions(context: JobContext, minPartitions: Int) {
     val files = listStatus(context).asScala
-    val totalLen = files.map(file => if (file.isDir) 0L else file.getLen).sum
+    val totalLen = files.map(file => if (file.isDirectory) 0L else file.getLen).sum
     val maxSplitSize = Math.ceil(totalLen * 1.0 /
       (if (minPartitions == 0) 1 else minPartitions)).toLong
     super.setMaxSplitSize(maxSplitSize)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{RoundingMode, MathContext}
+import java.math.{MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -339,6 +339,9 @@ object Decimal {
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
+
+  /** Maximum number of decimal digits a Int can represent */
+  val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18

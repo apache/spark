@@ -24,18 +24,14 @@ import scala.language.existentials
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.PatienceConfiguration
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.rdd.{ReliableRDDCheckpointData, RDD}
-import org.apache.spark.storage._
+import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.storage.BroadcastBlockId
-import org.apache.spark.storage.RDDBlockId
-import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.storage.ShuffleIndexBlockId
+import org.apache.spark.storage._
 
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config
@@ -489,7 +485,8 @@ class CleanerTester(
   def assertCleanup()(implicit waitTimeout: PatienceConfiguration.Timeout) {
     try {
       eventually(waitTimeout, interval(100 millis)) {
-        assert(isAllCleanedUp)
+        assert(isAllCleanedUp,
+          "The following resources were not cleaned up:\n" + uncleanedResourcesToString)
       }
       postCleanupValidate()
     } finally {

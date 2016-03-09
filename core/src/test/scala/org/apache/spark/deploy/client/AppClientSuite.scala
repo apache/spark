@@ -17,7 +17,8 @@
 
 package org.apache.spark.deploy.client
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfterAll
@@ -63,15 +64,18 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
   }
 
   override def afterAll(): Unit = {
-    workerRpcEnvs.foreach(_.shutdown())
-    masterRpcEnv.shutdown()
-    workers.foreach(_.stop())
-    master.stop()
-    workerRpcEnvs = null
-    masterRpcEnv = null
-    workers = null
-    master = null
-    super.afterAll()
+    try {
+      workerRpcEnvs.foreach(_.shutdown())
+      masterRpcEnv.shutdown()
+      workers.foreach(_.stop())
+      master.stop()
+      workerRpcEnvs = null
+      masterRpcEnv = null
+      workers = null
+      master = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("interface methods of AppClient using local Master") {
@@ -144,7 +148,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     (0 until numWorkers).map { i =>
       val rpcEnv = workerRpcEnvs(i)
       val worker = new Worker(rpcEnv, 0, cores, memory, Array(masterRpcEnv.address),
-        Worker.SYSTEM_NAME + i, Worker.ENDPOINT_NAME, null, conf, securityManager)
+        Worker.ENDPOINT_NAME, null, conf, securityManager)
       rpcEnv.setupEndpoint(Worker.ENDPOINT_NAME, worker)
       worker
     }
@@ -162,14 +166,14 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
 
   /** Application Listener to collect events */
   private class AppClientCollector extends AppClientListener with Logging {
-    val connectedIdList = new ArrayBuffer[String] with SynchronizedBuffer[String]
+    val connectedIdList = new ConcurrentLinkedQueue[String]()
     @volatile var disconnectedCount: Int = 0
-    val deadReasonList = new ArrayBuffer[String] with SynchronizedBuffer[String]
-    val execAddedList = new ArrayBuffer[String] with SynchronizedBuffer[String]
-    val execRemovedList = new ArrayBuffer[String] with SynchronizedBuffer[String]
+    val deadReasonList = new ConcurrentLinkedQueue[String]()
+    val execAddedList = new ConcurrentLinkedQueue[String]()
+    val execRemovedList = new ConcurrentLinkedQueue[String]()
 
     def connected(id: String): Unit = {
-      connectedIdList += id
+      connectedIdList.add(id)
     }
 
     def disconnected(): Unit = {
@@ -179,7 +183,7 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
     }
 
     def dead(reason: String): Unit = {
-      deadReasonList += reason
+      deadReasonList.add(reason)
     }
 
     def executorAdded(
@@ -188,11 +192,11 @@ class AppClientSuite extends SparkFunSuite with LocalSparkContext with BeforeAnd
         hostPort: String,
         cores: Int,
         memory: Int): Unit = {
-      execAddedList += id
+      execAddedList.add(id)
     }
 
     def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit = {
-      execRemovedList += id
+      execRemovedList.add(id)
     }
   }
 

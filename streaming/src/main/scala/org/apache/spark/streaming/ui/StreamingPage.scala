@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.ui
 
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
@@ -392,8 +390,15 @@ private[ui] class StreamingPage(parent: StreamingTab)
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
-    val content = listener.receivedEventRateWithBatchTime.map { case (streamId, eventRates) =>
-      generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxY)
+    val maxYCalculated = listener.receivedEventRateWithBatchTime.values
+      .flatMap { case streamAndRates => streamAndRates.map { case (_, eventRate) => eventRate } }
+      .reduceOption[Double](math.max)
+      .map(_.ceil.toLong)
+      .getOrElse(0L)
+
+    val content = listener.receivedEventRateWithBatchTime.toList.sortBy(_._1).map {
+      case (streamId, eventRates) =>
+        generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxYCalculated)
     }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
     // scalastyle:off
@@ -437,7 +442,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     }.getOrElse(emptyCell)
     val receiverLastError = receiverInfo.map { info =>
       val msg = s"${info.lastErrorMessage} - ${info.lastError}"
-      if (msg.size > 100) msg.take(97) + "..." else msg
+      if (msg.length > 100) msg.take(97) + "..." else msg
     }.getOrElse(emptyCell)
     val receiverLastErrorTime = receiverInfo.map {
       r => if (r.lastErrorTime < 0) "-" else SparkUIUtils.formatDate(r.lastErrorTime)
@@ -459,7 +464,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
     <tr>
       <td rowspan="2" style="vertical-align: middle; width: 151px;">
         <div style="width: 151px;">
-          <div><strong>{receiverName}</strong></div>
+          <div style="word-wrap: break-word;"><strong>{receiverName}</strong></div>
           <div>Avg: {receivedRecords.formattedAvg} events/sec</div>
         </div>
       </td>

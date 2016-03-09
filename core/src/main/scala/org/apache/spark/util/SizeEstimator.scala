@@ -17,15 +17,14 @@
 
 package org.apache.spark.util
 
-import com.google.common.collect.MapMaker
-
 import java.lang.management.ManagementFactory
 import java.lang.reflect.{Field, Modifier}
 import java.util.{IdentityHashMap, Random}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
+
+import com.google.common.collect.MapMaker
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi

@@ -17,7 +17,7 @@
 
 package org.apache.spark.memory
 
-import org.apache.spark.{SparkEnv, TaskContextImpl, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext, TaskContextImpl}
 
 /**
  * Helper methods for mocking out memory-management-related classes in tests.
@@ -31,7 +31,6 @@ object MemoryTestingUtils {
       taskAttemptId = 0,
       attemptNumber = 0,
       taskMemoryManager = taskMemoryManager,
-      metricsSystem = env.metricsSystem,
-      internalAccumulators = Seq.empty)
+      metricsSystem = env.metricsSystem)
   }
 }

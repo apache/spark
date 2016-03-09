@@ -19,6 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.Logging
@@ -407,7 +408,7 @@ private object BisectingKMeans extends Serializable {
  */
 @Since("1.6.0")
 @Experimental
-class ClusteringTreeNode private[clustering] (
+private[clustering] class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,
     private val centerWithNorm: VectorWithNorm,
@@ -467,6 +468,7 @@ class ClusteringTreeNode private[clustering] (
    * @param cost the cost to the current center
    * @return (predicted leaf cluster index, cost)
    */
+  @tailrec
   private def predict(pointWithNorm: VectorWithNorm, cost: Double): (Int, Double) = {
     if (isLeaf) {
       (index, cost)

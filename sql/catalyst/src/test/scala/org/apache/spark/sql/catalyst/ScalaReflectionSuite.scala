@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
@@ -68,6 +67,10 @@ case class ComplexData(
 
 case class GenericData[A](
     genericField: A)
+
+object GenericData {
+  type IntData = GenericData[Int]
+}
 
 case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
@@ -184,6 +187,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("_1", IntegerType, nullable = false),
         StructField("_2", StringType, nullable = true))),
       nullable = true))
+  }
+
+  test("type-aliased data") {
+    assert(schemaFor[GenericData[Int]] == schemaFor[GenericData.IntData])
   }
 
   test("convert PrimitiveData to catalyst") {

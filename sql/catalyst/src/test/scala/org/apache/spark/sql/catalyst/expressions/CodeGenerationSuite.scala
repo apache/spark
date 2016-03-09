@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, RandomDataGenerator}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
@@ -36,9 +36,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     import scala.concurrent.duration._
 
     val futures = (1 to 20).map { _ =>
-      future {
+      Future {
         GeneratePredicate.generate(EqualTo(Literal(1), Literal(1)))
-        GenerateProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateMutableProjection.generate(EqualTo(Literal(1), Literal(1)) :: Nil)
         GenerateOrdering.generate(Add(Literal(1), Literal(1)).asc :: Nil)
       }
@@ -106,5 +105,14 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       EqualTo(BoundReference(0, StringType, false), Literal.create("*/", StringType)),
       true,
       InternalRow(UTF8String.fromString("*/")))
+  }
+
+  test("\\u in the data") {
+    // When \ u appears in a comment block (i.e. in /**/), code gen will break.
+    // So, in Expression and CodegenFallback, we escape \ u to \\u.
+    checkEvaluation(
+      EqualTo(BoundReference(0, StringType, false), Literal.create("\\u", StringType)),
+      true,
+      InternalRow(UTF8String.fromString("\\u")))
   }
 }

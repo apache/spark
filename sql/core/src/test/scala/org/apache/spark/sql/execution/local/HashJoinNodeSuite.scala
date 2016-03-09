@@ -20,10 +20,10 @@ package org.apache.spark.sql.execution.local
 import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.broadcast.TorrentBroadcast
-import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{InterpretedMutableProjection, UnsafeProjection, Expression}
-import org.apache.spark.sql.execution.joins.{HashedRelation, BuildLeft, BuildRight, BuildSide}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeProjection}
+import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide, HashedRelation}
+import org.apache.spark.sql.internal.SQLConf
 
 class HashJoinNodeSuite extends LocalNodeTest {
 

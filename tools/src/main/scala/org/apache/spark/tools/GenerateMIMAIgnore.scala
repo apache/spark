@@ -23,8 +23,8 @@ import java.util.jar.JarFile
 
 import scala.collection.mutable
 import scala.collection.JavaConverters._
-import scala.reflect.runtime.universe.runtimeMirror
 import scala.reflect.runtime.{universe => unv}
+import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Try
 
 /**

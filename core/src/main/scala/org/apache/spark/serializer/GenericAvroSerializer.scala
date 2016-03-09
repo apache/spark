@@ -29,7 +29,7 @@ import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkException, SparkEnv}
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 
 /**

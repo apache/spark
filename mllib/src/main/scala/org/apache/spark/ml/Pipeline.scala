@@ -26,11 +26,9 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkContext, Logging}
-import org.apache.spark.annotation.{Since, DeveloperApi, Experimental}
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, Params}
-import org.apache.spark.ml.util.MLReader
-import org.apache.spark.ml.util.MLWriter
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
@@ -87,25 +85,32 @@ abstract class PipelineStage extends Params with Logging {
  * transformers, corresponding to the pipeline stages. If there are no stages, the pipeline acts as
  * an identity transformer.
  */
+@Since("1.2.0")
 @Experimental
-class Pipeline(override val uid: String) extends Estimator[PipelineModel] with MLWritable {
+class Pipeline @Since("1.4.0") (
+  @Since("1.4.0") override val uid: String) extends Estimator[PipelineModel] with MLWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("pipeline"))
 
   /**
    * param for pipeline stages
    * @group param
    */
+  @Since("1.2.0")
   val stages: Param[Array[PipelineStage]] = new Param(this, "stages", "stages of the pipeline")
 
   /** @group setParam */
+  @Since("1.2.0")
   def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
 
   // Below, we clone stages so that modifications to the list of stages will not change
   // the Param value in the Pipeline.
   /** @group getParam */
+  @Since("1.2.0")
   def getStages: Array[PipelineStage] = $(stages).clone()
 
+  @Since("1.4.0")
   override def validateParams(): Unit = {
     super.validateParams()
     $(stages).foreach(_.validateParams())
@@ -123,6 +128,7 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with M
    * @param dataset input dataset
    * @return fitted pipeline
    */
+  @Since("1.2.0")
   override def fit(dataset: DataFrame): PipelineModel = {
     transformSchema(dataset.schema, logging = true)
     val theStages = $(stages)
@@ -160,13 +166,16 @@ class Pipeline(override val uid: String) extends Estimator[PipelineModel] with M
     new PipelineModel(uid, transformers.toArray).setParent(this)
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): Pipeline = {
     val map = extractParamMap(extra)
     val newStages = map(stages).map(_.copy(extra))
     new Pipeline().setStages(newStages)
   }
 
+  @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     val theStages = $(stages)
     require(theStages.toSet.size == theStages.length,
       "Cannot have duplicate components in a pipeline.")
@@ -276,10 +285,11 @@ object Pipeline extends MLReadable[Pipeline] {
  * :: Experimental ::
  * Represents a fitted pipeline.
  */
+@Since("1.2.0")
 @Experimental
 class PipelineModel private[ml] (
-    override val uid: String,
-    val stages: Array[Transformer])
+    @Since("1.4.0") override val uid: String,
+    @Since("1.4.0") val stages: Array[Transformer])
   extends Model[PipelineModel] with MLWritable with Logging {
 
   /** A Java/Python-friendly auxiliary constructor. */
@@ -287,20 +297,25 @@ class PipelineModel private[ml] (
     this(uid, stages.asScala.toArray)
   }
 
+  @Since("1.4.0")
   override def validateParams(): Unit = {
     super.validateParams()
     stages.foreach(_.validateParams())
   }
 
+  @Since("1.2.0")
   override def transform(dataset: DataFrame): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur))
   }
 
+  @Since("1.2.0")
   override def transformSchema(schema: StructType): StructType = {
+    validateParams()
     stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur))
   }
 
+  @Since("1.4.0")
   override def copy(extra: ParamMap): PipelineModel = {
     new PipelineModel(uid, stages.map(_.copy(extra))).setParent(parent)
   }

@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import scala.annotation.tailrec
+import scala.collection.mutable
+
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 
 /**
  * A pattern that matches any number of project or filter operations on top of another relational
@@ -76,10 +78,13 @@ object PhysicalOperation extends PredicateHelper {
   private def substitute(aliases: Map[Attribute, Expression])(expr: Expression): Expression = {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
-        aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(ref)
+          .map(Alias(_, name)(a.exprId, a.qualifiers, isGenerated = a.isGenerated))
+          .getOrElse(a)
 
       case a: AttributeReference =>
-        aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+        aliases.get(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifiers, isGenerated = a.isGenerated)).getOrElse(a)
     }
   }
 }
@@ -133,16 +138,67 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
+  * A pattern that collects the filter and inner joins.
+  *
+  *          Filter
+  *            |
+  *        inner Join
+  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+  *      Filter   plan2
+  *        |
+  *  inner join
+  *      /    \
+  *   plan0    plan1
+  *
+  * Note: This pattern currently only works for left-deep trees.
+  */
+object ExtractFiltersAndInnerJoins extends PredicateHelper {
+
+  // flatten all inner joins, which are next to each other
+  def flattenJoin(plan: LogicalPlan): (Seq[LogicalPlan], Seq[Expression]) = plan match {
+    case Join(left, right, Inner, cond) =>
+      val (plans, conditions) = flattenJoin(left)
+      (plans ++ Seq(right), conditions ++ cond.toSeq)
+
+    case Filter(filterCondition, j @ Join(left, right, Inner, joinCondition)) =>
+      val (plans, conditions) = flattenJoin(j)
+      (plans, conditions ++ splitConjunctivePredicates(filterCondition))
+
+    case _ => (Seq(plan), Seq())
+  }
+
+  def unapply(plan: LogicalPlan): Option[(Seq[LogicalPlan], Seq[Expression])] = plan match {
+    case f @ Filter(filterCondition, j @ Join(_, _, Inner, _)) =>
+      Some(flattenJoin(f))
+    case j @ Join(_, _, Inner, _) =>
+      Some(flattenJoin(j))
+    case _ => None
+  }
+}
+
+
+/**
  * A pattern that collects all adjacent unions and returns their children as a Seq.
  */
 object Unions {
   def unapply(plan: LogicalPlan): Option[Seq[LogicalPlan]] = plan match {
-    case u: Union => Some(collectUnionChildren(u))
+    case u: Union => Some(collectUnionChildren(mutable.Stack(u), Seq.empty[LogicalPlan]))
     case _ => None
   }
 
-  private def collectUnionChildren(plan: LogicalPlan): Seq[LogicalPlan] = plan match {
-    case Union(l, r) => collectUnionChildren(l) ++ collectUnionChildren(r)
-    case other => other :: Nil
+  // Doing a depth-first tree traversal to combine all the union children.
+  @tailrec
+  private def collectUnionChildren(
+      plans: mutable.Stack[LogicalPlan],
+      children: Seq[LogicalPlan]): Seq[LogicalPlan] = {
+    if (plans.isEmpty) children
+    else {
+      plans.pop match {
+        case Union(grandchildren) =>
+          grandchildren.reverseMap(plans.push(_))
+          collectUnionChildren(plans, children)
+        case other => collectUnionChildren(plans, children :+ other)
+      }
+    }
   }
 }

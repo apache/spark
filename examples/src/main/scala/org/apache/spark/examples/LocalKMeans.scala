@@ -23,9 +23,7 @@ import java.util.Random
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
-import breeze.linalg.{Vector, DenseVector, squaredDistance}
-
-import org.apache.spark.SparkContext._
+import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
 /**
  * K-means clustering.

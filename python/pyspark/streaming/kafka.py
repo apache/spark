@@ -40,7 +40,7 @@ class KafkaUtils(object):
 
     @staticmethod
     def createStream(ssc, zkQuorum, groupId, topics, kafkaParams=None,
-                     storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
+                     storageLevel=StorageLevel.MEMORY_AND_DISK_2,
                      keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
         Create an input stream that pulls messages from a Kafka Broker.

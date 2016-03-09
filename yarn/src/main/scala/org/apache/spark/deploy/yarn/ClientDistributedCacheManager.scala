@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.fs.permission.FsAction
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.util.{Records, ConverterUtils}
+import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.Logging
 

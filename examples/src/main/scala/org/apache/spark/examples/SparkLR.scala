@@ -22,7 +22,7 @@ import java.util.Random
 
 import scala.math.exp
 
-import breeze.linalg.{Vector, DenseVector}
+import breeze.linalg.{DenseVector, Vector}
 
 import org.apache.spark._
 
@@ -36,7 +36,7 @@ import org.apache.spark._
  */
 object SparkLR {
   val N = 10000  // Number of data points
-  val D = 10   // Numer of dimensions
+  val D = 10   // Number of dimensions
   val R = 0.7  // Scaling factor
   val ITERATIONS = 5
   val rand = new Random(42)

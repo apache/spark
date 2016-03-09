@@ -18,17 +18,17 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
+import scala.language.implicitConversions
+
 import akka.actor.ActorSystem
 import akka.actor.actorRef2Scala
+import akka.util.ByteString
 import akka.zeromq._
 import akka.zeromq.Subscribe
-import akka.util.ByteString
 
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.zeromq._
-
-import scala.language.implicitConversions
-import org.apache.spark.SparkConf
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
@@ -69,10 +69,10 @@ object SimpleZeroMQPublisher {
  *
  * To run this example locally, you may run publisher as
  *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.1.1:1234 foo.bar`
+ *      org.apache.spark.examples.streaming.SimpleZeroMQPublisher tcp://127.0.0.1:1234 foo`
  * and run the example as
  *    `$ bin/run-example \
- *      org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.1.1:1234 foo`
+ *      org.apache.spark.examples.streaming.ZeroMQWordCount tcp://127.0.0.1:1234 foo`
  */
 // scalastyle:on
 object ZeroMQWordCount {
@@ -90,7 +90,11 @@ object ZeroMQWordCount {
     def bytesToStringIterator(x: Seq[ByteString]): Iterator[String] = x.map(_.utf8String).iterator
 
     // For this stream, a zeroMQ publisher should be running.
-    val lines = ZeroMQUtils.createStream(ssc, url, Subscribe(topic), bytesToStringIterator _)
+    val lines = ZeroMQUtils.createStream(
+      ssc,
+      url,
+      Subscribe(topic),
+      bytesToStringIterator _)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()

@@ -108,7 +108,7 @@ public class UnsafeShuffleWriterSuite {
     spillFilesCreated.clear();
     conf = new SparkConf()
       .set("spark.buffer.pageSize", "1m")
-      .set("spark.unsafe.offHeap", "false");
+      .set("spark.memory.offHeap.enabled", "false");
     taskMetrics = new TaskMetrics();
     memoryManager = new TestMemoryManager(conf);
     taskMemoryManager =  new TaskMemoryManager(memoryManager, 0);
@@ -139,7 +139,7 @@ public class UnsafeShuffleWriterSuite {
       new Answer<InputStream>() {
         @Override
         public InputStream answer(InvocationOnMock invocation) throws Throwable {
-          assert (invocation.getArguments()[0] instanceof TempShuffleBlockId);
+          assertTrue(invocation.getArguments()[0] instanceof TempShuffleBlockId);
           InputStream is = (InputStream) invocation.getArguments()[1];
           if (conf.getBoolean("spark.shuffle.compress", true)) {
             return CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(is);
@@ -154,7 +154,7 @@ public class UnsafeShuffleWriterSuite {
       new Answer<OutputStream>() {
         @Override
         public OutputStream answer(InvocationOnMock invocation) throws Throwable {
-          assert (invocation.getArguments()[0] instanceof TempShuffleBlockId);
+          assertTrue(invocation.getArguments()[0] instanceof TempShuffleBlockId);
           OutputStream os = (OutputStream) invocation.getArguments()[1];
           if (conf.getBoolean("spark.shuffle.compress", true)) {
             return CompressionCodec$.MODULE$.createCodec(conf).compressedOutputStream(os);
@@ -191,8 +191,6 @@ public class UnsafeShuffleWriterSuite {
       });
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
-    when(taskContext.internalMetricsToAccumulators()).thenReturn(null);
-
     when(shuffleDep.serializer()).thenReturn(Option.<Serializer>apply(serializer));
     when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
   }
@@ -254,7 +252,7 @@ public class UnsafeShuffleWriterSuite {
     createWriter(false).stop(false);
   }
 
-  class PandaException extends RuntimeException {
+  static class PandaException extends RuntimeException {
   }
 
   @Test(expected=PandaException.class)
@@ -279,8 +277,8 @@ public class UnsafeShuffleWriterSuite {
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
     assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleRecordsWritten());
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().shuffleBytesWritten());
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().recordsWritten());
+    assertEquals(0, taskMetrics.shuffleWriteMetrics().get().bytesWritten());
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
   }
@@ -311,10 +309,10 @@ public class UnsafeShuffleWriterSuite {
       HashMultiset.create(readRecordsFromFile()));
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   private void testMergingSpills(
@@ -354,11 +352,11 @@ public class UnsafeShuffleWriterSuite {
     assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   @Test
@@ -416,11 +414,11 @@ public class UnsafeShuffleWriterSuite {
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   @Test
@@ -437,11 +435,11 @@ public class UnsafeShuffleWriterSuite {
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics().get();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.shuffleRecordsWritten());
+    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.shuffleBytesWritten());
+    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
   @Test

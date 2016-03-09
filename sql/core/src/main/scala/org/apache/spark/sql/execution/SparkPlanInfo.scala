@@ -30,17 +30,20 @@ class SparkPlanInfo(
     val nodeName: String,
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
+    val metadata: Map[String, String],
     val metrics: Seq[SQLMetricInfo])
 
 private[sql] object SparkPlanInfo {
 
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
+
+    val children = plan.children ++ plan.subqueries
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
         Utils.getFormattedClassName(metric.param))
     }
-    val children = plan.children.map(fromSparkPlan)
 
-    new SparkPlanInfo(plan.nodeName, plan.simpleString, children, metrics)
+    new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),
+      plan.metadata, metrics)
   }
 }

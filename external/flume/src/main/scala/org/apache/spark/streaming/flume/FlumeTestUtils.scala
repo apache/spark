@@ -29,7 +29,7 @@ import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.commons.lang3.RandomUtils
 import org.apache.flume.source.avro
-import org.apache.flume.source.avro.{AvroSourceProtocol, AvroFlumeEvent}
+import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol}
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory

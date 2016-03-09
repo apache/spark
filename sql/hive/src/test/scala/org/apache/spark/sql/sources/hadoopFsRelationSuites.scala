@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -27,9 +28,9 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.ConvertToUnsafe
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -123,7 +124,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         val dataGenerator = RandomDataGenerator.forType(
           dataType = dataType,
           nullable = true,
-          seed = Some(System.nanoTime())
+          new Random(System.nanoTime())
         ).getOrElse {
           fail(s"Failed to create data generator for schema $dataType")
         }
@@ -501,8 +502,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
 
       val actualPaths = df.queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: HadoopFsRelation, _) =>
-          relation.paths.toSet
+        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
+          relation.location.paths.map(_.toString).toSet
       }.getOrElse {
         fail("Expect an FSBasedRelation, but none could be found")
       }
@@ -559,7 +560,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       .saveAsTable("t")
 
     withTable("t") {
-      checkAnswer(sqlContext.table("t"), df.select('b, 'c, 'a).collect())
+      checkAnswer(sqlContext.table("t").select('b, 'c, 'a), df.select('b, 'c, 'a).collect())
     }
   }
 
@@ -687,36 +688,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       hadoopConfiguration.clear()
       clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
       sqlContext.sparkContext.conf.set("spark.speculation", speculationEnabled.toString)
-    }
-  }
-
-  test("HadoopFsRelation produces UnsafeRow") {
-    withTempTable("test_unsafe") {
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        sqlContext.range(3).write.format(dataSourceName).save(path)
-        sqlContext.read
-          .format(dataSourceName)
-          .option("dataSchema", new StructType().add("id", LongType, nullable = false).json)
-          .load(path)
-          .registerTempTable("test_unsafe")
-
-        val df = sqlContext.sql(
-          """SELECT COUNT(*)
-            |FROM test_unsafe a JOIN test_unsafe b
-            |WHERE a.id = b.id
-          """.stripMargin)
-
-        val plan = df.queryExecution.executedPlan
-
-        assert(
-          plan.collect { case plan: ConvertToUnsafe => plan }.isEmpty,
-          s"""Query plan shouldn't have ${classOf[ConvertToUnsafe].getSimpleName} node(s):
-             |$plan
-           """.stripMargin)
-
-        checkAnswer(df, Row(3))
-      }
     }
   }
 }

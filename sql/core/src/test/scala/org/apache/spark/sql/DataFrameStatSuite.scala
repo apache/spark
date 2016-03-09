@@ -19,8 +19,13 @@ package org.apache.spark.sql
 
 import java.util.Random
 
+import org.scalatest.Matchers._
+
+import org.apache.spark.Logging
+import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.DoubleType
 
 class DataFrameStatSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -62,6 +67,28 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("randomSplit on reordered partitions") {
+    // This test ensures that randomSplit does not create overlapping splits even when the
+    // underlying dataframe (such as the one below) doesn't guarantee a deterministic ordering of
+    // rows in each partition.
+    val data =
+      sparkContext.parallelize(1 to 600, 2).mapPartitions(scala.util.Random.shuffle(_)).toDF("id")
+    val splits = data.randomSplit(Array[Double](2, 3), seed = 1)
+
+    assert(splits.length == 2, "wrong number of splits")
+
+    // Verify that the splits span the entire dataset
+    assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
+
+    // Verify that the splits don't overalap
+    assert(splits(0).intersect(splits(1)).collect().isEmpty)
+
+    // Verify that the results are deterministic across multiple runs
+    val firstRun = splits.toSeq.map(_.collect().toSeq)
+    val secondRun = data.randomSplit(Array[Double](2, 3), seed = 1).toSeq.map(_.collect().toSeq)
+    assert(firstRun == secondRun)
+  }
+
   test("pearson correlation") {
     val df = Seq.tabulate(10)(i => (i, 2 * i, i * -1.0)).toDF("a", "b", "c")
     val corr1 = df.stat.corr("a", "b", "pearson")
@@ -96,6 +123,33 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val decimalData = Seq.tabulate(6)(i => (BigDecimal(i % 3), BigDecimal(i % 2))).toDF("a", "b")
     val decimalRes = decimalData.stat.cov("a", "b")
     assert(math.abs(decimalRes) < 1e-12)
+  }
+
+  test("approximate quantile") {
+    val n = 1000
+    val df = Seq.tabulate(n)(i => (i, 2.0 * i)).toDF("singles", "doubles")
+
+    val q1 = 0.5
+    val q2 = 0.8
+    val epsilons = List(0.1, 0.05, 0.001)
+
+    for (epsilon <- epsilons) {
+      val Array(single1) = df.stat.approxQuantile("singles", Array(q1), epsilon)
+      val Array(double2) = df.stat.approxQuantile("doubles", Array(q2), epsilon)
+      // Also make sure there is no regression by computing multiple quantiles at once.
+      val Array(d1, d2) = df.stat.approxQuantile("doubles", Array(q1, q2), epsilon)
+      val Array(s1, s2) = df.stat.approxQuantile("singles", Array(q1, q2), epsilon)
+
+      val error_single = 2 * 1000 * epsilon
+      val error_double = 2 * 2000 * epsilon
+
+      assert(math.abs(single1 - q1 * n) < error_single)
+      assert(math.abs(double2 - 2 * q2 * n) < error_double)
+      assert(math.abs(s1 - q1 * n) < error_single)
+      assert(math.abs(s2 - q2 * n) < error_single)
+      assert(math.abs(d1 - 2 * q1 * n) < error_double)
+      assert(math.abs(d2 - 2 * q2 * n) < error_double)
+    }
   }
 
   test("crosstab") {
@@ -188,4 +242,96 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 6), Row(1, 11)))
   }
+
+  // This test case only verifies that `DataFrame.countMinSketch()` methods do return
+  // `CountMinSketch`es that meet required specs.  Test cases for `CountMinSketch` can be found in
+  // `CountMinSketchSuite` in project spark-sketch.
+  test("countMinSketch") {
+    val df = sqlContext.range(1000)
+
+    val sketch1 = df.stat.countMinSketch("id", depth = 10, width = 20, seed = 42)
+    assert(sketch1.totalCount() === 1000)
+    assert(sketch1.depth() === 10)
+    assert(sketch1.width() === 20)
+
+    val sketch2 = df.stat.countMinSketch($"id", depth = 10, width = 20, seed = 42)
+    assert(sketch2.totalCount() === 1000)
+    assert(sketch2.depth() === 10)
+    assert(sketch2.width() === 20)
+
+    val sketch3 = df.stat.countMinSketch("id", eps = 0.001, confidence = 0.99, seed = 42)
+    assert(sketch3.totalCount() === 1000)
+    assert(sketch3.relativeError() === 0.001)
+    assert(sketch3.confidence() === 0.99 +- 5e-3)
+
+    val sketch4 = df.stat.countMinSketch($"id", eps = 0.001, confidence = 0.99, seed = 42)
+    assert(sketch4.totalCount() === 1000)
+    assert(sketch4.relativeError() === 0.001 +- 1e04)
+    assert(sketch4.confidence() === 0.99 +- 5e-3)
+
+    intercept[IllegalArgumentException] {
+      df.select('id cast DoubleType as 'id)
+        .stat
+        .countMinSketch('id, depth = 10, width = 20, seed = 42)
+    }
+  }
+
+  // This test only verifies some basic requirements, more correctness tests can be found in
+  // `BloomFilterSuite` in project spark-sketch.
+  test("Bloom filter") {
+    val df = sqlContext.range(1000)
+
+    val filter1 = df.stat.bloomFilter("id", 1000, 0.03)
+    assert(filter1.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(filter1.mightContain))
+
+    val filter2 = df.stat.bloomFilter($"id" * 3, 1000, 0.03)
+    assert(filter2.expectedFpp() - 0.03 < 1e-3)
+    assert(0.until(1000).forall(i => filter2.mightContain(i * 3)))
+
+    val filter3 = df.stat.bloomFilter("id", 1000, 64 * 5)
+    assert(filter3.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(filter3.mightContain))
+
+    val filter4 = df.stat.bloomFilter($"id" * 3, 1000, 64 * 5)
+    assert(filter4.bitSize() == 64 * 5)
+    assert(0.until(1000).forall(i => filter4.mightContain(i * 3)))
+  }
+}
+
+
+class DataFrameStatPerfSuite extends QueryTest with SharedSQLContext with Logging {
+
+  // Turn on this test if you want to test the performance of approximate quantiles.
+  ignore("computing quantiles should not take much longer than describe()") {
+    val df = sqlContext.range(5000000L).toDF("col1").cache()
+    def seconds(f: => Any): Double = {
+      // Do some warmup
+      logDebug("warmup...")
+      for (i <- 1 to 10) {
+        df.count()
+        f
+      }
+      logDebug("execute...")
+      // Do it 10 times and report median
+      val times = (1 to 10).map { i =>
+        val start = System.nanoTime()
+        f
+        val end = System.nanoTime()
+        (end - start) / 1e9
+      }
+      logDebug("execute done")
+      times.sum / times.length.toDouble
+    }
+
+    logDebug("*** Normal describe ***")
+    val t1 = seconds { df.describe() }
+    logDebug(s"T1 = $t1")
+    logDebug("*** Just quantiles ***")
+    val t2 = seconds {
+      StatFunctions.multipleApproxQuantiles(df, Seq("col1"), Seq(0.1, 0.25, 0.5, 0.75, 0.9), 0.01)
+    }
+    logDebug(s"T1 = $t1, T2 = $t2")
+  }
+
 }

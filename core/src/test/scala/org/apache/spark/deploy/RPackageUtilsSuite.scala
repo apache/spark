@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy
 
-import java.io.{PrintStream, OutputStream, File}
+import java.io.{File, OutputStream, PrintStream}
 import java.net.URI
-import java.util.jar.Attributes.Name
 import java.util.jar.{JarFile, Manifest}
+import java.util.jar.Attributes.Name
 import java.util.zip.ZipFile
 
 import scala.collection.JavaConverters._

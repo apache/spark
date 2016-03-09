@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
@@ -88,7 +87,7 @@ import org.apache.spark.sql.types.IntegerType
  *    this aggregate consists of the original group by clause, all the requested distinct columns
  *    and the group id. Both de-duplication of distinct column and the aggregation of the
  *    non-distinct group take advantage of the fact that we group by the group id (gid) and that we
- *    have nulled out all non-relevant columns for the the given group.
+ *    have nulled out all non-relevant columns the given group.
  * 3. Aggregating the distinct groups and combining this with the results of the non-distinct
  *    aggregation. In this step we use the group id to filter the inputs for the aggregate
  *    functions. The result of the non-distinct group are 'aggregated' by using the first operator,
@@ -100,13 +99,10 @@ import org.apache.spark.sql.types.IntegerType
  * we could improve this in the current rule by applying more advanced expression cannocalization
  * techniques.
  */
-case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
+object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case p if !p.resolved => p
-    // We need to wait until this Aggregate operator is resolved.
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case a: Aggregate => rewrite(a)
-    case p => p
   }
 
   def rewrite(a: Aggregate): Aggregate = {
@@ -123,20 +119,14 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
-      // When the flag is set to specialize single distinct agg planning,
-      // we will rely on our Aggregation strategy to handle queries with a single
-      // distinct column.
-      distinctAggGroups.size > 1
-    } else {
-      distinctAggGroups.size >= 1
-    }
-    if (shouldRewrite) {
+    // Aggregation strategy can handle the query with single distinct
+    if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
-      val gid = new AttributeReference("gid", IntegerType, false)()
+      val gid =
+        new AttributeReference("gid", IntegerType, false)(isGenerated = true)
       val groupByMap = a.groupingExpressions.collect {
         case ne: NamedExpression => ne -> ne.toAttribute
-        case e => e -> new AttributeReference(e.prettyString, e.dataType, e.nullable)()
+        case e => e -> new AttributeReference(e.sql, e.dataType, e.nullable)()
       }
       val groupByAttrs = groupByMap.map(_._2)
 
@@ -190,7 +180,7 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       val regularAggOperatorMap = regularAggExprs.map { e =>
         // Perform the actual aggregation in the initial aggregate.
         val af = patchAggregateFunctionChildren(e.aggregateFunction)(regularAggChildAttrLookup)
-        val operator = Alias(e.copy(aggregateFunction = af), e.prettyString)()
+        val operator = Alias(e.copy(aggregateFunction = af), e.sql)()
 
         // Select the result of the first aggregate in the last aggregate.
         val result = AggregateExpression(
@@ -275,5 +265,5 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
     // NamedExpression. This is done to prevent collisions between distinct and regular aggregate
     // children, in this case attribute reuse causes the input of the regular aggregate to bound to
     // the (nulled out) input of the distinct aggregate.
-    e -> new AttributeReference(e.prettyString, e.dataType, true)()
+    e -> new AttributeReference(e.sql, e.dataType, true)()
 }

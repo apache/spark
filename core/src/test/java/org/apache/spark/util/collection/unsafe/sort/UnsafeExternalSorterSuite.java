@@ -58,7 +58,7 @@ public class UnsafeExternalSorterSuite {
 
   final LinkedList<File> spillFilesCreated = new LinkedList<File>();
   final TestMemoryManager memoryManager =
-    new TestMemoryManager(new SparkConf().set("spark.unsafe.offHeap", "false"));
+    new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
   final PrefixComparator prefixComparator = new PrefixComparator() {
@@ -323,23 +323,23 @@ public class UnsafeExternalSorterSuite {
       record[0] = (long) i;
       sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
     }
-    assert(sorter.getNumberOfAllocatedPages() >= 2);
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
     UnsafeExternalSorter.SpillableIterator iter =
       (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
     int lastv = 0;
     for (int i = 0; i < n / 3; i++) {
       iter.hasNext();
       iter.loadNext();
-      assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
       lastv = i;
     }
-    assert(iter.spill() > 0);
-    assert(iter.spill() == 0);
-    assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
+    assertTrue(iter.spill() > 0);
+    assertEquals(0, iter.spill());
+    assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
     for (int i = n / 3; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
-      assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -355,15 +355,46 @@ public class UnsafeExternalSorterSuite {
       record[0] = (long) i;
       sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
     }
-    assert(sorter.getNumberOfAllocatedPages() >= 2);
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
     UnsafeExternalSorter.SpillableIterator iter =
       (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
-    assert(iter.spill() > 0);
-    assert(iter.spill() == 0);
+    assertTrue(iter.spill() > 0);
+    assertEquals(0, iter.spill());
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
-      assert(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+    }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void forcedSpillingWithoutComparator() throws Exception {
+    final UnsafeExternalSorter sorter = UnsafeExternalSorter.create(
+      taskMemoryManager,
+      blockManager,
+      taskContext,
+      null,
+      null,
+      /* initialSize */ 1024,
+      pageSizeBytes);
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    int batch = n / 4;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
+      if (i % batch == batch - 1) {
+        sorter.spill();
+      }
+    }
+    UnsafeSorterIterator iter = sorter.getIterator();
+    for (int i = 0; i < n; i++) {
+      iter.hasNext();
+      iter.loadNext();
+      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();

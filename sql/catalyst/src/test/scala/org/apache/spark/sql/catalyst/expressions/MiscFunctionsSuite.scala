@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.commons.codec.digest.DigestUtils
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{IntegerType, StringType, BinaryType}
+import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.types._
 
 class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -58,5 +60,76 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       2180413220L)
     checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
+  }
+
+  private val structOfString = new StructType().add("str", StringType)
+  private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
+  private val arrayOfString = ArrayType(StringType)
+  private val arrayOfNull = ArrayType(NullType)
+  private val mapOfString = MapType(StringType, StringType)
+  private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
+
+  testMurmur3Hash(
+    new StructType()
+      .add("null", NullType)
+      .add("boolean", BooleanType)
+      .add("byte", ByteType)
+      .add("short", ShortType)
+      .add("int", IntegerType)
+      .add("long", LongType)
+      .add("float", FloatType)
+      .add("double", DoubleType)
+      .add("bigDecimal", DecimalType.SYSTEM_DEFAULT)
+      .add("smallDecimal", DecimalType.USER_DEFAULT)
+      .add("string", StringType)
+      .add("binary", BinaryType)
+      .add("date", DateType)
+      .add("timestamp", TimestampType)
+      .add("udt", new ExamplePointUDT))
+
+  testMurmur3Hash(
+    new StructType()
+      .add("arrayOfNull", arrayOfNull)
+      .add("arrayOfString", arrayOfString)
+      .add("arrayOfArrayOfString", ArrayType(arrayOfString))
+      .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))
+      .add("arrayOfMap", ArrayType(mapOfString))
+      .add("arrayOfStruct", ArrayType(structOfString))
+      .add("arrayOfUDT", arrayOfUDT))
+
+  testMurmur3Hash(
+    new StructType()
+      .add("mapOfIntAndString", MapType(IntegerType, StringType))
+      .add("mapOfStringAndArray", MapType(StringType, arrayOfString))
+      .add("mapOfArrayAndInt", MapType(arrayOfString, IntegerType))
+      .add("mapOfArray", MapType(arrayOfString, arrayOfString))
+      .add("mapOfStringAndStruct", MapType(StringType, structOfString))
+      .add("mapOfStructAndString", MapType(structOfString, StringType))
+      .add("mapOfStruct", MapType(structOfString, structOfString)))
+
+  testMurmur3Hash(
+    new StructType()
+      .add("structOfString", structOfString)
+      .add("structOfStructOfString", new StructType().add("struct", structOfString))
+      .add("structOfArray", new StructType().add("array", arrayOfString))
+      .add("structOfMap", new StructType().add("map", mapOfString))
+      .add("structOfArrayAndMap",
+        new StructType().add("array", arrayOfString).add("map", mapOfString))
+      .add("structOfUDT", structOfUDT))
+
+  private def testMurmur3Hash(inputSchema: StructType): Unit = {
+    val inputGenerator = RandomDataGenerator.forType(inputSchema, nullable = false).get
+    val encoder = RowEncoder(inputSchema)
+    val seed = scala.util.Random.nextInt()
+    test(s"murmur3 hash: ${inputSchema.simpleString}") {
+      for (_ <- 1 to 10) {
+        val input = encoder.toRow(inputGenerator.apply().asInstanceOf[Row]).asInstanceOf[UnsafeRow]
+        val literals = input.toSeq(inputSchema).zip(inputSchema.map(_.dataType)).map {
+          case (value, dt) => Literal.create(value, dt)
+        }
+        // Only test the interpreted version has same result with codegen version.
+        checkEvaluation(Murmur3Hash(literals, seed), Murmur3Hash(literals, seed).eval())
+      }
+    }
   }
 }

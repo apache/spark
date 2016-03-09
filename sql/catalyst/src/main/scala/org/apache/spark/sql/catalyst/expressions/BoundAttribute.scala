@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenContext, GeneratedExpressionCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 
 object BoundReference {
@@ -38,9 +38,9 @@ object BoundReference {
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
-  extends LeafExpression with NamedExpression {
+  extends LeafExpression {
 
-  override def toString: String = s"input[$ordinal, $dataType]"
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
@@ -67,7 +67,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     }
   }
 
-  override def name: String = _name.getOrElse(s"i[$ordinal]")
+  def name: String = _name.getOrElse(s"i[$ordinal]")
 
   private var _name: Option[String] = None
 
@@ -76,19 +76,25 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
     this
   }
 
-  override def toAttribute: Attribute = throw new UnsupportedOperationException
-
-  override def qualifiers: Seq[String] = throw new UnsupportedOperationException
-
-  override def exprId: ExprId = throw new UnsupportedOperationException
-
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
-    s"""
-      boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-      $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
-    """
+    if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
+      val oev = ctx.currentVars(ordinal)
+      ev.isNull = oev.isNull
+      ev.value = oev.value
+      oev.code
+    } else if (nullable) {
+      s"""
+        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+      """
+    } else {
+      ev.isNull = "false"
+      s"""
+        $javaType ${ev.value} = $value;
+      """
+    }
   }
 }
 
@@ -109,6 +115,7 @@ object BindReferences extends Logging {
           }
         } else {
           BoundReference(ordinal, a.dataType, a.nullable, a.name)
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable, a.name)
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.

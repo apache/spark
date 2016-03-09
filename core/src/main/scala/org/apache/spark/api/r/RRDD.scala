@@ -19,8 +19,7 @@ package org.apache.spark.api.r
 
 import java.io._
 import java.net.{InetAddress, ServerSocket}
-import java.util.Arrays
-import java.util.{Map => JMap}
+import java.util.{Arrays, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.io.Source
