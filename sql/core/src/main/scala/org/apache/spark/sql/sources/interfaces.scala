@@ -419,10 +419,12 @@ case class HadoopFsRelation(
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =
     location.allFiles().map(_.getPath.toUri.toString).toArray
+
+  override def sizeInBytes: Long = location.allFiles().map(_.getLen).sum
 }
 
 /**
- * Used to read a write data in files to [[InternalRow]] format.
+ * Used to read and write data stored in files to/from the [[InternalRow]] format.
  */
 trait FileFormat {
   /**

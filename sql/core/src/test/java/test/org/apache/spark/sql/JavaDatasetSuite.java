@@ -67,7 +67,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
-    return new Tuple2<T1, T2>(t1, t2);
+    return new Tuple2<>(t1, t2);
   }
 
   @Test
@@ -465,6 +465,9 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+      if (this == other) return true;
+      if (other == null || getClass() != other.getClass()) return false;
+
       return this.value.equals(((KryoSerializable) other).value);
     }
 
@@ -483,6 +486,9 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+      if (this == other) return true;
+      if (other == null || getClass() != other.getClass()) return false;
+
       return this.value.equals(((JavaSerializable) other).value);
     }
 
@@ -631,7 +637,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
 
-      SimpleJavaBean that = (SimpleJavaBean) o;
+      SimpleJavaBean2 that = (SimpleJavaBean2) o;
 
       if (!a.equals(that.a)) return false;
       if (!b.equals(that.b)) return false;

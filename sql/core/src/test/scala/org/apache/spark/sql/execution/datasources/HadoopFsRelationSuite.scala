@@ -15,34 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.status.api.v1;
+package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.util.EnumUtil;
+import java.io.{File, FilenameFilter}
 
-import java.util.HashSet;
-import java.util.Set;
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.test.SharedSQLContext
 
-public enum TaskSorting {
-  ID,
-  INCREASING_RUNTIME("runtime"),
-  DECREASING_RUNTIME("-runtime");
+class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
 
-  private final Set<String> alternateNames;
-  private TaskSorting(String... names) {
-    alternateNames = new HashSet<>();
-    for (String n: names) {
-      alternateNames.add(n);
+  test("sizeInBytes should be the total size of all files") {
+    withTempDir{ dir =>
+      dir.delete()
+      sqlContext.range(1000).write.parquet(dir.toString)
+      // ignore hidden files
+      val allFiles = dir.listFiles(new FilenameFilter {
+        override def accept(dir: File, name: String): Boolean = {
+          !name.startsWith(".")
+        }
+      })
+      val totalSize = allFiles.map(_.length()).sum
+      val df = sqlContext.read.parquet(dir.toString)
+      assert(df.queryExecution.logical.statistics.sizeInBytes === BigInt(totalSize))
     }
   }
-
-  public static TaskSorting fromString(String str) {
-    String lower = str.toLowerCase();
-    for (TaskSorting t: values()) {
-      if (t.alternateNames.contains(lower)) {
-        return t;
-      }
-    }
-    return EnumUtil.parseIgnoreCase(TaskSorting.class, str);
-  }
-
 }
