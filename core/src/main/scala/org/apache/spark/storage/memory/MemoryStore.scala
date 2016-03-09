@@ -185,7 +185,7 @@ private[spark] class MemoryStore(
         } else if (pendingMemoryReserved < size) {
           memoryManager.acquireStorageMemory(blockId, size - pendingMemoryReserved)
         } else {
-          memoryManager.releaseStorageMemory(pendingMemoryReserved - size)
+          memoryManager.releaseUnrollMemory(pendingMemoryReserved - size)
           true
         }
       }
