@@ -32,6 +32,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def getRelevantConstraints(constraints: Set[Expression]): Set[Expression] = {
     constraints
+      .union(inferAdditionalConstraints(constraints))
       .union(constructIsNotNullConstraints(constraints))
       .filter(constraint =>
         constraint.references.nonEmpty && constraint.references.subsetOf(outputSet))
@@ -59,6 +60,25 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case _ =>
         Set.empty[Expression]
     }.foldLeft(Set.empty[Expression])(_ union _.toSet)
+  }
+
+  /**
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`
+   */
+  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+    constraints.map {
+      case eq @ EqualTo(l: Attribute, r: Attribute) =>
+        (constraints -- Set(eq)).map(_ transform {
+          case a: Attribute if a.semanticEquals(l) => r
+        }).union(
+          (constraints -- Set(eq)).map(_ transform {
+            case a: Attribute if a.semanticEquals(r) => l
+          }))
+      case _ =>
+        Set.empty[Expression]
+    }.foldLeft(Set.empty[Expression])(_ union _) -- constraints
   }
 
   /**
