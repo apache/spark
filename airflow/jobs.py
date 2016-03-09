@@ -417,6 +417,7 @@ class SchedulerJob(BaseJob):
                     dag_id=dag.dag_id,
                     run_id='scheduled__' + next_run_date.isoformat(),
                     execution_date=next_run_date,
+                    start_date=datetime.now(),
                     state=State.RUNNING,
                     external_trigger=False
                 )
