@@ -29,6 +29,7 @@ import org.apache.spark.sql.types._
 object ParserUtils {
 
   object Token {
+    // Match on (text, children)
     def unapply(node: ASTNode): Some[(String, List[ASTNode])] = {
       CurrentOrigin.setPosition(node.line, node.positionInLine)
       node.pattern
