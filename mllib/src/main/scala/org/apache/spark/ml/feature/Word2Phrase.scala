@@ -156,10 +156,10 @@ class Word2Phrase(override val uid: String)
     val thresholdA = $(threshold)
     // Scores > threshold
     var biGrams = sqlContext.sql(s"select biGram from bi_gram_scores where score > $thresholdA").collect()
-    var bigram_list = biGrams.map(row => (row.toString))
-    println(bigram_list.deep.mkString("\n"))
 
-    copyValues(new Word2PhraseModel(uid, bigram_list).setParent(this))
+    var bigram_list = biGrams.map(row => (row.toString))
+
+    copyValues(new Word2PhraseModel(uid, bigram_list.map(item => (item.drop(1).dropRight(1)))).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -196,7 +196,7 @@ class Word2PhraseModel private[ml] (
 
   override def transform(dataset: DataFrame): DataFrame = {
 
-    var mapBiGrams = udf((t: String) => bigram_list.foldLeft(t){case (z, r) => z.replaceAll(Regex.quote("(?i)"+r), r.split(" ").mkString("_"))})
+    var mapBiGrams = udf((t: String) => bigram_list.foldLeft(t){case (z, r) => z.replaceAll("(?i)"+Regex.quote(r), r.split(" ").mkString("_"))})
     dataset.withColumn($(outputCol), mapBiGrams(dataset($(inputCol))))
   }
 

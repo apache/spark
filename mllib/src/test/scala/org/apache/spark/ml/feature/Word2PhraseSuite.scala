@@ -25,7 +25,32 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  /*test("Word2Phrase Read/Write") {
+  test("Word2Phrase Trained Model; Set Functions") {
+
+    var wordDataFrame = sqlContext.createDataFrame(Seq(
+      (0, "Hi I heard about Spark"),
+      (1, "I heard Java could use case classes"),
+      (2, "I heard Logistic regression models are neat")
+    )).toDF("label", "inputWords")
+
+    var t = new Word2Phrase().setInputCol("inputWords").setOutputCol("out")
+    t.setMinCount(0)
+    t.setThreshold(-100)
+    t.setMinWords(0)
+
+    var model = t.fit(wordDataFrame)
+    var result = model.transform(wordDataFrame)
+
+    var resultDataFrame = sqlContext.createDataFrame(Seq(
+      (0, "Hi I heard about Spark", "hi_I_heard_about_spark"),
+      (1, "I heard Java could use case classes", "i_heard_java_could_use_case_classes"),
+      (2, "I heard Logistic regression models are neat", "i_heard_logistic_regression_models_are_neat")
+    )).toDF("label", "inputWords", "out")
+
+    assert(result == resultDataFrame)
+  }
+
+  test("Word2Phrase Read/Write") {
 
     val wordDataFrame = sqlContext.createDataFrame(Seq(
       (0, "Hi I heard about Spark"),
@@ -37,7 +62,7 @@ class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     
     val newInstance = testDefaultReadWrite(t)
     assert(newInstance === t)
-  }*/
+  }
 
   test("Word2PhraseModel Read/Write") {
 
