@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.Logging
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -42,7 +43,7 @@ case class SubqueryHolder(query: String) extends LeafExpression with Unevaluable
 }
 
 /**
- * A builder class used to convert a resolved logical plan into a SQL query string.  Note that this
+ * A builder class used to convert a resolved logical plan into a SQL query string.  Note that not
  * all resolved logical plan are convertible.  They either don't have corresponding SQL
  * representations (e.g. logical plans that operate on local Scala collections), or are simply not
  * supported by this builder (yet).
@@ -93,6 +94,9 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   private def toSQL(node: LogicalPlan): String = node match {
     case Distinct(p: Project) =>
       projectToSQL(p, isDistinct = true)
+
+    case g : Generate =>
+      generateToSQL(g)
 
     case p: Project =>
       projectToSQL(p, isDistinct = false)
@@ -205,13 +209,34 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     segments.map(_.trim).filter(_.nonEmpty).mkString(" ")
 
   private def projectToSQL(plan: Project, isDistinct: Boolean): String = {
+    val (projectListExprs, planToProcess) = getProjectListExprs(plan)
     build(
       "SELECT",
       if (isDistinct) "DISTINCT" else "",
-      plan.projectList.map(_.sql).mkString(", "),
-      if (plan.child == OneRowRelation) "" else "FROM",
-      toSQL(plan.child)
+      projectListExprs.map(_.sql).mkString(", "),
+      if (planToProcess == OneRowRelation) "" else "FROM",
+      toSQL(planToProcess)
     )
+  }
+
+  private def getProjectListExprs(plan: Project): (Seq[NamedExpression], LogicalPlan) = {
+    plan match {
+      case p @ Project(_, g: Generate) if g.qualifier.isEmpty =>
+        // Only keep the first generated column in the list so that we can
+        // transform it to a Generator expression in the following step.
+        val projList = p.projectList.filter {
+          case e: Expression if g.generatorOutput.tail.exists(_.semanticEquals(e)) => false
+          case _ => true
+        }
+        val exprs = projList.map {
+          case e: Expression if g.generatorOutput.exists(_.semanticEquals(e)) =>
+            val names = g.generatorOutput.map(_.name)
+            MultiAlias(g.generator, names)
+          case other => other
+        }
+        (exprs, g.child)
+      case _ => (plan.projectList, plan.child)
+    }
   }
 
   private def aggregateToSQL(plan: Aggregate): String = {
@@ -297,6 +322,31 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     )
   }
 
+  /* This function handles the SQL generation when generators are specified in the
+   * LATERAL VIEW clause. SQL generation of generators specified in projection lists
+   * is handled in projectToSQL.
+   * sample plan :
+   *   +- Project [mycol2#192]
+   *     +- Generate explode(myCol#191), true, false, Some(mytable2), [mycol2#192]
+   *       +- Generate explode(array(array(1, 2, 3))), true, false, Some(mytable), [mycol#191]
+   *         +- MetastoreRelation default, src, None
+   *
+   */
+  private def generateToSQL(plan: Generate): String = {
+    val columnAliases = plan.generatorOutput.map(a => quoteIdentifier(a.name)).mkString(",")
+    val generatorAlias = if (plan.qualifier.isEmpty) "" else plan.qualifier.get
+    val outerClause = if (plan.outer) "OUTER" else ""
+    build(
+      toSQL(plan.child),
+      "LATERAL VIEW",
+      outerClause,
+      plan.generator.sql,
+      quoteIdentifier(generatorAlias),
+      "AS",
+      columnAliases
+    )
+  }
+
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
       Batch("Canonicalizer", FixedPoint(100),
@@ -329,6 +379,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
         case plan @ Project(_,
           _: SubqueryAlias
+            | _: Generate
             | _: Filter
             | _: Join
             | _: MetastoreRelation
