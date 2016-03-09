@@ -51,6 +51,8 @@ class SQLExecutionSuite extends SparkFunSuite {
 
   test("concurrent query execution with fork-join pool (SPARK-13747)") {
     val sc = new SparkContext("local[*]", "test")
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
     try {
       // Should not throw IllegalArgumentException
       (1 to 100).par.foreach { _ =>
