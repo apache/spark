@@ -134,19 +134,18 @@ class Imputer @Since("2.0.0")(override val uid: String)
       case Double.NaN => "NaN"
       case _ => $(missingValue).toString
     }
+    val filteredDF = dataset.select(colName).where(s"$colName != '$missValue'")
     val colStatistics = $(strategy) match {
       case "mean" =>
-        dataset.where(s"$colName != '$missValue'").selectExpr(s"avg($colName)").first().getDouble(0)
+        filteredDF.selectExpr(s"avg($colName)").first().getDouble(0)
       case "median" =>
         // TODO: optimize the sort with quick-select or Percentile(Hive) if required
-        val rddDouble = dataset.select(colName).where(s"$colName != $missValue").rdd
-          .map(_.getDouble(0))
+        val rddDouble = filteredDF.rdd.map(_.getDouble(0))
         rddDouble.sortBy(d => d).zipWithIndex().map {
           case (v, idx) => (idx, v)
         }.lookup(rddDouble.count()/2).head
       case "most" =>
-        val input = dataset.where(s"$colName != $missValue").select(colName).rdd
-          .map(_.getDouble(0))
+        val input = filteredDF.rdd.map(_.getDouble(0))
         val most = input.map(d => (d, 1)).reduceByKey(_ + _).sortBy(-_._2).first()._1
         most
     }
@@ -161,6 +160,13 @@ class Imputer @Since("2.0.0")(override val uid: String)
     val copied = new Imputer(uid)
     copyValues(copied, extra)
   }
+}
+
+@Since("1.6.0")
+object Imputer extends DefaultParamsReadable[Imputer] {
+
+  @Since("1.6.0")
+  override def load(path: String): Imputer = super.load(path)
 }
 
 /**
@@ -214,7 +220,7 @@ class ImputerModel private[ml] (
                 }
               case s: SparseVector =>
                 var iter = 0
-                while(iter < s.values.size) {
+                while(iter < s.values.length) {
                   if (matchMissingValue(s.values(iter))) {
                     s.values(iter) = alternate(s.indices(iter))
                   }

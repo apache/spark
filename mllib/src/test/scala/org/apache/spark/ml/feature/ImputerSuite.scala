@@ -18,7 +18,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
@@ -64,19 +64,23 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
 
   test("Imputer for Vector column with NaN and null") {
     val df = sqlContext.createDataFrame( Seq(
-      (0, Vector(1, 2), Vector(1, 2), Vector(1, 2), Vector(1, 2)),
-      (1, Vector(1, 2), Vector(1, 2), Vector(1, 2), Vector(1, 2)),
-      (2, Vector(3, 2), Vector(3, 2), Vector(3, 2), Vector(3, 2)),
-      (3, Vector(4, 2), Vector(4, 2), Vector(4, 2), Vector(4, 2)),
-      (4, Vector(Double.NaN, 2), Vector(2.25, 2), Vector(3.0, 2), Vector(1.0, 2)),
-      (4, null, Vector(2.25, 2), Vector(3.0, 2), Vector(1.0, 2))
+      (0, Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2)),
+      (1, Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2), Vectors.dense(1, 2)),
+      (2, Vectors.dense(3, 2), Vectors.dense(3, 2), Vectors.dense(3, 2), Vectors.dense(3, 2)),
+      (3, Vectors.dense(4, 2), Vectors.dense(4, 2), Vectors.dense(4, 2), Vectors.dense(4, 2)),
+      (4, Vectors.dense(Double.NaN, 2), Vectors.dense(2.25, 2), Vectors.dense(3.0, 2),
+        Vectors.dense(1.0, 2)),
+      (5, Vectors.sparse(2, Array(0, 1), Array(Double.NaN, 2.0)), Vectors.dense(2.25, 2),
+        Vectors.dense(3.0, 2), Vectors.dense(1.0, 2)),
+      (6, null.asInstanceOf[Vector], Vectors.dense(2.25, 2), Vectors.dense(3.0, 2),
+        Vectors.dense(1.0, 2))
     )).toDF("id", "value", "mean", "median", "most")
     Seq("mean", "median", "most").foreach { strategy =>
       val imputer = new Imputer().setInputCol("value").setOutputCol("out").setStrategy(strategy)
       val model = imputer.fit(df)
       model.transform(df).select(strategy, "out").collect()
-        .foreach { case Row(d1: Double, d2: Double) =>
-          assert(d1 ~== d2 absTol 1e-5, s"Imputer ut error: $d2 should be $d1")
+        .foreach { case Row(v1: Vector, v2: Vector) =>
+          assert(v1 == v2, s"$strategy Imputer ut error: $v2 should be $v1")
         }
     }
   }
@@ -85,10 +89,11 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     val t = new Imputer()
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
+      .setMissingValue(-1.0)
     testDefaultReadWrite(t)
   }
 
-  test("Imputer read/write") {
+  test("ImputerModel read/write") {
     val instance = new ImputerModel(
       "myImputer", Vectors.dense(1.0, 10.0))
       .setInputCol("myInputCol")
