@@ -155,7 +155,7 @@ case class Sort(
      """.stripMargin.trim
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     if (row != null) {
       s"$sorterVariable.insertRow((UnsafeRow)$row.copy());"
     } else {

@@ -68,7 +68,7 @@ trait CodegenSupport extends SparkPlan {
   protected var parent: CodegenSupport = null
 
   /**
-    * Whether this SparkPlan accepts UnsafeRow as input in consumeChild.
+    * Whether this SparkPlan accepts UnsafeRow as input in doConsume.
     */
   def consumeUnsafeRow: Boolean = false
 
@@ -211,7 +211,7 @@ trait CodegenSupport extends SparkPlan {
     *   if (isNull1 || !value2) continue;
     *   # call consume(), which will call parent.doConsume()
     */
-  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
+  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     throw new UnsupportedOperationException
   }
 }
