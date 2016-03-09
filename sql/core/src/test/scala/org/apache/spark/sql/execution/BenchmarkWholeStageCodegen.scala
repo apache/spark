@@ -84,28 +84,28 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     */
   }
 
-  ignore("range/sample") {
-    val N = 50 << 10
-    runBenchmark("range/sample withRep.", N) {
-      sqlContext.range(N).sample(true, 0.8).collect()
+  ignore("range/sample/sum") {
+    val N = 500 << 20
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(true, 0.8).groupBy().sum().collect()
     }
     /*
     Intel(R) Core(TM) i7-5557U CPU @ 3.10GHz
-    range/sample withRep.:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/sample withRep. codegen=false       237 /  322          0.2        4633.6       1.0X
-    range/sample withRep. codegen=true        232 /  302          0.2        4536.5       1.0X
+    range/sample/sum codegen=false         55656 / 56490          9.4         106.2       1.0X
+    range/sample/sum codegen=true          35423 / 35758         14.8          67.6       1.6X
     */
 
-    runBenchmark("range/sample", N) {
-      sqlContext.range(N).sample(false, 0.8).collect()
+    runBenchmark("range/sample/sum", N) {
+      sqlContext.range(N).sample(false, 0.8).groupBy().sum().collect()
     }
     /*
     Intel(R) Core(TM) i7-5557U CPU @ 3.10GHz
-    range/sample:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    range/sample/sum:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
-    range/sample codegen=false                135 /  180          0.4        2628.3       1.0X
-    range/sample codegen=true                 184 /  225          0.3        3592.5       0.7X
+    range/sample/sum codegen=false         16460 / 17161         31.9          31.4       1.0X
+    range/sample/sum codegen=true            4081 / 5390        128.5           7.8       4.0X
     */
   }
 
