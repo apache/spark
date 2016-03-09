@@ -42,7 +42,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 
 class KafkaRDD[
   K: ClassTag,
-  V: ClassTag] private (
+  V: ClassTag] private[kafka] (
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
@@ -58,6 +58,14 @@ class KafkaRDD[
     kafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
       " must be set to false for executor kafka params, else offsets may commit before processing")
+
+  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms", 64)
+  private val cacheInitialCapacity =
+    conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
+  private val cacheMaxCapacity =
+    conf.getInt("spark.streaming.kafka.consumer.cache.maxCapacity", 64)
+  private val cacheLoadFactor =
+    conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
 
   override def getPartitions: Array[Partition] = {
     offsetRanges.zipWithIndex.map { case (o, i) =>
@@ -162,12 +170,10 @@ class KafkaRDD[
 
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-    val pollTimeout = sparkContext.getConf.getLong("spark.streaming.kafka.consumer.poll.ms", 10)
-
     val consumer = {
-      CachedKafkaConsumer.init(sparkContext.getConf)
-      if (context.attemptNumber > 0) {
-        // just in case the prior attempt failure was cache related
+      CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
+      if (context.attemptNumber > 1) {
+        // just in case the prior attempt failures were cache related
         CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
       }
       CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, kafkaParams)
@@ -186,7 +192,21 @@ class KafkaRDD[
   }
 }
 
-object KafkaRDD {
+object KafkaRDD extends Logging {
+  private[kafka] def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
+    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
+    kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+
+    log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
+    kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
+
+    // this probably doesnt matter since executors are manually assigned partitions, but just in case
+    if (null != kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)) {
+      val id = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG) + "-executor"
+      log.warn(s"overriding ${ConsumerConfig.GROUP_ID_CONFIG} to ${id} for executor")
+      kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, id)
+    }
+  }
 
   def apply[
     K: ClassTag,
@@ -196,7 +216,10 @@ object KafkaRDD {
     offsetRanges: Array[OffsetRange],
     preferredHosts: ju.Map[TopicPartition, String]
     ): KafkaRDD[K, V] = {
+    val kp = new ju.HashMap[String, Object](kafkaParams)
+    val osr = offsetRanges.clone()
+    val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
 
-    new KafkaRDD[K, V](sc, kafkaParams, offsetRanges, preferredHosts)
+    new KafkaRDD[K, V](sc, kp, osr, ph)
   }
 }

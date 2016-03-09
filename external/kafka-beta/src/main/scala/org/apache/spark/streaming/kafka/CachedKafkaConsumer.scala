@@ -49,33 +49,50 @@ class CachedKafkaConsumer[K, V] private(
   }
 
   protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
+  protected var nextOffset = -2L
 
   /** Get the record for the given offset, waiting up to timeout ms if IO is necessary.
     * Sequential forward access will use buffers, but random access will be horribly inefficient.
     */
   def get(offset: Long, timeout: Long): ConsumerRecord[K, V] = {
-    if (!buffer.hasNext) { poll(timeout) }
+    log.debug(s"get $groupId $topic $partition nextOffset $nextOffset requested $offset")
+    if (offset != nextOffset) {
+      log.info(s"initial fetch for $groupId $topic $partition $offset")
+      buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
+      seek(offset)
+      poll(timeout)
+    }
 
+    if (!buffer.hasNext()) { poll(timeout) }
+    assert(buffer.hasNext(),
+      s"failed to get records for $groupId $topic $partition $offset after polling for $timeout")
     var record = buffer.next()
 
     if (record.offset != offset) {
       log.info(s"buffer miss for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
+      assert(buffer.hasNext(),
+        s"failed to get records for $groupId $topic $partition $offset after polling for $timeout")
       record = buffer.next()
       assert(record.offset == offset,
-        s"Failed to get offset $offset after seeking to it")
+        s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset")
     }
 
+    nextOffset = offset + 1
     record
   }
 
   private def seek(offset: Long): Unit = {
+    log.debug(s"seeking to $topicPartition $offset")
     consumer.seek(topicPartition, offset)
   }
 
   private def poll(timeout: Long): Unit = {
-    buffer = consumer.poll(timeout).records(topicPartition).iterator
+    val p = consumer.poll(timeout)
+    val r = p.records(topicPartition)
+    log.debug(s"polled ${p.partitions()}  ${r.size}")
+    buffer = r.iterator
   }
 
 }
@@ -89,15 +106,17 @@ object CachedKafkaConsumer extends Logging {
   private var cache: ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]] = null
 
   /** Must be called before get, once per JVM, to configure the cache. Further calls are ignored */
-  def init(conf: SparkConf): Unit = CachedKafkaConsumer.synchronized {
+  def init(
+    initialCapacity: Int,
+    maxCapacity: Int,
+    loadFactor: Float): Unit = CachedKafkaConsumer.synchronized {
     if (null == cache) {
-      val initial = conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
-      val max = conf.getInt("spark.streaming.kafka.consumer.cache.maxCapacity", 64)
-      val load = conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
-      cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]](initial, load, true) {
+      log.info(s"initializing cache $initialCapacity $maxCapacity $loadFactor")
+      cache = new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer[_, _]](
+        initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
           entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer[_, _]]): Boolean = {
-          if (this.size > max) {
+          if (this.size > maxCapacity) {
             entry.getValue.consumer.close()
             true
           } else {
@@ -120,7 +139,8 @@ object CachedKafkaConsumer extends Logging {
       val k = CacheKey(groupId, topic, partition)
       val v = cache.get(k)
       if (null == v) {
-        log.info(s"cache miss for $groupId $topic $partition")
+        log.info(s"cache miss for $k")
+        log.debug(cache.keySet.toString)
         val c = new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
         cache.put(k, c)
         c
@@ -134,6 +154,7 @@ object CachedKafkaConsumer extends Logging {
   def remove(groupId: String, topic: String, partition: Int): Unit =
     CachedKafkaConsumer.synchronized {
       val k = CacheKey(groupId, topic, partition)
+      log.info(s"removing $k from cache")
       val v = cache.get(k)
       if (null != v) {
         v.consumer.close()

@@ -51,7 +51,7 @@ import scala.collection.JavaConverters._
  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
  */
 
-class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
+class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[kafka] (
     _ssc: StreamingContext,
     val driverKafkaParams: ju.Map[String, Object],
     val executorKafkaParams: ju.Map[String, Object],
@@ -61,11 +61,6 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
   import DirectKafkaInputDStream.{
     PartitionAssignment, Assigned, Subscribed, PatternSubscribed, Unassigned
   }
-
-  assert(1 ==
-    driverKafkaParams.get(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG).asInstanceOf[Int],
-    ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG +
-      " must be set to 1 for driver kafka params, because the driver should not consume messages")
 
   assert(false ==
     driverKafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
@@ -83,26 +78,33 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
   }
   consumer()
 
+  // XXX TODO listeners arent much use if they dont have a reference to the consumer
   private def listenerFor(className: String): ConsumerRebalanceListener =
     Class.forName(className)
       .newInstance()
       .asInstanceOf[ConsumerRebalanceListener]
 
   private def assignPartitions(pa: PartitionAssignment): Unit = this.synchronized {
+    import DirectKafkaInputDStream.defaultListener
+
     val reset = driverKafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String]
       .toLowerCase
-    val resetMsg = "Dynamic topic subscriptions won't work well unless " +
-      ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is set"
+    val resetMsg = "Dynamic topic subscriptions may not work well unless " +
+      ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is set or a rebalance listener is configured"
 
     // using kc directly because consumer() calls this method
     pa match {
       case Assigned(partitions) =>
         kc.assign(partitions)
       case Subscribed(topics, className) =>
-        assert(reset == "earliest" || reset == "latest", resetMsg)
+        if (!(reset == "earliest" || reset == "latest" || className != defaultListener)) {
+          log.warn(resetMsg)
+        }
         kc.subscribe(topics, listenerFor(className))
       case PatternSubscribed(pattern, className) =>
-        assert(reset == "earliest" || reset == "latest", resetMsg)
+        if (!(reset == "earliest" || reset == "latest" || className != defaultListener)) {
+          log.warn(resetMsg)
+        }
         kc.subscribe(pattern, listenerFor(className))
       case Unassigned =>
     }
@@ -342,7 +344,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private (
 
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
-         generatedRDDs += t -> KafkaRDD[K, V](
+         generatedRDDs += t -> new KafkaRDD[K, V](
            context.sparkContext, executorKafkaParams, b.map(OffsetRange(_)), getPreferredHosts)
       }
     }
@@ -377,6 +379,15 @@ object DirectKafkaInputDStream extends Logging {
   /** Not yet assigned */
   protected case object Unassigned extends PartitionAssignment
 
+  private def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
+    // wouldn't this be nice to have...  0.10 has it, but with a minimum of 1
+    // log.warn(s"overriding ${ConsumerConfig.MAX_POLL_RECORDS_CONFIG} to 0 for driver")
+    // kafkaParams.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 0: Integer)
+
+    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for driver")
+    kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+  }
+
   def apply[K: ClassTag, V: ClassTag](
     ssc: StreamingContext,
     driverKafkaParams: ju.Map[String, Object],
@@ -384,26 +395,11 @@ object DirectKafkaInputDStream extends Logging {
     preferredHosts: ju.Map[TopicPartition, String]): DirectKafkaInputDStream[K, V] = {
     val dkp = new ju.HashMap[String, Object](driverKafkaParams)
     val ekp = new ju.HashMap[String, Object](executorKafkaParams)
+    val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
 
-    log.warn(s"overriding ${ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG} to 1 for driver")
-    dkp.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 1: Integer)
+    fixKafkaParams(dkp)
+    KafkaRDD.fixKafkaParams(ekp)
 
-    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for driver")
-    dkp.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
-
-    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
-    ekp.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
-
-    log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
-    ekp.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
-
-    // this probably doesnt matter since executors are manually assigned partitions, but just in case
-    if (null != ekp.get(ConsumerConfig.GROUP_ID_CONFIG)) {
-      val id = ekp.get(ConsumerConfig.GROUP_ID_CONFIG) + "-executor"
-      log.warn(s"overriding ${ConsumerConfig.GROUP_ID_CONFIG} to ${id} for executor")
-      ekp.put(ConsumerConfig.GROUP_ID_CONFIG, id)
-    }
-
-    new DirectKafkaInputDStream[K, V](ssc, dkp, ekp, preferredHosts)
+    new DirectKafkaInputDStream[K, V](ssc, dkp, ekp, ph)
   }
 }
