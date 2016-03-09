@@ -1202,6 +1202,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
+    result4.left.get.close()
+    assert(memoryStore.currentUnrollMemoryForThisTask === 0) // close released the unroll memory
   }
 
   test("multiple unrolls by the same thread") {
