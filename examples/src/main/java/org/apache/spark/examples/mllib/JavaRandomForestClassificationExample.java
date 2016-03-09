@@ -85,5 +85,7 @@ public class JavaRandomForestClassificationExample {
     RandomForestModel sameModel = RandomForestModel.load(jsc.sc(),
       "target/tmp/myRandomForestClassificationModel");
     // $example off$
+
+    jsc.stop();
   }
 }

@@ -92,5 +92,7 @@ public class JavaGradientBoostingRegressionExample {
     GradientBoostedTreesModel sameModel = GradientBoostedTreesModel.load(jsc.sc(),
       "target/tmp/myGradientBoostingRegressionModel");
     // $example off$
+
+    jsc.stop();
   }
 }

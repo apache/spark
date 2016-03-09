@@ -22,7 +22,6 @@ import java.util.Iterator;
 import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
-import org.apache.spark.sql.Column;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;

@@ -44,7 +44,8 @@ import static org.apache.spark.unsafe.Platform.*;
  * <p>
  * Note: This is not designed for general use cases, should not be used outside SQL.
  */
-public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable {
+public final class UTF8String implements Comparable<UTF8String>, Externalizable, KryoSerializable,
+  Cloneable {
 
   // These are only updated by readExternal() or read()
   @Nonnull

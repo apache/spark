@@ -55,7 +55,7 @@ public class RequestTimeoutIntegrationSuite {
   private TransportConf conf;
 
   // A large timeout that "shouldn't happen", for the sake of faulty tests not hanging forever.
-  private final int FOREVER = 60 * 1000;
+  private static final int FOREVER = 60 * 1000;
 
   @Before
   public void setUp() throws Exception {
