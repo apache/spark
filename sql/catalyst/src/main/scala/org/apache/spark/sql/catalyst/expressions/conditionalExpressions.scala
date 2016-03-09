@@ -144,7 +144,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
     if (!shouldCodegen) {
       // Fallback to interpreted mode if there are too many branches, as it may reach the
       // 64K limit (limit on bytecode size for a single function).
-      return super.genCode(ctx, ev)
+      return super[CodegenFallback].genCode(ctx, ev)
     }
     // Generate code that looks like:
     //
