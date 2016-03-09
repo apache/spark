@@ -151,6 +151,17 @@ object DecimalType extends AbstractDataType {
   }
 
   /**
+   * Returns if dt is a DecimalType that fits inside a int
+   */
+  def is32BitDecimalType(dt: DataType): Boolean = {
+    dt match {
+      case t: DecimalType =>
+        t.precision <= Decimal.MAX_INT_DIGITS
+      case _ => false
+    }
+  }
+
+  /**
    * Returns if dt is a DecimalType that fits inside a long
    */
   def is64BitDecimalType(dt: DataType): Boolean = {

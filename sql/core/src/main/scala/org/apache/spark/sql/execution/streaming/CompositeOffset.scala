@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.util.Try
-
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance

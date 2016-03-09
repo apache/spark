@@ -186,7 +186,7 @@ Next, we want to count these words.
 JavaPairDStream<String, Integer> pairs = words.mapToPair(
   new PairFunction<String, String, Integer>() {
     @Override public Tuple2<String, Integer> call(String s) {
-      return new Tuple2<String, Integer>(s, 1);
+      return new Tuple2<>(s, 1);
     }
   });
 JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
@@ -872,10 +872,7 @@ val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
-the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
-[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
-/spark/examples/streaming/StatefulNetworkWordCount.scala).
+the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 </div>
 <div data-lang="java" markdown="1">
@@ -2098,7 +2095,7 @@ unifiedStream.print()
 <div data-lang="java" markdown="1">
 {% highlight java %}
 int numStreams = 5;
-List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<JavaPairDStream<String, String>>(numStreams);
+List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<>(numStreams);
 for (int i = 0; i < numStreams; i++) {
   kafkaStreams.add(KafkaUtils.createStream(...));
 }

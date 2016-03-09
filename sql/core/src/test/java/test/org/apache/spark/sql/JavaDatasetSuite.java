@@ -67,7 +67,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
-    return new Tuple2<T1, T2>(t1, t2);
+    return new Tuple2<>(t1, t2);
   }
 
   @Test
@@ -304,15 +304,12 @@ public class JavaDatasetSuite implements Serializable {
     Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
   }
 
-  private <T> Set<T> toSet(List<T> records) {
-    Set<T> set = new HashSet<T>();
-    for (T record : records) {
-      set.add(record);
-    }
-    return set;
+  private static <T> Set<T> toSet(List<T> records) {
+    return new HashSet<>(records);
   }
 
-  private <T> Set<T> asSet(T... records) {
+  @SafeVarargs
+  private static <T> Set<T> asSet(T... records) {
     return toSet(Arrays.asList(records));
   }
 
@@ -468,6 +465,9 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+      if (this == other) return true;
+      if (other == null || getClass() != other.getClass()) return false;
+
       return this.value.equals(((KryoSerializable) other).value);
     }
 
@@ -486,6 +486,9 @@ public class JavaDatasetSuite implements Serializable {
 
     @Override
     public boolean equals(Object other) {
+      if (this == other) return true;
+      if (other == null || getClass() != other.getClass()) return false;
+
       return this.value.equals(((JavaSerializable) other).value);
     }
 
@@ -529,7 +532,7 @@ public class JavaDatasetSuite implements Serializable {
     Encoders.kryo(PrivateClassTest.class);
   }
 
-  public class SimpleJavaBean implements Serializable {
+  public static class SimpleJavaBean implements Serializable {
     private boolean a;
     private int b;
     private byte[] c;
@@ -612,7 +615,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class SimpleJavaBean2 implements Serializable {
+  public static class SimpleJavaBean2 implements Serializable {
     private Timestamp a;
     private Date b;
     private java.math.BigDecimal c;
@@ -634,7 +637,7 @@ public class JavaDatasetSuite implements Serializable {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
 
-      SimpleJavaBean that = (SimpleJavaBean) o;
+      SimpleJavaBean2 that = (SimpleJavaBean2) o;
 
       if (!a.equals(that.a)) return false;
       if (!b.equals(that.b)) return false;
@@ -650,7 +653,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class NestedJavaBean implements Serializable {
+  public static class NestedJavaBean implements Serializable {
     private SimpleJavaBean a;
 
     public SimpleJavaBean getA() {
@@ -745,7 +748,7 @@ public class JavaDatasetSuite implements Serializable {
     ds.collect();
   }
 
-  public class SmallBean implements Serializable {
+  public static class SmallBean implements Serializable {
     private String a;
 
     private int b;
@@ -780,7 +783,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class NestedSmallBean implements Serializable {
+  public static class NestedSmallBean implements Serializable {
     private SmallBean f;
 
     public SmallBean getF() {

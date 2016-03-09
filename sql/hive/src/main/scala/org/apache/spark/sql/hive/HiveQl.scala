@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser._
-import org.apache.spark.sql.catalyst.parser.ParseUtils._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.SparkQl
@@ -81,6 +80,9 @@ private[hive] case class CreateViewAsSelect(
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging {
+  import ParseUtils._
+  import ParserUtils._
+
   protected val nativeCommands = Seq(
     "TOK_ALTERDATABASE_OWNER",
     "TOK_ALTERDATABASE_PROPERTIES",
@@ -583,11 +585,11 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
 
       val (output, schemaLess) = outputClause match {
         case Token("TOK_ALIASLIST", aliases) :: Nil =>
-          (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
-            false)
+          (aliases.map { case Token(name, Nil) =>
+            AttributeReference(cleanIdentifier(name), StringType)() }, false)
         case Token("TOK_TABCOLLIST", attributes) :: Nil =>
           (attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
-            AttributeReference(name, nodeToDataType(dataType))() }, false)
+            AttributeReference(cleanIdentifier(name), nodeToDataType(dataType))() }, false)
         case Nil =>
           (List(AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()), true)

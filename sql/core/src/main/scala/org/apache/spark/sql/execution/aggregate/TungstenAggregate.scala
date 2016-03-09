@@ -46,6 +46,10 @@ case class TungstenAggregate(
 
   require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
 
+  override lazy val allAttributes: Seq[Attribute] =
+    child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
+      aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -116,6 +120,8 @@ case class TungstenAggregate(
   // all the mode of aggregate expressions
   private val modes = aggregateExpressions.map(_.mode).distinct
 
+  override def usedInputs: AttributeSet = inputSet
+
   override def supportCodegen: Boolean = {
     // ImperativeAggregate is not supported right now
     !aggregateExpressions.exists(_.aggregateFunction.isInstanceOf[ImperativeAggregate])
@@ -164,23 +170,24 @@ case class TungstenAggregate(
        """.stripMargin
       ExprCode(ev.code + initVars, isNull, value)
     }
+    val initBufVar = evaluateVariables(bufVars)
 
     // generate variables for output
-    val bufferAttrs = functions.flatMap(_.aggBufferAttributes)
     val (resultVars, genResult) = if (modes.contains(Final) || modes.contains(Complete)) {
       // evaluate aggregate results
       ctx.currentVars = bufVars
       val aggResults = functions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, bufferAttrs).gen(ctx)
+        BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
       }
+      val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
       val resultVars = resultExpressions.map { e =>
         BindReferences.bindReference(e, aggregateAttributes).gen(ctx)
       }
       (resultVars, s"""
-        | ${aggResults.map(_.code).mkString("\n")}
-        | ${resultVars.map(_.code).mkString("\n")}
+        |$evaluateAggResults
+        |${evaluateVariables(resultVars)}
        """.stripMargin)
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // output the aggregate buffer directly
@@ -188,7 +195,7 @@ case class TungstenAggregate(
     } else {
       // no aggregate function, the result should be literals
       val resultVars = resultExpressions.map(_.gen(ctx))
-      (resultVars, resultVars.map(_.code).mkString("\n"))
+      (resultVars, evaluateVariables(resultVars))
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
@@ -196,7 +203,7 @@ case class TungstenAggregate(
       s"""
          | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
-         |   ${bufVars.map(_.code).mkString("\n")}
+         |   $initBufVar
          |
          |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          | }
@@ -204,7 +211,7 @@ case class TungstenAggregate(
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
-       | if (!$initAgg) {
+       | while (!$initAgg) {
        |   $initAgg = true;
        |   $doAgg();
        |
@@ -241,7 +248,7 @@ case class TungstenAggregate(
     }
     s"""
        | // do aggregate
-       | ${aggVals.map(_.code).mkString("\n").trim}
+       | ${evaluateVariables(aggVals)}
        | // update aggregation buffer
        | ${updates.mkString("\n").trim}
      """.stripMargin
@@ -252,8 +259,7 @@ case class TungstenAggregate(
   private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
     .filter(_.isInstanceOf[DeclarativeAggregate])
     .map(_.asInstanceOf[DeclarativeAggregate])
-  private val bufferAttributes = declFunctions.flatMap(_.aggBufferAttributes)
-  private val bufferSchema = StructType.fromAttributes(bufferAttributes)
+  private val bufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
 
   // The name for HashMap
   private var hashMapTerm: String = _
@@ -318,7 +324,7 @@ case class TungstenAggregate(
       val mergeExpr = declFunctions.flatMap(_.mergeExpressions)
       val mergeProjection = newMutableProjection(
         mergeExpr,
-        bufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes),
+        aggregateBufferAttributes ++ declFunctions.flatMap(_.inputAggBufferAttributes),
         subexpressionEliminationEnabled)()
       val joinedRow = new JoinedRow()
 
@@ -380,15 +386,18 @@ case class TungstenAggregate(
       val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).gen(ctx)
       }
+      val evaluateKeyVars = evaluateVariables(keyVars)
       ctx.INPUT_ROW = bufferTerm
-      val bufferVars = bufferAttributes.zipWithIndex.map { case (e, i) =>
+      val bufferVars = aggregateBufferAttributes.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).gen(ctx)
       }
+      val evaluateBufferVars = evaluateVariables(bufferVars)
       // evaluate the aggregation result
       ctx.currentVars = bufferVars
       val aggResults = declFunctions.map(_.evaluateExpression).map { e =>
-        BindReferences.bindReference(e, bufferAttributes).gen(ctx)
+        BindReferences.bindReference(e, aggregateBufferAttributes).gen(ctx)
       }
+      val evaluateAggResults = evaluateVariables(aggResults)
       // generate the final result
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
@@ -396,11 +405,9 @@ case class TungstenAggregate(
         BindReferences.bindReference(e, inputAttrs).gen(ctx)
       }
       s"""
-       ${keyVars.map(_.code).mkString("\n")}
-       ${bufferVars.map(_.code).mkString("\n")}
-       ${aggResults.map(_.code).mkString("\n")}
-       ${resultVars.map(_.code).mkString("\n")}
-
+       $evaluateKeyVars
+       $evaluateBufferVars
+       $evaluateAggResults
        ${consume(ctx, resultVars)}
        """
 
@@ -422,10 +429,7 @@ case class TungstenAggregate(
       val eval = resultExpressions.map{ e =>
         BindReferences.bindReference(e, groupingAttributes).gen(ctx)
       }
-      s"""
-       ${eval.map(_.code).mkString("\n")}
-       ${consume(ctx, eval)}
-       """
+      consume(ctx, eval)
     }
   }
 
@@ -508,8 +512,8 @@ case class TungstenAggregate(
     ctx.currentVars = input
     val hashEval = BindReferences.bindReference(hashExpr, child.output).gen(ctx)
 
-    val inputAttr = bufferAttributes ++ child.output
-    ctx.currentVars = new Array[ExprCode](bufferAttributes.length) ++ input
+    val inputAttr = aggregateBufferAttributes ++ child.output
+    ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
     ctx.INPUT_ROW = buffer
     // TODO: support subexpression elimination
     val evals = updateExpr.map(BindReferences.bindReference(_, inputAttr).gen(ctx))
@@ -557,7 +561,7 @@ case class TungstenAggregate(
      $incCounter
 
      // evaluate aggregate function
-     ${evals.map(_.code).mkString("\n").trim}
+     ${evaluateVariables(evals)}
      // update aggregate buffer
      ${updates.mkString("\n").trim}
      """

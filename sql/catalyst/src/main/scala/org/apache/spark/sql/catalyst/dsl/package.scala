@@ -83,7 +83,7 @@ package object dsl {
     def >= (other: Expression): Predicate = GreaterThanOrEqual(expr, other)
     def === (other: Expression): Predicate = EqualTo(expr, other)
     def <=> (other: Expression): Predicate = EqualNullSafe(expr, other)
-    def !== (other: Expression): Predicate = Not(EqualTo(expr, other))
+    def =!= (other: Expression): Predicate = Not(EqualTo(expr, other))
 
     def in(list: Expression*): Expression = In(expr, list)
 
