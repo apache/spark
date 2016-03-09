@@ -326,7 +326,12 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val generatorAlias = if (plan.qualifier.isEmpty) "" else plan.qualifier.get
     val outerClause = if (plan.outer) "OUTER" else ""
     build(
-      if (plan.child == OneRowRelation) s"(SELECT 1) ${SQLBuilder.newSubqueryName}" else toSQL(plan.child),
+      if (plan.child == OneRowRelation) {
+        s"(SELECT 1) ${SQLBuilder.newSubqueryName}"
+      }
+      else {
+        toSQL(plan.child)
+      },
       "LATERAL VIEW",
       outerClause,
       plan.generator.sql,
@@ -350,7 +355,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       case o => o
     }
 
-    //If Generate is missing the qualifier (its in projection list) , add one here.
+    // If Generate is missing the qualifier (its in projection list) , add one here.
     val planToProcess =
       if (generate.qualifier.isEmpty) {
         generate.copy(qualifier = Some(generatorAlias))
