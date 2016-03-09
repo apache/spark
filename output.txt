@@ -65,10 +65,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-parent_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 43 milliseconds.[0m
+[36mDiscovery completed in 37 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 109 milliseconds.[0m
+[36mRun completed in 94 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -100,7 +100,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 3 Java sources to /Users/sweng/Desktop/spark/tags/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:23 PM [0.563s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:07 PM [0.529s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-test-tags_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -129,10 +129,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-test-tags_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 73 milliseconds.[0m
+[36mDiscovery completed in 57 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 131 milliseconds.[0m
+[36mRun completed in 101 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -179,7 +179,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m      unsafe = (sun.misc.Unsafe) unsafeField.get(null);[0m
 [0m[[33mwarn[0m] [0m                        ^[0m
 [0m[[33mwarn[0m] [0m6 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:25 PM [0.846s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:09 PM [0.800s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-sketch_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -197,7 +197,7 @@ main:
 [INFO] 
 [INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-sketch_2.11 ---
 [INFO] Using zinc server for incremental compilation
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:25 PM [0.047s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:09 PM [0.047s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-sketch_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -209,10 +209,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-sketch_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 92 milliseconds.[0m
+[36mDiscovery completed in 81 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 135 milliseconds.[0m
+[36mRun completed in 129 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -244,7 +244,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 15 Java sources to /Users/sweng/Desktop/spark/launcher/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:28 PM [1.138s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:12 PM [1.120s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-launcher_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -266,7 +266,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 5 Java sources to /Users/sweng/Desktop/spark/launcher/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:31 PM [1.142s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:15 PM [1.103s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-launcher_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -278,10 +278,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-launcher_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 70 milliseconds.[0m
+[36mDiscovery completed in 68 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 139 milliseconds.[0m
+[36mRun completed in 131 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -313,7 +313,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 65 Java sources to /Users/sweng/Desktop/spark/network/common/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:33 PM [1.600s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:18 PM [1.688s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-network-common_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -334,7 +334,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 12 Java sources to /Users/sweng/Desktop/spark/network/common/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:35 PM [1.410s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:19 PM [1.481s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-network-common_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -349,10 +349,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-network-common_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 110 milliseconds.[0m
+[36mDiscovery completed in 112 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 157 milliseconds.[0m
+[36mRun completed in 161 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -384,7 +384,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 16 Java sources to /Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:37 PM [1.147s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:21 PM [1.162s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-network-shuffle_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -405,7 +405,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 10 Java sources to /Users/sweng/Desktop/spark/network/shuffle/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:38 PM [1.204s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:23 PM [1.192s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-network-shuffle_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -417,10 +417,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-network-shuffle_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 70 milliseconds.[0m
+[36mDiscovery completed in 79 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 127 milliseconds.[0m
+[36mRun completed in 139 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -452,7 +452,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 14 Java sources to /Users/sweng/Desktop/spark/unsafe/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:40 PM [0.990s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:24 PM [1.045s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-unsafe_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -473,7 +473,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 1 Scala source and 5 Java sources to /Users/sweng/Desktop/spark/unsafe/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:42 PM [1.971s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:27 PM [2.114s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-unsafe_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -485,10 +485,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-unsafe_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 97 milliseconds.[0m
+[36mDiscovery completed in 108 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 144 milliseconds.[0m
+[36mRun completed in 155 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -533,7 +533,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0mfour warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:49:52 PM [7.554s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:37 PM [7.602s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-core_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -574,7 +574,7 @@ main:
 [0m[[33mwarn[0m] [0m    tc.isRunningLocally();[0m
 [0m[[33mwarn[0m] [0m      ^[0m
 [0m[[33mwarn[0m] [0m3 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:50:02 PM [7.596s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:47 PM [7.683s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-core_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -586,10 +586,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-core_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 2 seconds, 300 milliseconds.[0m
+[36mDiscovery completed in 2 seconds, 359 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 2 seconds, 357 milliseconds.[0m
+[36mRun completed in 2 seconds, 415 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -628,7 +628,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0mtwo warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:50:10 PM [4.501s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:06:55 PM [4.563s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-graphx_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -667,7 +667,7 @@ main:
 [0m[[33mwarn[0m] [0m      val neighborAttrSums = graph.mapReduceTriplets[Int]([0m
 [0m[[33mwarn[0m] [0m                                   ^[0m
 [0m[[33mwarn[0m] [0m6 warnings found[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:50:16 PM [4.593s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:07:01 PM [4.765s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-graphx_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -679,10 +679,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-graphx_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 254 milliseconds.[0m
+[36mDiscovery completed in 310 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 303 milliseconds.[0m
+[36mRun completed in 366 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -739,7 +739,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m8 warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:50:27 PM [9.542s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:07:13 PM [9.961s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -879,7 +879,7 @@ main:
 [0m[[33mwarn[0m] [0m39 warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:50:44 PM [15.897s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:07:31 PM [16.703s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -891,10 +891,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 755 milliseconds.[0m
+[36mDiscovery completed in 855 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 827 milliseconds.[0m
+[36mRun completed in 947 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -979,7 +979,7 @@ Grammar /Users/sweng/Desktop/spark/sql/catalyst/src/main/antlr3/org/apache/spark
 [0m[[33mwarn[0m] [0m  where E is a type-variable:[0m
 [0m[[33mwarn[0m] [0m    E extends Object declared in class Stack[0m
 [0m[[33mwarn[0m] [0m6 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:51:20 PM [32.730s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:08:10 PM [35.481s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-catalyst_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1011,7 +1011,7 @@ main:
 [0m[[33mwarn[0m] [0m            |${e.getStackTraceString}[0m
 [0m[[33mwarn[0m] [0m                 ^[0m
 [0m[[33mwarn[0m] [0mfour warnings found[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:51:36 PM [15.730s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:08:29 PM [18.583s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-catalyst_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1026,10 +1026,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-catalyst_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 1 second, 442 milliseconds.[0m
+[36mDiscovery completed in 2 seconds, 7 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 1 second, 501 milliseconds.[0m
+[36mRun completed in 2 seconds, 77 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1071,7 +1071,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m        if (columnarBatch != null && dataEncoding == Encoding.PLAIN_DICTIONARY) {[0m
 [0m[[33mwarn[0m] [0m                                                             ^[0m
 [0m[[33mwarn[0m] [0m2 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:52:01 PM [21.437s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:08:58 PM [24.531s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-sql_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -1149,7 +1149,7 @@ main:
 [0m[[33mwarn[0m] [0m  where T is a type-variable:[0m
 [0m[[33mwarn[0m] [0m    T extends Object declared in method <T>asSet(T...)[0m
 [0m[[33mwarn[0m] [0m11 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:52:37 PM [33.884s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:09:38 PM [37.031s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-sql_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1161,10 +1161,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-sql_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 2 seconds, 26 milliseconds.[0m
+[36mDiscovery completed in 2 seconds, 270 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 2 seconds, 89 milliseconds.[0m
+[36mRun completed in 2 seconds, 352 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1212,7 +1212,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m5 warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:53:08 PM [26.607s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:10:11 PM [28.420s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-mllib_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -1258,7 +1258,7 @@ main:
 [0m[[33mwarn[0m] [0m  required: List<FreqItemset<String>>[0m
 [0m[[33mwarn[0m] [0m  found:    List[0m
 [0m[[33mwarn[0m] [0m3 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:53:39 PM [30.689s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:10:44 PM [32.408s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-mllib_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1270,7 +1270,7 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-mllib_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 1 second, 446 milliseconds.[0m
+[36mDiscovery completed in 1 second, 582 milliseconds.[0m
 [36mRun starting. Expected test count is: 2[0m
 [32mWord2PhraseSuite:[0m
 [32m- Word2Phrase Trained Model; Set Functions[0m
@@ -1278,7 +1278,7 @@ SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
 SLF4J: Defaulting to no-operation (NOP) logger implementation
 SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
 [32m- Word2PhraseModel Read/Write[0m
-[36mRun completed in 13 seconds, 113 milliseconds.[0m
+[36mRun completed in 13 seconds, 722 milliseconds.[0m
 [36mTotal number of tests run: 2[0m
 [36mSuites: completed 2, aborted 0[0m
 [36mTests: succeeded 2, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1315,7 +1315,7 @@ SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further detail
 [0m[[33mwarn[0m] [0m    sym.annotations.exists(_.tpe =:= unv.typeOf[org.apache.spark.annotation.Experimental])[0m
 [0m[[33mwarn[0m] [0m                             ^[0m
 [0m[[33mwarn[0m] [0mtwo warnings found[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:53:56 PM [2.065s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:02 PM [1.927s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-tools_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1344,10 +1344,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-tools_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 79 milliseconds.[0m
+[36mDiscovery completed in 101 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 159 milliseconds.[0m
+[36mRun completed in 163 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1432,7 +1432,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m16 warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:07 PM [9.059s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:13 PM [9.055s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-hive_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -1482,7 +1482,7 @@ main:
 [0m[[33mwarn[0m] [0m    Complex typedOther = (Complex)other;[0m
 [0m[[33mwarn[0m] [0m                         ^[0m
 [0m[[33mwarn[0m] [0m4 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:27 PM [18.740s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:33 PM [18.994s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-hive_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1494,10 +1494,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-hive_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 876 milliseconds.[0m
+[36mDiscovery completed in 809 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 944 milliseconds.[0m
+[36mRun completed in 865 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1544,7 +1544,7 @@ main:
 [INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-docker-integration-tests_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 4 Scala sources to /Users/sweng/Desktop/spark/docker-integration-tests/target/test-classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:34 PM [3.732s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:40 PM [3.985s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-docker-integration-tests_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1556,10 +1556,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-docker-integration-tests_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 82 milliseconds.[0m
+[36mDiscovery completed in 87 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 133 milliseconds.[0m
+[36mRun completed in 139 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1592,7 +1592,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-repl_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 3 Scala sources to /Users/sweng/Desktop/spark/repl/target/scala-2.11/classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:38 PM [2.421s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:44 PM [2.495s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-repl_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1614,7 +1614,7 @@ main:
 [INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-repl_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 2 Scala sources to /Users/sweng/Desktop/spark/repl/target/scala-2.11/test-classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:43 PM [5.405s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:49 PM [5.191s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-repl_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1626,10 +1626,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-repl_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 97 milliseconds.[0m
+[36mDiscovery completed in 103 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 156 milliseconds.[0m
+[36mRun completed in 162 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1668,10 +1668,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-assembly_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 52 milliseconds.[0m
+[36mDiscovery completed in 48 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 131 milliseconds.[0m
+[36mRun completed in 113 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1701,7 +1701,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-streaming-twitter_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 2 Scala sources to /Users/sweng/Desktop/spark/external/twitter/target/scala-2.11/classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:47 PM [1.233s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:53 PM [1.252s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-twitter_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -1723,7 +1723,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 1 Scala source and 2 Java sources to /Users/sweng/Desktop/spark/external/twitter/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:50 PM [2.526s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:56 PM [2.558s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-twitter_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1735,10 +1735,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-twitter_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 71 milliseconds.[0m
+[36mDiscovery completed in 80 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 127 milliseconds.[0m
+[36mRun completed in 139 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1777,7 +1777,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m  required: List<SparkSinkEvent>[0m
 [0m[[33mwarn[0m] [0m  found:    Object[0m
 [0m[[33mwarn[0m] [0m2 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:53 PM [0.908s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:11:59 PM [0.945s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-flume-sink_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -1800,7 +1800,7 @@ main:
 [INFO] 
 [INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-streaming-flume-sink_2.11 ---
 [INFO] Using zinc server for incremental compilation
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:54 PM [0.046s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:00 PM [0.061s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-flume-sink_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1812,10 +1812,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-flume-sink_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 96 milliseconds.[0m
+[36mDiscovery completed in 115 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 143 milliseconds.[0m
+[36mRun completed in 167 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1847,7 +1847,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 8 Scala sources and 1 Java source to /Users/sweng/Desktop/spark/external/flume/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:54:58 PM [2.671s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:04 PM [2.813s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-flume_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -1876,7 +1876,7 @@ main:
 [0m[[33mwarn[0m] [0mtwo warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:02 PM [3.365s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:08 PM [3.422s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-flume_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -1888,10 +1888,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-flume_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 116 milliseconds.[0m
+[36mDiscovery completed in 115 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 164 milliseconds.[0m
+[36mRun completed in 168 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1948,10 +1948,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-flume-assembly_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 45 milliseconds.[0m
+[36mDiscovery completed in 47 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 121 milliseconds.[0m
+[36mRun completed in 117 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -1981,7 +1981,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-streaming-akka_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 2 Scala sources to /Users/sweng/Desktop/spark/external/akka/target/scala-2.11/classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:06 PM [1.591s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:13 PM [1.687s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-akka_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -2002,7 +2002,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 1 Scala source and 1 Java source to /Users/sweng/Desktop/spark/external/akka/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:09 PM [2.729s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:16 PM [2.766s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-akka_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -2014,7 +2014,7 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-akka_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 89 milliseconds.[0m
+[36mDiscovery completed in 85 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
 [36mRun completed in 147 milliseconds.[0m
@@ -2047,7 +2047,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-streaming-mqtt_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 2 Scala sources to /Users/sweng/Desktop/spark/external/mqtt/target/scala-2.11/classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:11 PM [1.245s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:18 PM [1.269s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-mqtt_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -2069,7 +2069,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 2 Scala sources and 2 Java sources to /Users/sweng/Desktop/spark/external/mqtt/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:15 PM [2.698s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:22 PM [2.835s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-mqtt_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -2081,10 +2081,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-mqtt_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 79 milliseconds.[0m
+[36mDiscovery completed in 84 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 140 milliseconds.[0m
+[36mRun completed in 147 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -2141,10 +2141,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-mqtt-assembly_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 52 milliseconds.[0m
+[36mDiscovery completed in 50 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 121 milliseconds.[0m
+[36mRun completed in 114 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -2174,7 +2174,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-streaming-zeromq_2.11 ---
 [INFO] Using zinc server for incremental compilation
 [0m[[0minfo[0m] [0mCompiling 2 Scala sources to /Users/sweng/Desktop/spark/external/zeromq/target/scala-2.11/classes...[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:18 PM [1.368s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:25 PM [1.423s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-zeromq_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -2196,7 +2196,7 @@ main:
 [0m[[0minfo[0m] [0mCompiling 1 Scala source and 2 Java sources to /Users/sweng/Desktop/spark/external/zeromq/target/scala-2.11/test-classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:22 PM [2.635s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:29 PM [2.693s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-zeromq_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -2208,7 +2208,7 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-zeromq_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 84 milliseconds.[0m
+[36mDiscovery completed in 83 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
 [36mRun completed in 144 milliseconds.[0m
@@ -2243,7 +2243,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[0minfo[0m] [0mCompiling 11 Scala sources and 1 Java source to /Users/sweng/Desktop/spark/external/kafka/target/scala-2.11/classes...[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:26 PM [3.243s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:33 PM [3.319s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-streaming-kafka_2.11 ---
 [INFO] Changes detected - recompiling the module!
@@ -2287,7 +2287,7 @@ main:
 [0m[[33mwarn[0m] [0m7 warnings found[0m
 [0m[[33mwarn[0m] [0mwarning: [options] bootstrap class path not set in conjunction with -source 1.7[0m
 [0m[[33mwarn[0m] [0m1 warning[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:31 PM [4.083s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:38 PM [4.133s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:testCompile (default-testCompile) @ spark-streaming-kafka_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -2299,10 +2299,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-kafka_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 171 milliseconds.[0m
+[36mDiscovery completed in 162 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 223 milliseconds.[0m
+[36mRun completed in 215 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -2425,7 +2425,7 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [0m[[33mwarn[0m] [0m  where T is a type-variable:[0m
 [0m[[33mwarn[0m] [0m    T extends Object declared in class JavaSampleActorReceiver[0m
 [0m[[33mwarn[0m] [0m2 warnings[0m
-[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 5:55:49 PM [15.174s][0m
+[0m[[0minfo[0m] [0mCompile success at Mar 8, 2016 6:12:57 PM [15.545s][0m
 [INFO] 
 [INFO] --- maven-compiler-plugin:3.3:compile (default-compile) @ spark-examples_2.11 ---
 [INFO] Nothing to compile - all classes are up to date
@@ -2454,10 +2454,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-examples_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 399 milliseconds.[0m
+[36mDiscovery completed in 375 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 464 milliseconds.[0m
+[36mRun completed in 441 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -2514,10 +2514,10 @@ main:
 [INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-streaming-kafka-assembly_2.11 ---
 Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; support was removed in 8.0
 [36mDiscovery starting.[0m
-[36mDiscovery completed in 45 milliseconds.[0m
+[36mDiscovery completed in 43 milliseconds.[0m
 [36mRun starting. Expected test count is: 0[0m
 [32mDiscoverySuite:[0m
-[36mRun completed in 106 milliseconds.[0m
+[36mRun completed in 108 milliseconds.[0m
 [36mTotal number of tests run: 0[0m
 [36mSuites: completed 1, aborted 0[0m
 [36mTests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0[0m
@@ -2525,39 +2525,39 @@ Java HotSpot(TM) 64-Bit Server VM warning: ignoring option MaxPermSize=512m; sup
 [INFO] ------------------------------------------------------------------------
 [INFO] Reactor Summary:
 [INFO] 
-[INFO] Spark Project Parent POM ........................... SUCCESS [  2.580 s]
-[INFO] Spark Project Test Tags ............................ SUCCESS [  1.665 s]
-[INFO] Spark Project Sketch ............................... SUCCESS [  1.612 s]
-[INFO] Spark Project Launcher ............................. SUCCESS [  6.203 s]
-[INFO] Spark Project Networking ........................... SUCCESS [  3.981 s]
-[INFO] Spark Project Shuffle Streaming Service ............ SUCCESS [  3.163 s]
-[INFO] Spark Project Unsafe ............................... SUCCESS [  3.711 s]
-[INFO] Spark Project Core ................................. SUCCESS [ 22.681 s]
-[INFO] Spark Project GraphX ............................... SUCCESS [ 11.509 s]
-[INFO] Spark Project Streaming ............................ SUCCESS [ 29.148 s]
-[INFO] Spark Project Catalyst ............................. SUCCESS [ 53.242 s]
-[INFO] Spark Project SQL .................................. SUCCESS [01:01 min]
-[INFO] Spark Project ML Library ........................... SUCCESS [01:13 min]
-[INFO] Spark Project Tools ................................ SUCCESS [  3.452 s]
-[INFO] Spark Project Hive ................................. SUCCESS [ 32.292 s]
-[INFO] Spark Project Docker Integration Tests ............. SUCCESS [  5.092 s]
-[INFO] Spark Project REPL ................................. SUCCESS [  9.520 s]
-[INFO] Spark Project Assembly ............................. SUCCESS [  1.324 s]
-[INFO] Spark Project External Twitter ..................... SUCCESS [  5.456 s]
-[INFO] Spark Project External Flume Sink .................. SUCCESS [  3.402 s]
-[INFO] Spark Project External Flume ....................... SUCCESS [  8.230 s]
-[INFO] Spark Project External Flume Assembly .............. SUCCESS [  1.756 s]
-[INFO] Spark Project External Akka ........................ SUCCESS [  5.376 s]
-[INFO] Spark Project External MQTT ........................ SUCCESS [  5.607 s]
-[INFO] Spark Project External MQTT Assembly ............... SUCCESS [  1.461 s]
-[INFO] Spark Project External ZeroMQ ...................... SUCCESS [  5.725 s]
-[INFO] Spark Project External Kafka ....................... SUCCESS [  8.991 s]
-[INFO] Spark Project Examples ............................. SUCCESS [ 19.054 s]
-[INFO] Spark Project External Kafka Assembly .............. SUCCESS [  0.936 s]
+[INFO] Spark Project Parent POM ........................... SUCCESS [  2.617 s]
+[INFO] Spark Project Test Tags ............................ SUCCESS [  1.522 s]
+[INFO] Spark Project Sketch ............................... SUCCESS [  1.521 s]
+[INFO] Spark Project Launcher ............................. SUCCESS [  6.300 s]
+[INFO] Spark Project Networking ........................... SUCCESS [  4.153 s]
+[INFO] Spark Project Shuffle Streaming Service ............ SUCCESS [  3.215 s]
+[INFO] Spark Project Unsafe ............................... SUCCESS [  3.914 s]
+[INFO] Spark Project Core ................................. SUCCESS [ 22.967 s]
+[INFO] Spark Project GraphX ............................... SUCCESS [ 11.968 s]
+[INFO] Spark Project Streaming ............................ SUCCESS [ 30.585 s]
+[INFO] Spark Project Catalyst ............................. SUCCESS [01:00 min]
+[INFO] Spark Project SQL .................................. SUCCESS [01:08 min]
+[INFO] Spark Project ML Library ........................... SUCCESS [01:18 min]
+[INFO] Spark Project Tools ................................ SUCCESS [  3.263 s]
+[INFO] Spark Project Hive ................................. SUCCESS [ 32.548 s]
+[INFO] Spark Project Docker Integration Tests ............. SUCCESS [  5.418 s]
+[INFO] Spark Project REPL ................................. SUCCESS [  9.441 s]
+[INFO] Spark Project Assembly ............................. SUCCESS [  1.381 s]
+[INFO] Spark Project External Twitter ..................... SUCCESS [  5.591 s]
+[INFO] Spark Project External Flume Sink .................. SUCCESS [  3.666 s]
+[INFO] Spark Project External Flume ....................... SUCCESS [  8.498 s]
+[INFO] Spark Project External Flume Assembly .............. SUCCESS [  1.837 s]
+[INFO] Spark Project External Akka ........................ SUCCESS [  5.545 s]
+[INFO] Spark Project External MQTT ........................ SUCCESS [  5.828 s]
+[INFO] Spark Project External MQTT Assembly ............... SUCCESS [  1.455 s]
+[INFO] Spark Project External ZeroMQ ...................... SUCCESS [  5.866 s]
+[INFO] Spark Project External Kafka ....................... SUCCESS [  9.212 s]
+[INFO] Spark Project Examples ............................. SUCCESS [ 19.241 s]
+[INFO] Spark Project External Kafka Assembly .............. SUCCESS [  0.928 s]
 [INFO] ------------------------------------------------------------------------
 [INFO] BUILD SUCCESS
 [INFO] ------------------------------------------------------------------------
-[INFO] Total time: 06:32 min
-[INFO] Finished at: 2016-03-08T17:55:52-08:00
-[INFO] Final Memory: 79M/1069M
+[INFO] Total time: 06:55 min
+[INFO] Finished at: 2016-03-08T18:12:59-08:00
+[INFO] Final Memory: 79M/1072M
 [INFO] ------------------------------------------------------------------------
