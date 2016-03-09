@@ -380,14 +380,11 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
-    // Eliminate the Projects with empty projectList
-    case p @ Project(projectList, child) if projectList.isEmpty => child
+    // Eliminate no-op Projects
+    case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
 
     // Can't prune the columns on LeafNode
     case p @ Project(_, l: LeafNode) => p
-
-    // Eliminate no-op Projects
-    case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
