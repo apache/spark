@@ -381,6 +381,10 @@ object ColumnPruning extends Rule[LogicalPlan] {
         p
       }
 
+    // Eliminate the child from the Projects with no references to its child
+    case p @ Project(projectList, child) if p.references.intersect(child.outputSet).isEmpty =>
+      Project(projectList, OneRowRelation)
+
     // Can't prune the columns on LeafNode
     case p @ Project(_, l: LeafNode) => p
 
