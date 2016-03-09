@@ -43,6 +43,60 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
+private[sql] object FileSourceStrategy extends Strategy with Logging {
+  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case PhysicalOperation(projects, filters, l@LogicalRelation(files: HadoopFsRelation, _, _)) =>
+      // Filters on this relation fall into four categories based on where we can use them to avoid
+      // reading unneeded data:
+      //  - partition keys only - used to prune directories to read
+      //  - bucket keys only - optionally used to prune files to read
+      //  - keys stored in the data only - optionally used to skip groups of data in files
+      //  - filters that need to be evaluated again after the scan
+      // TODO: PhysicalOperation should just return an ExpressionSet.
+      val filterSet = ExpressionSet(filters)
+
+      // TODO: kinda weird to have to deal w/ resolvers here...
+      val partitionColumns =
+        AttributeSet(l.resolve(files.partitionSchema, files.sqlContext.analyzer.resolver))
+      val partitionKeyFilters =
+        ExpressionSet(filters.filter(_.references.subsetOf(partitionColumns)))
+      logError(s"Pruning directories with: $partitionKeyFilters")
+
+      // TODO: also weird that bucket spec is not a struct type to?
+      val bucketColumns =
+        AttributeSet(
+          files.bucketSpec
+              .map(_.bucketColumnNames)
+              .getOrElse(Nil)
+              .map(l.resolveQuoted(_, files.sqlContext.conf.resolver)
+                    .getOrElse(sys.error(""))))
+
+      // Partition keys are not available in the statistics of the files.
+      val dataFilters = filters.filter(_.references.intersect(partitionColumns).isEmpty)
+
+      // Predicates with both partition keys and attributes need to be evaluated after the scan.
+      val evaluateAfterFilters = filterSet -- partitionKeyFilters -- dataFilters
+
+      // TODO: Should be public filters?
+      val selectedFiles = files.location.listFiles(partitionKeyFilters.toSeq)
+
+      // TODO: move to partition pruning?
+//      logInfo {
+//        val total = t.partitionSpec.partitions.length
+//        val selected = selectedPartitions.length
+//        val percentPruned = (1 - selected.toDouble / total.toDouble) * 100
+//        s"Selected $selected partitions out of $total, pruned $percentPruned% partitions."
+//      }
+
+      val filterAttributes = AttributeSet(evaluateAgain)
+      val requiredExpressions: Seq[NamedExpression] = filterAttributes.toSeq ++ projects
+
+
+      ???
+    case _ => Nil
+  }
+}
+
 /**
  * Replaces generic operations with specific variants that are designed to work with Spark
  * SQL Data Sources.

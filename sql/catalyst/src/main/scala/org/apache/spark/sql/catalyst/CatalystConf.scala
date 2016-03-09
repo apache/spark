@@ -17,8 +17,18 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.analysis._
+
 private[spark] trait CatalystConf {
   def caseSensitiveAnalysis: Boolean
+
+  def resolver: Resolver = {
+    if (caseSensitiveAnalysis) {
+      caseSensitiveResolution
+    } else {
+      caseInsensitiveResolution
+    }
+  }
 }
 
 /**

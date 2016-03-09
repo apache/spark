@@ -459,6 +459,8 @@ trait FileFormat {
       options: Map[String, String]): RDD[InternalRow]
 }
 
+case class FileMetaData(path: String, partitionValues: InternalRow, sizeBytes: Long)
+
 /**
  * An interface for objects capable of enumerating the files that comprise a relation as well
  * as the partitioning characteristics of those files.
@@ -467,6 +469,8 @@ trait FileCatalog {
   def paths: Seq[Path]
 
   def partitionSpec(schema: Option[StructType]): PartitionSpec
+
+  def listFiles(filters: Seq[Expression]): Seq[FileMetaData]
 
   def allFiles(): Seq[FileStatus]
 
@@ -610,6 +614,8 @@ class HDFSFileCatalog(
   }
 
   override def hashCode(): Int = paths.toSet.hashCode()
+
+  override def listFiles(filters: Seq[Expression]): Seq[FileMetaData] = ???
 }
 
 /**
