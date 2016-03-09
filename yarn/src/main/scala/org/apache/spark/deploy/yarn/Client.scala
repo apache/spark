@@ -73,7 +73,6 @@ private[spark] class Client(
   private val yarnConf = new YarnConfiguration(hadoopConf)
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
-  logInfo(s">>>>> is cluster mdoe: ${isClusterMode}")
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {

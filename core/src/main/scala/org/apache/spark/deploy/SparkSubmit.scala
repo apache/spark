@@ -537,6 +537,10 @@ object SparkSubmit {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
+
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
     }
 
     // assure a keytab is available from any place in a JVM
@@ -563,9 +567,6 @@ object SparkSubmit {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
-        if (args.pyFiles != null) {
-          sysProps("spark.submit.pyFiles") = args.pyFiles
-        }
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
       } else if (args.isR) {
         val mainFile = new Path(args.primaryResource).getName
@@ -647,7 +648,7 @@ object SparkSubmit {
       childMainClass: String,
       verbose: Boolean): Unit = {
     // scalastyle:off println
-    if (verbose) {
+    if (true) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
