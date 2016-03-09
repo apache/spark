@@ -170,65 +170,43 @@ private[spark] class MemoryStore(
     if (keepUnrolling) {
       // We successfully unrolled the entirety of this block
       val arrayValues = vector.toArray
-      if (level.deserialized) {
+      val entry = if (level.deserialized) {
         val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-        val acquiredStorageMemory = {
-          if (pendingMemoryReserved == sizeEstimate) {
-            true
-          } else if (pendingMemoryReserved < sizeEstimate) {
-            memoryManager.acquireStorageMemory(blockId, sizeEstimate - pendingMemoryReserved)
-          } else {
-            memoryManager.releaseStorageMemory(pendingMemoryReserved - sizeEstimate)
-            true
-          }
-        }
-        if (acquiredStorageMemory) {
-          memoryManager.synchronized {
-            unrollMemoryMap(currentTaskAttemptId()) -= pendingMemoryReserved
-          }
-          // We acquired enough memory for the block, so go ahead and put it
-          val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
-          entries.synchronized {
-            entries.put(blockId, entry)
-          }
-          logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
-            blockId, Utils.bytesToString(sizeEstimate), Utils.bytesToString(blocksMemoryUsed)))
-          Right(sizeEstimate)
-        } else {
-          Left((pendingMemoryReserved, arrayValues.toIterator))
-        }
+        new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
       } else {
         val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-        val acquiredStorageMemory = {
-          if (pendingMemoryReserved == bytes.limit) {
-            true
-          } else if (pendingMemoryReserved < bytes.limit) {
-            memoryManager.acquireStorageMemory(blockId, bytes.limit - pendingMemoryReserved)
-          } else {
-            memoryManager.releaseStorageMemory(pendingMemoryReserved - bytes.limit)
-            true
-          }
-        }
-        if (acquiredStorageMemory) {
-          memoryManager.synchronized {
-            unrollMemoryMap(currentTaskAttemptId()) -= pendingMemoryReserved
-          }
-          // We acquired enough memory for the block, so go ahead and put it
-          val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
-          entries.synchronized {
-            entries.put(blockId, entry)
-          }
-          logInfo("Block %s stored asb bytes in memory (estimated size %s, free %s)".format(
-            blockId, Utils.bytesToString(bytes.limit), Utils.bytesToString(blocksMemoryUsed)))
-          Right(bytes.limit)
+        new MemoryEntry(bytes, bytes.limit, deserialized = false)
+      }
+      val size = entry.size
+      val acquiredStorageMemory = {
+        if (pendingMemoryReserved == size) {
+          true
+        } else if (pendingMemoryReserved < size) {
+          memoryManager.acquireStorageMemory(blockId, size - pendingMemoryReserved)
         } else {
-          Left((pendingMemoryReserved, arrayValues.toIterator))
+          memoryManager.releaseStorageMemory(pendingMemoryReserved - size)
+          true
         }
+      }
+      if (acquiredStorageMemory) {
+        // We acquired enough memory for the block, so go ahead and put it
+        memoryManager.synchronized {
+          unrollMemoryMap(currentTaskAttemptId()) -= pendingMemoryReserved
+        }
+        entries.synchronized {
+          entries.put(blockId, entry)
+        }
+        val bytesOrValues = if (level.deserialized) "values" else "bytes"
+        logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
+          blockId, bytesOrValues, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+        Right(size)
+      } else {
+        Left((pendingMemoryReserved, arrayValues.toIterator))
       }
     } else {
       // We ran out of space while unrolling the values for this block
       logUnrollFailureMessage(blockId, vector.estimateSize())
-      Left(0L, vector.iterator ++ values)
+      Left(pendingMemoryReserved, vector.iterator ++ values)
     }
   }
 
