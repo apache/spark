@@ -46,6 +46,7 @@ acquire_rat_jar () {
     printf "Our attempt to download rat locally to ${JAR} failed. Please install rat manually.\n"
     exit -1
   fi
+  printf "Done downloading.\n"
 }
 
 # Go to the Airflow project root directory
@@ -72,6 +73,7 @@ mkdir -p ${TRAVIS_CACHE}/lib
     exit 1
 }
 
+echo "Running license checks. This can take a while."
 $java_cmd -jar "$rat_jar" -E "$FWDIR"/.rat-excludes  -d "$FWDIR" > rat-results.txt
 
 if [ $? -ne 0 ]; then
@@ -85,15 +87,19 @@ if test ! -z "$ERRORS"; then
     echo "Could not find Apache license headers in the following files:"
     echo "$ERRORS"
     COUNT=`echo "${ERRORS}" | wc -l`
-    if [ ! -f ${TRAVIS_CACHE}/rat-error-count ]; then
-        echo ${COUNT} > ${TRAVIS_CACHE}/rat-error-count
+    # due to old builds can be removed later
+    rm -rf ${TRAVIS_CACHE}/rat-error-count
+    if [ ! -f ${TRAVIS_CACHE}/rat-error-count-builds ]; then
+        [ "${TRAVIS_PULL_REQUEST}" = "false" ] && echo ${COUNT} > ${TRAVIS_CACHE}/rat-error-count-builds
+        OLD_COUNT=${COUNT}
+    else
+        typeset -i OLD_COUNT=$(cat ${TRAVIS_CACHE}/rat-error-count-builds)
     fi
-    typeset -i OLD_COUNT=$(cat ${TRAVIS_CACHE}/rat-error-count)
     if [ ${COUNT} -gt ${OLD_COUNT} ]; then
-        echo "New missing licenses detected. Please correct them by adding them to to header of your files"
+        echo "New missing licenses (${COUNT} vs ${OLD_COUNT}) detected. Please correct them by adding them to to header of your files"
         exit 1
     else
-        echo ${COUNT} > ${TRAVIS_CACHE}/rat-error-count
+        [ "${TRAVIS_PULL_REQUEST}" = "false" ] && echo ${COUNT} > ${TRAVIS_CACHE}/rat-error-count-builds
     fi
     exit 0
 else
