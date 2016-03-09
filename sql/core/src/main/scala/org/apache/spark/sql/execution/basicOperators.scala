@@ -84,7 +84,7 @@ case class Filter(condition: Expression, child: SparkPlan)
   }
 
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
-  @transient private val notNullAttributes = notNullPreds.flatMap(_.references)
+  private val notNullAttributes = notNullPreds.flatMap(_.references)
 
   override def output: Seq[Attribute] = {
     child.output.map { a =>
