@@ -36,7 +36,7 @@ class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
         NullPropagation,
         ConstantFolding,
         BooleanSimplification,
-        SimplifyFilters) :: Nil
+        PruneFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
