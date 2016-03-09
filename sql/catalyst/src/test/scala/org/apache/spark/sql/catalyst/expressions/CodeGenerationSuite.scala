@@ -58,7 +58,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-13242: complicated case-when expressions") {
+  test("SPARK-13242: case-when expression with large number of branches (or cases)") {
     val cases = 50
     val clauses = 20
 

@@ -137,13 +137,13 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
   }
 
   def shouldCodegen: Boolean = {
-    branches.length < CaseWhen.MAX_NUMBER_OF_SWITCHES
+    branches.length < CaseWhen.MAX_NUM_CASES_FOR_CODEGEN
   }
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     if (!shouldCodegen) {
-      // Fallback to interpreted mode if there are too many branches, or it may reach the
-      // 64K limit (number of bytecode for single Java method).
+      // Fallback to interpreted mode if there are too many branches, as it may reach the
+      // 64K limit (limit on bytecode size for a single function).
       return super.genCode(ctx, ev)
     }
     // Generate code that looks like:
@@ -215,7 +215,7 @@ case class CaseWhen(branches: Seq[(Expression, Expression)], elseValue: Option[E
 object CaseWhen {
 
   // The maxium number of switches supported with codegen.
-  val MAX_NUMBER_OF_SWITCHES = 20
+  val MAX_NUM_CASES_FOR_CODEGEN = 20
 
   def apply(branches: Seq[(Expression, Expression)], elseValue: Expression): CaseWhen = {
     CaseWhen(branches, Option(elseValue))
