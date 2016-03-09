@@ -100,13 +100,21 @@ private[spark] class MemoryStore(
    */
   def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    // Work on a duplicate - since the original input might be used elsewhere.
-    lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
-    val putSuccess = tryToPut(blockId, () => bytes, size, deserialized = false)
-    if (putSuccess) {
+    if (acquireStorageMemory(blockId, size)) {
+      // We acquired enough memory for the block, so go ahead and put it
+      // Work on a duplicate - since the original input might be used elsewhere.
+      val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
       assert(bytes.limit == size)
+      val entry = new MemoryEntry(bytes, size, deserialized = false)
+      entries.synchronized {
+        entries.put(blockId, entry)
+      }
+      logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
+        blockId, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+      true
+    } else {
+      false
     }
-    putSuccess
   }
 
   /**
@@ -215,14 +223,42 @@ private[spark] class MemoryStore(
         // Values are fully unrolled in memory, so store them as an array
         if (level.deserialized) {
           val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-          if (tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)) {
+          val tryToPutResult = {
+            if (acquireStorageMemory(blockId, sizeEstimate)) {
+              // We acquired enough memory for the block, so go ahead and put it
+              val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
+              entries.synchronized {
+                entries.put(blockId, entry)
+              }
+              logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
+                blockId, Utils.bytesToString(sizeEstimate), Utils.bytesToString(blocksMemoryUsed)))
+              true
+            } else {
+              false
+            }
+          }
+          if (tryToPutResult) {
             Right(sizeEstimate)
           } else {
             Left(arrayValues.toIterator)
           }
         } else {
           val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-          if (tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)) {
+          val tryToPutResult = {
+            if (acquireStorageMemory(blockId, bytes.limit)) {
+              // We acquired enough memory for the block, so go ahead and put it
+              val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
+              entries.synchronized {
+                entries.put(blockId, entry)
+              }
+              logInfo("Block %s stored asb bytes in memory (estimated size %s, free %s)".format(
+                blockId, Utils.bytesToString(bytes.limit), Utils.bytesToString(blocksMemoryUsed)))
+              true
+            } else {
+              false
+            }
+          }
+          if (tryToPutResult) {
             Right(bytes.limit())
           } else {
             Left(arrayValues.toIterator)
@@ -288,45 +324,18 @@ private[spark] class MemoryStore(
     blockId.asRDDId.map(_.rddId)
   }
 
-  /**
-   * Try to put in a set of values, if we can free up enough space. The value should either be
-   * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
-   * must also be passed by the caller.
-   *
-   * @return whether put was successful.
-   */
-  private def tryToPut(
-      blockId: BlockId,
-      value: () => Any,
-      size: Long,
-      deserialized: Boolean): Boolean = {
-    val acquiredEnoughStorageMemory = {
-      // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
-      // task.
-      memoryManager.synchronized {
-        // Note: if we have previously unrolled this block successfully, then pending unroll
-        // memory should be non-zero. This is the amount that we already reserved during the
-        // unrolling process. In this case, we can just reuse this space to cache our block.
-        // The synchronization on `memoryManager` here guarantees that the release and acquire
-        // happen atomically. This relies on the assumption that all memory acquisitions are
-        // synchronized on the same lock.
-        releasePendingUnrollMemoryForThisTask()
-        memoryManager.acquireStorageMemory(blockId, size)
-      }
-    }
-
-    if (acquiredEnoughStorageMemory) {
-      // We acquired enough memory for the block, so go ahead and put it
-      val entry = new MemoryEntry(value(), size, deserialized)
-      entries.synchronized {
-        entries.put(blockId, entry)
-      }
-      val valuesOrBytes = if (deserialized) "values" else "bytes"
-      logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
-        blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
-      true
-    } else {
-      false
+  private def acquireStorageMemory(blockId: BlockId, size: Long): Boolean = {
+    // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
+    // task.
+    memoryManager.synchronized {
+      // Note: if we have previously unrolled this block successfully, then pending unroll
+      // memory should be non-zero. This is the amount that we already reserved during the
+      // unrolling process. In this case, we can just reuse this space to cache our block.
+      // The synchronization on `memoryManager` here guarantees that the release and acquire
+      // happen atomically. This relies on the assumption that all memory acquisitions are
+      // synchronized on the same lock.
+      releasePendingUnrollMemoryForThisTask()
+      memoryManager.acquireStorageMemory(blockId, size)
     }
   }
 
