@@ -53,22 +53,16 @@ object OuterScopes {
         // `INSTANCE()` method to get the single instance of class `$read`. Then call `$iw()`
         // method multiply times to get the single instance of the inner most `$iw` class.
         case REPLClass(baseClassName) =>
-          // Count how many `$$iw`s at the end of outer class name.
-          val nestedLevel = (outerClassName.length - baseClassName.length) / 4
-
           val objClass = Utils.classForName(baseClassName + "$")
           val objInstance = objClass.getField("MODULE$").get(null)
           val baseInstance = objClass.getMethod("INSTANCE").invoke(objInstance)
+          val baseClass = Utils.classForName(baseClassName)
 
-          var i = 0
-          var clsName = baseClassName
+          var getter = iwGetter(baseClass)
           var obj = baseInstance
-          while (i < nestedLevel) {
-            val cls = Utils.classForName(clsName)
-            obj = cls.getMethod("$iw").invoke(obj)
-
-            clsName += "$$iw"
-            i += 1
+          while (getter != null) {
+            obj = getter.invoke(obj)
+            getter = iwGetter(getter.getReturnType)
           }
 
           outerScopes.putIfAbsent(outerClassName, obj)
@@ -77,6 +71,14 @@ object OuterScopes {
       }
     } else {
       outer
+    }
+  }
+
+  private def iwGetter(cls: Class[_]) = {
+    try {
+      cls.getMethod("$iw")
+    } catch {
+      case _: NoSuchMethodException => null
     }
   }
 
