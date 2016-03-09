@@ -67,7 +67,7 @@ public class JavaDatasetSuite implements Serializable {
   }
 
   private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
-    return new Tuple2<T1, T2>(t1, t2);
+    return new Tuple2<>(t1, t2);
   }
 
   @Test
