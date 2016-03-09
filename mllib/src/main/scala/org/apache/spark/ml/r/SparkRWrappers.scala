@@ -159,7 +159,7 @@ private[r] object SparkRWrappers {
       case None =>
         val summary = lastModel.asInstanceOf[NaiveBayesModel].summary
         summary.predictions.select(summary.labelCol)
-          .distinct().map(_.getDouble(0)).collect().sorted.map(_.toString)
+          .distinct().collect().map(_.getDouble(0)).sorted.map(_.toString)
     }
   }
 
