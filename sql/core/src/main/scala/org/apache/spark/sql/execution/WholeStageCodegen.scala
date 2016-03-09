@@ -174,20 +174,21 @@ trait CodegenSupport extends SparkPlan {
       input: Seq[ExprCode],
       row: String = null): String = {
     ctx.freshNamePrefix = variablePrefix
+    val realUsedInput =
+      if (row != null && consumeUnsafeRow) {
+        // If this SparkPlan consumes UnsafeRow and there is an UnsafeRow passed in,
+        // we don't need to evaluate inputs because doConsume will directly consume the UnsafeRow.
+        AttributeSet.empty
+      } else {
+        usedInputs
+      }
+
     val inputVars =
       if (row != null) {
-        if (!consumeUnsafeRow) {
-          // If this SparkPlan can't consume UnsafeRow and there is an UnsafeRow,
-          // we extract the columns from the row and call doConsume.
-          ctx.currentVars = null
-          ctx.INPUT_ROW = row
-          child.output.zipWithIndex.map { case (attr, i) =>
-            BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
-          }
-        } else {
-          // If this SparkPlan consumes UnsafeRow and there is an UnsafeRow,
-          // we don't need to unpack variables from the row.
-          Seq.empty
+        ctx.currentVars = null
+        ctx.INPUT_ROW = row
+        child.output.zipWithIndex.map { case (attr, i) =>
+          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
         }
       } else {
         input
@@ -195,7 +196,7 @@ trait CodegenSupport extends SparkPlan {
     s"""
        |
        |/*** CONSUME: ${toCommentSafeString(this.simpleString)} */
-       |${evaluateRequiredVariables(child.output, inputVars, usedInputs)}
+       |${evaluateRequiredVariables(child.output, inputVars, realUsedInput)}
        |${doConsume(ctx, inputVars, row)}
      """.stripMargin
   }
@@ -245,19 +246,12 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
     val input = ctx.freshName("input")
     // Right now, InputAdapter is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-    val row = ctx.freshName("row")
 
-    // If the parent of this InputAdapter can't consume UnsafeRow,
-    // we unpack variables from the row.
-    val columns: Seq[ExprCode] = if (!this.parent.consumeUnsafeRow) {
-      val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
-      ctx.INPUT_ROW = row
-      ctx.currentVars = null
-      exprs.map(_.gen(ctx))
-    } else {
-      // If the parent consumes UnsafeRow, we don't need to unpack the row.
-      Seq.empty
-    }
+    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val row = ctx.freshName("row")
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns = exprs.map(_.gen(ctx))
     s"""
        | while (!shouldStop() && $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
