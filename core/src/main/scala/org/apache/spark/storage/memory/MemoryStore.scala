@@ -170,6 +170,7 @@ private[spark] class MemoryStore(
     if (keepUnrolling) {
       // We successfully unrolled the entirety of this block
       val arrayValues = vector.toArray
+      vector = null
       val entry = if (level.deserialized) {
         val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
         new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
