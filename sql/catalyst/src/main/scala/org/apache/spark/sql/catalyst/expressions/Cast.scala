@@ -925,7 +925,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression {
 
     (c, evPrim, evNull) =>
       s"""
-        final $rowClass $result = new $rowClass(${fieldsCasts.size});
+        final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
         $fieldsEvalCode
         $evPrim = $result.copy();

@@ -19,6 +19,7 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Arrays;
 
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.HashPartitioner;
@@ -54,7 +55,7 @@ public class UnsafeInMemorySorterSuite {
       mock(PrefixComparator.class),
       100);
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
-    assert(!iter.hasNext());
+    Assert.assertFalse(iter.hasNext());
   }
 
   @Test

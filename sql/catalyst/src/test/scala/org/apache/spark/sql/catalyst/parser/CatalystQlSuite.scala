@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -200,6 +201,17 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
     parser.parsePlan("select sum(product + 1) over (partition by (product + (1)) order by 2) " +
       "from windowData")
+  }
+
+  test("very long AND/OR expression") {
+    val equals = (1 to 1000).map(x => s"$x == $x")
+    val expr = parser.parseExpression(equals.mkString(" AND "))
+    assert(expr.isInstanceOf[And])
+    assert(expr.collect( { case EqualTo(_, _) => true } ).size == 1000)
+
+    val expr2 = parser.parseExpression(equals.mkString(" OR "))
+    assert(expr2.isInstanceOf[Or])
+    assert(expr2.collect( { case EqualTo(_, _) => true } ).size == 1000)
   }
 
   test("subquery") {

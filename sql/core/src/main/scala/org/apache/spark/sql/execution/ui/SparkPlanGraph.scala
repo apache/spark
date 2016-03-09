@@ -21,7 +21,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.execution.{InputAdapter, SparkPlanInfo, WholeStageCodegen}
+import org.apache.commons.lang3.StringEscapeUtils
+
+import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
@@ -73,36 +75,40 @@ private[sql] object SparkPlanGraph {
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
       parent: SparkPlanGraphNode,
       subgraph: SparkPlanGraphCluster): Unit = {
-    if (planInfo.nodeName == classOf[WholeStageCodegen].getSimpleName) {
-      val cluster = new SparkPlanGraphCluster(
-        nodeIdGenerator.getAndIncrement(),
-        planInfo.nodeName,
-        planInfo.simpleString,
-        mutable.ArrayBuffer[SparkPlanGraphNode]())
-      nodes += cluster
-      buildSparkPlanGraphNode(
-        planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster)
-    } else if (planInfo.nodeName == classOf[InputAdapter].getSimpleName) {
-      buildSparkPlanGraphNode(planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null)
-    } else {
-      val metrics = planInfo.metrics.map { metric =>
-        SQLPlanMetric(metric.name, metric.accumulatorId,
-          SQLMetrics.getMetricParam(metric.metricParam))
-      }
-      val node = new SparkPlanGraphNode(
-        nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
-        planInfo.simpleString, planInfo.metadata, metrics)
-      if (subgraph == null) {
-        nodes += node
-      } else {
-        subgraph.nodes += node
-      }
+    planInfo.nodeName match {
+      case "WholeStageCodegen" =>
+        val cluster = new SparkPlanGraphCluster(
+          nodeIdGenerator.getAndIncrement(),
+          planInfo.nodeName,
+          planInfo.simpleString,
+          mutable.ArrayBuffer[SparkPlanGraphNode]())
+        nodes += cluster
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster)
+      case "InputAdapter" =>
+        buildSparkPlanGraphNode(planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null)
+      case "Subquery" if subgraph != null =>
+        // Subquery should not be included in WholeStageCodegen
+        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null)
+      case _ =>
+        val metrics = planInfo.metrics.map { metric =>
+          SQLPlanMetric(metric.name, metric.accumulatorId,
+            SQLMetrics.getMetricParam(metric.metricParam))
+        }
+        val node = new SparkPlanGraphNode(
+          nodeIdGenerator.getAndIncrement(), planInfo.nodeName,
+          planInfo.simpleString, planInfo.metadata, metrics)
+        if (subgraph == null) {
+          nodes += node
+        } else {
+          subgraph.nodes += node
+        }
 
-      if (parent != null) {
-        edges += SparkPlanGraphEdge(node.id, parent.id)
-      }
-      planInfo.children.foreach(
-        buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph))
+        if (parent != null) {
+          edges += SparkPlanGraphEdge(node.id, parent.id)
+        }
+        planInfo.children.foreach(
+          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph))
     }
   }
 }
@@ -132,16 +138,14 @@ private[ui] class SparkPlanGraphNode(
     }
 
     if (values.nonEmpty) {
-      // If there are metrics, display each entry in a separate line. We should use an escaped
-      // "\n" here to follow the dot syntax.
-      //
+      // If there are metrics, display each entry in a separate line.
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      builder ++= "\\n \\n"
-      builder ++= values.mkString("\\n")
+      builder ++= "\n \n"
+      builder ++= values.mkString("\n")
     }
 
-    s"""  $id [label="${builder.toString()}"];"""
+    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
@@ -158,7 +162,7 @@ private[ui] class SparkPlanGraphCluster(
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     s"""
        |  subgraph cluster${id} {
-       |    label=${name};
+       |    label="${StringEscapeUtils.escapeJava(name)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
      """.stripMargin

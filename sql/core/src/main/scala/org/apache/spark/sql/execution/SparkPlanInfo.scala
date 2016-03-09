@@ -36,11 +36,8 @@ class SparkPlanInfo(
 private[sql] object SparkPlanInfo {
 
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
-    val children = plan match {
-      case WholeStageCodegen(child, _) => child :: Nil
-      case InputAdapter(child) => child :: Nil
-      case plan => plan.children
-    }
+
+    val children = plan.children ++ plan.subqueries
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id,
         Utils.getFormattedClassName(metric.param))

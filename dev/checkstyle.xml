@@ -49,7 +49,7 @@
     <property name="fileExtensions" value="java, properties, xml"/>
 
     <module name="SuppressionFilter">
-      <property name="file" value="checkstyle-suppressions.xml"/>
+      <property name="file" value="dev/checkstyle-suppressions.xml"/>
     </module>
 
     <!-- Checks for whitespace                               -->
@@ -166,5 +166,6 @@
             <property name="exceptionVariableName" value="expected"/>
         </module>
         <module name="CommentsIndentation"/>
+        <module name="UnusedImports"/>
     </module>
 </module>

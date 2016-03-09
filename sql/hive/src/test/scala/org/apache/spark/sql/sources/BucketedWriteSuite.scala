@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.net.URI
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -55,7 +56,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
   test("write bucketed data to unsupported data source") {
     val df = Seq(Tuple1("a"), Tuple1("b")).toDF("i")
-    intercept[AnalysisException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
+    intercept[SparkException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
   }
 
   test("write bucketed data to non-hive-table or existing hive table") {
