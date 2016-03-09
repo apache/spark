@@ -122,6 +122,8 @@ public class TransportClientFactorySuite {
     for (TransportClient client : clients) {
       client.close();
     }
+
+    factory.close();
   }
 
   @Test
