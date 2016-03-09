@@ -73,9 +73,8 @@ object AlterTableCommandParser {
     node match {
       case Token("TOK_PARTSPEC", partitions) =>
         partitions.map {
-          // Note: sometimes there's an equal sign between the key and the value
-          // (e.g. drop partitions). We should figure out why...
-          case Token("TOK_PARTVAL", ident :: Token("=", Nil) :: constant :: Nil) =>
+          // Note: sometimes there's a "=", "<" or ">" between the key and the value
+          case Token("TOK_PARTVAL", ident :: conj :: constant :: Nil) =>
             (cleanAndUnquoteString(ident.text), cleanAndUnquoteString(constant.text))
           case Token("TOK_PARTVAL", ident :: constant :: Nil) =>
             (cleanAndUnquoteString(ident.text), cleanAndUnquoteString(constant.text))
