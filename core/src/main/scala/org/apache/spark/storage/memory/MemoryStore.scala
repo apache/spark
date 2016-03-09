@@ -100,7 +100,7 @@ private[spark] class MemoryStore(
    */
   def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    if (acquireStorageMemory(blockId, size)) {
+    if (memoryManager.acquireStorageMemory(blockId, size)) {
       // We acquired enough memory for the block, so go ahead and put it
       // Work on a duplicate - since the original input might be used elsewhere.
       val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
@@ -190,7 +190,21 @@ private[spark] class MemoryStore(
       val arrayValues = vector.toArray
       if (level.deserialized) {
         val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-        if (acquireStorageMemory(blockId, sizeEstimate)) {
+        val acquiredStorageMemory = {
+          // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
+          // task.
+          memoryManager.synchronized {
+            // Note: if we have previously unrolled this block successfully, then pending unroll
+            // memory should be non-zero. This is the amount that we already reserved during the
+            // unrolling process. In this case, we can just reuse this space to cache our block.
+            // The synchronization on `memoryManager` here guarantees that the release and acquire
+            // happen atomically. This relies on the assumption that all memory acquisitions are
+            // synchronized on the same lock.
+            releasePendingUnrollMemoryForThisTask()
+            memoryManager.acquireStorageMemory(blockId, sizeEstimate)
+          }
+        }
+        if (acquiredStorageMemory) {
           // We acquired enough memory for the block, so go ahead and put it
           val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
           entries.synchronized {
@@ -204,7 +218,21 @@ private[spark] class MemoryStore(
         }
       } else {
         val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-        if (acquireStorageMemory(blockId, bytes.limit)) {
+        val acquiredStorageMemory = {
+          // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
+          // task.
+          memoryManager.synchronized {
+            // Note: if we have previously unrolled this block successfully, then pending unroll
+            // memory should be non-zero. This is the amount that we already reserved during the
+            // unrolling process. In this case, we can just reuse this space to cache our block.
+            // The synchronization on `memoryManager` here guarantees that the release and acquire
+            // happen atomically. This relies on the assumption that all memory acquisitions are
+            // synchronized on the same lock.
+            releasePendingUnrollMemoryForThisTask()
+            memoryManager.acquireStorageMemory(blockId, bytes.limit)
+          }
+        }
+        if (acquiredStorageMemory) {
           // We acquired enough memory for the block, so go ahead and put it
           val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
           entries.synchronized {
@@ -277,21 +305,6 @@ private[spark] class MemoryStore(
    */
   private def getRddId(blockId: BlockId): Option[Int] = {
     blockId.asRDDId.map(_.rddId)
-  }
-
-  private def acquireStorageMemory(blockId: BlockId, size: Long): Boolean = {
-    // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
-    // task.
-    memoryManager.synchronized {
-      // Note: if we have previously unrolled this block successfully, then pending unroll
-      // memory should be non-zero. This is the amount that we already reserved during the
-      // unrolling process. In this case, we can just reuse this space to cache our block.
-      // The synchronization on `memoryManager` here guarantees that the release and acquire
-      // happen atomically. This relies on the assumption that all memory acquisitions are
-      // synchronized on the same lock.
-      releasePendingUnrollMemoryForThisTask()
-      memoryManager.acquireStorageMemory(blockId, size)
-    }
   }
 
   /**
