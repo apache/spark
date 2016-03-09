@@ -348,7 +348,7 @@ private[spark]
 class GapSampling(
     f: Double,
     rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) {
+    epsilon: Double = RandomSampler.rngEpsilon) extends Serializable {
 
   require(f > 0.0  &&  f < 1.0, s"Sampling fraction ($f) must reside on open interval (0, 1)")
   require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
@@ -479,7 +479,7 @@ private[spark]
 class GapSamplingReplacement(
     val f: Double,
     val rng: Random = RandomSampler.newDefaultRNG,
-    epsilon: Double = RandomSampler.rngEpsilon) extends PoissonGE {
+    epsilon: Double = RandomSampler.rngEpsilon) extends PoissonGE with Serializable {
 
   require(f > 0.0, s"Sampling fraction ($f) must be > 0")
   require(epsilon > 0.0, s"epsilon ($epsilon) must be > 0")
