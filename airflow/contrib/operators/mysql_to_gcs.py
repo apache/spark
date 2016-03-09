@@ -1,11 +1,13 @@
 import json
 import logging
+import time
 
 from airflow.contrib.hooks.gcs_hook import GoogleCloudStorageHook
 from airflow.hooks import MySqlHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
 from collections import OrderedDict
+from datetime import date, datetime
 from MySQLdb.constants import FIELD_TYPE
 from tempfile import NamedTemporaryFile
 
@@ -110,7 +112,10 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
         tmp_file_handles = { self.filename.format(file_no): tmp_file_handle }
 
         for row in cursor:
+            # Convert datetime objects to utc seconds
+            row = map(lambda v: time.mktime(v.timetuple()) if type(v) in (datetime, date) else v, row)
             row_dict = dict(zip(schema, row))
+
             # TODO validate that row isn't > 2MB. BQ enforces a hard row size of 2MB.
             json.dump(row_dict, tmp_file_handle)
 
@@ -139,7 +144,10 @@ class MySqlToGoogleCloudStorageOperator(BaseOperator):
             # See PEP 249 for details about the description tuple.
             field_name = field[0]
             field_type = self.type_map(field[1])
-            field_mode = 'NULLABLE' if field[6] else 'REQUIRED'
+            # Always allow TIMESTAMP to be nullable. MySQLdb returns None types
+            # for required fields because some MySQL timestamps can't be
+            # represented by Python's datetime (e.g. 0000-00-00 00:00:00).
+            field_mode = 'NULLABLE' if field[6] or field_type == 'TIMESTAMP' else 'REQUIRED'
             schema.append({
                 'name': field_name,
                 'type': field_type,
