@@ -453,13 +453,13 @@ object SparkSubmit {
         sysProp = "spark.driver.extraLibraryPath"),
 
       // Yarn only
-      OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
+      OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
-      OptionAssigner(args.files, YARN, CLIENT, sysProp = "spark.yarn.dist.files"),
-      OptionAssigner(args.archives, YARN, CLIENT, sysProp = "spark.yarn.dist.archives"),
-      OptionAssigner(args.principal, YARN, CLIENT, sysProp = "spark.yarn.principal"),
-      OptionAssigner(args.keytab, YARN, CLIENT, sysProp = "spark.yarn.keytab"),
+      OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
+      OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
+      OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.principal"),
+      OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
@@ -470,10 +470,10 @@ object SparkSubmit {
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.files"),
-      OptionAssigner(args.jars, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.jars, STANDALONE | MESOS | YARN, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE | MESOS | YARN, CLUSTER,
         sysProp = "spark.driver.memory"),
-      OptionAssigner(args.driverCores, STANDALONE | MESOS, CLUSTER,
+      OptionAssigner(args.driverCores, STANDALONE | MESOS | YARN, CLUSTER,
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
@@ -648,7 +648,7 @@ object SparkSubmit {
       childMainClass: String,
       verbose: Boolean): Unit = {
     // scalastyle:off println
-    if (true) {
+    if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       printStream.println(s"System properties:\n${sysProps.mkString("\n")}")
