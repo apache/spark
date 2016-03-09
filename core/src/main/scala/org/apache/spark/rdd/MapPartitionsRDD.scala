@@ -38,7 +38,9 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     val input = firstParent[T].iterator(split, context)
     // Set the ID of the RDD and partition being processed. We need to do this per
     // element since we chain the iterator transformations together
-    val data = input.map{x => context.setRDDPartitionInfo(id, split.index); x}
+    val data = input.map{x =>
+      context.setRDDPartitionInfo(id, split.index, input.isEmpty)
+      x}
     f(context, split.index, data)
   }
 

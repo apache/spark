@@ -58,7 +58,7 @@ private[spark] class ResultTask[T, U](
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
-  override def runTask(context: TaskContext): (U, Boolean) = {
+  override def runTask(context: TaskContext): U = {
     // Deserialize the RDD and the func using the broadcast variables.
     val deserializeStartTime = System.currentTimeMillis()
     val ser = SparkEnv.get.closureSerializer.newInstance()
@@ -69,8 +69,7 @@ private[spark] class ResultTask[T, U](
     metrics = Some(context.taskMetrics)
     val itr = rdd.iterator(partition, context)
     val result = func(context, itr)
-    val computedFullPartition = itr.isEmpty || rdd.storageLevel != StorageLevel.NONE
-    (result, computedFullPartition)
+    result
   }
 
   // This is only callable on the driver side.

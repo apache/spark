@@ -223,7 +223,7 @@ private[spark] class Executor(
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
         var threwException = true
-        val (value, readFullPartition) = try {
+        val value = try {
           val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = attemptNumber,
@@ -278,7 +278,7 @@ private[spark] class Executor(
         }
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
-        val accumUpdates = task.collectAccumulatorUpdates(taskFailed = false, readFullPartition)
+        val accumUpdates = task.collectAccumulatorUpdates(taskFailed = false)
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
@@ -331,7 +331,7 @@ private[spark] class Executor(
                 m.setExecutorRunTime(System.currentTimeMillis() - taskStart)
                 m.setJvmGCTime(computeTotalGcTime() - startGCTime)
               }
-              task.collectAccumulatorUpdates(taskFailed = true, readFullPartition = false)
+              task.collectAccumulatorUpdates(taskFailed = true)
             } else {
               Seq.empty[AccumulableInfo]
             }

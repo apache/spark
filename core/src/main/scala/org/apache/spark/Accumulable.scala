@@ -124,7 +124,7 @@ class Accumulable[R, T] private[spark] (
 
   @volatile @transient private var value_ : R = initialValue // Current value on driver
   // For consistent accumulators pending and processed updates
-  @volatile @transient private[spark] var pending = new mutable.HashMap[(Int, Int), R]()
+  @volatile @transient private[spark] var pending = new mutable.HashMap[(Int, Int), (R, Boolean)]()
   @volatile @transient private var processed = new mutable.HashMap[Int, mutable.BitSet]()
 
   val zero = param.zero(initialValue) // Zero value to be passed to executors
@@ -175,9 +175,9 @@ class Accumulable[R, T] private[spark] (
   def add(term: T) {
     value_ = param.addAccumulator(value_, term)
     if (consistent) {
-      val updateInfo = TaskContext.get().getRDDPartitionInfo()
-      val base = pending.getOrElse(updateInfo, zero)
-      pending(updateInfo) = param.addAccumulator(base, term)
+      val (updateInfo, complete) = TaskContext.get().getRDDPartitionInfo()
+      val (base, _) = pending.getOrElse(updateInfo, (zero, false))
+      pending(updateInfo) = (param.addAccumulator(base, term), complete)
     }
   }
 
@@ -205,7 +205,7 @@ class Accumulable[R, T] private[spark] (
     if (!consistent) {
       merge(term.asInstanceOf[R])
     } else {
-      mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int), R]])
+      mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int), (R, Boolean)]])
     }
   }
 
@@ -213,12 +213,14 @@ class Accumulable[R, T] private[spark] (
    * Merge another pending updates, checks to make sure that each pending update has not
    * already been processed before updating.
    */
-  private[spark] def mergePending(term: mutable.HashMap[(Int, Int), R]) = {
-    term.foreach{case ((rddId, splitId), v) =>
-      val splits = processed.getOrElseUpdate(rddId, new mutable.BitSet())
-      if (!splits.contains(splitId)) {
+  private[spark] def mergePending(term: mutable.HashMap[(Int, Int), (R, Boolean)]) = {
+    term.foreach{case ((rddId, splitId), (v, full)) =>
+      if (full) {
+        val splits = processed.getOrElseUpdate(rddId, new mutable.BitSet())
+        if (!splits.contains(splitId)) {
           splits += splitId
-        value_ = param.addInPlace(value_, v)
+          value_ = param.addInPlace(value_, v)
+        }
       }
     }
   }
@@ -295,7 +297,7 @@ class Accumulable[R, T] private[spark] (
     in.defaultReadObject()
     value_ = zero
     if (consistent) {
-      pending = new mutable.HashMap[(Int, Int), R]()
+      pending = new mutable.HashMap[(Int, Int), (R, Boolean)]()
     }
     deserialized = true
 

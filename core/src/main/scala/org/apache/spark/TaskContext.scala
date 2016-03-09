@@ -185,12 +185,15 @@ abstract class TaskContext extends Serializable {
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
 
   /**
-   * Set the current RDD and partition being processed.
+   * Set the current RDD, partition being processed, and if fully consumed.
    */
-  private[spark] def setRDDPartitionInfo(rddId: Int, index: Int): Unit
+  private[spark] def setRDDPartitionInfo(rddId: Int, index: Int, consumed: Boolean): Unit
 
   /**
-   * Returns the current RDD and Partition ids being processed. May be null.
+   * Returns the current RDD, Partition ids, and if the partition has been fully consumed.
+   * This can be used to track of if an RDD has been previously computed, the IDs will be the same
+   * during a recompute.
+   * Note: May be null if called outside of a MapPartitionsRDD.
    */
-  private[spark] def getRDDPartitionInfo(): (Int, Int)
+  private[spark] def getRDDPartitionInfo(): ((Int, Int), Boolean)
 }

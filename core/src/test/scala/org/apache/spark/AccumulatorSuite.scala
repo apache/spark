@@ -407,5 +407,5 @@ private[spark] class DummyTask(
     val internalAccums: Seq[Accumulator[_]],
     val externalAccums: Seq[Accumulator[_]])
   extends Task[Int](0, 0, 0, internalAccums) {
-  override def runTask(c: TaskContext): (Int, Boolean) = (1, false)
+  override def runTask(c: TaskContext): Int = 1
 }
