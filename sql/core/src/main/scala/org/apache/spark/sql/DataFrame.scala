@@ -44,7 +44,6 @@ import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -128,23 +127,13 @@ class Dataset[T] private[sql](
     encoder: Encoder[T])
   extends Queryable with Serializable {
 
+  queryExecution.assertAnalyzed()
+
   // Note for Spark contributors: if adding or updating any action in `DataFrame`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
 
-  /**
-   * A constructor that automatically analyzes the logical plan.
-   *
-   * This reports error eagerly as the [[DataFrame]] is constructed, unless
-   * [[SQLConf.dataFrameEagerAnalysis]] is turned off.
-   */
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(sqlContext, {
-      val qe = sqlContext.executePlan(logicalPlan)
-      if (sqlContext.conf.dataFrameEagerAnalysis) {
-        qe.assertAnalyzed()  // This should force analysis and throw errors if there are any
-      }
-      qe
-    }, encoder)
+    this(sqlContext, sqlContext.executePlan(logicalPlan), encoder)
   }
 
   @transient protected[sql] val logicalPlan: LogicalPlan = queryExecution.logical match {
@@ -164,9 +153,7 @@ class Dataset[T] private[sql](
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(encoder)
-  if (sqlContext.conf.dataFrameEagerAnalysis) {
-    unresolvedTEncoder.validate(logicalPlan.output)
-  }
+  unresolvedTEncoder.validate(logicalPlan.output)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
