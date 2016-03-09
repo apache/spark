@@ -896,7 +896,7 @@ private[spark] class BlockManager(
               diskStore.put(blockId) { fileOutputStream =>
                 dataSerializeStream(blockId, fileOutputStream, iter)
               }
-              Right(diskStore.getSize(blockId))
+              size = diskStore.getSize(blockId)
             } else {
               iteratorFromFailedMemoryStorePut = Some(iter)
             }
