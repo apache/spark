@@ -192,14 +192,8 @@ object KMeansModel extends MLReadable[KMeansModel] {
         val initialModel = instance.getInitialModel
         initialModel.save(initialModelPath)
 
-        // Remove the initialModel temporarily
-        instance.clear(instance.initialModel)
-
         // Save metadata and Params
         DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> true))
-
-        // Set the initialModel back to avoid making side effect on instance
-        instance.set(instance.initialModel, initialModel)
       } else {
         // Save metadata and Params
         DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> false))
@@ -370,14 +364,8 @@ object KMeans extends MLReadable[KMeans] {
         val initialModel = instance.getInitialModel
         initialModel.save(initialModelPath)
 
-        // Remove the initialModel temporarily
-        instance.clear(instance.initialModel)
-
         // Save metadata and Params
         DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> true))
-
-        // Set the initialModel back to avoid making side effect on instance
-        instance.set(instance.initialModel, initialModel)
       } else {
         // Save metadata and Params
         DefaultParamsWriter.saveMetadata(instance, path, sc, Some("hasInitialModel" -> false))
