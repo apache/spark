@@ -129,129 +129,98 @@ private[spark] class MemoryStore(
       values: Iterator[Any],
       level: StorageLevel): Either[Iterator[Any], Long] = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    /**
-     * Unroll the given block in memory safely.
-     *
-     * The safety of this operation refers to avoiding potential OOM exceptions caused by
-     * unrolling the entirety of the block in memory at once. This is achieved by periodically
-     * checking whether the memory restrictions for unrolling blocks are still satisfied,
-     * stopping immediately if not. This check is a safeguard against the scenario in which
-     * there is not enough free memory to accommodate the entirety of a single block.
-     *
-     * This method returns either an array with the contents of the entire block or an iterator
-     * containing the values of the block (if the array would have exceeded available memory).
-     */
-    val unrolledValues = {
-      // Number of elements unrolled so far
-      var elementsUnrolled = 0
-      // Whether there is still enough memory for us to continue unrolling this block
-      var keepUnrolling = true
-      // Initial per-task memory to request for unrolling blocks (bytes). Exposed for testing.
-      val initialMemoryThreshold = unrollMemoryThreshold
-      // How often to check whether we need to request more memory
-      val memoryCheckPeriod = 16
-      // Memory currently reserved by this task for this particular unrolling operation
-      var memoryThreshold = initialMemoryThreshold
-      // Memory to request as a multiple of current vector size
-      val memoryGrowthFactor = 1.5
-      // Keep track of pending unroll memory reserved by this method.
-      var pendingMemoryReserved = 0L
-      // Underlying vector for unrolling the block
-      var vector = new SizeTrackingVector[Any]
+    // Number of elements unrolled so far
+    var elementsUnrolled = 0
+    // Whether there is still enough memory for us to continue unrolling this block
+    var keepUnrolling = true
+    // Initial per-task memory to request for unrolling blocks (bytes). Exposed for testing.
+    val initialMemoryThreshold = unrollMemoryThreshold
+    // How often to check whether we need to request more memory
+    val memoryCheckPeriod = 16
+    // Memory currently reserved by this task for this particular unrolling operation
+    var memoryThreshold = initialMemoryThreshold
+    // Memory to request as a multiple of current vector size
+    val memoryGrowthFactor = 1.5
+    // Keep track of pending unroll memory reserved by this method.
+    var pendingMemoryReserved = 0L
+    // Underlying vector for unrolling the block
+    var vector = new SizeTrackingVector[Any]
 
-      // Request enough memory to begin unrolling
-      keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold)
+    // Request enough memory to begin unrolling
+    keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold)
 
-      if (!keepUnrolling) {
-        logWarning(s"Failed to reserve initial memory threshold of " +
-          s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
-      } else {
-        pendingMemoryReserved += initialMemoryThreshold
-      }
-
-      // Unroll this block safely, checking whether we have exceeded our threshold periodically
-      try {
-        while (values.hasNext && keepUnrolling) {
-          vector += values.next()
-          if (elementsUnrolled % memoryCheckPeriod == 0) {
-            // If our vector's size has exceeded the threshold, request more memory
-            val currentSize = vector.estimateSize()
-            if (currentSize >= memoryThreshold) {
-              val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
-              keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest)
-              if (keepUnrolling) {
-                pendingMemoryReserved += amountToRequest
-              }
-              // New threshold is currentSize * memoryGrowthFactor
-              memoryThreshold += amountToRequest
-            }
-          }
-          elementsUnrolled += 1
-        }
-
-        if (keepUnrolling) {
-          // We successfully unrolled the entirety of this block
-          Left(vector.toArray)
-        } else {
-          // We ran out of space while unrolling the values for this block
-          logUnrollFailureMessage(blockId, vector.estimateSize())
-          Right(vector.iterator ++ values)
-        }
-
-      } finally {
-        // If we return an array, the values returned here will be cached in `tryToPut` later.
-        // In this case, we should release the memory only after we cache the block there.
-        if (keepUnrolling) {
-          val taskAttemptId = currentTaskAttemptId()
-          memoryManager.synchronized {
-            // Since we continue to hold onto the array until we actually cache it, we cannot
-            // release the unroll memory yet. Instead, we transfer it to pending unroll memory
-            // so `tryToPut` can further transfer it to normal storage memory later.
-            // TODO: we can probably express this without pending unroll memory (SPARK-10907)
-            unrollMemoryMap(taskAttemptId) -= pendingMemoryReserved
-            pendingUnrollMemoryMap(taskAttemptId) =
-              pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + pendingMemoryReserved
-          }
-        } else {
-          // Otherwise, if we return an iterator, we can only release the unroll memory when
-          // the task finishes since we don't know when the iterator will be consumed.
-        }
-      }
+    if (!keepUnrolling) {
+      logWarning(s"Failed to reserve initial memory threshold of " +
+        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+    } else {
+      pendingMemoryReserved += initialMemoryThreshold
     }
-    unrolledValues match {
-      case Left(arrayValues) =>
-        // Values are fully unrolled in memory, so store them as an array
-        if (level.deserialized) {
-          val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-          if (acquireStorageMemory(blockId, sizeEstimate)) {
-            // We acquired enough memory for the block, so go ahead and put it
-            val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
-            entries.synchronized {
-              entries.put(blockId, entry)
-            }
-            logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
-              blockId, Utils.bytesToString(sizeEstimate), Utils.bytesToString(blocksMemoryUsed)))
-            Right(sizeEstimate)
-          } else {
-            Left(arrayValues.toIterator)
+
+    // Unroll this block safely, checking whether we have exceeded our threshold periodically
+    while (values.hasNext && keepUnrolling) {
+      vector += values.next()
+      if (elementsUnrolled % memoryCheckPeriod == 0) {
+        // If our vector's size has exceeded the threshold, request more memory
+        val currentSize = vector.estimateSize()
+        if (currentSize >= memoryThreshold) {
+          val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
+          keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest)
+          if (keepUnrolling) {
+            pendingMemoryReserved += amountToRequest
           }
-        } else {
-          val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-          if (acquireStorageMemory(blockId, bytes.limit)) {
-            // We acquired enough memory for the block, so go ahead and put it
-            val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
-            entries.synchronized {
-              entries.put(blockId, entry)
-            }
-            logInfo("Block %s stored asb bytes in memory (estimated size %s, free %s)".format(
-              blockId, Utils.bytesToString(bytes.limit), Utils.bytesToString(blocksMemoryUsed)))
-            Right(bytes.limit)
-          } else {
-            Left(arrayValues.toIterator)
-          }
+          // New threshold is currentSize * memoryGrowthFactor
+          memoryThreshold += amountToRequest
         }
-      case Right(iteratorValues) =>
-        Left(iteratorValues)
+      }
+      elementsUnrolled += 1
+    }
+
+    if (keepUnrolling) {
+      // We successfully unrolled the entirety of this block
+      val taskAttemptId = currentTaskAttemptId()
+      memoryManager.synchronized {
+        // Since we continue to hold onto the array until we actually cache it, we cannot
+        // release the unroll memory yet. Instead, we transfer it to pending unroll memory
+        // so `tryToPut` can further transfer it to normal storage memory later.
+        // TODO: we can probably express this without pending unroll memory (SPARK-10907)
+        unrollMemoryMap(taskAttemptId) -= pendingMemoryReserved
+        pendingUnrollMemoryMap(taskAttemptId) =
+          pendingUnrollMemoryMap.getOrElse(taskAttemptId, 0L) + pendingMemoryReserved
+      }
+      val arrayValues = vector.toArray
+      if (level.deserialized) {
+        val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
+        if (acquireStorageMemory(blockId, sizeEstimate)) {
+          // We acquired enough memory for the block, so go ahead and put it
+          val entry = new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
+          entries.synchronized {
+            entries.put(blockId, entry)
+          }
+          logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
+            blockId, Utils.bytesToString(sizeEstimate), Utils.bytesToString(blocksMemoryUsed)))
+          Right(sizeEstimate)
+        } else {
+          Left(arrayValues.toIterator)
+        }
+      } else {
+        val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+        if (acquireStorageMemory(blockId, bytes.limit)) {
+          // We acquired enough memory for the block, so go ahead and put it
+          val entry = new MemoryEntry(bytes, bytes.limit, deserialized = false)
+          entries.synchronized {
+            entries.put(blockId, entry)
+          }
+          logInfo("Block %s stored asb bytes in memory (estimated size %s, free %s)".format(
+            blockId, Utils.bytesToString(bytes.limit), Utils.bytesToString(blocksMemoryUsed)))
+          Right(bytes.limit)
+        } else {
+          Left(arrayValues.toIterator)
+        }
+      }
+    } else {
+      // We ran out of space while unrolling the values for this block
+      logUnrollFailureMessage(blockId, vector.estimateSize())
+      Left(vector.iterator ++ values)
     }
   }
 
