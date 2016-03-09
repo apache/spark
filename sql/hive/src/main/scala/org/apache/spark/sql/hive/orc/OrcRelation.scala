@@ -161,7 +161,11 @@ private[orc] class OrcOutputWriter(
     val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
     val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
+    val compressionExtension = {
+      val name = conf.get(OrcTableProperties.COMPRESSION.getPropName)
+      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
+    }
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString$compressionExtension.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
@@ -328,5 +332,13 @@ private[orc] object OrcRelation {
     "snappy" -> CompressionKind.SNAPPY,
     "zlib" -> CompressionKind.ZLIB,
     "lzo" -> CompressionKind.LZO)
+
+  // The extensions for ORC compression codecs
+  val extensionsForCompressionCodecNames = Map(
+    CompressionKind.NONE.name -> "",
+    CompressionKind.SNAPPY.name -> ".snappy",
+    CompressionKind.ZLIB.name -> ".zlib",
+    CompressionKind.LZO.name -> ".lzo"
+  )
 }
 

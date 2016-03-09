@@ -140,7 +140,7 @@ private[sql] class CsvOutputWriter(
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
       }
     }.getRecordWriter(context)
   }
