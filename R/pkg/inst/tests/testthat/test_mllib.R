@@ -143,19 +143,24 @@ test_that("kmeans", {
 })
 
 test_that("naiveBayes", {
-  data(HouseVotes84, package = "mlbench")
-  training <- createDataFrame(sqlContext, HouseVotes84)
+  training <- suppressWarnings(createDataFrame(sqlContext, iris))
 
-  model <- naiveBayes(Class ~ ., data = training, lambda = 1, modelType = "multinomial")
+  model <- naiveBayes(Sepal_Width ~ ., data = training, lambda = 1, modelType = "multinomial")
   sample <- take(select(predict(model, training), "prediction"), 1)
   expect_equal(typeof(sample$prediction), "double")
-  expect_equal(sample$prediction, 0)
+  expect_equal(sample$prediction, 9)
 
   # Test summary works on naiveBayes
   summary.model <- summary(model)
-  expect_equal(length(summary.model$pi), 2)
+  expect_equal(length(summary.model$pi), 23)
+  expect_equal(sum(summary.model$pi), 1)
   l1 <- summary(model)$theta[1,]
   l2 <- summary(model)$theta[2,]
   expect_true(all.equal(Reduce(`+`, l1), 1))
   expect_true(all.equal(Reduce(`+`, l2), 1))
+
+  # Test e1071::naiveBayes
+  if (requireNamespace("e1071", quietly = TRUE)) {
+    model2 <- e1071::naiveBayes(Class ~ ., data = HouseVotes84)
+  }
 })
