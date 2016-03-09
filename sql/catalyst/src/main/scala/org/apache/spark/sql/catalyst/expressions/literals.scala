@@ -203,7 +203,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}f"
@@ -212,7 +212,7 @@ case class Literal protected (value: Any, dataType: DataType)
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            super.genCode(ctx, ev)
+            super[CodegenFallback].genCode(ctx, ev)
           } else {
             ev.isNull = "false"
             ev.value = s"${value}D"
@@ -232,7 +232,7 @@ case class Literal protected (value: Any, dataType: DataType)
           ""
         // eval() version may be faster for non-primitive types
         case other =>
-          super.genCode(ctx, ev)
+          super[CodegenFallback].genCode(ctx, ev)
       }
     }
   }
