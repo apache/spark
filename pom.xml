@@ -99,7 +99,7 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>docker-integration-tests</module>
+    <module>external/docker-integration-tests</module>
     <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>
@@ -2354,7 +2354,7 @@
     <profile>
       <id>spark-ganglia-lgpl</id>
       <modules>
-        <module>extras/spark-ganglia-lgpl</module>
+        <module>external/spark-ganglia-lgpl</module>
       </modules>
     </profile>
 
@@ -2362,8 +2362,8 @@
     <profile>
       <id>kinesis-asl</id>
       <modules>
-        <module>extras/kinesis-asl</module>
-        <module>extras/kinesis-asl-assembly</module>
+        <module>external/kinesis-asl</module>
+        <module>external/kinesis-asl-assembly</module>
       </modules>
     </profile>
 
@@ -2387,7 +2387,7 @@
       </build>
 
       <modules>
-        <module>extras/java8-tests</module>
+        <module>external/java8-tests</module>
       </modules>
 
     </profile>
