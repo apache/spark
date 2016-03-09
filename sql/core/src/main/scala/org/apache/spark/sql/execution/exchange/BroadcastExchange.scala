@@ -34,11 +34,15 @@ import org.apache.spark.util.ThreadUtils
  */
 case class BroadcastExchange(
     mode: BroadcastMode,
-    child: SparkPlan) extends UnaryNode {
-
-  override def output: Seq[Attribute] = child.output
+    child: SparkPlan) extends Exchange {
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
+
+  override def sameResult(plan: SparkPlan): Boolean = plan match {
+    case p: BroadcastExchange =>
+      mode.compatibleWith(p.mode) && child.sameResult(p.child)
+    case _ => false
+  }
 
   @transient
   private val timeout: Duration = {

@@ -38,7 +38,7 @@ import org.apache.spark.util.MutablePair
 case class ShuffleExchange(
     var newPartitioning: Partitioning,
     child: SparkPlan,
-    @transient coordinator: Option[ExchangeCoordinator]) extends UnaryNode {
+    @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
 
   override def nodeName: String = {
     val extraInfo = coordinator match {
@@ -54,8 +54,6 @@ case class ShuffleExchange(
   }
 
   override def outputPartitioning: Partitioning = newPartitioning
-
-  override def output: Seq[Attribute] = child.output
 
   private val serializer: Serializer = new UnsafeRowSerializer(child.output.size)
 
@@ -103,16 +101,25 @@ case class ShuffleExchange(
     new ShuffledRowRDD(shuffleDependency, specifiedPartitionStartIndices)
   }
 
+  /**
+   * Caches the created ShuffleRowRDD so we can reuse that.
+   */
+  private var cachedShuffleRDD: ShuffledRowRDD = null
+
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
-    coordinator match {
-      case Some(exchangeCoordinator) =>
-        val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
-        assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
-        shuffleRDD
-      case None =>
-        val shuffleDependency = prepareShuffleDependency()
-        preparePostShuffleRDD(shuffleDependency)
+    // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
+    if (cachedShuffleRDD == null) {
+      cachedShuffleRDD = coordinator match {
+        case Some(exchangeCoordinator) =>
+          val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
+          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
+          shuffleRDD
+        case None =>
+          val shuffleDependency = prepareShuffleDependency()
+          preparePostShuffleRDD(shuffleDependency)
+      }
     }
+    cachedShuffleRDD
   }
 }
 

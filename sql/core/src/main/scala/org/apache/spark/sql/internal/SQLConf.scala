@@ -504,6 +504,10 @@ object SQLConf {
       " method",
     isPublic = false)
 
+  val EXCHANGE_REUSE_ENABLED = booleanConf("spark.sql.exchange.reuse",
+    defaultValue = Some(true),
+    doc = "When true, the planner will try to find out duplicated exchanges and re-use them",
+    isPublic = false)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -563,6 +567,8 @@ class SQLConf extends Serializable with CatalystConf with ParserConf with Loggin
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def canonicalView: Boolean = getConf(CANONICAL_NATIVE_VIEW)
 
