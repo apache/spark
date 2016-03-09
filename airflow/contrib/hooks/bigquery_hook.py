@@ -197,7 +197,7 @@ class BigQueryBaseCursor(object):
 
         return self.run_with_configuration(configuration)
 
-    def run_extract(self, source_dataset_table, destination_cloud_storage_uris, compression='NONE', export_format='CSV', field_delimiter=',', print_header=True):
+    def run_extract(self, source_project_dataset_table, destination_cloud_storage_uris, compression='NONE', export_format='CSV', field_delimiter=',', print_header=True):
         """
         Executes a BigQuery extract command to copy data from BigQuery to 
         Google Cloud Storage. See here:
@@ -206,8 +206,8 @@ class BigQueryBaseCursor(object):
 
         For more details about these parameters.
 
-        :param source_dataset_table: The dotted <dataset>.<table> BigQuery table to use as the source data.
-        :type source_dataset_table: string
+        :param source_project_dataset_table: The dotted <dataset>.<table> BigQuery table to use as the source data.
+        :type source_project_dataset_table: string
         :param destination_cloud_storage_uris: The destination Google Cloud 
             Storage URI (e.g. gs://some-bucket/some-file.txt). Follows 
             convention defined here: 
@@ -222,14 +222,11 @@ class BigQueryBaseCursor(object):
         :param print_header: Whether to print a header for a CSV file extract.
         :type print_header: boolean
         """
-        assert '.' in source_dataset_table, \
-            'Expected source_dataset_table in the format of <dataset>.<table>. Got: {}'.format(source_dataset_table)
-
-        source_dataset, source_table = source_dataset_table.split('.', 1)
+        source_project, source_dataset, source_table = self._split_project_dataset_table_input('source_project_dataset_table', source_project_dataset_table)
         configuration = {
             'extract': {
                 'sourceTable': {
-                    'projectId': self.project_id,
+                    'projectId': source_project,
                     'datasetId': source_dataset,
                     'tableId': source_table,
                 },
@@ -248,7 +245,11 @@ class BigQueryBaseCursor(object):
 
         return self.run_with_configuration(configuration)
 
-    def run_copy(self, source_dataset_tables, destination_project_dataset_table, write_disposition='WRITE_EMPTY', create_disposition='CREATE_IF_NEEDED'):
+    def run_copy(self,
+                 source_project_dataset_tables,
+                 destination_project_dataset_table,
+                 write_disposition='WRITE_EMPTY',
+                 reate_disposition='CREATE_IF_NEEDED'):
         """
         Executes a BigQuery copy command to copy data from one BigQuery table
         to another. See here:
@@ -257,10 +258,11 @@ class BigQueryBaseCursor(object):
 
         For more details about these parameters.
 
-        :param source_dataset_tables: One or more dotted <dataset>.<table>
+        :param source_project_dataset_tables: One or more dotted (<project>.)<dataset>.<table>
             BigQuery tables to use as the source data. Use a list if there are
             multiple source tables.
-        :type source_dataset_tables: list|string
+            If <project> is not included, project will be the project defined in the connection json.
+        :type source_project_dataset_tables: list|string
         :param destination_project_dataset_table: The destination BigQuery
             table. Format is: <project>.<dataset>.<table>
         :type destination_project_dataset_table: string
@@ -269,19 +271,16 @@ class BigQueryBaseCursor(object):
         :param create_disposition: The create disposition if the table doesn't exist.
         :type create_disposition: string
         """
-        source_dataset_tables = [source_dataset_tables] if not isinstance(source_dataset_tables, list) else source_dataset_tables
-        source_project_dataset_tables = []
+        source_project_dataset_tables = [source_project_dataset_tables] if not isinstance(source_project_dataset_tables, list) else source_project_dataset_tables
 
-        for source_dataset_table in source_dataset_tables:
-            assert '.' in source_dataset_table, \
-                'Expected source_dataset_table in the format of <dataset>.<table>. Got: {}'.format(source_dataset_table)
-
-            source_dataset, source_table = source_dataset_table.split('.', 1)
-            source_project_dataset_tables.append({
-                'projectId': self.project_id,
-                'datasetId': source_dataset,
-                'tableId': source_table
-            })
+        source_project_dataset_tables_fixup = []
+        for source_project_dataset_table in source_project_dataset_tables:
+            source_project, source_dataset, source_table = self._split_project_dataset_table_input('source_project_dataset_table', source_project_dataset_table)
+            source_project_dataset_tables_fixup.append({
+                    'projectId': source_project,
+                    'datasetId': source_dataset,
+                    'tableId': source_table
+                })
 
         assert 3 == len(destination_project_dataset_table.split('.')), \
             'Expected destination_project_dataset_table in the format of <project>.<dataset>.<table>. Got: {}'.format(destination_project_dataset_table)
@@ -291,7 +290,7 @@ class BigQueryBaseCursor(object):
             'copy': {
                 'createDisposition': create_disposition,
                 'writeDisposition': write_disposition,
-                'sourceTables': source_project_dataset_tables,
+                'sourceTables': source_project_dataset_tables_fixup,
                 'destinationTable': {
                     'projectId': destination_project,
                     'datasetId': destination_dataset,
@@ -302,7 +301,14 @@ class BigQueryBaseCursor(object):
 
         return self.run_with_configuration(configuration)
 
-    def run_load(self, destination_dataset_table, schema_fields, source_uris, source_format='CSV', create_disposition='CREATE_IF_NEEDED', skip_leading_rows=0, write_disposition='WRITE_EMPTY', field_delimiter=','):
+    def run_load(self,
+                 destination_project_dataset_table,
+                 schema_fields, source_uris,
+                 source_format='CSV',
+                 create_disposition='CREATE_IF_NEEDED',
+                 skip_leading_rows=0,
+                 write_disposition='WRITE_EMPTY',
+                 field_delimiter=','):
         """
         Executes a BigQuery load command to load data from Google Cloud Storage
         to BigQuery. See here:
@@ -311,8 +317,9 @@ class BigQueryBaseCursor(object):
 
         For more details about these parameters.
 
-        :param destination_dataset_table: The dotted <dataset>.<table> BigQuery table to load data into.
-        :type destination_dataset_table: string
+        :param destination_project_dataset_table: The dotted (<project>.)<dataset>.<table> BigQuery table to load data into.
+            If <project> is not included, project will be the project defined in the connection json.
+        :type destination_project_dataset_table: string
         :param schema_fields: The schema field list as defined here:
             https://cloud.google.com/bigquery/docs/reference/v2/jobs#configuration.load
         :type schema_fields: list
@@ -331,16 +338,13 @@ class BigQueryBaseCursor(object):
         :param field_delimiter: The delimiter to use when loading from a CSV.
         :type field_delimiter: string
         """
-        assert '.' in destination_dataset_table, \
-            'Expected destination_dataset_table in the format of <dataset>.<table>. Got: {}'.format(destination_dataset_table)
-
-        destination_dataset, destination_table = destination_dataset_table.split('.', 1)
+        destination_project, destination_dataset, destination_table = self._split_project_dataset_table_input('destination_project_dataset_table', destination_project_dataset_table)
 
         configuration = {
             'load': {
                 'createDisposition': create_disposition,
                 'destinationTable': {
-                    'projectId': self.project_id,
+                    'projectId': destination_project,
                     'datasetId': destination_dataset,
                     'tableId': destination_table,
                 },
@@ -358,6 +362,27 @@ class BigQueryBaseCursor(object):
             configuration['load']['fieldDelimiter'] = field_delimiter
 
         return self.run_with_configuration(configuration)
+
+    def _split_project_dataset_table_input(self, var_name, project_dataset_table):
+        """
+        :param var_name: the name of the variable input, for logging and erroring purposes.
+        :type var_name: str
+        :param project_dataset_table: input string in (<project>.)<dataset>.<project> format.
+            if project is not included in the string, self.project_id will be returned in the tuple.
+        :type project_dataset_table: str
+        :return: (project, dataset, table) tuple
+        """
+        table_split = project_dataset_table.split('.')
+        assert len(table_split) == 2 or len(table_split) == 3, \
+            'Expected {var} in the format of (<project.)<dataset>.<table>, got {input}'.format(var=var_name, input=project_dataset_table)
+
+        if len(table_split) == 2:
+            logging.info('project not included in {var}: {input}; using project "{project}"'.format(var=var_name, input=project_dataset_table, project=self.project_id))
+            dataset, table = table_split
+            return self.project_id, dataset, table
+        else:
+            project, dataset, table = table_split
+            return project, dataset, table
 
     def run_with_configuration(self, configuration):
         """
