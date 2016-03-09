@@ -189,10 +189,10 @@ final class RandomForestRegressionModel private[ml] (
    *  - Average over trees:
    *     - importance(feature j) = sum (over nodes which split on feature j) of the gain,
    *       where gain is scaled by the number of instances passing through node
-   *     - Normalize importances for tree based on total number of training instances used
-   *       to build tree.
+   *     - Normalize importances for tree to sum to 1.
    *  - Normalize feature importance vector to sum to 1.
    */
+  @Since("1.5.0")
   lazy val featureImportances: Vector = RandomForest.featureImportances(trees, numFeatures)
 
   /** (private[ml]) Convert to a model in the old API */

@@ -20,7 +20,6 @@ package org.apache.spark.ml.regression
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.impl.TreeTests
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
@@ -82,23 +81,17 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       .setSeed(123)
 
     // In this data, feature 1 is very important.
-    val data: RDD[LabeledPoint] = sc.parallelize(Seq(
-      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 1)),
-      new LabeledPoint(1, Vectors.dense(1, 1, 0, 1, 0)),
-      new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0)),
-      new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
-      new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
-    ))
+    val data: RDD[LabeledPoint] = TreeTests.featureImportanceData(sc)
     val categoricalFeatures = Map.empty[Int, Int]
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
     val model = rf.fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
     val importances = model.featureImportances
     val mostImportantFeature = importances.argmax
     assert(mostImportantFeature === 1)
+    assert(importances.toArray.sum === 1.0)
+    assert(importances.toArray.forall(_ >= 0.0))
   }
 
   /////////////////////////////////////////////////////////////////////////////
