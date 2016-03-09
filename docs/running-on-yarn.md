@@ -492,18 +492,26 @@ using the Kerberos credentials of the user launching the application —that is,
 identity will become that of the launched Spark application.
 
 This is normally done at launch time: in a secure cluster Spark will automatically obtain a
-token for the cluster's HDFS filesystem, and, if required, HBase and Hive.
+token for the cluster's HDFS filesystem, and potentially for HBase and Hive.
+
+An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
+the application is secure (i.e. `hbase.security.authentication==kerberos`),
+and `spark.yarn.security.tokens.hbase.enabled` is not set to `false`.
+
+Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
+includes a URI of the metadata store in `"hive.metastore.uris`, and
+`spark.yarn.security.tokens.hive.enabled` is not set to `false`.
 
 If an application needs to interact with other secure HDFS clusters, then
 the tokens needed to access these clusters must be explicitly requested at
 launch time. This is done by listing them in the `spark.yarn.access.namenodes` property.
 
 ```
-spark.yarn.access.namenodes hdfs://ireland.emea.example.org:8020/,hdfs://frankfurt.emea.example.org:8020/
+spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
 ```
 
-Hadoop tokens expire. They can be renewed "for a while";
-However, eventually, they will stop being renewable —after which all attempts to
+Hadoop tokens expire. They can be renewed "for a while".
+Eventually, they will stop being renewable —after which all attempts to
 access secure data will fail. The only way to avoid that is for the application to be launched
 with the secrets needed to log in to Kerberos directly: a "keytab". Consult
 the [Spark Property](#Spark Properties) `spark.yarn.keytab` for the specifics.

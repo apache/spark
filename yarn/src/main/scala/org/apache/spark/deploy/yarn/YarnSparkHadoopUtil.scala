@@ -331,23 +331,6 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-   * Are the credentials supplied by the environment, rather than a TGT or keytab?
-   * This predicate will always return true in a YARN AM, as the relevant env var is
-   * always set (it is used to pass down the AM/RM token). In the client, if it is true
-   * it means that the application was launched in an Oozie workflow (or similar) with
-   * all tokens created in advance.
-   * @return the path to a credentials file if that is where the credentials came from
-   */
-  def environmentCredentialsFile() : Option[File] = {
-    val location = System.getenv(UserGroupInformation.HADOOP_TOKEN_FILE_LOCATION)
-    if (location != null) {
-      Some(new File(location))
-    } else {
-      None
-    }
-  }
-
-  /**
    * Dump the credentials' tokens to string values.
    * @param credentials credentials
    * @return an iterator over the string values. If no credentials are passed in: an empty list
