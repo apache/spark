@@ -290,6 +290,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       "getPartitionsByFilter",
       classOf[Table],
       classOf[String])
+  private lazy val getPartitionsByPartitionSpec =
+    findMethod(
+      classOf[Hive],
+      "getPartitions",
+      classOf[Table],
+      classOf[JMap[_, _]])
   private lazy val getCommandProcessorMethod =
     findStaticMethod(
       classOf[CommandProcessorFactory],
@@ -317,25 +323,49 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
    *
    * Unsupported predicates are skipped.
    */
-  def convertFilters(table: Table, filters: Seq[Expression]): String = {
+  def convertFilters(table: Table, filters: Seq[Expression]): FilterPushdown = {
     // hive varchar is treated as catalyst string, but hive varchar can't be pushed down.
     val varcharKeys = table.getPartitionKeys.asScala
       .filter(col => col.getType.startsWith(serdeConstants.VARCHAR_TYPE_NAME) ||
         col.getType.startsWith(serdeConstants.CHAR_TYPE_NAME))
       .map(col => col.getName).toSet
 
-    filters.collect {
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
-        s"${a.name} ${op.symbol} $v"
-      case op @ BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
-        s"$v ${op.symbol} ${a.name}"
-      case op @ BinaryComparison(a: Attribute, Literal(v, _: StringType))
-          if !varcharKeys.contains(a.name) =>
-        s"""${a.name} ${op.symbol} "$v""""
-      case op @ BinaryComparison(Literal(v, _: StringType), a: Attribute)
-          if !varcharKeys.contains(a.name) =>
-        s""""$v" ${op.symbol} ${a.name}"""
-    }.mkString(" and ")
+    val supportedFilters = filters.collect {
+      case op@BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) => op
+      case op@BinaryComparison(Literal(v, _: IntegralType), a: Attribute) => op
+      case op@BinaryComparison(a: Attribute, Literal(v, _: StringType))
+        if !varcharKeys.contains(a.name) => op
+      case op@BinaryComparison(Literal(v, _: StringType), a: Attribute)
+        if !varcharKeys.contains(a.name) => op
+    }
+    // SPARK-12313.  We use hive's getPartition(partitionSpec) whenever possible
+    val simplePartitionSpec = supportedFilters.forall {
+      case _ @ Equality(_, _) => true
+      case _ => false
+    }
+    if (supportedFilters.isEmpty) {
+      EmptyPushdown
+    } else if (simplePartitionSpec) {
+      new PartitionSpec(
+        supportedFilters.collect {
+          case op@BinaryComparison(a: Attribute, Literal(v, _)) =>
+            a -> v
+          case op@BinaryComparison(Literal(v, _), a: Attribute) =>
+            a -> v
+        }.map{ case (a, v) => a.name -> v.toString }.toMap
+      )
+    } else {
+      new PartitionExpr(supportedFilters.collect {
+        case op@BinaryComparison(a: Attribute, Literal(v, _: IntegralType)) =>
+          s"${a.name} ${op.symbol} $v"
+        case op@BinaryComparison(Literal(v, _: IntegralType), a: Attribute) =>
+          s"$v ${op.symbol} ${a.name}"
+        case op@BinaryComparison(a: Attribute, Literal(v, _: StringType)) =>
+          s"""${a.name} ${op.symbol} "$v""""
+        case op@BinaryComparison(Literal(v, _: StringType), a: Attribute) =>
+          s""""$v" ${op.symbol} ${a.name}"""
+      }.mkString(" and "))
+    }
   }
 
   override def getPartitionsByFilter(
@@ -346,13 +376,19 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
-    val partitions =
-      if (filter.isEmpty) {
-        getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
-      } else {
-        logDebug(s"Hive metastore filter is '$filter'.")
-        getPartitionsByFilterMethod.invoke(hive, table, filter).asInstanceOf[JArrayList[Partition]]
+    val partitions = {
+      val r = filter match {
+        case EmptyPushdown =>
+          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+        case PartitionExpr(filterExpr) =>
+          logDebug(s"Hive metastore filter expression is '$filterExpr'.")
+          getPartitionsByFilterMethod.invoke(hive, table, filterExpr)
+        case PartitionSpec(filterSpec) =>
+          logDebug(s"Hive metastore partition spec is $filterSpec.")
+          getPartitionsByPartitionSpec.invoke(hive, table, filterSpec)
       }
+      r.asInstanceOf[JArrayList[Partition]]
+    }
 
     partitions.asScala.toSeq
   }
@@ -523,3 +559,15 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
   }
 
 }
+
+private[client] sealed abstract class FilterPushdown
+private[client] case class PartitionSpec(partitionSpec: JMap[String, String])
+    extends FilterPushdown {
+  def this(scalaMap: Map[String, String]) = {
+    this(mapAsJavaMapConverter(scalaMap).asJava)
+  }
+}
+
+private[client] case class PartitionExpr(partitionExpr: String) extends FilterPushdown
+
+private[client] case object EmptyPushdown extends FilterPushdown

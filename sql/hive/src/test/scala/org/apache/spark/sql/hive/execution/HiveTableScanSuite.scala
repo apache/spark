@@ -46,6 +46,29 @@ class HiveTableScanSuite extends HiveComparisonTest {
       |SELECT * from part_scan_test;
     """.stripMargin)
 
+  createQueryTest("partition filtering",
+    """
+      | SET spark.sql.hive.metastorePartitionPruning = true;
+      | SELECT * FROM srcpart WHERE ds = '2008-04-08'
+    """.stripMargin
+  )
+
+  createQueryTest("partition filtering with null",
+    // this test is pretty bad right now, since there isn't actually any data with null.  right now
+    // this test will just capture basic usage errors
+    """
+      | SET spark.sql.hive.metastorePartitionPruning = true;
+      | SELECT * FROM srcpart WHERE ds IS NULL
+    """.stripMargin
+  )
+
+  createQueryTest("partition filtering with >",
+    """
+      | SET spark.sql.hive.metastorePartitionPruning = true;
+      | SELECT * FROM srcpart WHERE ds > '2008-04-08'
+    """.stripMargin
+  )
+
   // In unit test, kv1.txt is a small file and will be loaded as table src
   // Since the small file will be considered as a single split, we assume
   // Hive / SparkSQL HQL has the same output even for SORT BY
