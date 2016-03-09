@@ -59,12 +59,12 @@ class NullFilteringSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
     val originalQuery = x.join(y,
-      condition = Some(("x.a".attr !== "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
+      condition = Some(("x.a".attr =!= "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
       .analyze
     val left = x.where(IsNotNull('a) && IsNotNull('b))
     val right = y.where(IsNotNull('a) && IsNotNull('c))
     val correctAnswer = left.join(right,
-      condition = Some(("x.a".attr !== "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
+      condition = Some(("x.a".attr =!= "y.a".attr) && ("x.b".attr === 1) && ("y.c".attr > 5)))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
