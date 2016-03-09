@@ -799,7 +799,7 @@ private[spark] class BlockManager(
       blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
         // Now that the block is in either the memory, externalBlockStore, or disk store,
-        // let other threads read it, and tell the master about it.
+        // tell the master about it.
         putBlockInfo.size = size
         if (tellMaster) {
           reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
@@ -912,7 +912,7 @@ private[spark] class BlockManager(
       blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
         // Now that the block is in either the memory, externalBlockStore, or disk store,
-        // let other threads read it, and tell the master about it.
+        // tell the master about it.
         putBlockInfo.size = size
         if (tellMaster) {
           reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
