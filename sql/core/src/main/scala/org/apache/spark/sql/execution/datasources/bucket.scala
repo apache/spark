@@ -27,13 +27,15 @@ import org.apache.spark.sql.catalyst.expressions.SortDirection
  *
  * @param numBuckets number of buckets.
  * @param bucketColumnNames the names of the columns that used to generate the bucket id.
- * @param sortColumnNames the names of the columns that used to sort data in each bucket.
+ * @param sortColumns (name, sort direction) of columns that used to sort data in each bucket.
  */
 private[sql] case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String],
-    sortDirections: Seq[SortDirection] = Nil)
+    sortColumns: Seq[(String, SortDirection)]) {
+
+  def sortColumnNames: Seq[String] = sortColumns.map { case (name, _) => name }
+}
 
 private[sql] object BucketingUtils {
   // The file name of bucketed data should have 3 parts:

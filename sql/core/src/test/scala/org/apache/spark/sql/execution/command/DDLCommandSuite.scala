@@ -170,9 +170,9 @@ class DDLCommandSuite extends PlanTest {
     val tableIdent = TableIdentifier("table_name", None)
     val cols = List("dt", "country")
     val expected1 = AlterTableStorageProperties(
-      tableIdent, BucketSpec(10, cols, Nil, Nil))(sql1)
+      tableIdent, BucketSpec(10, cols, Nil))(sql1)
     val expected2 = AlterTableStorageProperties(
-      tableIdent, BucketSpec(10, cols, cols, List(Ascending, Descending)))(sql2)
+      tableIdent, BucketSpec(10, cols, List(("dt", Ascending), ("country", Descending))))(sql2)
     val expected3 = AlterTableNotClustered(tableIdent)(sql3)
     val expected4 = AlterTableNotSorted(tableIdent)(sql4)
     comparePlans(parsed1, expected1)
