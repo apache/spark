@@ -211,7 +211,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
           |expr = (not leaf-0)""".stripMargin.trim
       )
       checkFilterPredicate(
-        '_1 !== 1,
+        '_1 =!= 1,
         """leaf-0 = (EQUALS _1 1)
           |expr = (not leaf-0)""".stripMargin.trim
       )
