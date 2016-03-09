@@ -340,6 +340,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
+    option("caseSensitiveAnalysis", sqlContext.conf.caseSensitiveAnalysis)
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)

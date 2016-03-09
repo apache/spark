@@ -99,8 +99,10 @@ private[sql] object InferSchema {
       case START_OBJECT =>
         val builder = Seq.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
+          val tn = parser.getCurrentName
+          val name = if (configOptions.caseSensitiveAnalysis) tn else tn.toLowerCase
           builder += StructField(
-            parser.getCurrentName,
+            name,
             inferField(parser, configOptions),
             nullable = true)
         }
