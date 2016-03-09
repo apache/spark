@@ -81,10 +81,6 @@ object ParserUtils {
     }
   }
 
-  def parseFailed(msg: String, node: ASTNode): Nothing = {
-    throw new AnalysisException(s"$msg: '${node.source}")
-  }
-
   def getClauses(
       clauseNames: Seq[String],
       nodeList: Seq[ASTNode]): Seq[Option[ASTNode]] = {
@@ -166,7 +162,14 @@ object ParserUtils {
   }
 
   /**
-   * Throw an exception because we cannot parse the given node.
+   * Throw an exception because we cannot parse the given node for some unexpected reason.
+   */
+  def parseFailed(msg: String, node: ASTNode): Nothing = {
+    throw new AnalysisException(s"$msg: '${node.source}")
+  }
+
+  /**
+   * Throw an exception because there are no rules to parse the node.
    */
   def noParseRule(msg: String, node: ASTNode): Nothing = {
     throw new NotImplementedError(

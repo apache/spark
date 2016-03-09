@@ -37,7 +37,7 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
    * For each node, extract properties in the form of a list ['key1', 'key2', 'key3', 'value']
    * into a pair (key1.key2.key3, value).
    */
-  protected def extractProps(
+  private def extractProps(
       props: Seq[ASTNode],
       expectedNodeText: String): Seq[(String, String)] = {
     props.map {
