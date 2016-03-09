@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
 
   def output: Seq[Attribute]
@@ -237,4 +237,65 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   override def innerChildren: Seq[PlanType] = subqueries
+
+  /**
+   * Canonicalized copy of this query plan.
+   */
+  protected lazy val canonicalized: PlanType = this
+
+  /**
+   * Returns true when the given query plan will return the same results as this query plan.
+   *
+   * Since its likely undecidable to generally determine if two given plans will produce the same
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
+   * possibly be different.
+   *
+   * By default this function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences. Operators that
+   * can do better should override this function.
+   */
+  def sameResult(plan: PlanType): Boolean = {
+    val canonicalizedLeft = this.canonicalized
+    val canonicalizedRight = plan.canonicalized
+    canonicalizedLeft.getClass == canonicalizedRight.getClass &&
+      canonicalizedLeft.children.size == canonicalizedRight.children.size &&
+      canonicalizedLeft.cleanArgs == canonicalizedRight.cleanArgs &&
+      (canonicalizedLeft.children, canonicalizedRight.children).zipped.forall(_ sameResult _)
+  }
+
+  /**
+   * All the attributes that are used for this plan.
+   */
+  lazy val allAttributes: Seq[Attribute] = children.flatMap(_.output)
+
+  private def cleanExpression(e: Expression): Expression = e match {
+    case a: Alias =>
+      // As the root of the expression, Alias will always take an arbitrary exprId, we need
+      // to erase that for equality testing.
+      val cleanedExprId =
+        Alias(a.child, a.name)(ExprId(-1), a.qualifiers, isGenerated = a.isGenerated)
+      BindReferences.bindReference(cleanedExprId, allAttributes, allowFailures = true)
+    case other =>
+      BindReferences.bindReference(other, allAttributes, allowFailures = true)
+  }
+
+  /** Args that have cleaned such that differences in expression id should not affect equality */
+  protected lazy val cleanArgs: Seq[Any] = {
+    def cleanArg(arg: Any): Any = arg match {
+      case e: Expression => cleanExpression(e).canonicalized
+      case other => other
+    }
+
+    productIterator.map {
+      // Children are checked using sameResult above.
+      case tn: TreeNode[_] if containsChild(tn) => null
+      case e: Expression => cleanArg(e)
+      case s: Option[_] => s.map(cleanArg)
+      case s: Seq[_] => s.map(cleanArg)
+      case m: Map[_, _] => m.mapValues(cleanArg)
+      case other => other
+    }.toSeq
+  }
 }

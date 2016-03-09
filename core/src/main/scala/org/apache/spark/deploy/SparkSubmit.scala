@@ -48,7 +48,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
 
 /**
  * Whether to submit, kill, or request the status of an application.
- * The latter two operations are currently supported only for standalone cluster mode.
+ * The latter two operations are currently supported only for standalone and Mesos cluster modes.
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value

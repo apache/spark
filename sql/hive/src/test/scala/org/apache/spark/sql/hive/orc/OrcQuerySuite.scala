@@ -348,7 +348,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  ignore("SPARK-10623 Enable ORC PPD") {
+  test("SPARK-10623 Enable ORC PPD") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
         import testImplicits._
@@ -363,7 +363,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           val nullValue: Option[String] = None
           (maybeInt, nullValue)
         }
-        createDataFrame(data).toDF("a", "b").write.orc(path)
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
         val df = sqlContext.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
