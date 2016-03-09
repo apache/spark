@@ -82,7 +82,7 @@ case class LessThanOrEqual(attribute: String, value: Any) extends Filter
  *
  * @since 1.3.0
  */
-case class In(attribute: String, values: Array[Any]) extends Filter
+case class In(attribute: String, values: Seq[Any]) extends Filter
 
 /**
  * A filter that evaluates to `true` iff the attribute evaluates to null.

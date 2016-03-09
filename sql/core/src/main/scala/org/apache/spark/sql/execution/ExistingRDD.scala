@@ -132,6 +132,12 @@ private[sql] case class DataSourceScan(
 
   override val nodeName: String = relation.toString
 
+  // Ignore rdd when checking results
+  override def sameResult(plan: SparkPlan ): Boolean = plan match {
+    case other: DataSourceScan => relation == other.relation && metadata == other.metadata
+    case _ => false
+  }
+
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
@@ -240,7 +246,7 @@ private[sql] case class DataSourceScan(
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprs.map(_.gen(ctx))
-    val inputRow = if (isUnsafeRow) row else null
+    val inputRow = if (outputUnsafeRows) row else null
     val scanRows = ctx.freshName("processRows")
     ctx.addNewFunction(scanRows,
       s"""
