@@ -19,14 +19,12 @@ package org.apache.spark.storage
 
 import java.io._
 import java.nio.{ByteBuffer, MappedByteBuffer}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
 import scala.util.control.NonFatal
-import scala.collection.JavaConverters._
 
 import sun.nio.ch.DirectBuffer
 
@@ -67,7 +65,7 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     defaultSerializer: Serializer,
     val conf: SparkConf,
-    val memoryManager: MemoryManager,
+    memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
     blockTransferService: BlockTransferService,
@@ -165,11 +163,6 @@ private[spark] class BlockManager(
    * Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
    * loaded yet. */
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
-
-  // Blocks are removing by another thread
-  private val pendingToRemove = new ConcurrentHashMap[BlockId, Long]()
-
-  private val NON_TASK_WRITER = -1024L
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -1032,7 +1025,7 @@ private[spark] class BlockManager(
     val info = blockInfo.get(blockId).orNull
 
     // If the block has not already been dropped
-    if (info != null && !pendingToRemove.containsKey(blockId)) {
+    if (info != null) {
       info.synchronized {
         // required ? As of now, this will be invoked only for blocks which are ready
         // But in case this changes in future, adding for consistency sake.
@@ -1058,13 +1051,11 @@ private[spark] class BlockManager(
           }
           blockIsUpdated = true
         }
-        pendingToRemove.put(blockId, currentTaskAttemptId)
 
         // Actually drop from memory store
         val droppedMemorySize =
           if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
         val blockIsRemoved = memoryStore.remove(blockId)
-        pendingToRemove.remove(blockId)
         if (blockIsRemoved) {
           blockIsUpdated = true
         } else {
@@ -1089,7 +1080,6 @@ private[spark] class BlockManager(
 
   /**
    * Remove all blocks belonging to the given RDD.
- *
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
@@ -1118,14 +1108,11 @@ private[spark] class BlockManager(
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
     logDebug(s"Removing block $blockId")
     val info = blockInfo.get(blockId).orNull
-    if (info != null && !pendingToRemove.containsKey(blockId)) {
-      pendingToRemove.put(blockId, currentTaskAttemptId)
+    if (info != null) {
       info.synchronized {
-        val level = info.level
         // Removals are idempotent in disk store and memory store. At worst, we get a warning.
-        val removedFromMemory = if (level.useMemory) memoryStore.remove(blockId) else false
-        pendingToRemove.remove(blockId)
-        val removedFromDisk = if (level.useDisk) diskStore.remove(blockId) else false
+        val removedFromMemory = memoryStore.remove(blockId)
+        val removedFromDisk = diskStore.remove(blockId)
         val removedFromExternalBlockStore =
           if (externalBlockStoreInitialized) externalBlockStore.remove(blockId) else false
         if (!removedFromMemory && !removedFromDisk && !removedFromExternalBlockStore) {
@@ -1160,11 +1147,9 @@ private[spark] class BlockManager(
       val entry = iterator.next()
       val (id, info, time) = (entry.getKey, entry.getValue.value, entry.getValue.timestamp)
       if (time < cleanupTime && shouldDrop(id)) {
-        pendingToRemove.put(id, currentTaskAttemptId)
         info.synchronized {
           val level = info.level
           if (level.useMemory) { memoryStore.remove(id) }
-          pendingToRemove.remove(id)
           if (level.useDisk) { diskStore.remove(id) }
           if (level.useOffHeap) { externalBlockStore.remove(id) }
           iterator.remove()
@@ -1174,28 +1159,6 @@ private[spark] class BlockManager(
         reportBlockStatus(id, info, status)
       }
     }
-  }
-
-  private def currentTaskAttemptId: Long = {
-    Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(NON_TASK_WRITER)
-  }
-
-  /**
-   * Release all lock held by the given task, clearing that task's pin bookkeeping
-   * structures and updating the global pin counts. This method should be called at the
-   * end of a task (either by a task completion handler or in `TaskRunner.run()`).
-   *
-   * @return the ids of blocks whose pins were released
-   */
-  def releaseAllLocksForTask(taskAttemptId: Long): ArrayBuffer[BlockId] = {
-    var selectLocks = ArrayBuffer[BlockId]()
-    pendingToRemove.entrySet().asScala.foreach { entry =>
-      if (entry.getValue == taskAttemptId) {
-        pendingToRemove.remove(taskAttemptId)
-        selectLocks += entry.getKey
-      }
-    }
-    selectLocks
   }
 
   private def shouldCompress(blockId: BlockId): Boolean = {
@@ -1271,7 +1234,6 @@ private[spark] class BlockManager(
     rpcEnv.stop(slaveEndpoint)
     blockInfo.clear()
     memoryStore.clear()
-    pendingToRemove.clear()
     diskStore.clear()
     if (externalBlockStoreInitialized) {
       externalBlockStore.clear()
