@@ -215,15 +215,14 @@ setMethod("fitted", signature(object = "PipelineModel"),
 #'
 #' Fit a naive Bayes model, similarly to R's naiveBayes() except for omitting two arguments 'subset'
 #' and 'na.action'. Users can use 'subset' function and 'fillna' or 'na.omit' function of DataFrame,
-#' respectviely, to preprocess their DataFrame. We use na.omit in this interface to avoid potential
-#' errors.
+#' respectively, to preprocess their DataFrame. We use na.omit in this interface to remove rows with
+#' NA values.
 #'
 #' @param object A symbolic description of the model to be fitted. Currently only a few formula
 #'                operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param data DataFrame for training
 #' @param lambda Smoothing parameter
 #' @param modelType Either 'multinomial' or 'bernoulli'. Default "multinomial".
-#' @param ... Undefined parameters
 #' @return A fitted naive Bayes model.
 #' @rdname naiveBayes
 #' @export
@@ -233,7 +232,7 @@ setMethod("fitted", signature(object = "PipelineModel"),
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- createDataFrame(sqlContext, HouseVotes84)
-#' model <- glm(Class ~ ., df, lambda = 1, modelType = "multinomial")
+#' model <- naiveBayes(Class ~ ., df, lambda = 1, modelType = "multinomial")
 #'}
 setMethod("naiveBayes", signature(formula = "formula", data = "DataFrame"),
           function(formula, data, lambda = 1, modelType = c("multinomial", "bernoulli"), ...) {
