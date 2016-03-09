@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.linalg.{BLAS, DenseVector, Vectors}
 import org.apache.spark.mllib.random._
@@ -30,7 +30,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class GeneralizedLinearRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   private val seed: Int = 42
   @transient var datasetGaussianIdentity: DataFrame = _
@@ -464,9 +465,36 @@ class GeneralizedLinearRegressionSuite extends SparkFunSuite with MLlibTestSpark
       }
     }
   }
+
+  test("read/write") {
+    def checkModelData(
+        model: GeneralizedLinearRegressionModel,
+        model2: GeneralizedLinearRegressionModel): Unit = {
+      assert(model.intercept === model2.intercept)
+      assert(model.coefficients.toArray === model2.coefficients.toArray)
+    }
+
+    val glr = new GeneralizedLinearRegression()
+    testEstimatorAndModelReadWrite(glr, datasetPoissonLog,
+      GeneralizedLinearRegressionSuite.allParamSettings, checkModelData)
+  }
 }
 
 object GeneralizedLinearRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "family" -> "poisson",
+    "link" -> "log",
+    "fitIntercept" -> true,
+    "maxIter" -> 2,  // intentionally small
+    "tol" -> 0.8,
+    "regParam" -> 0.01,
+    "predictionCol" -> "myPrediction")
 
   def generateGeneralizedLinearRegressionInput(
       intercept: Double,
