@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -62,7 +64,8 @@ private[sql] object SparkPlanGraph {
     val nodeIdGenerator = new AtomicLong(0)
     val nodes = mutable.ArrayBuffer[SparkPlanGraphNode]()
     val edges = mutable.ArrayBuffer[SparkPlanGraphEdge]()
-    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null)
+    val exchanges = mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]()
+    buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, null, null, exchanges)
     new SparkPlanGraph(nodes, edges)
   }
 
@@ -72,7 +75,8 @@ private[sql] object SparkPlanGraph {
       nodes: mutable.ArrayBuffer[SparkPlanGraphNode],
       edges: mutable.ArrayBuffer[SparkPlanGraphEdge],
       parent: SparkPlanGraphNode,
-      subgraph: SparkPlanGraphCluster): Unit = {
+      subgraph: SparkPlanGraphCluster,
+      exchanges: mutable.HashMap[SparkPlanInfo, SparkPlanGraphNode]): Unit = {
     planInfo.nodeName match {
       case "WholeStageCodegen" =>
         val cluster = new SparkPlanGraphCluster(
@@ -82,13 +86,14 @@ private[sql] object SparkPlanGraph {
           mutable.ArrayBuffer[SparkPlanGraphNode]())
         nodes += cluster
         buildSparkPlanGraphNode(
-          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster)
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, cluster, exchanges)
       case "InputAdapter" =>
-        buildSparkPlanGraphNode(planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null)
+        buildSparkPlanGraphNode(
+          planInfo.children.head, nodeIdGenerator, nodes, edges, parent, null, exchanges)
       case "Subquery" if subgraph != null =>
         // Subquery should not be included in WholeStageCodegen
-        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null)
-      case _ =>
+        buildSparkPlanGraphNode(planInfo, nodeIdGenerator, nodes, edges, parent, null, exchanges)
+      case name =>
         val metrics = planInfo.metrics.map { metric =>
           SQLPlanMetric(metric.name, metric.accumulatorId,
             SQLMetrics.getMetricParam(metric.metricParam))
@@ -101,12 +106,15 @@ private[sql] object SparkPlanGraph {
         } else {
           subgraph.nodes += node
         }
+        if (name == "ShuffleExchange" || name == "BroadcastExchange") {
+          exchanges += planInfo -> node
+        }
 
         if (parent != null) {
           edges += SparkPlanGraphEdge(node.id, parent.id)
         }
         planInfo.children.foreach(
-          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph))
+          buildSparkPlanGraphNode(_, nodeIdGenerator, nodes, edges, node, subgraph, exchanges))
     }
   }
 }
@@ -136,16 +144,14 @@ private[ui] class SparkPlanGraphNode(
     }
 
     if (values.nonEmpty) {
-      // If there are metrics, display each entry in a separate line. We should use an escaped
-      // "\n" here to follow the dot syntax.
-      //
+      // If there are metrics, display each entry in a separate line.
       // Note: whitespace between two "\n"s is to create an empty line between the name of
       // SparkPlan and metrics. If removing it, it won't display the empty line in UI.
-      builder ++= "\\n \\n"
-      builder ++= values.mkString("\\n")
+      builder ++= "\n \n"
+      builder ++= values.mkString("\n")
     }
 
-    s"""  $id [label="${builder.toString()}"];"""
+    s"""  $id [label="${StringEscapeUtils.escapeJava(builder.toString())}"];"""
   }
 }
 
@@ -162,7 +168,7 @@ private[ui] class SparkPlanGraphCluster(
   override def makeDotNode(metricsValue: Map[Long, String]): String = {
     s"""
        |  subgraph cluster${id} {
-       |    label=${name};
+       |    label="${StringEscapeUtils.escapeJava(name)}";
        |    ${nodes.map(_.makeDotNode(metricsValue)).mkString("    \n")}
        |  }
      """.stripMargin

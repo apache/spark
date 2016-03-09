@@ -32,7 +32,7 @@ import org.scalactic.Tolerance._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.json.InferSchema.compatibleType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -1178,21 +1178,21 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       sparkContext.parallelize(1 to 100)
         .map(i => s"""{"a": 1, "b": "str$i"}""").saveAsTextFile(path)
 
-      val d1 = ResolvedDataSource(
+      val d1 = DataSource(
         sqlContext,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        provider = classOf[DefaultSource].getCanonicalName,
-        options = Map("path" -> path))
+        className = classOf[DefaultSource].getCanonicalName,
+        options = Map("path" -> path)).resolveRelation()
 
-      val d2 = ResolvedDataSource(
+      val d2 = DataSource(
         sqlContext,
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        provider = classOf[DefaultSource].getCanonicalName,
-        options = Map("path" -> path))
+        className = classOf[DefaultSource].getCanonicalName,
+        options = Map("path" -> path)).resolveRelation()
       assert(d1 === d2)
     })
   }
