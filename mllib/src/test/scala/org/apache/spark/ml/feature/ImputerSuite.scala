@@ -18,11 +18,10 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
-
 
 class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -44,7 +43,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
     }
   }
 
-  test("Imputer for with missing Value -1.0") {
+  test("Imputer for Double with missing Value -1.0") {
     val df = sqlContext.createDataFrame( Seq(
       (0, 1.0, 1.0, 1.0, 1.0),
       (1, 1.0, 1.0, 1.0, 1.0),

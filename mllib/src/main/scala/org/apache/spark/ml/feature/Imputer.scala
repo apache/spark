@@ -68,7 +68,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasOut
     validateParams()
     val inputType = schema($(inputCol)).dataType
     require(inputType.isInstanceOf[VectorUDT] || inputType.isInstanceOf[DoubleType],
-      s"Input column ${$(inputCol)} must of type vector or Double")
+      s"Input column ${$(inputCol)} must of type Vector or Double")
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
