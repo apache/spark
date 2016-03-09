@@ -376,20 +376,18 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
-    val partitions = {
-      val r = filter match {
-        case EmptyPushdown =>
-          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
-        case PartitionExpr(filterExpr) =>
-          logDebug(s"Hive metastore filter expression is '$filterExpr'.")
-          getPartitionsByFilterMethod.invoke(hive, table, filterExpr)
-        case PartitionSpec(filterSpec) =>
-          logDebug(s"Hive metastore partition spec is $filterSpec.")
-          getPartitionsByPartitionSpec.invoke(hive, table, filterSpec)
-      }
-      r.asInstanceOf[JArrayList[Partition]]
+    val partitions = filter match {
+      case EmptyPushdown =>
+        getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+      case PartitionExpr(filterExpr) =>
+        logDebug(s"Hive metastore filter expression is '$filterExpr'.")
+        getPartitionsByFilterMethod.invoke(hive, table, filterExpr)
+          .asInstanceOf[JArrayList[Partition]]
+      case PartitionSpec(filterSpec) =>
+        logDebug(s"Hive metastore partition spec is $filterSpec.")
+        getPartitionsByPartitionSpec.invoke(hive, table, filterSpec)
+          .asInstanceOf[JArrayList[Partition]]
     }
-
     partitions.asScala.toSeq
   }
 
