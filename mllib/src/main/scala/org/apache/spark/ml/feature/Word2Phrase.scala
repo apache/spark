@@ -23,9 +23,6 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params, IntParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
-//import org.apache.spark.ml.feature.{HashingTF, IDF, Tokenizer, RegexTokenizer}
-//import org.apache.spark.ml.feature.StopWordsRemover
-//import org.apache.spark.ml.feature.NGram
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.stat.Statistics
@@ -44,7 +41,6 @@ import org.apache.spark.sql.types._
 
 /**
  * Params for [[Word2Phrase]] and [[Word2PhraseModel]].
- * currently not being used
  */ 
 private[feature] trait Word2PhraseParams extends Params with HasInputCol with HasOutputCol {
 
@@ -61,13 +57,6 @@ private[feature] trait Word2PhraseParams extends Params with HasInputCol with Ha
 
   val minWords: IntParam = new IntParam(this, "minWords",
     "minimum word count before it's counted")
-
-  /* var bigram_list = Array(("default", "val"))
-
-  def printBigramList() : Unit = {
-
-    println(bigram_list.deep.mkString("\n"))
-  } */
 
   /**
    * threshold for score
@@ -91,16 +80,12 @@ private[feature] trait Word2PhraseParams extends Params with HasInputCol with Ha
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
     StructType(outputFields)
   }
-
-  /* override def validateParams(): Unit = {
-    require($(minCount) < $(threshold), s"The specified minCount(${$(minCount)}) is larger or equal to threshold(${$(threshold)})")
-  } */
 }
 
 /**
  * :: Experimental ::
  * Creates a training model for word2phrase
- * counts the number of words and creates a mapping of words to bigrams
+ * Uses the Word2Phrase algorithm to determine which words to turn into phrases
  */
 @Experimental
 class Word2Phrase(override val uid: String)
@@ -145,21 +130,19 @@ class Word2Phrase(override val uid: String)
     // counts the number of bigrams (w1 w2, w2 w3, etc.)
     var biGramCount = ngramDataFrame.select("ngrams").rdd.flatMap(line => line(0).asInstanceOf[Seq[String]]).map(word => (word, 1)).reduceByKey(_ + _).toDF("biGram", "count")
     biGramCount.registerTempTable("biGramCount")
-    sqlContext.sql("select * from biGramCount").show(20)
 
     val minCountA = $(minCount)
     val minWordsA = $(minWords)
     // calculated the score for each bigram ***************************** minCount and threshold should probably be used in the below formula
     sqlContext.sql(s"select biGram, (bigram_count - $minCountA)/(word1_count * word2_count) as score from (select biGrams.biGram as biGram, biGrams.count as bigram_count, wc1.word as word1, wc1.count as word1_count, wc2.word as word2, wc2.count as word2_count from (Select biGram, count, split(biGram,' ')[0] as word1, split(biGram,' ')[1] as word2 from biGramCount) biGrams inner join wordCount as wc1 on (wc1.word = biGrams.word1) inner join wordCount as wc2 on (wc2.word = biGrams.word2) ) biGramsStats where word2_count > $minWordsA and word1_count > $minWordsA order by score desc").registerTempTable("bi_gram_scores")
-    sqlContext.sql("select * from bi_gram_scores").show(20)
 
     val thresholdA = $(threshold)
     // Scores > threshold
     var biGrams = sqlContext.sql(s"select biGram from bi_gram_scores where score > $thresholdA").collect()
+    var bigram_list = biGrams.map(row => (row(0).toString))
 
-    var bigram_list = biGrams.map(row => (row.toString))
+    copyValues(new Word2PhraseModel(uid, bigram_list).setParent(this))
 
-    copyValues(new Word2PhraseModel(uid, bigram_list.map(item => (item.drop(1).dropRight(1)))).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -238,9 +221,6 @@ object Word2PhraseModel extends MLReadable[Word2PhraseModel] {
       val dataPath = new Path(path, "data").toString
       val data = sqlContext.read.parquet(dataPath).select("bigram_list").head()
       val bigram_list = data.getAs[Seq[String]](0).toArray
-      //var holder = Array(("ok", "ok"), ("ok", "ok"), ("o", "oO"))
-           // val model = new Word2PhraseModel(metadata.uid, data.map((bigram:String, bigram_broken:String) => (bigram, bigram_broken)).collect())
-
       val model = new Word2PhraseModel(metadata.uid, bigram_list)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model

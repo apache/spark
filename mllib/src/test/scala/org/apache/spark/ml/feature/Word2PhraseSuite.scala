@@ -39,29 +39,18 @@ class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     t.setMinWords(0)
 
     var model = t.fit(wordDataFrame)
-    var result = model.transform(wordDataFrame)
+    var actualDf = model.transform(wordDataFrame)
 
-    var resultDataFrame = sqlContext.createDataFrame(Seq(
-      (0, "Hi I heard about Spark", "hi_I_heard_about_spark"),
-      (1, "I heard Java could use case classes", "i_heard_java_could_use_case_classes"),
-      (2, "I heard Logistic regression models are neat", "i_heard_logistic_regression_models_are_neat")
-    )).toDF("label", "inputWords", "out")
+    var expectedDf = sqlContext.createDataFrame(Seq(
+      (0, "hi_i_heard_about_spark"),
+      (1, "i_heard_java_could_use_case_classes"),
+      (2, "i_heard_logistic_regression_models_are_neat")
+    )).toDF("label", "bigrams")
 
-    assert(result == resultDataFrame)
-  }
+    var expected = expectedDf.map(row => (row(1).toString)).collect()
+    var actual = actualDf.map(row => (row(2).toString)).collect()
 
-  test("Word2Phrase Read/Write") {
-
-    val wordDataFrame = sqlContext.createDataFrame(Seq(
-      (0, "Hi I heard about Spark"),
-      (1, "I wish Java could use case classes"),
-      (2, "Logistic regression models are neat")
-    )).toDF("label", "inputWords")
-
-    var t = new Word2Phrase().setInputCol("inputWords").setOutputCol("out")
-    
-    val newInstance = testDefaultReadWrite(t)
-    assert(newInstance === t)
+    assert(expected.deep == actual.deep)
   }
 
   test("Word2PhraseModel Read/Write") {
