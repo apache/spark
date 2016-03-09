@@ -1081,7 +1081,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  test("safely unroll blocks") {
+  ignore("safely unroll blocks") {
     store = makeBlockManager(12000)
     val smallList = List.fill(40)(new Array[Byte](100))
     val bigList = List.fill(40)(new Array[Byte](1000))
