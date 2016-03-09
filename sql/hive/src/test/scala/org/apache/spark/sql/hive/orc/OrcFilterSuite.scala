@@ -212,8 +212,9 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       )
       checkFilterPredicate(
         '_1 =!= 1,
-        """leaf-0 = (EQUALS _1 1)
-          |expr = (not leaf-0)""".stripMargin.trim
+        """leaf-0 = (IS_NULL _1)
+          |leaf-1 = (EQUALS _1 1)
+          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
       )
       checkFilterPredicate(
         !('_1 < 4),
