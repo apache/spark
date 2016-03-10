@@ -19,6 +19,7 @@ package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -66,7 +67,7 @@ public class JavaMultilayerPerceptronClassifierSuite implements Serializable {
       .setMaxIter(100);
     MultilayerPerceptronClassificationModel model = mlpc.fit(dataFrame);
     Dataset<Row> result = model.transform(dataFrame);
-    Row[] predictionAndLabels = result.select("prediction", "label").collect();
+    List<Row> predictionAndLabels = result.select("prediction", "label").collectAsList();
     for (Row r: predictionAndLabels) {
       Assert.assertEquals((int) r.getDouble(0), (int) r.getDouble(1));
     }

@@ -56,7 +56,7 @@ public class JavaNaiveBayesSuite implements Serializable {
   }
 
   public void validatePrediction(Dataset<Row> predictionAndLabels) {
-    for (Row r : predictionAndLabels.collect()) {
+    for (Row r : predictionAndLabels.collectAsList()) {
       double prediction = r.getAs(0);
       double label = r.getAs(1);
       assertEquals(label, prediction, 1E-5);

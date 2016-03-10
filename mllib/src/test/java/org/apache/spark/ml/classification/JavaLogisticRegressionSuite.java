@@ -130,7 +130,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
     model.transform(dataset).registerTempTable("transformed");
     Dataset<Row> trans1 = jsql.sql("SELECT rawPrediction, probability FROM transformed");
-    for (Row row: trans1.collect()) {
+    for (Row row: trans1.collectAsList()) {
       Vector raw = (Vector)row.get(0);
       Vector prob = (Vector)row.get(1);
       Assert.assertEquals(raw.size(), 2);
@@ -141,7 +141,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     }
 
     Dataset<Row> trans2 = jsql.sql("SELECT prediction, probability FROM transformed");
-    for (Row row: trans2.collect()) {
+    for (Row row: trans2.collectAsList()) {
       double pred = row.getDouble(0);
       Vector prob = (Vector)row.get(1);
       double probOfPred = prob.apply((int)pred);
