@@ -904,7 +904,7 @@ private[spark] class BlockManager(
           c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
         }
         logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-        if (level.replication > 1 && blockWasSuccessfullyStored) {
+        if (level.replication > 1) {
           val remoteStartTime = System.currentTimeMillis
           val bytesToReplicate = doGetLocalBytes(blockId, putBlockInfo)
           try {
