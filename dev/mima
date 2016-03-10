@@ -24,51 +24,9 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-# All default projects except for assemblies:
-SPARK_PROJECTS=(
-  "common/network-common"
-  "common/network-shuffle"
-  "common/network-yarn"
-  "common/sketch"
-  "common/tags"
-  "common/unsafe"
-  "core"
-  "docker-integration-tests"
-  "examples"
-  "external/akka"
-  "external/flume"
-  "external/flume-sink"
-  "external/kafka"
-  "external/mqtt"
-  "external/twitter"
-  "external/zeromq"
-  "extras/kinesis-asl"
-  "extras/spark-ganglia-lgpl"
-  "graphx"
-  "launcher"
-  "mllib"
-  "repl"
-  "sql/catalyst"
-  "sql/core"
-  "sql/hive"
-  "sql/hive-thriftserver"
-  "streaming"
-  "tools"
-  "yarn"
-)
-SPARK_CLASSES=""
-for project in "${SPARK_PROJECTS[@]}"; do
-  SPARK_CLASSES="$FWDIR/$project/target/scala-2.11/classes/:$SPARK_CLASSES"
-done
-
 TOOLS_CLASSPATH="$(build/sbt "export tools/fullClasspath" | tail -n1)"
 
 rm -f .generated-mima*
-
-# Generate Mima Ignore is called twice, first with latest built jars
-# on the classpath and then again with previous version jars on the classpath.
-# Because of a bug in GenerateMIMAIgnore that when old jars are ahead on classpath
-# it did not process the new classes (which are in assembly jar).
 
 generate_mima_ignore() {
     java \
@@ -79,8 +37,8 @@ generate_mima_ignore() {
 }
 
 SPARK_PROFILES="-Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"
-generate_mima_ignore "$SPARK_CLASSES:$(build/sbt $SPARK_PROFILES "export assembly/test:managedClasspath" | tail -n1)"
-generate_mima_ignore "$(build/sbt $SPARK_PROFILES "export oldDeps/managedClasspath" | tail -n1)"
+generate_mima_ignore "$(build/sbt $SPARK_PROFILES "export assembly/fullClasspath" | tail -n1)"
+generate_mima_ignore "$(build/sbt $SPARK_PROFILES "export oldDeps/fullClasspath" | tail -n1)"
 
 echo -e "q\n" | build/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
 ret_val=$?
