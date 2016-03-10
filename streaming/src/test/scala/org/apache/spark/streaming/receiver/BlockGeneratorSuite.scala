@@ -203,8 +203,8 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
   test("block push errors are reported") {
     val listener = new TestBlockGeneratorListener {
       @volatile var errorReported = false
-      override def onPushBlock(
-          blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+      override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_],
+                               numRecordsLimit: Long): Unit = {
         throw new SparkException("test")
       }
       override def onError(message: String, throwable: Throwable): Unit = {
@@ -244,7 +244,8 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     @volatile var onAddDataCalled = false
     @volatile var onPushBlockCalled = false
 
-    override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
+    override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_],
+                             numRecordsLimit: Long): Unit = {
       pushedData.addAll(arrayBuffer.asJava)
       onPushBlockCalled = true
     }

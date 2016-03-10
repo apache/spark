@@ -121,7 +121,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
 
   /** Store an ArrayBuffer of received data as a data block into Spark's memory. */
   def store(dataBuffer: ArrayBuffer[T]) {
-    supervisor.pushArrayBuffer(dataBuffer, None, None)
+    supervisor.pushArrayBuffer(dataBuffer, None, None, None)
   }
 
   /**
@@ -130,12 +130,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataBuffer: ArrayBuffer[T], metadata: Any) {
-    supervisor.pushArrayBuffer(dataBuffer, Some(metadata), None)
+    supervisor.pushArrayBuffer(dataBuffer, Some(metadata), None, None)
   }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: Iterator[T]) {
-    supervisor.pushIterator(dataIterator, None, None)
+    supervisor.pushIterator(dataIterator, None, None, None)
   }
 
   /**
@@ -144,12 +144,12 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataIterator: java.util.Iterator[T], metadata: Any) {
-    supervisor.pushIterator(dataIterator.asScala, Some(metadata), None)
+    supervisor.pushIterator(dataIterator.asScala, Some(metadata), None, None)
   }
 
   /** Store an iterator of received data as a data block into Spark's memory. */
   def store(dataIterator: java.util.Iterator[T]) {
-    supervisor.pushIterator(dataIterator.asScala, None, None)
+    supervisor.pushIterator(dataIterator.asScala, None, None, None)
   }
 
   /**
@@ -158,7 +158,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(dataIterator: Iterator[T], metadata: Any) {
-    supervisor.pushIterator(dataIterator, Some(metadata), None)
+    supervisor.pushIterator(dataIterator, Some(metadata), None, None)
   }
 
   /**
@@ -167,7 +167,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * that Spark is configured to use.
    */
   def store(bytes: ByteBuffer) {
-    supervisor.pushBytes(bytes, None, None)
+    supervisor.pushBytes(bytes, None, None, None)
   }
 
   /**
@@ -176,7 +176,7 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * for being used in the corresponding InputDStream.
    */
   def store(bytes: ByteBuffer, metadata: Any) {
-    supervisor.pushBytes(bytes, Some(metadata), None)
+    supervisor.pushBytes(bytes, Some(metadata), None, None)
   }
 
   /** Report exceptions in receiving data. */
