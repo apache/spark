@@ -839,10 +839,10 @@ private[spark] class BlockManager(
 
     val startTimeMs = System.currentTimeMillis
     var blockWasSuccessfullyStored: Boolean = false
-    var result: Option[T] = None
-    try {
-      result = putBody(putBlockInfo)
-      blockWasSuccessfullyStored = result.isEmpty
+    val result: Option[T] = try {
+      val res = putBody(putBlockInfo)
+      blockWasSuccessfullyStored = res.isEmpty
+      res
     } finally {
       if (blockWasSuccessfullyStored) {
         if (keepReadLock) {
