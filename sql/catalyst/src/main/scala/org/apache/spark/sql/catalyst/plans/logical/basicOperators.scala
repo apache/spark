@@ -434,14 +434,13 @@ case class Aggregate(
 }
 
 case class Window(
-    projectList: Seq[Attribute],
     windowExpressions: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] =
-    projectList ++ windowExpressions.map(_.toAttribute)
+    child.output ++ windowExpressions.map(_.toAttribute)
 }
 
 private[sql] object Expand {
