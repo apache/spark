@@ -100,7 +100,7 @@ class SampleActorReceiver[T](urlOfPublisher: String) extends ActorReceiver {
 object FeederActor {
 
   def main(args: Array[String]) {
-    if (args.length < 2){
+    if (args.length < 2) {
       System.err.println("Usage: FeederActor <hostname> <port>\n")
       System.exit(1)
     }

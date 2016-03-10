@@ -420,7 +420,7 @@ private[spark] object BLAS extends Serializable with Logging {
     val AcolPtrs = A.colPtrs
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (A.isTransposed){
+    if (A.isTransposed) {
       var colCounterForB = 0
       if (!B.isTransposed) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {

@@ -361,7 +361,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
-  test("SPARK-11522 select input_file_name from non-parquet table"){
+  test("SPARK-11522 select input_file_name from non-parquet table") {
 
     withTempDir { tempDir =>
 

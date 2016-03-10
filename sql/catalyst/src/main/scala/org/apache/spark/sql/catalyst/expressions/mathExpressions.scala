@@ -806,14 +806,14 @@ case class Round(child: Expression, scale: Expression)
       case FloatType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})){
+            if (Float.isNaN(${ce.value}) || Float.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).
@@ -823,14 +823,14 @@ case class Round(child: Expression, scale: Expression)
       case DoubleType => // if child eval to NaN or Infinity, just return it.
         if (_scale == 0) {
           s"""
-            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = Math.round(${ce.value});
             }"""
         } else {
           s"""
-            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})){
+            if (Double.isNaN(${ce.value}) || Double.isInfinite(${ce.value})) {
               ${ev.value} = ${ce.value};
             } else {
               ${ev.value} = java.math.BigDecimal.valueOf(${ce.value}).

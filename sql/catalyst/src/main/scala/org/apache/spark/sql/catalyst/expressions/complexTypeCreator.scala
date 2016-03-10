@@ -159,7 +159,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
         TypeCheckResult.TypeCheckFailure(
           s"Only foldable StringType expressions are allowed to appear at odd position , got :" +
             s" ${invalidNames.mkString(",")}")
-      } else if (!names.contains(null)){
+      } else if (!names.contains(null)) {
         TypeCheckResult.TypeCheckSuccess
       } else {
         TypeCheckResult.TypeCheckFailure("Field name should not be null")

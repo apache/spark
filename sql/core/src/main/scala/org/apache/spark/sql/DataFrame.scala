@@ -1147,7 +1147,7 @@ class DataFrame private[sql](
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
    * {{{
-   *   df.explode("words", "word"){words: String => words.split(" ")}
+   *   df.explode("words", "word") {words: String => words.split(" ")}
    * }}}
    * @group dfops
    * @since 1.3.0

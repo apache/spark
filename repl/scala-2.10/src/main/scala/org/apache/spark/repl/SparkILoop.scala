@@ -169,7 +169,7 @@ class SparkILoop(
   }
 
 
-  private def sparkCleanUp(){
+  private def sparkCleanUp() {
     echo("Stopping spark context.")
     intp.beQuietDuring {
       command("sc.stop()")

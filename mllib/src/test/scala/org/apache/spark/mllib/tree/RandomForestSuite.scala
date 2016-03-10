@@ -197,7 +197,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
       featureSubsetStrategy = "sqrt", seed = 12345)
   }
 
-  test("subsampling rate in RandomForest"){
+  test("subsampling rate in RandomForest") {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(5, 20)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,

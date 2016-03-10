@@ -105,7 +105,7 @@ class RandomForestClassifierSuite extends SparkFunSuite with MLlibTestSparkConte
     compareAPIs(rdd, rf, categoricalFeatures, numClasses)
   }
 
-  test("subsampling rate in RandomForest"){
+  test("subsampling rate in RandomForest") {
     val rdd = orderedLabeledPoints5_20
     val categoricalFeatures = Map.empty[Int, Int]
     val numClasses = 2

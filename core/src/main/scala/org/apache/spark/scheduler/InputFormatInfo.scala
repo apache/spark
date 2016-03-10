@@ -173,7 +173,7 @@ object InputFormatInfo {
     for (inputSplit <- formats) {
       val splits = inputSplit.findPreferredLocations()
 
-      for (split <- splits){
+      for (split <- splits) {
         val location = split.hostLocation
         val set = nodeToSplit.getOrElseUpdate(location, new HashSet[SplitInfo])
         set += split
