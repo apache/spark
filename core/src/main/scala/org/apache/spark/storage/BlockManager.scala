@@ -520,7 +520,7 @@ private[spark] class BlockManager(
    *
    * This does not acquire a lock on this block in this JVM.
    */
-  def getRemote(blockId: BlockId): Option[BlockResult] = {
+  def getRemoteValues(blockId: BlockId): Option[BlockResult] = {
     getRemoteBytes(blockId).map { data =>
       new BlockResult(dataDeserialize(blockId, data), DataReadMethod.Network, data.limit())
     }
@@ -586,7 +586,7 @@ private[spark] class BlockManager(
       logInfo(s"Found block $blockId locally")
       return local
     }
-    val remote = getRemote(blockId)
+    val remote = getRemoteValues(blockId)
     if (remote.isDefined) {
       logInfo(s"Found block $blockId remotely")
       return remote
