@@ -72,7 +72,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
       .write
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .startStream()
       .stop()
   }
 
@@ -82,7 +82,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
       .write
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .startStream()
       .stop()
   }
 
@@ -108,7 +108,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("opt1", "1")
       .options(Map("opt2" -> "2"))
       .options(map)
-      .stream()
+      .startStream()
       .stop()
 
     assert(LastOptions.parameters("opt1") == "1")
@@ -123,14 +123,14 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .startStream()
       .stop()
     assert(LastOptions.partitionColumns == Nil)
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
       .partitionBy("a")
-      .stream()
+      .startStream()
       .stop()
     assert(LastOptions.partitionColumns == Seq("a"))
 
@@ -138,7 +138,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       df.write
         .format("org.apache.spark.sql.streaming.test")
         .partitionBy("A")
-        .stream()
+        .startStream()
         .stop()
       assert(LastOptions.partitionColumns == Seq("a"))
     }
@@ -147,7 +147,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       df.write
         .format("org.apache.spark.sql.streaming.test")
         .partitionBy("b")
-        .stream()
+        .startStream()
         .stop()
     }
   }
@@ -163,7 +163,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     df.write
       .format("org.apache.spark.sql.streaming.test")
-      .stream("/test")
+      .startStream("/test")
       .stop()
 
     assert(LastOptions.parameters("path") == "/test")
@@ -187,7 +187,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
-      .stream("/test")
+      .startStream("/test")
       .stop()
 
     assert(LastOptions.parameters("intOpt") == "56")
@@ -205,7 +205,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .write
         .format("org.apache.spark.sql.streaming.test")
         .queryName(name)
-        .stream()
+        .startStream()
     }
 
     /** Start a query without specifying a name */
@@ -215,7 +215,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
         .stream("/test")
         .write
         .format("org.apache.spark.sql.streaming.test")
-        .stream()
+        .startStream()
     }
 
     /** Get the names of active streams */
