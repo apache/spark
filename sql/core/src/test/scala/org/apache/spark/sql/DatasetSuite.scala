@@ -266,6 +266,15 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ((("b", 2), ("b", 2)), ("b", 2)))
   }
 
+  test("cartesian join") {
+    val ds1 = Seq(("a", 1), ("b", 2)).toDS()
+    val ds2 = Seq(("a", 1)).toDS()
+
+    checkAnswer(
+      ds1.joinWith(ds2),
+      (("a", 1), ("a", 1)), (("b", 2), ("a", 1)))
+  }
+
   test("groupBy function, keys") {
     val ds = Seq(("a", 1), ("b", 1)).toDS()
     val grouped = ds.groupBy(v => (1, v._2))

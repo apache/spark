@@ -625,6 +625,40 @@ class Dataset[T] private[sql](
    * ****** */
 
   /**
+   * Using specified join type to join this [[Dataset]] returning a [[Tuple2]] for each pair
+   * where `condition` evaluates to true.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+    joinWith(other, Some(condition), joinType)
+  }
+
+  /**
+   * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
+   * where `condition` evaluates to true.
+   *
+   * @param other Right side of the join.
+   * @param condition Join expression.
+   * @since 1.6.0
+   */
+  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
+    joinWith(other, Some(condition), "inner")
+  }
+
+  /**
+   * Using cartesian inner join to join this [[Dataset]] returning a [[Tuple2]] for each pair
+   * Note: cartesian joins are very expensive without a filter that can be pushed down.
+   *
+   * @param other Right side of the join.
+   * @since 2.0.0
+   */
+  def joinWith[U](other: Dataset[U]): Dataset[(T, U)] = joinWith(other, None, "inner")
+
+  /**
    * Joins this [[Dataset]] returning a [[Tuple2]] for each pair where `condition` evaluates to
    * true.
    *
@@ -641,12 +675,19 @@ class Dataset[T] private[sql](
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
    * @since 1.6.0
    */
-  def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
+  protected def joinWith[U](
+      other: Dataset[U],
+      condition: Option[Column],
+      joinType: String): Dataset[(T, U)] = {
     val left = this.logicalPlan
     val right = other.logicalPlan
+    val expression = {
+      if (condition.isDefined) Some(condition.get.expr)
+      else None
+    }
 
     val joined = sqlContext.executePlan(Join(left, right, joinType =
-      JoinType(joinType), Some(condition.expr)))
+      JoinType(joinType), expression))
     val leftOutput = joined.analyzed.output.take(left.output.length)
     val rightOutput = joined.analyzed.output.takeRight(right.output.length)
 
@@ -666,18 +707,6 @@ class Dataset[T] private[sql](
         leftData :: rightData :: Nil,
         joined.analyzed)
     }
-  }
-
-  /**
-   * Using inner equi-join to join this [[Dataset]] returning a [[Tuple2]] for each pair
-   * where `condition` evaluates to true.
-   *
-   * @param other Right side of the join.
-   * @param condition Join expression.
-   * @since 1.6.0
-   */
-  def joinWith[U](other: Dataset[U], condition: Column): Dataset[(T, U)] = {
-    joinWith(other, condition, "inner")
   }
 
   /* ************************** *
