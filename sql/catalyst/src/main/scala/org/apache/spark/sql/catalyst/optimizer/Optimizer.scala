@@ -68,6 +68,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       PushPredicateThroughProject,
       PushPredicateThroughGenerate,
       PushPredicateThroughAggregate,
+      PushPredicateThroughWindow,
       LimitPushDown,
       ColumnPruning,
       // Operator combine
@@ -908,6 +909,33 @@ object PushPredicateThroughGenerate extends Rule[LogicalPlan] with PredicateHelp
         val newGenerate = Generate(g.generator, join = g.join, outer = g.outer,
           g.qualifier, g.generatorOutput, Filter(pushDownPredicate, g.child))
         if (stayUp.isEmpty) newGenerate else Filter(stayUp.reduce(And), newGenerate)
+      } else {
+        filter
+      }
+  }
+}
+
+/**
+ * Push [[Filter]] operators through [[Window]] operators. Parts of the predicate that can be pushed
+ * beneath must satisfy three conditions:
+ * 1. involving one and only one column that is part of window partitioning key.
+ * 2. Window partitioning key should be just a sequence of [[AttributeReference]].
+ * 3. deterministic
+ */
+object PushPredicateThroughWindow extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case filter @ Filter(condition, w: Window)
+        if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
+        cond.references.size == 1 &&
+          cond.references.subsetOf(w.outputSet) &&
+          cond.deterministic
+      }
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val newWindow = w.copy(child = Filter(pushDownPredicate, w.child))
+        if (stayUp.isEmpty) newWindow else Filter(stayUp.reduce(And), newWindow)
       } else {
         filter
       }

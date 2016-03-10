@@ -268,7 +268,14 @@ package object dsl {
         Aggregate(groupingExprs, aliasedExprs, logicalPlan)
       }
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
+    def window(
+        projectList: Seq[Attribute],
+        windowExpressions: Seq[NamedExpression],
+        partitionSpec: Seq[Expression],
+        orderSpec: Seq[SortOrder]): LogicalPlan =
+      Window(projectList, windowExpressions, partitionSpec, orderSpec, logicalPlan)
+
+    def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
 
       def except(otherPlan: LogicalPlan): LogicalPlan = Except(logicalPlan, otherPlan)
 
