@@ -78,7 +78,7 @@ abstract class Optimizer extends RuleExecutor[LogicalPlan] {
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      // NullFiltering,
+      NullFiltering,
       NullPropagation,
       OptimizeIn,
       ConstantFolding,
