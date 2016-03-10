@@ -25,7 +25,7 @@ from pyspark.sql import SQLContext
 # $example off$
 
 """
-This example demonstrats applying TrainValidationSplit to split data
+This example demonstrates applying TrainValidationSplit to split data
 and preform model selection, as well as applying Pipelines.
 Run with:
 
@@ -58,7 +58,7 @@ if __name__ == "__main__":
                                # 80% of the data will be used for training, 20% for validation.
                                trainRatio=0.8)
 
-    # Run TrainValidationSplit, chosing the set of parameters that optimizes the evaluator.
+    # Run TrainValidationSplit, and choose the best set of parameters.
     model = tvs.fit(train)
     # Make predictions on test data. model is the model with combination of parameters
     # that performed best.
