@@ -296,9 +296,6 @@ object MimaExcludes {
         // SPARK-12073: backpressure rate controller consumes events preferentially from lagging partitions
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.KafkaTestUtils.createTopic"),
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.streaming.kafka.DirectKafkaInputDStream.maxMessagesPerPartition")
-      ) ++ Seq(
-        // SPARK-13244: Migrates DataFrame to Dataset. DataFrame is not a class anymore.
-        MimaBuild.excludeClass("org.apache.spark.sql.DataFrame")
       )
     case v if v.startsWith("1.6") =>
       Seq(
