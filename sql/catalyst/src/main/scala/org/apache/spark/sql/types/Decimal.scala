@@ -69,13 +69,6 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
-   * Just updates the underlying value to `v`, assuming precision and scale is unchanged.
-   */
-  def setInternal(v: Long): Unit = {
-    this.longVal = v
-  }
-
-  /**
    * Set this Decimal to the given unscaled Long, with a given precision and scale.
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal = {
@@ -382,6 +375,17 @@ object Decimal {
     new Decimal().set(unscaled, precision, scale)
 
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
+
+  /**
+   * Creates a decimal from unscaled, precision and scale without checking the bounds.
+   */
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    val dec = new Decimal()
+    dec.longVal = unscaled
+    dec._precision = precision
+    dec._scale = scale
+    dec
+  }
 
   // Evidence parameters for Decimal considered either as Fractional or Integral. We provide two
   // parameters inheriting from a common trait since both traits define mkNumericOps.
