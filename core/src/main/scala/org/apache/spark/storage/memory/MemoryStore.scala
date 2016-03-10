@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.storage.memory
 
 import java.nio.ByteBuffer
 import java.util.LinkedHashMap
@@ -23,8 +23,9 @@ import java.util.LinkedHashMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{Logging, SparkConf, TaskContext}
 import org.apache.spark.memory.MemoryManager
+import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
@@ -34,13 +35,15 @@ private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
  * Stores blocks in memory, either as Arrays of deserialized Java objects or as
  * serialized ByteBuffers.
  */
-private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: MemoryManager)
-  extends BlockStore(blockManager) {
+private[spark] class MemoryStore(
+    conf: SparkConf,
+    blockManager: BlockManager,
+    memoryManager: MemoryManager)
+  extends Logging {
 
   // Note: all changes to memory allocations, notably putting blocks, evicting blocks, and
   // acquiring or releasing unroll memory, must be synchronized on `memoryManager`!
 
-  private val conf = blockManager.conf
   private val entries = new LinkedHashMap[BlockId, MemoryEntry](32, 0.75f, true)
 
   // A mapping from taskAttemptId to amount of memory used for unrolling a block (in bytes)
@@ -81,22 +84,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     memoryUsed - currentUnrollMemory
   }
 
-  override def getSize(blockId: BlockId): Long = {
+  def getSize(blockId: BlockId): Long = {
     entries.synchronized {
       entries.get(blockId).size
-    }
-  }
-
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): Unit = {
-    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    // Work on a duplicate - since the original input might be used elsewhere.
-    val bytes = _bytes.duplicate()
-    bytes.rewind()
-    if (level.deserialized) {
-      val values = blockManager.dataDeserialize(blockId, bytes)
-      putIterator(blockId, values, level)
-    } else {
-      tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
     }
   }
 
@@ -105,8 +95,10 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * put it into MemoryStore. Otherwise, the ByteBuffer won't be created.
    *
    * The caller should guarantee that `size` is correct.
+   *
+   * @return true if the put() succeeded, false otherwise.
    */
-  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Unit = {
+  def putBytes(blockId: BlockId, size: Long, _bytes: () => ByteBuffer): Boolean = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     // Work on a duplicate - since the original input might be used elsewhere.
     lazy val bytes = _bytes().duplicate().rewind().asInstanceOf[ByteBuffer]
@@ -114,89 +106,70 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     if (putSuccess) {
       assert(bytes.limit == size)
     }
-  }
-
-  override def putIterator(
-      blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel): Either[Iterator[Any], Long] = {
-    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-    putIterator(blockId, values, level, allowPersistToDisk = true)
+    putSuccess
   }
 
   /**
    * Attempt to put the given block in memory store.
    *
-   * There may not be enough space to fully unroll the iterator in memory, in which case we
-   * optionally drop the values to disk if
-   *   (1) the block's storage level specifies useDisk, and
-   *   (2) `allowPersistToDisk` is true.
-   *
-   * One scenario in which `allowPersistToDisk` is false is when the BlockManager reads a block
-   * back from disk and attempts to cache it in memory. In this case, we should not persist the
-   * block back on disk again, as it is already in disk store.
+   * @return the estimated size of the stored data if the put() succeeded, or an iterator
+   *         in case the put() failed (the returned iterator lets callers fall back to the disk
+   *         store if desired).
    */
   private[storage] def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
-      level: StorageLevel,
-      allowPersistToDisk: Boolean): Either[Iterator[Any], Long] = {
+      level: StorageLevel): Either[Iterator[Any], Long] = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
     val unrolledValues = unrollSafely(blockId, values)
     unrolledValues match {
       case Left(arrayValues) =>
         // Values are fully unrolled in memory, so store them as an array
-        val size = {
-          if (level.deserialized) {
-            val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-            tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)
-            sizeEstimate
+        if (level.deserialized) {
+          val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
+          if (tryToPut(blockId, () => arrayValues, sizeEstimate, deserialized = true)) {
+            Right(sizeEstimate)
           } else {
-            val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
-            tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)
-            bytes.limit()
+            Left(arrayValues.toIterator)
+          }
+        } else {
+          val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
+          if (tryToPut(blockId, () => bytes, bytes.limit, deserialized = false)) {
+            Right(bytes.limit())
+          } else {
+            Left(arrayValues.toIterator)
           }
         }
-        Right(size)
       case Right(iteratorValues) =>
-        // Not enough space to unroll this block; drop to disk if applicable
-        if (level.useDisk && allowPersistToDisk) {
-          logWarning(s"Persisting block $blockId to disk instead.")
-          blockManager.diskStore.putIterator(blockId, iteratorValues, level)
-        } else {
-          Left(iteratorValues)
-        }
+        Left(iteratorValues)
     }
   }
 
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
     if (entry == null) {
       None
-    } else if (entry.deserialized) {
-      Some(blockManager.dataSerialize(blockId, entry.value.asInstanceOf[Array[Any]].iterator))
     } else {
+      require(!entry.deserialized, "should only call getBytes on blocks stored in serialized form")
       Some(entry.value.asInstanceOf[ByteBuffer].duplicate()) // Doesn't actually copy the data
     }
   }
 
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
+  def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
     if (entry == null) {
       None
-    } else if (entry.deserialized) {
-      Some(entry.value.asInstanceOf[Array[Any]].iterator)
     } else {
-      val buffer = entry.value.asInstanceOf[ByteBuffer].duplicate() // Doesn't actually copy data
-      Some(blockManager.dataDeserialize(blockId, buffer))
+      require(entry.deserialized, "should only call getValues on deserialized blocks")
+      Some(entry.value.asInstanceOf[Array[Any]].iterator)
     }
   }
 
-  override def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
+  def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
     }
@@ -210,7 +183,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def clear(): Unit = memoryManager.synchronized {
+  def clear(): Unit = memoryManager.synchronized {
     entries.synchronized {
       entries.clear()
     }
@@ -323,14 +296,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
    * must also be passed by the caller.
    *
-   * `value` will be lazily created. If it cannot be put into MemoryStore or disk, `value` won't be
-   * created to avoid OOM since it may be a big ByteBuffer.
-   *
-   * Synchronize on `memoryManager` to ensure that all the put requests and its associated block
-   * dropping is done by only on thread at a time. Otherwise while one thread is dropping
-   * blocks to free memory for one block, another thread may use up the freed space for
-   * another block.
-   *
    * @return whether put was successful.
    */
   private def tryToPut(
@@ -338,42 +303,33 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
       value: () => Any,
       size: Long,
       deserialized: Boolean): Boolean = {
-
-    /* TODO: Its possible to optimize the locking by locking entries only when selecting blocks
-     * to be dropped. Once the to-be-dropped blocks have been selected, and lock on entries has
-     * been released, it must be ensured that those to-be-dropped blocks are not double counted
-     * for freeing up more space for another block that needs to be put. Only then the actually
-     * dropping of blocks (and writing to disk if necessary) can proceed in parallel. */
-
-    memoryManager.synchronized {
-      // Note: if we have previously unrolled this block successfully, then pending unroll
-      // memory should be non-zero. This is the amount that we already reserved during the
-      // unrolling process. In this case, we can just reuse this space to cache our block.
-      // The synchronization on `memoryManager` here guarantees that the release and acquire
-      // happen atomically. This relies on the assumption that all memory acquisitions are
-      // synchronized on the same lock.
-      releasePendingUnrollMemoryForThisTask()
-      val enoughMemory = memoryManager.acquireStorageMemory(blockId, size)
-      if (enoughMemory) {
-        // We acquired enough memory for the block, so go ahead and put it
-        val entry = new MemoryEntry(value(), size, deserialized)
-        entries.synchronized {
-          entries.put(blockId, entry)
-        }
-        val valuesOrBytes = if (deserialized) "values" else "bytes"
-        logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
-          blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
-      } else {
-        // Tell the block manager that we couldn't put it in memory so that it can drop it to
-        // disk if the block allows disk storage.
-        lazy val data = if (deserialized) {
-          Left(value().asInstanceOf[Array[Any]])
-        } else {
-          Right(value().asInstanceOf[ByteBuffer].duplicate())
-        }
-        blockManager.dropFromMemory(blockId, () => data)
+    val acquiredEnoughStorageMemory = {
+      // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
+      // task.
+      memoryManager.synchronized {
+        // Note: if we have previously unrolled this block successfully, then pending unroll
+        // memory should be non-zero. This is the amount that we already reserved during the
+        // unrolling process. In this case, we can just reuse this space to cache our block.
+        // The synchronization on `memoryManager` here guarantees that the release and acquire
+        // happen atomically. This relies on the assumption that all memory acquisitions are
+        // synchronized on the same lock.
+        releasePendingUnrollMemoryForThisTask()
+        memoryManager.acquireStorageMemory(blockId, size)
       }
-      enoughMemory
+    }
+
+    if (acquiredEnoughStorageMemory) {
+      // We acquired enough memory for the block, so go ahead and put it
+      val entry = new MemoryEntry(value(), size, deserialized)
+      entries.synchronized {
+        entries.put(blockId, entry)
+      }
+      val valuesOrBytes = if (deserialized) "values" else "bytes"
+      logInfo("Block %s stored as %s in memory (estimated size %s, free %s)".format(
+        blockId, valuesOrBytes, Utils.bytesToString(size), Utils.bytesToString(blocksMemoryUsed)))
+      true
+    } else {
+      false
     }
   }
 
@@ -455,7 +411,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, memoryManager: Memo
     }
   }
 
-  override def contains(blockId: BlockId): Boolean = {
+  def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }
   }
 
