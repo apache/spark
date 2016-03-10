@@ -476,7 +476,6 @@ class HiveContext private[hive](
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::
         ExtractPythonUDFs ::
-        ResolveHiveWindowFunction ::
         PreInsertCastAndRename ::
         (if (conf.runSQLOnFile) new ResolveDataSource(self) :: Nil else Nil)
 
