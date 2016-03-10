@@ -1152,11 +1152,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(original.rdd.partitions.length == 1)
     val df = original.repartition(5, $"key")
     assert(df.rdd.partitions.length == 5)
-    checkAnswer(original.select(), df.select())
+    checkAnswer(original, df)
 
     val df2 = original.repartition(10, $"key")
     assert(df2.rdd.partitions.length == 10)
-    checkAnswer(original.select(), df2.select())
+    checkAnswer(original, df2)
 
     // Group by the column we are distributed by. This should generate a plan with no exchange
     // between the aggregates
