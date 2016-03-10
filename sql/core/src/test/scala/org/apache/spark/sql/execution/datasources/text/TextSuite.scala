@@ -74,7 +74,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         val tempDirPath = tempDir.getAbsolutePath
         testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(_.getName.endsWith(extension)))
+        assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
         verifyFrame(sqlContext.read.text(tempDirPath))
     }
 
@@ -102,7 +102,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         val tempDirPath = tempDir.getAbsolutePath
         testDf.write.option("compression", "none").mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+        assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
         verifyFrame(sqlContext.read.text(tempDirPath))
       } finally {
         // Hadoop 1 doesn't have `Configuration.unset`
