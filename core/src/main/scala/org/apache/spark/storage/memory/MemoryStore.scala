@@ -291,21 +291,6 @@ private[spark] class MemoryStore(
     blockId.asRDDId.map(_.rddId)
   }
 
-  private def acquireStorageMemory(blockId: BlockId, size: Long): Boolean = {
-    // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
-    // task.
-    memoryManager.synchronized {
-      // Note: if we have previously unrolled this block successfully, then pending unroll
-      // memory should be non-zero. This is the amount that we already reserved during the
-      // unrolling process. In this case, we can just reuse this space to cache our block.
-      // The synchronization on `memoryManager` here guarantees that the release and acquire
-      // happen atomically. This relies on the assumption that all memory acquisitions are
-      // synchronized on the same lock.
-      releasePendingUnrollMemoryForThisTask()
-      memoryManager.acquireStorageMemory(blockId, size)
-    }
-  }
-
   /**
    * Try to put in a set of values, if we can free up enough space. The value should either be
    * an Array if deserialized is true or a ByteBuffer otherwise. Its (possibly estimated) size
@@ -318,7 +303,22 @@ private[spark] class MemoryStore(
       value: () => Any,
       size: Long,
       deserialized: Boolean): Boolean = {
-    if (acquireStorageMemory(blockId, size)) {
+    val acquiredEnoughStorageMemory = {
+      // Synchronize on memoryManager so that the pending unroll memory isn't stolen by another
+      // task.
+      memoryManager.synchronized {
+        // Note: if we have previously unrolled this block successfully, then pending unroll
+        // memory should be non-zero. This is the amount that we already reserved during the
+        // unrolling process. In this case, we can just reuse this space to cache our block.
+        // The synchronization on `memoryManager` here guarantees that the release and acquire
+        // happen atomically. This relies on the assumption that all memory acquisitions are
+        // synchronized on the same lock.
+        releasePendingUnrollMemoryForThisTask()
+        memoryManager.acquireStorageMemory(blockId, size)
+      }
+    }
+
+    if (acquiredEnoughStorageMemory) {
       // We acquired enough memory for the block, so go ahead and put it
       val entry = new MemoryEntry(value(), size, deserialized)
       entries.synchronized {
