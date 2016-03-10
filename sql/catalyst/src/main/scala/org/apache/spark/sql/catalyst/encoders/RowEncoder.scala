@@ -52,6 +52,8 @@ object RowEncoder {
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
          FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
 
+    case p: PythonUserDefinedType => extractorsFor(inputObject, p.sqlType)
+
     case udt: UserDefinedType[_] =>
       val obj = NewInstance(
         udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
@@ -151,10 +153,14 @@ object RowEncoder {
 
   private def constructorFor(schema: StructType): Expression = {
     val fields = schema.zipWithIndex.map { case (f, i) =>
-      val field = BoundReference(i, f.dataType, f.nullable)
+      val dt = f.dataType match {
+        case p: PythonUserDefinedType => p.sqlType
+        case other => other
+      }
+      val field = BoundReference(i, dt, f.nullable)
       If(
         IsNull(field),
-        Literal.create(null, externalDataTypeFor(f.dataType)),
+        Literal.create(null, externalDataTypeFor(dt)),
         constructorFor(field)
       )
     }
