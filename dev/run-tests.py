@@ -561,11 +561,10 @@ def main():
     # spark build
     build_apache_spark(build_tool, hadoop_version)
 
-    # TODO Temporarily disable MiMA check for DF-to-DS migration prototyping
-    # # backwards compatibility checks
-    # if build_tool == "sbt":
-    #     # Note: compatiblity tests only supported in sbt for now
-    #     detect_binary_inop_with_mima()
+    # backwards compatibility checks
+    if build_tool == "sbt":
+        # Note: compatiblity tests only supported in sbt for now
+        detect_binary_inop_with_mima()
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
