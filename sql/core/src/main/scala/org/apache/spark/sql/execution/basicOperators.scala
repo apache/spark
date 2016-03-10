@@ -77,18 +77,17 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
 case class Filter(condition: Expression, child: SparkPlan)
   extends UnaryNode with CodegenSupport with PredicateHelper {
 
-  // Split out all the IsNotNulls from condition.
-  private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a) if child.output.contains(a) => true
-    case _ => false
-  }
+  override protected def validConstraints: Set[Expression] =
+    child.constraints.union(splitConjunctivePredicates(condition).toSet)
 
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
-  private val notNullAttributes = notNullPreds.flatMap(_.references)
+  private val notNullAttributes = child.output.filter { case e =>
+      e.nullable && constraints.contains(IsNotNull(e))
+  }
 
-  override def output: Seq[Attribute] = {
+  override val output: Seq[Attribute] = {
     child.output.map { a =>
-      if (a.nullable && notNullAttributes.contains(a)) {
+      if (notNullAttributes.contains(a)) {
         a.withNullability(false)
       } else {
         a
@@ -117,7 +116,10 @@ case class Filter(condition: Expression, child: SparkPlan)
     }.mkString("\n")
 
     ctx.currentVars = input
-    val predicates = otherPreds.map { e =>
+    val predicates = splitConjunctivePredicates(condition).filterNot { p =>
+      notNullAttributes.contains(IsNotNull(p))
+    }
+    val evalPredicates = predicates.map { e =>
       val bound = ExpressionCanonicalizer.execute(
         BindReferences.bindReference(e, output))
       val ev = bound.gen(ctx)
@@ -141,7 +143,7 @@ case class Filter(condition: Expression, child: SparkPlan)
     }
     s"""
        |$filterOutNull
-       |$predicates
+       |$evalPredicates
        |$numOutput.add(1);
        |${consume(ctx, resultVars)}
      """.stripMargin
