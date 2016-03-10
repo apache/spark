@@ -34,7 +34,8 @@ class ColumnPruningSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Column pruning", FixedPoint(100),
-      ColumnPruning) :: Nil
+      ColumnPruning,
+      CollapseProject) :: Nil
   }
 
   test("Column pruning for Generate when Generate.join = false") {
@@ -270,8 +271,7 @@ class ColumnPruningSuite extends PlanTest {
             SortOrder('b, Ascending) :: Nil,
             UnspecifiedFrame)).as('window)).select('a, 'c)
 
-    val correctAnswer =
-      input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
+    val correctAnswer = input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -297,7 +297,6 @@ class ColumnPruningSuite extends PlanTest {
             SortOrder('b, Ascending) :: Nil,
             UnspecifiedFrame)).as('window) :: Nil,
           'a :: Nil, 'b.asc :: Nil)
-        .select('a, 'c, 'window).select('a, 'c, 'window, 'window)
         .select('a, 'c, 'window).where('window > 1).select('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -316,8 +315,7 @@ class ColumnPruningSuite extends PlanTest {
             SortOrder('b, Ascending) :: Nil,
             UnspecifiedFrame)).as('window)).select('a, 'c)
 
-    val correctAnswer =
-      input.select('a, 'c).analyze
+    val correctAnswer = input.select('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
