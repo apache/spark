@@ -381,6 +381,7 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Can't prune the columns on LeafNode
     case p @ Project(_, l: LeafNode) => p
 
+    // Prune windowExpressions and child of Window
     case p @ Project(_, w: Window) if (w.outputSet -- p.references).nonEmpty =>
       val newWindowExprs = w.windowExpressions.filter(p.references.contains)
       val newGrandChild = prunedChild(w.child, w.references ++ p.references)
