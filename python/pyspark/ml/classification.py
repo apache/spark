@@ -353,7 +353,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel):
     """
 
     @property
-    @since("2.0.0")
+    @since("1.6.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -368,7 +368,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel):
           - Normalize importances for tree to sum to 1.
 
         Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a `RandomForestClassifier`
+              correlated predictor variables. Consider using a :class:`RandomForestClassifier`
               to determine feature importance instead.
         """
         return self._call_java("featureImportances")

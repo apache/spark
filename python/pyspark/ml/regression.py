@@ -515,7 +515,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel):
           - Normalize importances for tree to sum to 1.
 
         Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a `RandomForestRegressor`
+              correlated predictor variables. Consider using a :class:`RandomForestRegressor`
               to determine feature importance instead.
         """
         return self._call_java("featureImportances")
