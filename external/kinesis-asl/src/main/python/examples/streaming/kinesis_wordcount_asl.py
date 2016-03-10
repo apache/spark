@@ -34,9 +34,9 @@
       $ export AWS_SECRET_KEY=<your-secret-key>
 
       # run the example
-      $ bin/spark-submit -jar extras/kinesis-asl/target/scala-*/\
+      $ bin/spark-submit -jar external/kinesis-asl/target/scala-*/\
         spark-streaming-kinesis-asl-assembly_*.jar \
-        extras/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
+        external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py \
         myAppName mySparkStream https://kinesis.us-east-1.amazonaws.com
 
   There is a companion helper class called KinesisWordProducerASL which puts dummy data

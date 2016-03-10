@@ -85,10 +85,14 @@ abstract class RDD[T: ClassTag](
   private def sc: SparkContext = {
     if (_sc == null) {
       throw new SparkException(
-        "RDD transformations and actions can only be invoked by the driver, not inside of other " +
-        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because " +
-        "the values transformation and count action cannot be performed inside of the rdd1.map " +
-        "transformation. For more information, see SPARK-5063.")
+        "This RDD lacks a SparkContext. It could happen in the following cases: \n(1) RDD " +
+        "transformations and actions are NOT invoked by the driver, but inside of other " +
+        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid " +
+        "because the values transformation and count action cannot be performed inside of the " +
+        "rdd1.map transformation. For more information, see SPARK-5063.\n(2) When a Spark " +
+        "Streaming job recovers from checkpoint, this exception will be hit if a reference to " +
+        "an RDD not defined by the streaming job is used in DStream operations. For more " +
+        "information, See SPARK-13758.")
     }
     _sc
   }

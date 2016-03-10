@@ -899,10 +899,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     }
 
     val attributes = clauses.collect {
-      case Token(a, Nil) => UnresolvedAttribute(a.toLowerCase)
+      case Token(a, Nil) => UnresolvedAttribute(cleanIdentifier(a.toLowerCase))
     }
 
-    Generate(generator, join = true, outer = outer, Some(alias.toLowerCase), attributes, child)
+    Generate(
+      generator,
+      join = true,
+      outer = outer,
+      Some(cleanIdentifier(alias.toLowerCase)),
+      attributes,
+      child)
   }
 
   protected def nodeToGenerator(node: ASTNode): Generator = noParseRule("Generator", node)

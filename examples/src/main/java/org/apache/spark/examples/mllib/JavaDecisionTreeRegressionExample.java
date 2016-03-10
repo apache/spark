@@ -54,7 +54,7 @@ class JavaDecisionTreeRegressionExample {
 
     // Set parameters.
     // Empty categoricalFeaturesInfo indicates all features are continuous.
-    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     String impurity = "variance";
     Integer maxDepth = 5;
     Integer maxBins = 32;
@@ -68,7 +68,7 @@ class JavaDecisionTreeRegressionExample {
       testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
       @Override
       public Tuple2<Double, Double> call(LabeledPoint p) {
-        return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
+        return new Tuple2<>(model.predict(p.features()), p.label());
       }
     });
     Double testMSE =

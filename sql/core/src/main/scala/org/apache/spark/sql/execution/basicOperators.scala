@@ -166,6 +166,9 @@ case class Range(
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
+  // output attributes should not affect the results
+  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
+
   override def upstreams(): Seq[RDD[InternalRow]] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
       .map(i => InternalRow(i)) :: Nil
