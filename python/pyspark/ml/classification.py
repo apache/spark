@@ -21,6 +21,7 @@ from pyspark import since
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import *
+from pyspark.ml.param import TypeConverters
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
 from pyspark.mllib.common import inherit_doc
@@ -87,7 +88,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
-                      " If threshold and thresholds are both set, they must match.")
+                      " If threshold and thresholds are both set, they must match.",
+                      typeConverter=TypeConverters.convertToFloat)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -652,7 +654,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     """
 
     smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
-                      "default is 1.0")
+                      "default is 1.0", typeConverter=TypeConverters.convertToFloat)
     modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
                       "(case-sensitive). Supported options: multinomial (default) and bernoulli.")
 
@@ -782,11 +784,13 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
     layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
                    "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
-                   "neurons and output layer of 10 neurons, default is [1, 1].")
+                   "neurons and output layer of 10 neurons, default is [1, 1].",
+                   typeConverter=TypeConverters.convertToListInt)
     blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
                       "matrices. Data is stacked within partitions. If block size is more than " +
                       "remaining data in a partition then it is adjusted to the size of this " +
-                      "data. Recommended size is between 10 and 1000, default is 128.")
+                      "data. Recommended size is between 10 and 1000, default is 128.",
+                      typeConverter=TypeConverters.convertToInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",

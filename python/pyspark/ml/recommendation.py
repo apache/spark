@@ -100,11 +100,15 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     .. versionadded:: 1.4.0
     """
 
-    rank = Param(Params._dummy(), "rank", "rank of the factorization")
-    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
-    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks")
+    rank = Param(Params._dummy(), "rank", "rank of the factorization",
+                 typeConverter=TypeConverters.convertToInt)
+    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks",
+                          typeConverter=TypeConverters.convertToInt)
+    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks",
+                          typeConverter=TypeConverters.convertToInt)
     implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference")
-    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference")
+    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
+                  typeConverter=TypeConverters.convertToFloat)
     userCol = Param(Params._dummy(), "userCol", "column name for user ids")
     itemCol = Param(Params._dummy(), "itemCol", "column name for item ids")
     ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings")

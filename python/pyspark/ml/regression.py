@@ -192,7 +192,8 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
               "antitonic/decreasing (false).")
     featureIndex = \
         Param(Params._dummy(), "featureIndex",
-              "The index of the feature if featuresCol is a vector column, no effect otherwise.")
+              "The index of the feature if featuresCol is a vector column, no effect otherwise.",
+              typeConverter=TypeConverters.convertToInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -278,7 +279,8 @@ class TreeEnsembleParams(DecisionTreeParams):
     """
 
     subsamplingRate = Param(Params._dummy(), "subsamplingRate", "Fraction of the training data " +
-                            "used for learning each decision tree, in range (0, 1].")
+                            "used for learning each decision tree, in range (0, 1].",
+                            typeConverter=TypeConverters.convertToFloat)
 
     def __init__(self):
         super(TreeEnsembleParams, self).__init__()
@@ -335,7 +337,8 @@ class RandomForestParams(TreeEnsembleParams):
     """
 
     supportedFeatureSubsetStrategies = ["auto", "all", "onethird", "sqrt", "log2"]
-    numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).")
+    numTrees = Param(Params._dummy(), "numTrees", "Number of trees to train (>= 1).",
+                     typeConverter=TypeConverters.convertToInt)
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
               "The number of features to consider for splits at each tree node. Supported " +
@@ -771,10 +774,11 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     quantileProbabilities = \
         Param(Params._dummy(), "quantileProbabilities",
               "quantile probabilities array. Values of the quantile probabilities array " +
-              "should be in the range (0, 1) and the array should be non-empty.")
+              "should be in the range (0, 1) and the array should be non-empty.",
+              typeConverter=TypeConverters.convertToListFloat)
     quantilesCol = Param(Params._dummy(), "quantilesCol",
                          "quantiles column name. This column will output quantiles of " +
-                         "corresponding quantileProbabilities if it is set.")
+                         "corresponding quantileProbabilities if it is set.",)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",

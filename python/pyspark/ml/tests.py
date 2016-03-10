@@ -36,6 +36,7 @@ else:
 
 from shutil import rmtree
 import tempfile
+import numpy as np
 
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import LogisticRegression
@@ -118,6 +119,43 @@ class ParamTypeConversionTests(PySparkTestCase):
         self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
         lr = LogisticRegression(elasticNetParam=0)
         self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
+
+    def test_int(self):
+        lr = LogisticRegression(maxIter=5.0)
+        self.assertEqual(lr.getMaxIter(), 5)
+        self.assertTrue(type(lr.getMaxIter()) == int)
+        self.assertRaises(TypeError, lambda: LogisticRegression(maxIter="notAnInt"))
+
+    def test_float(self):
+        lr = LogisticRegression(tol=1)
+        self.assertEqual(lr.getTol(), 1.0)
+        self.assertTrue(type(lr.getTol()) == float)
+        self.assertRaises(TypeError, lambda: LogisticRegression(tol="notAFloat"))
+
+    def test_vector(self):
+        ewp = ElementwiseProduct(scalingVec=[1, 3])
+        self.assertEqual(ewp.getScalingVec(), DenseVector([1.0, 3.0]))
+        ewp = ElementwiseProduct(scalingVec=np.array([1.2, 3.4]))
+        self.assertEqual(ewp.getScalingVec(), DenseVector([1.2, 3.4]))
+        self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
+
+    def test_list_int(self):
+        vs = VectorSlicer(indices=[1.0, 4.0])
+        self.assertListEqual(vs.getIndices(), [1, 4])
+        self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
+        vs = VectorSlicer(indices=np.array([1.0, 4.0]))
+        self.assertListEqual(vs.getIndices(), [1, 4])
+        self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
+        vs = VectorSlicer(indices=DenseVector([1.0, 4.0]))
+        self.assertListEqual(vs.getIndices(), [1, 4])
+        self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
+        self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
+
+    def test_list_float(self):
+        b = Bucketizer(splits=[1, 4])
+        self.assertEqual(b.getSplits(), [1.0, 4.0])
+        self.assertTrue(all([type(v) == float for v in b.getSplits()]))
+        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", "b"]))
 
 
 class PipelineTests(PySparkTestCase):

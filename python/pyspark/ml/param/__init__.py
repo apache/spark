@@ -17,12 +17,14 @@
 
 from abc import ABCMeta
 import copy
+import numpy as np
 
 from pyspark import since
 from pyspark.ml.util import Identifiable
+from pyspark.mllib.linalg import DenseVector, Vector
 
 
-__all__ = ['Param', 'Params']
+__all__ = ['Param', 'Params', 'TypeConverters']
 
 
 class Param(object):
@@ -32,13 +34,14 @@ class Param(object):
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc, expectedType=None):
+    def __init__(self, parent, name, doc, expectedType=None, typeConverter=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
         self.expectedType = expectedType
+        self.typeConverter = typeConverter
 
     def _copy_new_parent(self, parent):
         """Copy the current param to a new parent, must be a dummy param."""
@@ -48,6 +51,15 @@ class Param(object):
             return param
         else:
             raise ValueError("Cannot copy from non-dummy parent %s." % parent)
+
+    def _convert(self, value):
+        if self.typeConverter is not None:
+            try:
+                return self.typeConverter(value)
+            except:
+                raise TypeError("Could not convert type")
+        else:
+            return value
 
     def __str__(self):
         return str(self.parent) + "__" + self.name
@@ -63,6 +75,68 @@ class Param(object):
             return self.parent == other.parent and self.name == other.name
         else:
             return False
+
+class TypeConverters(object):
+    """
+    .. note:: DeveloperApi
+    Factory methods for common validation functions for `Param.isValid`.
+    .. versionadded:: 2.0.0
+    """
+
+    @staticmethod
+    def convertToList(value):
+        """
+        Convert a value to a list, if possible.
+        """
+        if type(value) == list:
+            return value
+        elif type(value) == np.ndarray:
+            return list(value)
+        elif isinstance(value, Vector):
+            return value.toArray()
+        else:
+            raise TypeError("Could not convert %s to list" % value)
+
+    @staticmethod
+    def convertToListFloat(value):
+        if type(value) != list:
+            value = TypeConverters.convertToList(value)
+        return list(map(lambda v: float(v), value))
+
+    @staticmethod
+    def convertToVector(value):
+        """
+        Convert a value to a Mllib Vector.
+        """
+        if not isinstance(value, Vector):
+            value = DenseVector(value)
+        return value
+
+    @staticmethod
+    def convertToListInt(value):
+        """
+        Convert a value to list of ints.
+        """
+        if type(value) != list:
+            value = TypeConverters.convertToList(value)
+
+        if not all(map(lambda v: type(v) == int, value)):
+            value = list(map(lambda v: int(v), value))
+        return value
+
+    @staticmethod
+    def convertToFloat(value):
+        """
+        Convert a value to a float.
+        """
+        return float(value)
+
+    @staticmethod
+    def convertToInt(value):
+        """
+        Convert a value to an int.
+        """
+        return int(value)
 
 
 class Params(Identifiable):
@@ -275,23 +349,8 @@ class Params(Identifiable):
         """
         for param, value in kwargs.items():
             p = getattr(self, param)
-            if p.expectedType is None or type(value) == p.expectedType or value is None:
-                self._paramMap[getattr(self, param)] = value
-            else:
-                try:
-                    # Try and do "safe" conversions that don't lose information
-                    if p.expectedType == float:
-                        self._paramMap[getattr(self, param)] = float(value)
-                    # Python 3 unified long & int
-                    elif p.expectedType == int and type(value).__name__ == 'long':
-                        self._paramMap[getattr(self, param)] = value
-                    else:
-                        raise Exception(
-                            "Provided type {0} incompatible with type {1} for param {2}"
-                            .format(type(value), p.expectedType, p))
-                except ValueError:
-                    raise Exception(("Failed to convert {0} to type {1} for param {2}"
-                                     .format(type(value), p.expectedType, p)))
+            value = p._convert(value)
+            self._paramMap[getattr(self, param)] = value
         return self
 
     def _setDefault(self, **kwargs):
