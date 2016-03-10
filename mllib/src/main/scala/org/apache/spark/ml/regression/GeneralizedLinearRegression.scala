@@ -19,6 +19,7 @@ package org.apache.spark.ml.regression
 
 import breeze.stats.distributions.{Gaussian => GD}
 import org.apache.hadoop.fs.Path
+import org.apache.spark.sql.types.{StructType, DataType}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.{Experimental, Since}
@@ -45,7 +46,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * to be used in the model.
    * Supported options: "gaussian", "binomial", "poisson" and "gamma".
    * Default is "gaussian".
-   * @group param
+    *
+    * @group param
    */
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
@@ -61,7 +63,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
    * Param for the name of link function which provides the relationship
    * between the linear predictor and the mean of the distribution function.
    * Supported options: "identity", "log", "inverse", "logit", "probit", "cloglog" and "sqrt".
-   * @group param
+    *
+    * @group param
    */
   @Since("2.0.0")
   final val link: Param[String] = new Param(this, "link", "The name of link function " +
@@ -77,7 +80,9 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
-  override def validateParams(): Unit = {
+  override def validateAndTransformSchema(schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
     if ($(solver) == "irls") {
       setDefault(maxIter -> 25)
     }
@@ -86,6 +91,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         Family.fromName($(family)) -> Link.fromName($(link))), "Generalized Linear Regression " +
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
   }
 }
 
@@ -117,7 +123,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the value of param [[family]].
    * Default is "gaussian".
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
@@ -125,7 +132,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
 
   /**
    * Sets the value of param [[link]].
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setLink(value: String): this.type = set(link, value)
@@ -133,7 +141,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets if we should fit the intercept.
    * Default is true.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
@@ -141,7 +150,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the maximum number of iterations.
    * Default is 25 if the solver algorithm is "irls".
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
@@ -150,7 +160,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the convergence tolerance of iterations.
    * Smaller value will lead to higher accuracy with the cost of more iterations.
    * Default is 1E-6.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setTol(value: Double): this.type = set(tol, value)
@@ -159,7 +170,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the regularization parameter.
    * Default is 0.0.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
@@ -169,7 +181,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    * Sets the value of param [[weightCol]].
    * If this is not set or empty, we treat all instance weights as 1.0.
    * Default is empty, so all instances have weight one.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
@@ -178,7 +191,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   /**
    * Sets the solver algorithm used for optimization.
    * Currently only support "irls" which is also the default solver.
-   * @group setParam
+    *
+    * @group setParam
    */
   @Since("2.0.0")
   def setSolver(value: String): this.type = set(solver, value)
@@ -305,7 +319,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
   /**
    * A description of the error distribution to be used in the model.
-   * @param name the name of the family.
+    *
+    * @param name the name of the family.
    */
   private[ml] abstract class Family(val name: String) extends Serializable {
 
@@ -326,7 +341,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     /**
      * Gets the [[Family]] object from its name.
-     * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
+      *
+      * @param name family name: "gaussian", "binomial", "poisson" or "gamma".
      */
     def fromName(name: String): Family = {
       name match {
@@ -447,7 +463,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
    * A description of the link function to be used in the model.
    * The link function provides the relationship between the linear predictor
    * and the mean of the distribution function.
-   * @param name the name of link function.
+    *
+    * @param name the name of link function.
    */
   private[ml] abstract class Link(val name: String) extends Serializable {
 
@@ -465,7 +482,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     /**
      * Gets the [[Link]] object from its name.
-     * @param name link name: "identity", "logit", "log",
+      *
+      * @param name link name: "identity", "logit", "log",
      *             "inverse", "probit", "cloglog" or "sqrt".
      */
     def fromName(name: String): Link = {
