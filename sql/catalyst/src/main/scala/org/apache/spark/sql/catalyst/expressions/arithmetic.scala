@@ -199,7 +199,12 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"
-  override def nullable: Boolean = true
+  override def nullable: Boolean = (left.nullable ||
+    !(!right.nullable && right.isInstanceOf[Literal] &&
+      ((right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
+        right.asInstanceOf[Literal].value.asInstanceOf[Decimal].toLong != 0) ||
+        (!right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
+          right.asInstanceOf[Literal].value != 0))))
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
@@ -237,21 +242,44 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
-    s"""
-      ${eval2.code}
-      boolean ${ev.isNull} = false;
-      $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-      if (${eval2.isNull} || $isZero) {
-        ${ev.isNull} = true;
+    if (nullable) {
+      if (!left.nullable && !right.nullable) {
+        s"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+          if ($isZero) {
+            ${ev.isNull} = true;
+          } else {
+            ${eval1.code}
+            ${ev.value} = $divide;
+          }
+        """
       } else {
-        ${eval1.code}
-        if (${eval1.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = $divide;
-        }
+        s"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+          if (${eval2.isNull} || $isZero) {
+            ${ev.isNull} = true;
+          } else {
+            ${eval1.code}
+            if (${eval1.isNull}) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = $divide;
+            }
+          }
+        """
       }
-    """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${eval2.code}
+        ${eval1.code}
+        $javaType ${ev.value} = $divide;
+      """
+    }
   }
 }
 
@@ -261,7 +289,12 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
 
   override def symbol: String = "%"
   override def decimalMethod: String = "remainder"
-  override def nullable: Boolean = true
+  override def nullable: Boolean = (left.nullable ||
+    !(!right.nullable && right.isInstanceOf[Literal] &&
+      ((right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
+        right.asInstanceOf[Literal].value.asInstanceOf[Decimal].toLong != 0) ||
+        (!right.asInstanceOf[Literal].value.isInstanceOf[Decimal] &&
+          right.asInstanceOf[Literal].value != 0))))
 
   private lazy val integral = dataType match {
     case i: IntegralType => i.integral.asInstanceOf[Integral[Any]]
@@ -299,21 +332,44 @@ case class Remainder(left: Expression, right: Expression) extends BinaryArithmet
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
-    s"""
-      ${eval2.code}
-      boolean ${ev.isNull} = false;
-      $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
-      if (${eval2.isNull} || $isZero) {
-        ${ev.isNull} = true;
+    if (nullable) {
+      if (!left.nullable && !right.nullable) {
+        s"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+          if ($isZero) {
+            ${ev.isNull} = true;
+          } else {
+            ${eval1.code}
+            ${ev.value} = $remainder;
+          }
+        """
       } else {
-        ${eval1.code}
-        if (${eval1.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = $remainder;
-        }
+        s"""
+          ${eval2.code}
+          boolean ${ev.isNull} = false;
+          $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+          if (${eval2.isNull} || $isZero) {
+            ${ev.isNull} = true;
+          } else {
+            ${eval1.code}
+            if (${eval1.isNull}) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = $remainder;
+            }
+          }
+        """
       }
-    """
+    } else {
+      ev.isNull = "false"
+      s"""
+        ${eval2.code}
+        ${eval1.code}
+        $javaType ${ev.value} = $remainder;
+      """
+    }
   }
 }
 
