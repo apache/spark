@@ -25,9 +25,9 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, OneRowRelation, Union}
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -889,7 +889,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .write.format("parquet").save("temp")
     }
     assert(e.getMessage.contains("Duplicate column(s)"))
-    assert(e.getMessage.contains("parquet"))
     assert(e.getMessage.contains("column1"))
     assert(!e.getMessage.contains("column2"))
 
@@ -900,7 +899,6 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .write.format("json").save("temp")
     }
     assert(f.getMessage.contains("Duplicate column(s)"))
-    assert(f.getMessage.contains("JSON"))
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))
@@ -1316,6 +1314,40 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           " _2: struct<_1: bigint," +
           " _2: bigint ... 2 more fields> ... 2 more fields> ... 2 more fields]")
 
+  }
+
+  test("reuse exchange") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "2") {
+      val df = sqlContext.range(100)
+      val join = df.join(df, "id")
+      val plan = join.queryExecution.executedPlan
+      checkAnswer(join, df)
+      assert(
+        join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+      assert(join.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 1)
+      val broadcasted = broadcast(join)
+      val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
+      checkAnswer(join2, df)
+      assert(
+        join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+      assert(
+        join2.queryExecution.executedPlan.collect { case e: BroadcastExchange => true }.size === 1)
+      assert(
+        join2.queryExecution.executedPlan.collect { case e: ReusedExchange => true }.size === 4)
+    }
+  }
+
+  test("sameResult() on aggregate") {
+    val df = sqlContext.range(100)
+    val agg1 = df.groupBy().count()
+    val agg2 = df.groupBy().count()
+    // two aggregates with different ExprId within them should have same result
+    assert(agg1.queryExecution.executedPlan.sameResult(agg2.queryExecution.executedPlan))
+    val agg3 = df.groupBy().sum()
+    assert(!agg1.queryExecution.executedPlan.sameResult(agg3.queryExecution.executedPlan))
+    val df2 = sqlContext.range(101)
+    val agg4 = df2.groupBy().count()
+    assert(!agg1.queryExecution.executedPlan.sameResult(agg4.queryExecution.executedPlan))
   }
 
   test("SPARK-12512: support `.` in column name for withColumn()") {

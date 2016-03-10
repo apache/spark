@@ -26,20 +26,18 @@ import org.apache.spark.Logging
  */
 private[spark] abstract class BlockStore(val blockManager: BlockManager) extends Logging {
 
-  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult
+  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): Unit
 
   /**
-   * Put in a block and, possibly, also return its content as either bytes or another Iterator.
-   * This is used to efficiently write the values to multiple locations (e.g. for replication).
+   * Attempt to store an iterator of values.
    *
-   * @return a PutResult that contains the size of the data, as well as the values put if
-   *         returnValues is true (if not, the result's data field can be null)
+   * @return an iterator of values (in case the put failed), or the estimated size of the stored
+   *         values if the put succeeded.
    */
   def putIterator(
-    blockId: BlockId,
-    values: Iterator[Any],
-    level: StorageLevel,
-    returnValues: Boolean): PutResult
+      blockId: BlockId,
+      values: Iterator[Any],
+      level: StorageLevel): Either[Iterator[Any], Long]
 
   /**
    * Return the size of a block in bytes.

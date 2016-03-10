@@ -330,7 +330,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             sqlContext.read.orc(path)
           }.getMessage
 
-          assert(errorMessage.contains("Failed to discover schema from ORC files"))
+          assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.registerTempTable("single")
@@ -363,7 +363,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           val nullValue: Option[String] = None
           (maybeInt, nullValue)
         }
-        createDataFrame(data).toDF("a", "b").write.orc(path)
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
         val df = sqlContext.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
@@ -376,8 +378,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           // A tricky part is, ORC does not process filter rows fully but return some possible
           // results. So, this checks if the number of result is less than the original count
           // of data, and then checks if it contains the expected data.
-          val isOrcFiltered = sourceDf.count < 10 && expectedData.subsetOf(data)
-          assert(isOrcFiltered)
+          assert(
+            sourceDf.count < 10 && expectedData.subsetOf(data),
+            s"No data was filtered for predicate: $pred")
         }
 
         checkPredicate('a === 5, List(5).map(Row(_, null)))

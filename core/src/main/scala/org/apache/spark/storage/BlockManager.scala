@@ -52,6 +52,12 @@ private[spark] class BlockResult(
     val readMethod: DataReadMethod.Value,
     val bytes: Long)
 
+// Class for representing return value of doPut()
+private sealed trait DoPutResult
+private case object DoPutSucceeded extends DoPutResult
+private case object DoPutBytesFailed extends DoPutResult
+private case class DoPutIteratorFailed(iter: Iterator[Any]) extends DoPutResult
+
 /**
  * Manager running on every node (driver and executors) which provides interfaces for putting and
  * retrieving blocks both locally and remotely into various stores (memory, disk, and off-heap).
@@ -432,98 +438,107 @@ private[spark] class BlockManager(
         logDebug(s"Block $blockId was not found")
         None
       case Some(info) =>
-        val level = info.level
-        logDebug(s"Level for block $blockId is $level")
+        doGetLocal(blockId, info, asBlockResult)
+    }
+  }
 
-        // Look for the block in memory
-        if (level.useMemory) {
-          logDebug(s"Getting block $blockId from memory")
-          val result = if (asBlockResult) {
-            memoryStore.getValues(blockId).map { iter =>
-              val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
-              new BlockResult(ci, DataReadMethod.Memory, info.size)
-            }
-          } else {
-            memoryStore.getBytes(blockId)
-          }
-          result match {
-            case Some(values) =>
-              return result
-            case None =>
-              logDebug(s"Block $blockId not found in memory")
-          }
+  /**
+   * Get a local block from the block manager.
+   * Assumes that the caller holds a read lock on the block.
+   */
+  private def doGetLocal(
+      blockId: BlockId,
+      info: BlockInfo,
+      asBlockResult: Boolean): Option[Any] = {
+    val level = info.level
+    logDebug(s"Level for block $blockId is $level")
+
+    // Look for the block in memory
+    if (level.useMemory) {
+      logDebug(s"Getting block $blockId from memory")
+      val result = if (asBlockResult) {
+        memoryStore.getValues(blockId).map { iter =>
+          val ci = CompletionIterator[Any, Iterator[Any]](iter, releaseLock(blockId))
+          new BlockResult(ci, DataReadMethod.Memory, info.size)
         }
+      } else {
+        memoryStore.getBytes(blockId)
+      }
+      result match {
+        case Some(values) =>
+          return result
+        case None =>
+          logDebug(s"Block $blockId not found in memory")
+      }
+    }
 
-        // Look for block on disk, potentially storing it back in memory if required
-        if (level.useDisk) {
-          logDebug(s"Getting block $blockId from disk")
-          val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
-            case Some(b) => b
-            case None =>
-              releaseLock(blockId)
-              throw new BlockException(
-                blockId, s"Block $blockId not found on disk, though it should be")
-          }
-          assert(0 == bytes.position())
-
-          if (!level.useMemory) {
-            // If the block shouldn't be stored in memory, we can just return it
-            if (asBlockResult) {
-              val iter = CompletionIterator[Any, Iterator[Any]](
-                dataDeserialize(blockId, bytes), releaseLock(blockId))
-              return Some(new BlockResult(iter, DataReadMethod.Disk, info.size))
-            } else {
-              return Some(bytes)
-            }
-          } else {
-            // Otherwise, we also have to store something in the memory store
-            if (!level.deserialized || !asBlockResult) {
-              /* We'll store the bytes in memory if the block's storage level includes
-               * "memory serialized", or if it should be cached as objects in memory
-               * but we only requested its serialized bytes. */
-              memoryStore.putBytes(blockId, bytes.limit, () => {
-                // https://issues.apache.org/jira/browse/SPARK-6076
-                // If the file size is bigger than the free memory, OOM will happen. So if we cannot
-                // put it into MemoryStore, copyForMemory should not be created. That's why this
-                // action is put into a `() => ByteBuffer` and created lazily.
-                val copyForMemory = ByteBuffer.allocate(bytes.limit)
-                copyForMemory.put(bytes)
-              })
-              bytes.rewind()
-            }
-            if (!asBlockResult) {
-              return Some(bytes)
-            } else {
-              val values = dataDeserialize(blockId, bytes)
-              if (level.deserialized) {
-                // Cache the values before returning them
-                val putResult = memoryStore.putIterator(
-                  blockId, values, level, returnValues = true, allowPersistToDisk = false)
-                // The put may or may not have succeeded, depending on whether there was enough
-                // space to unroll the block. Either way, the put here should return an iterator.
-                putResult.data match {
-                  case Left(it) =>
-                    val ci = CompletionIterator[Any, Iterator[Any]](it, releaseLock(blockId))
-                    return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
-                  case _ =>
-                    // This only happens if we dropped the values back to disk (which is never)
-                    throw new SparkException("Memory store did not return an iterator!")
-                }
-              } else {
-                val ci = CompletionIterator[Any, Iterator[Any]](values, releaseLock(blockId))
-                return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
-              }
-            }
-          }
-        } else {
-          // This branch represents a case where the BlockInfoManager contained an entry for
-          // the block but the block could not be found in any of the block stores. This case
-          // should never occur, but for completeness's sake we address it here.
-          logError(
-            s"Block $blockId is supposedly stored locally but was not found in any block store")
+    // Look for block on disk, potentially storing it back in memory if required
+    if (level.useDisk) {
+      logDebug(s"Getting block $blockId from disk")
+      val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
+        case Some(b) => b
+        case None =>
           releaseLock(blockId)
-          None
+          throw new BlockException(
+            blockId, s"Block $blockId not found on disk, though it should be")
+      }
+      assert(0 == bytes.position())
+
+      if (!level.useMemory) {
+        // If the block shouldn't be stored in memory, we can just return it
+        if (asBlockResult) {
+          val iter = CompletionIterator[Any, Iterator[Any]](
+            dataDeserialize(blockId, bytes), releaseLock(blockId))
+          return Some(new BlockResult(iter, DataReadMethod.Disk, info.size))
+        } else {
+          return Some(bytes)
         }
+      } else {
+        // Otherwise, we also have to store something in the memory store
+        if (!level.deserialized && !asBlockResult) {
+          /* We'll store the bytes in memory if the block's storage level includes
+           * "memory serialized" and we requested its serialized bytes. */
+          memoryStore.putBytes(blockId, bytes.limit, () => {
+            // https://issues.apache.org/jira/browse/SPARK-6076
+            // If the file size is bigger than the free memory, OOM will happen. So if we cannot
+            // put it into MemoryStore, copyForMemory should not be created. That's why this
+            // action is put into a `() => ByteBuffer` and created lazily.
+            val copyForMemory = ByteBuffer.allocate(bytes.limit)
+            copyForMemory.put(bytes)
+          })
+          bytes.rewind()
+        }
+        if (!asBlockResult) {
+          return Some(bytes)
+        } else {
+          val values = dataDeserialize(blockId, bytes)
+          val valuesToReturn: Iterator[Any] = {
+            if (level.deserialized) {
+              // Cache the values before returning them
+              memoryStore.putIterator(blockId, values, level, allowPersistToDisk = false) match {
+                case Left(iter) =>
+                  // The memory store put() failed, so it returned the iterator back to us:
+                  iter
+                case Right(_) =>
+                  // The put() succeeded, so we can read the values back:
+                  memoryStore.getValues(blockId).get
+              }
+            } else {
+              values
+            }
+          }
+          val ci = CompletionIterator[Any, Iterator[Any]](valuesToReturn, releaseLock(blockId))
+          return Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
+        }
+      }
+    } else {
+      // This branch represents a case where the BlockInfoManager contained an entry for
+      // the block but the block could not be found in any of the block stores. This case
+      // should never occur, but for completeness's sake we address it here.
+      logError(
+        s"Block $blockId is supposedly stored locally but was not found in any block store")
+      releaseLock(blockId)
+      None
     }
   }
 
@@ -659,7 +674,7 @@ private[spark] class BlockManager(
       makeIterator: () => Iterator[Any]): Either[BlockResult, Iterator[Any]] = {
     // Initially we hold no locks on this block.
     doPut(blockId, IteratorValues(makeIterator), level, keepReadLock = true) match {
-      case None =>
+      case DoPutSucceeded =>
         // doPut() didn't hand work back to us, so the block already existed or was successfully
         // stored. Therefore, we now hold a read lock on the block.
         val blockResult = get(blockId).getOrElse {
@@ -669,11 +684,13 @@ private[spark] class BlockManager(
           throw new SparkException(s"get() failed for block $blockId even though we held a lock")
         }
         Left(blockResult)
-      case Some(failedPutResult) =>
+      case DoPutIteratorFailed(iter) =>
         // The put failed, likely because the data was too large to fit in memory and could not be
         // dropped to disk. Therefore, we need to pass the input iterator back to the caller so
         // that they can decide what to do with the values (e.g. process them without caching).
-       Right(failedPutResult.data.left.get)
+       Right(iter)
+      case DoPutBytesFailed =>
+        throw new SparkException("doPut returned an invalid failure response")
     }
   }
 
@@ -687,7 +704,13 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(values != null, "Values is null")
-    doPut(blockId, IteratorValues(() => values), level, tellMaster, effectiveStorageLevel).isEmpty
+    val result = doPut(
+      blockId,
+      IteratorValues(() => values),
+      level,
+      tellMaster,
+      effectiveStorageLevel)
+    result == DoPutSucceeded
   }
 
   /**
@@ -719,7 +742,8 @@ private[spark] class BlockManager(
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None): Boolean = {
     require(bytes != null, "Bytes is null")
-    doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel).isEmpty
+    val result = doPut(blockId, ByteBufferValues(bytes), level, tellMaster, effectiveStorageLevel)
+    result == DoPutSucceeded
   }
 
   /**
@@ -734,9 +758,9 @@ private[spark] class BlockManager(
    * @param keepReadLock if true, this method will hold the read lock when it returns (even if the
    *                     block already exists). If false, this method will hold no locks when it
    *                     returns.
-   * @return `Some(PutResult)` if the block did not exist and could not be successfully cached,
-   *         or None if the block already existed or was successfully stored (fully consuming
-   *         the input data / input iterator).
+   * @return [[DoPutSucceeded]] if the block was already present or if the put succeeded, or
+   *        [[DoPutBytesFailed]] if the put failed and we were storing bytes, or
+   *        [[DoPutIteratorFailed]] if the put failed and we were storing an iterator.
    */
   private def doPut(
       blockId: BlockId,
@@ -744,7 +768,7 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       effectiveStorageLevel: Option[StorageLevel] = None,
-      keepReadLock: Boolean = false): Option[PutResult] = {
+      keepReadLock: Boolean = false): DoPutResult = {
 
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -765,20 +789,11 @@ private[spark] class BlockManager(
           // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
           releaseLock(blockId)
         }
-        return None
+        return DoPutSucceeded
       }
     }
 
     val startTimeMs = System.currentTimeMillis
-
-    /* If we're storing values and we need to replicate the data, we'll want access to the values,
-     * but because our put will read the whole iterator, there will be no values left. For the
-     * case where the put serializes data, we'll remember the bytes, above; but for the case where
-     * it doesn't, such as deserialized storage, let's rely on the put returning an Iterator. */
-    var valuesAfterPut: Iterator[Any] = null
-
-    // Ditto for the bytes after the put
-    var bytesAfterPut: ByteBuffer = null
 
     // Size of the block in bytes
     var size = 0L
@@ -801,43 +816,46 @@ private[spark] class BlockManager(
     }
 
     var blockWasSuccessfullyStored = false
-    var result: PutResult = null
+    var iteratorFromFailedMemoryStorePut: Option[Iterator[Any]] = None
 
     putBlockInfo.synchronized {
       logTrace("Put for block %s took %s to get into synchronized block"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
       try {
-        // returnValues - Whether to return the values put
-        // blockStore - The type of storage to put these values into
-        val (returnValues, blockStore: BlockStore) = {
-          if (putLevel.useMemory) {
-            // Put it in memory first, even if it also has useDisk set to true;
-            // We will drop it to disk later if the memory store can't hold it.
-            (true, memoryStore)
-          } else if (putLevel.useDisk) {
-            // Don't get back the bytes from put unless we replicate them
-            (putLevel.replication > 1, diskStore)
-          } else {
-            assert(putLevel == StorageLevel.NONE)
-            throw new BlockException(
-              blockId, s"Attempted to put block $blockId without specifying storage level!")
+        if (putLevel.useMemory) {
+          // Put it in memory first, even if it also has useDisk set to true;
+          // We will drop it to disk later if the memory store can't hold it.
+          data match {
+            case IteratorValues(iterator) =>
+              memoryStore.putIterator(blockId, iterator(), putLevel) match {
+                case Right(s) =>
+                  size = s
+                case Left(iter) =>
+                  iteratorFromFailedMemoryStorePut = Some(iter)
+              }
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
+              size = bytes.limit()
+              memoryStore.putBytes(blockId, bytes, putLevel)
           }
-        }
-
-        // Actually put the values
-        result = data match {
-          case IteratorValues(iterator) =>
-            blockStore.putIterator(blockId, iterator(), putLevel, returnValues)
-          case ByteBufferValues(bytes) =>
-            bytes.rewind()
-            blockStore.putBytes(blockId, bytes, putLevel)
-        }
-        size = result.size
-        result.data match {
-          case Left (newIterator) if putLevel.useMemory => valuesAfterPut = newIterator
-          case Right (newBytes) => bytesAfterPut = newBytes
-          case _ =>
+        } else if (putLevel.useDisk) {
+          data match {
+            case IteratorValues(iterator) =>
+              diskStore.putIterator(blockId, iterator(), putLevel) match {
+                case Right(s) =>
+                  size = s
+                // putIterator() will never return Left (see its return type).
+              }
+            case ByteBufferValues(bytes) =>
+              bytes.rewind()
+              size = bytes.limit()
+              diskStore.putBytes(blockId, bytes, putLevel)
+          }
+        } else {
+          assert(putLevel == StorageLevel.NONE)
+          throw new BlockException(
+            blockId, s"Attempted to put block $blockId without specifying storage level!")
         }
 
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
@@ -868,33 +886,26 @@ private[spark] class BlockManager(
     }
     logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
-    // Either we're storing bytes and we asynchronously started replication, or we're storing
-    // values and need to serialize and replicate them now:
-    if (putLevel.replication > 1) {
-      data match {
-        case ByteBufferValues(bytes) =>
-          if (replicationFuture != null) {
-            Await.ready(replicationFuture, Duration.Inf)
-          }
-        case _ =>
-          if (blockWasSuccessfullyStored) {
-            val remoteStartTime = System.currentTimeMillis
-            // Serialize the block if not already done
-            if (bytesAfterPut == null) {
-              if (valuesAfterPut == null) {
-                throw new SparkException(
-                  "Underlying put returned neither an Iterator nor bytes! This shouldn't happen.")
-              }
-              bytesAfterPut = dataSerialize(blockId, valuesAfterPut)
-            }
-            replicate(blockId, bytesAfterPut, putLevel)
-            logDebug("Put block %s remotely took %s"
-              .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
+    if (replicationFuture != null) {
+      // Wait for asynchronous replication to finish
+      Await.ready(replicationFuture, Duration.Inf)
+    } else if (putLevel.replication > 1 && blockWasSuccessfullyStored) {
+      val remoteStartTime = System.currentTimeMillis
+      val bytesToReplicate: ByteBuffer = {
+        doGetLocal(blockId, putBlockInfo, asBlockResult = false)
+          .map(_.asInstanceOf[ByteBuffer])
+          .getOrElse {
+            throw new SparkException(s"Block $blockId was not found even though it was just stored")
           }
       }
+      try {
+        replicate(blockId, bytesToReplicate, putLevel)
+      } finally {
+        BlockManager.dispose(bytesToReplicate)
+      }
+      logDebug("Put block %s remotely took %s"
+        .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
     }
-
-    BlockManager.dispose(bytesAfterPut)
 
     if (putLevel.replication > 1) {
       logDebug("Putting block %s with replication took %s"
@@ -905,9 +916,11 @@ private[spark] class BlockManager(
     }
 
     if (blockWasSuccessfullyStored) {
-      None
+      DoPutSucceeded
+    } else if (iteratorFromFailedMemoryStorePut.isDefined) {
+      DoPutIteratorFailed(iteratorFromFailedMemoryStorePut.get)
     } else {
-      Some(result)
+      DoPutBytesFailed
     }
   }
 
@@ -1064,7 +1077,7 @@ private[spark] class BlockManager(
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
-          diskStore.putIterator(blockId, elements.toIterator, level, returnValues = false)
+          diskStore.putIterator(blockId, elements.toIterator, level)
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes, level)
       }
