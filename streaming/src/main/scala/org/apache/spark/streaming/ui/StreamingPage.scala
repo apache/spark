@@ -24,15 +24,14 @@ import scala.collection.mutable.ArrayBuffer
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.Logging
-import org.apache.spark.ui._
-import org.apache.spark.ui.{UIUtils => SparkUIUtils}
+import org.apache.spark.ui.{UIUtils => SparkUIUtils, _}
 
 /**
  * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.
  *
  * @param timelineDivId the timeline `id` used in the html `div` tag
  * @param histogramDivId the timeline `id` used in the html `div` tag
- * @param data the data for the graph
+ * @param dataSets the data sets for the graph; each data set typically represents a line
  * @param minX the min value of X axis
  * @param maxX the max value of X axis
  * @param minY the min value of Y axis
@@ -44,7 +43,7 @@ import org.apache.spark.ui.{UIUtils => SparkUIUtils}
 private[ui] class GraphUIData(
     timelineDivId: String,
     histogramDivId: String,
-    data: Seq[(Long, Double)],
+    dataSets: Seq[Seq[(Long, Double)]],
     minX: Long,
     maxX: Long,
     minY: Double,
@@ -55,8 +54,11 @@ private[ui] class GraphUIData(
   private var dataJavaScriptName: String = _
 
   def generateDataJs(jsCollector: JsCollector): Unit = {
-    val jsForData = data.map { case (x, y) =>
-      s"""{"x": $x, "y": $y}"""
+    // jsForData then is a 2-dimensional array
+    val jsForData = dataSets.map { dataSet =>
+      dataSet.map { case (x, y) =>
+        s"""{"x": $x, "y": $y}"""
+      }.mkString("[", ",", "]")
     }.mkString("[", ",", "]")
     dataJavaScriptName = jsCollector.nextVariableName
     jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
@@ -79,7 +81,8 @@ private[ui] class GraphUIData(
   }
 
   def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
-    val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
+    // we only generate histogram for the 0th data-set, i.e., the event rate data-set
+    val histogramData = s"$dataJavaScriptName[0].map(function(d) { return d.y; })"
     jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
     if (batchInterval.isDefined) {
       jsCollector.addStatement(
@@ -219,6 +222,35 @@ private[ui] class StreamingPage(parent: StreamingTab)
       (batchInfo.batchTime.milliseconds, batchInfo.numRecords * 1000.0 / listener.batchDuration)
     })
 
+    // Use the max input rate for all InputDStreams' graphs to make the Y axis ranges same.
+    // If it's not an integral number, just use its ceil integral number.
+    val maxEventRate: Long = eventRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
+    val minEventRate: Long = 0L
+
+    val numRecordsLimitForAllStreamsOption = if (listener.allStreamsUnderRateControl) {
+      val uiDate = new EventRateUIData(batches.map { batchInfo =>
+        (batchInfo.batchTime.milliseconds, {
+          val numRecordsLimitRate = batchInfo.numRecordsLimitOption
+                                    .getOrElse(Long.MaxValue) * 1000.0 / listener.batchDuration
+          StreamingPage.limitRateVisibleBoundTo(maxEventRate, numRecordsLimitRate)
+        })
+      })
+      Some(uiDate)
+    } else {
+      None
+    }
+
+    // Cal maxY of limit rates from all batches
+    val maxNumRecordsLimitRate: Long = if (numRecordsLimitForAllStreamsOption.isDefined) {
+      numRecordsLimitForAllStreamsOption.get.max.map(_.ceil.toLong).getOrElse(0L)
+    }
+    else {
+      0L
+    }
+
+    // Cal maxY from maxEventRate and maxNumRecordsLimitRate
+    val maxEventRateOrNumRecordsLimitRate = maxEventRate.max(maxNumRecordsLimitRate)
+
     val schedulingDelay = new MillisecondsStatUIData(batches.flatMap { batchInfo =>
       batchInfo.schedulingDelay.map(batchInfo.batchTime.milliseconds -> _)
     })
@@ -239,11 +271,6 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val (maxTime, normalizedUnit) = UIUtils.normalizeDuration(_maxTime)
     val formattedUnit = UIUtils.shortTimeUnitString(normalizedUnit)
 
-    // Use the max input rate for all InputDStreams' graphs to make the Y axis ranges same.
-    // If it's not an integral number, just use its ceil integral number.
-    val maxEventRate = eventRateForAllStreams.max.map(_.ceil.toLong).getOrElse(0L)
-    val minEventRate = 0L
-
     val batchInterval = UIUtils.convertToTimeUnit(listener.batchDuration, normalizedUnit)
 
     val jsCollector = new JsCollector
@@ -252,11 +279,20 @@ private[ui] class StreamingPage(parent: StreamingTab)
       new GraphUIData(
         "all-stream-events-timeline",
         "all-stream-events-histogram",
-        eventRateForAllStreams.data,
+        if (listener.allStreamsUnderRateControl) {
+          // All streams are under rate control, so we display the rate-limit line
+          Seq(eventRateForAllStreams.data) ++
+          StreamingPage.divideIntoLinesByMaxY(numRecordsLimitForAllStreamsOption.get.data,
+                                              maxEventRateOrNumRecordsLimitRate)
+        }
+        else {
+          // Not all streams are under rate control, so we won't display the rate-limit line
+          Seq(eventRateForAllStreams.data)
+        },
         minBatchTime,
         maxBatchTime,
         minEventRate,
-        maxEventRate,
+        maxEventRateOrNumRecordsLimitRate,
         "events/sec")
     graphUIDataForEventRateOfAllStreams.generateDataJs(jsCollector)
 
@@ -264,7 +300,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       new GraphUIData(
         "scheduling-delay-timeline",
         "scheduling-delay-histogram",
-        schedulingDelay.timelineData(normalizedUnit),
+        Seq(schedulingDelay.timelineData(normalizedUnit)),
         minBatchTime,
         maxBatchTime,
         minTime,
@@ -276,7 +312,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       new GraphUIData(
         "processing-time-timeline",
         "processing-time-histogram",
-        processingTime.timelineData(normalizedUnit),
+        Seq(processingTime.timelineData(normalizedUnit)),
         minBatchTime,
         maxBatchTime,
         minTime,
@@ -288,7 +324,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
       new GraphUIData(
         "total-delay-timeline",
         "total-delay-histogram",
-        totalDelay.timelineData(normalizedUnit),
+        Seq(totalDelay.timelineData(normalizedUnit)),
         minBatchTime,
         maxBatchTime,
         minTime,
@@ -390,15 +426,36 @@ private[ui] class StreamingPage(parent: StreamingTab)
       maxX: Long,
       minY: Double,
       maxY: Double): Seq[Node] = {
-    val maxYCalculated = listener.receivedEventRateWithBatchTime.values
-      .flatMap { case streamAndRates => streamAndRates.map { case (_, eventRate) => eventRate } }
+    val receivedEventRateAndLimitRateWithBatchTime =
+      listener.receivedEventRateAndLimitRateWithBatchTime
+
+    val maxYOfEventRate = receivedEventRateAndLimitRateWithBatchTime.values
+      .flatMap { case streamAndEventRatesAndLimitRateOptions =>
+        streamAndEventRatesAndLimitRateOptions.map {
+          case (_, eventRate, _) =>
+            eventRate
+        }
+      }
       .reduceOption[Double](math.max)
       .map(_.ceil.toLong)
       .getOrElse(0L)
 
-    val content = listener.receivedEventRateWithBatchTime.toList.sortBy(_._1).map {
-      case (streamId, eventRates) =>
-        generateInputDStreamRow(jsCollector, streamId, eventRates, minX, maxX, minY, maxYCalculated)
+    val maxYOfLimitRate = receivedEventRateAndLimitRateWithBatchTime.values
+      .flatMap { case streamAndEventRatesAndLimitRateOptions =>
+        streamAndEventRatesAndLimitRateOptions.map {
+          case (_, _, limitRate) =>
+            limitRate.getOrElse(Double.MaxValue)
+        }
+      }
+      .reduceOption[Double](math.max)
+      .map(_.ceil.toLong)
+      .getOrElse(0L)
+
+    val maxYCalculated = StreamingPage.limitRateVisibleBoundTo(maxYOfEventRate, maxYOfLimitRate)
+
+    val content = receivedEventRateAndLimitRateWithBatchTime.toList.sortBy(_._1).map {
+      case (streamId, eventRatesAndLimitRates) => generateInputDStreamRow(jsCollector, streamId,
+                                      eventRatesAndLimitRates, minX, maxX, minY, maxYCalculated)
     }.foldLeft[Seq[Node]](Nil)(_ ++ _)
 
     // scalastyle:off
@@ -422,7 +479,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateInputDStreamRow(
       jsCollector: JsCollector,
       streamId: Int,
-      eventRates: Seq[(Long, Double)],
+      eventRatesAndLimitRates: Seq[(Long, Double, Option[Double])],
       minX: Long,
       maxX: Long,
       minY: Double,
@@ -447,13 +504,28 @@ private[ui] class StreamingPage(parent: StreamingTab)
     val receiverLastErrorTime = receiverInfo.map {
       r => if (r.lastErrorTime < 0) "-" else SparkUIUtils.formatDate(r.lastErrorTime)
     }.getOrElse(emptyCell)
-    val receivedRecords = new EventRateUIData(eventRates)
+    val receivedRecords = new EventRateUIData(eventRatesAndLimitRates.map(e => (e._1, e._2)))
+    val receivedRecordsLimitOption =
+      if (listener.streamUnderRateControl(streamId).getOrElse(false)) {
+        Some(new EventRateUIData(
+          eventRatesAndLimitRates.map(e => (e._1, maxY.min(e._3.getOrElse(Double.MaxValue))))
+        ))
+      } else {
+        None
+      }
 
     val graphUIDataForEventRate =
       new GraphUIData(
         s"stream-$streamId-events-timeline",
         s"stream-$streamId-events-histogram",
-        receivedRecords.data,
+        if (receivedRecordsLimitOption.isDefined) {
+          // This stream is under rate control, so we display the rate-limit line
+          Seq(receivedRecords.data) ++
+          StreamingPage.divideIntoLinesByMaxY(receivedRecordsLimitOption.get.data, maxY)
+        } else {
+          // This stream is not under rate control, so we won't display the rate-limit line
+          Seq(receivedRecords.data)
+        },
         minX,
         maxX,
         minY,
@@ -489,14 +561,16 @@ private[ui] class StreamingPage(parent: StreamingTab)
 
     val activeBatchesContent = {
       <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq
+        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration,
+                             listener.allStreamsUnderRateControl).toNodeSeq
     }
 
     val completedBatchesContent = {
       <h4 id="completed">
         Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
       </h4> ++
-        new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq
+        new CompletedBatchTable(completedBatches, listener.batchDuration,
+                                listener.allStreamsUnderRateControl).toNodeSeq
     }
 
     activeBatchesContent ++ completedBatchesContent
@@ -516,6 +590,60 @@ private[ui] object StreamingPage {
     msOption.map(SparkUIUtils.formatDurationVerbose).getOrElse(emptyCell)
   }
 
+  val VISIBLE_BOUND_MULTIPLIER = 2
+
+  def limitRateVisibleBoundTo(eventRate: Double, limitRate: Double): Double = {
+    if (limitRate > eventRate * VISIBLE_BOUND_MULTIPLIER) {
+      eventRate * VISIBLE_BOUND_MULTIPLIER
+    }
+    else {
+      limitRate
+    }
+  }
+
+  /**
+   * @return a Seq of dashed, solid, dashed, solid, dashed... lines
+   */
+  def divideIntoLinesByMaxY(rateLimits: Seq[(Long, Double)], maxY: Double)
+    : Seq[Seq[(Long, Double)]] = {
+    if (rateLimits.length <= 1) {
+      Seq(rateLimits)
+    }
+    else {
+      var ret: Seq[Seq[(Long, Double)]] = Seq()
+      val array = rateLimits.toArray
+
+      var consecutiveMaxY = array(0)._2 == maxY && array(1)._2 == maxY
+      if (!consecutiveMaxY) {
+        // This ensures that the first returned line is a dashed one
+        ret = ret :+ Seq()
+      }
+      var startIdx = 0
+
+      // Each iteration adds a dashed or solid line
+      while (startIdx < array.length) {
+        var stopIdx = startIdx
+        if (consecutiveMaxY) {
+          // Calculate the (inclusive) stopIdx for a dashed line
+          while (stopIdx + 1 < array.length && array(stopIdx + 1)._2 == maxY) {
+            stopIdx += 1
+          }
+        }
+        else {
+          // Calculate the (inclusive) stopIdx for a solid line
+          while (stopIdx < array.length - 1 &&
+                 (array(stopIdx)._2 != maxY || array(stopIdx + 1)._2 != maxY)) {
+            stopIdx += 1
+          }
+        }
+        ret = ret :+ array.slice(startIdx, stopIdx + 1).toSeq
+        startIdx = if (stopIdx + 1 < array.length) stopIdx else array.length
+        consecutiveMaxY = !consecutiveMaxY
+      }
+
+      ret
+    }
+  }
 }
 
 /**

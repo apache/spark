@@ -177,7 +177,7 @@ class DirectKafkaInputDStream[
     val metadata = Map(
       "offsets" -> offsetRanges.toList,
       StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
-    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+    val inputInfo = StreamInputInfo(id, rdd.count, None, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)

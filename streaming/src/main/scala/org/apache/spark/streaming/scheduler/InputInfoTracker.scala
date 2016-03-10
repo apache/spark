@@ -29,13 +29,18 @@ import org.apache.spark.streaming.{StreamingContext, Time}
  *
  * @param inputStreamId the input stream id
  * @param numRecords the number of records in a batch
+ * @param numRecordsLimitOption (if exist) the upper bound of number of records in a batch
  * @param metadata metadata for this batch. It should contain at least one standard field named
  *                 "Description" which maps to the content that will be shown in the UI.
  */
 @DeveloperApi
-case class StreamInputInfo(
-    inputStreamId: Int, numRecords: Long, metadata: Map[String, Any] = Map.empty) {
+case class StreamInputInfo(inputStreamId: Int,
+                           numRecords: Long,
+                           numRecordsLimitOption: Option[Long] = None,
+                           metadata: Map[String, Any] = Map.empty) {
   require(numRecords >= 0, "numRecords must not be negative")
+  require(numRecordsLimitOption.isEmpty || numRecordsLimitOption.get >= 0,
+          "numRecordsLimitOption must not be negative")
 
   def metadataDescription: Option[String] =
     metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString)

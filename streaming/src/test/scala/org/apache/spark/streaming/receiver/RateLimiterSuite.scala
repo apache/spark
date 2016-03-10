@@ -99,4 +99,32 @@ class RateLimiterSuite extends SparkFunSuite {
     assert(rateLimiter.rateLimitHistory(0).ts == 2500)
   }
 
+  test("sumRateLimits() works good for normal cases") {
+    // if rateLimits contains some None, then sumRateLimits() should return None
+    var rateLimits: Seq[Option[Long]] = Seq(Some(1L), None)
+    assert(RateLimiterHelper.sumRateLimits(rateLimits) == None)
+
+    // normal case
+    rateLimits = Seq(Some(10L))
+    var sum: Option[Long] = RateLimiterHelper.sumRateLimits(rateLimits)
+    assert(sum.isDefined && sum.get == 10L)
+    
+    // another normal case
+    rateLimits = Seq(Some(10L), Some(20L), Some(30L), Some(40L))
+    sum = RateLimiterHelper.sumRateLimits(rateLimits)
+    assert(sum.isDefined && sum.get == 100L)
+  }
+
+  test("sumRateLimits() works good for overflow cases") {
+    // overflow case
+    var rateLimits: Seq[Option[Long]] = Seq(Some(Long.MaxValue), Some(1L))
+    var sum = RateLimiterHelper.sumRateLimits(rateLimits)
+    assert(sum.isDefined && sum.get == Long.MaxValue)
+
+    // another overflow case
+    rateLimits = Seq(Some(Long.MaxValue), Some(Long.MaxValue), Some(Long.MaxValue))
+    sum = RateLimiterHelper.sumRateLimits(rateLimits)
+    assert(sum.isDefined && sum.get == Long.MaxValue)
+  }
+
 }
