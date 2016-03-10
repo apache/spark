@@ -482,6 +482,10 @@ private[spark] class BlockManager(
     if (level.deserialized) {
       // Try to avoid expensive serialization by reading a pre-serialized copy from disk:
       if (level.useDisk && diskStore.contains(blockId)) {
+        // Note: we purposely do not try to put the block back into memory here. Since this branch
+        // handles deserialized blocks, this block may only be cached in memory as objects, not
+        // serialized bytes. Because the caller only requested bytes, it doesn't make sense to
+        // cache the block's deserialized objects since that caching may not have a payoff.
         diskStore.getBytes(blockId)
       } else if (level.useMemory && memoryStore.contains(blockId)) {
         // The block was not found on disk, so serialize an in-memory copy:
