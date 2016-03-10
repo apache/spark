@@ -107,7 +107,7 @@ case class BroadcastHashJoin(
     streamedPlan.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     if (joinType == Inner) {
       codegenInner(ctx, input)
     } else {

@@ -65,7 +65,12 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
     */
-  private var parent: CodegenSupport = null
+  protected var parent: CodegenSupport = null
+
+  /**
+    * Whether this SparkPlan prefers to accept UnsafeRow as input in doConsume.
+    */
+  def preferUnsafeRow: Boolean = false
 
   /**
     * Returns all the RDDs of InternalRow which generates the input rows.
@@ -176,11 +181,20 @@ trait CodegenSupport extends SparkPlan {
       } else {
         input
       }
+
+    val evaluated =
+      if (row != null && preferUnsafeRow) {
+        // Current plan can consume UnsafeRows directly.
+        ""
+      } else {
+        evaluateRequiredVariables(child.output, inputVars, usedInputs)
+      }
+
     s"""
        |
        |/*** CONSUME: ${toCommentSafeString(this.simpleString)} */
-       |${evaluateRequiredVariables(child.output, inputVars, usedInputs)}
-       |${doConsume(ctx, inputVars)}
+       |${evaluated}
+       |${doConsume(ctx, inputVars, row)}
      """.stripMargin
   }
 
@@ -195,7 +209,7 @@ trait CodegenSupport extends SparkPlan {
     *   if (isNull1 || !value2) continue;
     *   # call consume(), which will call parent.doConsume()
     */
-  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     throw new UnsupportedOperationException
   }
 }
@@ -238,7 +252,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
     s"""
        | while (!shouldStop() && $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
-       |   ${consume(ctx, columns).trim}
+       |   ${consume(ctx, columns, row).trim}
        | }
      """.stripMargin
   }

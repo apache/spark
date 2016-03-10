@@ -105,6 +105,8 @@ case class Sort(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
+  override def preferUnsafeRow: Boolean = true
+
   override protected def doProduce(ctx: CodegenContext): String = {
     val needToSort = ctx.freshName("needToSort")
     ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
@@ -153,18 +155,22 @@ case class Sort(
      """.stripMargin.trim
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val colExprs = child.output.zipWithIndex.map { case (attr, i) =>
-      BoundReference(i, attr.dataType, attr.nullable)
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
+    if (row != null) {
+      s"$sorterVariable.insertRow((UnsafeRow)$row);"
+    } else {
+      val colExprs = child.output.zipWithIndex.map { case (attr, i) =>
+        BoundReference(i, attr.dataType, attr.nullable)
+      }
+
+      ctx.currentVars = input
+      val code = GenerateUnsafeProjection.createCode(ctx, colExprs)
+
+      s"""
+         | // Convert the input attributes to an UnsafeRow and add it to the sorter
+         | ${code.code}
+         | $sorterVariable.insertRow(${code.value});
+       """.stripMargin.trim
     }
-
-    ctx.currentVars = input
-    val code = GenerateUnsafeProjection.createCode(ctx, colExprs)
-
-    s"""
-       | // Convert the input attributes to an UnsafeRow and add it to the sorter
-       | ${code.code}
-       | $sorterVariable.insertRow(${code.value});
-     """.stripMargin.trim
   }
 }
