@@ -944,11 +944,8 @@ private[spark] class BlockManager(
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
 
-    if (blockWasSuccessfullyStored) {
-      None
-    } else {
-      Some(iteratorFromFailedMemoryStorePut.get)
-    }
+    assert(blockWasSuccessfullyStored == iteratorFromFailedMemoryStorePut.isEmpty)
+    iteratorFromFailedMemoryStorePut
   }
 
   /**
