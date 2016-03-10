@@ -946,7 +946,7 @@ object PushPredicateThroughWindow extends Rule[LogicalPlan] with PredicateHelper
         if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition { cond =>
         cond.references.size == 1 &&
-          cond.references.subsetOf(w.outputSet) &&
+          cond.references.subsetOf(AttributeSet(w.partitionSpec.flatMap(_.references))) &&
           cond.deterministic
       }
       if (pushDown.nonEmpty) {

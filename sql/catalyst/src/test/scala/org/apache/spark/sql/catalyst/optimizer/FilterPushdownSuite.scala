@@ -693,4 +693,30 @@ class FilterPushdownSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("Window: no push down -- predicates are not from partitioning keys") {
+    val originalQuery = testRelation
+      .select('a, 'b, 'c,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window)).where('c > 1).select('a, 'c)
+
+
+    val correctAnswer = testRelation
+      .select('a, 'b, 'c)
+      .window('a.attr :: 'b.attr :: 'c.attr :: Nil,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window) :: Nil,
+        'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil).where('c > 1)
+      .select('a, 'c).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, correctAnswer)
+  }
 }
