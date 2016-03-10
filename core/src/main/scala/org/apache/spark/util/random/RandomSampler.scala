@@ -117,21 +117,9 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
     if (ub - lb <= 0.0) {
       if (complement) 1 else 0
     } else {
-      if (complement) {
-        val x = rng.nextDouble()
-        if ((x < lb) || (x >= ub)) {
-          1
-        } else {
-          0
-        }
-      } else {
-        val x = rng.nextDouble()
-        if ((x >= lb) && (x < ub)) {
-          1
-        } else {
-          0
-        }
-      }
+      val x = rng.nextDouble()
+      val n = if ((x >= lb) && (x < ub)) 1 else 0
+      if (complement) 1 - n else n
     }
   }
 
