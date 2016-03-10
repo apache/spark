@@ -355,27 +355,27 @@ public class JavaDataFrameSuite {
     DataFrame df = context.range(1000);
 
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
-    assert (filter1.expectedFpp() - 0.03 < 1e-3);
+    Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);
     for (int i = 0; i < 1000; i++) {
-      assert (filter1.mightContain(i));
+      Assert.assertTrue(filter1.mightContain(i));
     }
 
     BloomFilter filter2 = df.stat().bloomFilter(col("id").multiply(3), 1000, 0.03);
-    assert (filter2.expectedFpp() - 0.03 < 1e-3);
+    Assert.assertTrue(filter2.expectedFpp() - 0.03 < 1e-3);
     for (int i = 0; i < 1000; i++) {
-      assert (filter2.mightContain(i * 3));
+      Assert.assertTrue(filter2.mightContain(i * 3));
     }
 
     BloomFilter filter3 = df.stat().bloomFilter("id", 1000, 64 * 5);
-    assert (filter3.bitSize() == 64 * 5);
+    Assert.assertTrue(filter3.bitSize() == 64 * 5);
     for (int i = 0; i < 1000; i++) {
-      assert (filter3.mightContain(i));
+      Assert.assertTrue(filter3.mightContain(i));
     }
 
     BloomFilter filter4 = df.stat().bloomFilter(col("id").multiply(3), 1000, 64 * 5);
-    assert (filter4.bitSize() == 64 * 5);
+    Assert.assertTrue(filter4.bitSize() == 64 * 5);
     for (int i = 0; i < 1000; i++) {
-      assert (filter4.mightContain(i * 3));
+      Assert.assertTrue(filter4.mightContain(i * 3));
     }
   }
 }

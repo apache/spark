@@ -25,12 +25,10 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -60,12 +58,12 @@ abstract class AbstractCommandBuilder {
   private Map<String, String> effectiveConfig;
 
   public AbstractCommandBuilder() {
-    this.appArgs = new ArrayList<String>();
-    this.childEnv = new HashMap<String, String>();
-    this.conf = new HashMap<String, String>();
-    this.files = new ArrayList<String>();
-    this.jars = new ArrayList<String>();
-    this.pyFiles = new ArrayList<String>();
+    this.appArgs = new ArrayList<>();
+    this.childEnv = new HashMap<>();
+    this.conf = new HashMap<>();
+    this.files = new ArrayList<>();
+    this.jars = new ArrayList<>();
+    this.pyFiles = new ArrayList<>();
   }
 
   /**
@@ -89,7 +87,7 @@ abstract class AbstractCommandBuilder {
    * class.
    */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
-    List<String> cmd = new ArrayList<String>();
+    List<String> cmd = new ArrayList<>();
     String envJavaHome;
 
     if (javaHome != null) {
@@ -136,7 +134,7 @@ abstract class AbstractCommandBuilder {
   List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
 
-    List<String> cp = new ArrayList<String>();
+    List<String> cp = new ArrayList<>();
     addToClassPath(cp, getenv("SPARK_CLASSPATH"));
     addToClassPath(cp, appClassPath);
 

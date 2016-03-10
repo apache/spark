@@ -35,7 +35,7 @@ import org.apache.spark._
  * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
  */
 object SparkHdfsLR {
-  val D = 10   // Numer of dimensions
+  val D = 10   // Number of dimensions
   val rand = new Random(42)
 
   case class DataPoint(x: Vector[Double], y: Double)

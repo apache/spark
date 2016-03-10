@@ -226,12 +226,12 @@ class ALS private (
     val sc = ratings.context
 
     val numUserBlocks = if (this.numUserBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
+      math.max(sc.defaultParallelism, ratings.partitions.length / 2)
     } else {
       this.numUserBlocks
     }
     val numProductBlocks = if (this.numProductBlocks == -1) {
-      math.max(sc.defaultParallelism, ratings.partitions.size / 2)
+      math.max(sc.defaultParallelism, ratings.partitions.length / 2)
     } else {
       this.numProductBlocks
     }

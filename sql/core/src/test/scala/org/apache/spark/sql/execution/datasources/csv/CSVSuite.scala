@@ -21,6 +21,12 @@ import java.io.File
 import java.nio.charset.UnsupportedCharsetException
 import java.sql.Timestamp
 
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
@@ -37,6 +43,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
+  private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
 
   private def testFile(fileName: String): String = {
@@ -110,6 +117,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = true, checkTypes = true)
+  }
+
+  test("test inferring booleans") {
+    val result = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(boolFile))
+
+    val expectedSchema = StructType(List(
+      StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
   }
 
   test("test with alternative delimiter and quote") {
@@ -385,7 +404,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(csvDir)
 
       val compressedFiles = new File(csvDir).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      assert(compressedFiles.exists(_.getName.endsWith(".csv.gz")))
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -393,6 +412,46 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(csvDir)
 
       verifyCars(carsCopy, withHeader = true)
+    }
+  }
+
+  test("SPARK-13543 Write the output as uncompressed via option()") {
+    val clonedConf = new Configuration(hadoopConfiguration)
+    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
+    hadoopConfiguration
+      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
+    hadoopConfiguration
+      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
+    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
+    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    withTempDir { dir =>
+      try {
+        val csvDir = new File(dir, "csv").getCanonicalPath
+        val cars = sqlContext.read
+          .format("csv")
+          .option("header", "true")
+          .load(testFile(carsFile))
+
+        cars.coalesce(1).write
+          .format("csv")
+          .option("header", "true")
+          .option("compression", "none")
+          .save(csvDir)
+
+        val compressedFiles = new File(csvDir).listFiles()
+        assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
+
+        val carsCopy = sqlContext.read
+          .format("csv")
+          .option("header", "true")
+          .load(csvDir)
+
+        verifyCars(carsCopy, withHeader = true)
+      } finally {
+        // Hadoop 1 doesn't have `Configuration.unset`
+        hadoopConfiguration.clear()
+        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+      }
     }
   }
 
@@ -406,5 +465,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(
       df.schema.fields.map(field => field.dataType).deep ==
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+  }
+
+  test("old csv data source name works") {
+    val cars = sqlContext
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "false")
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
   }
 }
