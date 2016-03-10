@@ -184,7 +184,8 @@ class ColumnPruningSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a).analyze
+        .select('a)
+        .groupBy('a)('a).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -201,7 +202,7 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select('a)
-        .select('a as 'c).analyze
+        .groupBy('a)('a as 'c).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -270,7 +271,7 @@ class ColumnPruningSuite extends PlanTest {
             UnspecifiedFrame)).as('window)).select('a, 'c)
 
     val correctAnswer =
-      input.select('a, 'c).analyze
+      input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
