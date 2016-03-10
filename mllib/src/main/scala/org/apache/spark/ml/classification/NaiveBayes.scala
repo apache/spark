@@ -145,7 +145,7 @@ class NaiveBayesModel private[ml] (
     case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = theta.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(theta.numCols){1.0})
+      val ones = new DenseVector(Array.fill(theta.numCols) {1.0})
       val thetaMinusNegTheta = theta.map { value =>
         value - math.log(1.0 - math.exp(value))
       }
