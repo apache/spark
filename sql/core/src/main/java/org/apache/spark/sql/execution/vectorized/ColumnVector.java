@@ -536,9 +536,13 @@ public abstract class ColumnVector {
    */
   public final Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
-      return Decimal.apply(getInt(rowId), precision, scale);
+      assert(resultDecimal != null);
+      resultDecimal.setInternal(getInt(rowId));
+      return resultDecimal;
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
-      return Decimal.apply(getLong(rowId), precision, scale);
+      assert (resultDecimal != null);
+      resultDecimal.setInternal(getLong(rowId));
+      return resultDecimal;
     } else {
       // TODO: best perf?
       byte[] bytes = getBinary(rowId);
@@ -853,6 +857,11 @@ public abstract class ColumnVector {
   protected final ColumnarBatch.Row resultStruct;
 
   /**
+   * Reusable object for getDecimal()
+   */
+  private Decimal resultDecimal;
+
+  /**
    * The Dictionary for this column.
    *
    * If it's not null, will be used to decode the value in getXXX().
@@ -926,6 +935,13 @@ public abstract class ColumnVector {
       this.childColumns = null;
       this.resultArray = null;
       this.resultStruct = null;
+    }
+
+    if (type instanceof DecimalType) {
+      DecimalType dt = (DecimalType)type;
+      if (dt.precision() <= Decimal.MAX_LONG_DIGITS()) {
+        resultDecimal = Decimal.apply(0, dt.precision(), dt.scale());
+      }
     }
   }
 }

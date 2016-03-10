@@ -69,6 +69,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Just updates the underlying value to `v`, assuming precision and scale is unchanged.
+   */
+  def setInternal(v: Long): Unit = {
+    this.longVal = v
+  }
+
+  /**
    * Set this Decimal to the given unscaled Long, with a given precision and scale.
    */
   def set(unscaled: Long, precision: Int, scale: Int): Decimal = {
