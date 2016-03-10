@@ -79,9 +79,9 @@ public class JavaPolynomialExpansionSuite {
 
     Dataset<Row> dataset = jsql.createDataFrame(data, schema);
 
-    Row[] pairs = polyExpansion.transform(dataset)
+    List<Row> pairs = polyExpansion.transform(dataset)
       .select("polyFeatures", "expected")
-      .collect();
+      .collectAsList();
 
     for (Row r : pairs) {
       double[] polyFeatures = ((Vector)r.get(0)).toArray();

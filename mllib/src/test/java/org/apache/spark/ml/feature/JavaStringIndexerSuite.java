@@ -65,9 +65,9 @@ public class JavaStringIndexerSuite {
       .setOutputCol("labelIndex");
     Dataset<Row> output = indexer.fit(dataset).transform(dataset);
 
-    Assert.assertArrayEquals(
-      new Row[] { cr(0, 0.0), cr(1, 2.0), cr(2, 1.0), cr(3, 0.0), cr(4, 0.0), cr(5, 1.0) },
-      output.orderBy("id").select("id", "labelIndex").collect());
+    Assert.assertEquals(
+      Arrays.asList(cr(0, 0.0), cr(1, 2.0), cr(2, 1.0), cr(3, 0.0), cr(4, 0.0), cr(5, 1.0)),
+      output.orderBy("id").select("id", "labelIndex").collectAsList());
   }
 
   /** An alias for RowFactory.create. */

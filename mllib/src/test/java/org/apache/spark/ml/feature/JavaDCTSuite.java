@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D;
 import org.junit.After;
@@ -69,8 +70,8 @@ public class JavaDCTSuite {
       .setInputCol("vec")
       .setOutputCol("resultVec");
 
-    Row[] result = dct.transform(dataset).select("resultVec").collect();
-    Vector resultVec = result[0].getAs("resultVec");
+    List<Row> result = dct.transform(dataset).select("resultVec").collectAsList();
+    Vector resultVec = result.get(0).getAs("resultVec");
 
     Assert.assertArrayEquals(expectedResult, resultVec.toArray(), 1e-6);
   }

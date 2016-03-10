@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -63,9 +64,9 @@ public class JavaTokenizerSuite {
     ));
     Dataset<Row> dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
 
-    Row[] pairs = myRegExTokenizer.transform(dataset)
+    List<Row> pairs = myRegExTokenizer.transform(dataset)
       .select("tokens", "wantedTokens")
-      .collect();
+      .collectAsList();
 
     for (Row r : pairs) {
       Assert.assertEquals(r.get(0), r.get(1));

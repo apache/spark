@@ -18,6 +18,7 @@
 package org.apache.spark.ml.feature;
 
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -70,7 +71,7 @@ public class JavaBucketizerSuite {
       .setOutputCol("result")
       .setSplits(splits);
 
-    Row[] result = bucketizer.transform(dataset).select("result").collect();
+    List<Row> result = bucketizer.transform(dataset).select("result").collectAsList();
 
     for (Row r : result) {
       double index = r.getDouble(0);
