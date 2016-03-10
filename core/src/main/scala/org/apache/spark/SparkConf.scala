@@ -388,7 +388,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
-  def contains(key: String): Boolean = settings.containsKey(key)
+  def contains(key: String): Boolean = {
+    settings.containsKey(key) ||
+      configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
+  }
 
   /** Copy this object */
   override def clone: SparkConf = {
