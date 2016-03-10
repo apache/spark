@@ -26,10 +26,12 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils.getCallSite
 
 private[sql] object Column {
 
@@ -138,6 +140,16 @@ class Column(protected[sql] val expr: Expression) extends Logging {
   }
 
   override def hashCode: Int = this.expr.hashCode()
+
+  {
+    // set current call stack to CurrentOrigin
+    val exprWithCallSite = expr.children.find(_.origin.callSite.isDefined)
+    val callSite = exprWithCallSite match {
+      case Some(expr) => expr.origin.callSite.get
+      case _ => org.apache.spark.util.Utils.getCallSite().shortForm
+    }
+    org.apache.spark.sql.catalyst.trees.CurrentOrigin.setPosition(callSite, 0, 0)
+  }
 
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
