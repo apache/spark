@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, Of
 trait OffsetSuite extends SparkFunSuite {
   /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
   def compare(one: Offset, two: Offset): Unit = {
-    test(s"comparision $one <=> $two") {
+    test(s"comparison $one <=> $two") {
       assert(one < two)
       assert(one <= two)
       assert(one <= one)

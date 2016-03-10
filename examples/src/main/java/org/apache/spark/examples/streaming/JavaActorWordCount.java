@@ -60,7 +60,9 @@ class JavaSampleActorReceiver<T> extends JavaActorReceiver {
 
   @Override
   public void onReceive(Object msg) throws Exception {
-    store((T) msg);
+    @SuppressWarnings("unchecked")
+    T msgT = (T) msg;
+    store(msgT);
   }
 
   @Override
@@ -127,7 +129,7 @@ public class JavaActorWordCount {
     }).mapToPair(new PairFunction<String, String, Integer>() {
       @Override
       public Tuple2<String, Integer> call(String s) {
-        return new Tuple2<String, Integer>(s, 1);
+        return new Tuple2<>(s, 1);
       }
     }).reduceByKey(new Function2<Integer, Integer, Integer>() {
       @Override

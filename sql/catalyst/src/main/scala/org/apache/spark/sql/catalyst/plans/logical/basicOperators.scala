@@ -51,25 +51,8 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
     !expressions.exists(!_.resolved) && childrenResolved && !hasSpecialExpressions
   }
 
-  /**
-   * Generates an additional set of aliased constraints by replacing the original constraint
-   * expressions with the corresponding alias
-   */
-  private def getAliasedConstraints: Set[Expression] = {
-    projectList.flatMap {
-      case a @ Alias(e, _) =>
-        child.constraints.map(_ transform {
-          case expr: Expression if expr.semanticEquals(e) =>
-            a.toAttribute
-        }).union(Set(EqualNullSafe(e, a.toAttribute)))
-      case _ =>
-        Set.empty[Expression]
-    }.toSet
-  }
-
-  override def validConstraints: Set[Expression] = {
-    child.constraints.union(getAliasedConstraints)
-  }
+  override def validConstraints: Set[Expression] =
+    child.constraints.union(getAliasedConstraints(projectList))
 }
 
 /**
@@ -106,9 +89,7 @@ case class Generate(
       generatorOutput.forall(_.resolved)
   }
 
-  // we don't want the gOutput to be taken as part of the expressions
-  // as that will cause exceptions like unresolved attributes etc.
-  override def expressions: Seq[Expression] = generator :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(generatorOutput)
 
   def output: Seq[Attribute] = {
     val qualified = qualifier.map(q =>
@@ -126,9 +107,8 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] =
     child.constraints.union(splitConjunctivePredicates(condition).toSet)
-  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -157,9 +137,8 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
       leftAttr.withNullability(leftAttr.nullable && rightAttr.nullable)
     }
 
-  override protected def validConstraints: Set[Expression] = {
+  override protected def validConstraints: Set[Expression] =
     leftConstraints.union(rightConstraints)
-  }
 
   // Intersect are only resolved if they don't introduce ambiguous expression ids,
   // since the Optimizer will convert Intersect to Join.
@@ -442,6 +421,9 @@ case class Aggregate(
   override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
+  override def validConstraints: Set[Expression] =
+    child.constraints.union(getAliasedConstraints(aggregateExpressions))
+
   override def statistics: Statistics = {
     if (groupingExpressions.isEmpty) {
       Statistics(sizeInBytes = 1)
@@ -467,21 +449,21 @@ private[sql] object Expand {
    * Extract attribute set according to the grouping id.
    *
    * @param bitmask bitmask to represent the selected of the attribute sequence
-   * @param exprs the attributes in sequence
+   * @param attrs the attributes in sequence
    * @return the attributes of non selected specified via bitmask (with the bit set to 1)
    */
-  private def buildNonSelectExprSet(
+  private def buildNonSelectAttrSet(
       bitmask: Int,
-      exprs: Seq[Expression]): ArrayBuffer[Expression] = {
-    val set = new ArrayBuffer[Expression](2)
+      attrs: Seq[Attribute]): AttributeSet = {
+    val nonSelect = new ArrayBuffer[Attribute]()
 
-    var bit = exprs.length - 1
+    var bit = attrs.length - 1
     while (bit >= 0) {
-      if (((bitmask >> bit) & 1) == 1) set += exprs(exprs.length - bit - 1)
+      if (((bitmask >> bit) & 1) == 1) nonSelect += attrs(attrs.length - bit - 1)
       bit -= 1
     }
 
-    set
+    AttributeSet(nonSelect)
   }
 
   /**
@@ -489,13 +471,15 @@ private[sql] object Expand {
    * multiple output rows for a input row.
    *
    * @param bitmasks The bitmask set represents the grouping sets
-   * @param groupByExprs The grouping by expressions
+   * @param groupByAliases The aliased original group by expressions
+   * @param groupByAttrs The attributes of aliased group by expressions
    * @param gid Attribute of the grouping id
    * @param child Child operator
    */
   def apply(
     bitmasks: Seq[Int],
-    groupByExprs: Seq[Expression],
+    groupByAliases: Seq[Alias],
+    groupByAttrs: Seq[Attribute],
     gid: Attribute,
     child: LogicalPlan): Expand = {
     // Create an array of Projections for the child projection, and replace the projections'
@@ -503,27 +487,21 @@ private[sql] object Expand {
     // are not set for this grouping set (according to the bit mask).
     val projections = bitmasks.map { bitmask =>
       // get the non selected grouping attributes according to the bit mask
-      val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, groupByExprs)
+      val nonSelectedGroupAttrSet = buildNonSelectAttrSet(bitmask, groupByAttrs)
 
-      (child.output :+ gid).map(expr => expr transformDown {
-        // TODO this causes a problem when a column is used both for grouping and aggregation.
-        case x: Expression if nonSelectedGroupExprSet.exists(_.semanticEquals(x)) =>
+      child.output ++ groupByAttrs.map { attr =>
+        if (nonSelectedGroupAttrSet.contains(attr)) {
           // if the input attribute in the Invalid Grouping Expression set of for this group
           // replace it with constant null
-          Literal.create(null, expr.dataType)
-        case x if x == gid =>
-          // replace the groupingId with concrete value (the bit mask)
-          Literal.create(bitmask, IntegerType)
-      })
+          Literal.create(null, attr.dataType)
+        } else {
+          attr
+        }
+      // groupingId is the last output, here we use the bit mask as the concrete value for it.
+      } :+ Literal.create(bitmask, IntegerType)
     }
-    val output = child.output.map { attr =>
-      if (groupByExprs.exists(_.semanticEquals(attr))) {
-        attr.withNullability(true)
-      } else {
-        attr
-      }
-    }
-    Expand(projections, output :+ gid, child)
+    val output = child.output ++ groupByAttrs :+ gid
+    Expand(projections, output, Project(child.output ++ groupByAliases, child))
   }
 }
 
@@ -549,20 +527,6 @@ case class Expand(
   }
 }
 
-trait GroupingAnalytics extends UnaryNode {
-
-  def groupByExprs: Seq[Expression]
-  def aggregations: Seq[NamedExpression]
-
-  override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
-
-  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
-  // will change in analysis.
-  override lazy val resolved: Boolean = false
-
-  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics
-}
-
 /**
  * A GROUP BY clause with GROUPING SETS can generate a result set equivalent
  * to generated by a UNION ALL of multiple simple GROUP BY clauses.
@@ -581,10 +545,13 @@ case class GroupingSets(
     bitmasks: Seq[Int],
     groupByExprs: Seq[Expression],
     child: LogicalPlan,
-    aggregations: Seq[NamedExpression]) extends GroupingAnalytics {
+    aggregations: Seq[NamedExpression]) extends UnaryNode {
 
-  def withNewAggs(aggs: Seq[NamedExpression]): GroupingAnalytics =
-    this.copy(aggregations = aggs)
+  override def output: Seq[Attribute] = aggregations.map(_.toAttribute)
+
+  // Needs to be unresolved before its translated to Aggregate + Expand because output attributes
+  // will change in analysis.
+  override lazy val resolved: Boolean = false
 }
 
 case class Pivot(

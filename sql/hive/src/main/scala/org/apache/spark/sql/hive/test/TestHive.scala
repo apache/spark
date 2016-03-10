@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.CacheTableCommand
+import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
@@ -46,7 +46,7 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 object TestHive
   extends TestHiveContext(
     new SparkContext(
-      System.getProperty("spark.sql.test.master", "local[32]"),
+      System.getProperty("spark.sql.test.master", "local[1]"),
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")

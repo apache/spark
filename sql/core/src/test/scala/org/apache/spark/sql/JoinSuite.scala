@@ -47,7 +47,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val operators = physical.collect {
       case j: LeftSemiJoinHash => j
       case j: BroadcastHashJoin => j
-      case j: LeftSemiJoinBNL => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
@@ -67,7 +66,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
         ("SELECT * FROM testData LEFT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
@@ -348,7 +347,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -358,7 +357,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -465,7 +464,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[LeftSemiJoinHash]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
-          classOf[LeftSemiJoinBNL]),
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2",

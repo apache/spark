@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Explode, Literal, SortOrder}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.StringType
@@ -154,6 +157,22 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(Optimize.execute(query), expected)
   }
 
+  test("Eliminate the Project with an empty projectList") {
+    val input = OneRowRelation
+    val expected = Project(Literal(1).as("1") :: Nil, input).analyze
+
+    val query1 =
+      Project(Literal(1).as("1") :: Nil, Project(Literal(1).as("1") :: Nil, input)).analyze
+    comparePlans(Optimize.execute(query1), expected)
+
+    val query2 =
+      Project(Literal(1).as("1") :: Nil, Project(Nil, input)).analyze
+    comparePlans(Optimize.execute(query2), expected)
+
+    // to make sure the top Project will not be removed.
+    comparePlans(Optimize.execute(expected), expected)
+  }
+
   test("column pruning for group") {
     val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
     val originalQuery =
@@ -247,6 +266,38 @@ class ColumnPruningSuite extends PlanTest {
     val expected = Project('b :: Nil,
       Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil)).analyze
     comparePlans(Optimize.execute(query), expected)
+  }
+
+  test("Remove redundant projects in column pruning rule") {
+    val input = LocalRelation('key.int, 'value.string)
+
+    val query =
+      Project(Seq($"x.key", $"y.key"),
+        Join(
+          SubqueryAlias("x", input),
+          BroadcastHint(SubqueryAlias("y", input)), Inner, None)).analyze
+
+    val optimized = Optimize.execute(query)
+
+    val expected =
+      Join(
+        Project(Seq($"x.key"), SubqueryAlias("x", input)),
+        BroadcastHint(
+          Project(Seq($"y.key"), SubqueryAlias("y", input))),
+        Inner, None).analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
+  private val func = identity[Iterator[OtherTuple]] _
+
+  test("Column pruning on MapPartitions") {
+    val input = LocalRelation('_1.int, '_2.int, 'c.int)
+    val plan1 = MapPartitions(func, input)
+    val correctAnswer1 =
+      MapPartitions(func, Project(Seq('_1, '_2), input)).analyze
+    comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
   }
 
   // todo: add more tests for column pruning
