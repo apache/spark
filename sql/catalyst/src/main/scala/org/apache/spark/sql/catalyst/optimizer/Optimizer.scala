@@ -319,14 +319,12 @@ object ColumnPruning extends Rule[LogicalPlan] {
       output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Prunes the unused columns from project list of Project/Aggregate/Window/Expand
+    // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
     case p @ Project(_, a: Aggregate) if (a.outputSet -- p.references).nonEmpty =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case p @ Project(_, w: Window) if (w.outputSet -- p.references).nonEmpty =>
-      p.copy(child = w.copy(windowExpressions = w.windowExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if (e.outputSet -- a.references).nonEmpty =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -381,6 +379,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // Eliminate no-op Projects
     case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
+
+    // Prune windowExpressions and child of Window
+    case p @ Project(_, w: Window)
+        if (w.outputSet -- p.references).nonEmpty ||
+          (w.child.inputSet -- (w.references ++ p.references)).nonEmpty =>
+      val windowExpressions = w.windowExpressions.filter(p.references.contains)
+      val newChild = prunedChild(w.child, allReferences = w.references ++ p.references)
+      p.copy(child = w.copy(windowExpressions = windowExpressions, child = newChild))
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
