@@ -466,4 +466,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       df.schema.fields.map(field => field.dataType).deep ==
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
+
+  test("old csv data source name works") {
+    val cars = sqlContext
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "false")
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
 }

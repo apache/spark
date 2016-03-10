@@ -37,6 +37,8 @@ import org.apache.spark.util.Utils
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
  *
  * @param code The sequence of statements required to evaluate the expression.
+ *             It should be empty string, if `isNull` and `value` are already existed, or no code
+ *             needed to evaluate them (literals).
  * @param isNull A term that holds a boolean value representing whether the expression evaluated
  *                 to null.
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not

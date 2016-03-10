@@ -81,11 +81,14 @@ trait CodegenSupport extends SparkPlan {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
     waitForSubqueries()
-    doProduce(ctx)
+    s"""
+       |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
+       |${doProduce(ctx)}
+     """.stripMargin
   }
 
   /**
-    * Generate the Java source code to process, should be overrided by subclass to support codegen.
+    * Generate the Java source code to process, should be overridden by subclass to support codegen.
     *
     * doProduce() usually generate the framework, for example, aggregation could generate this:
     *
@@ -94,11 +97,11 @@ trait CodegenSupport extends SparkPlan {
     *     # call child.produce()
     *     initialized = true;
     *   }
-    *   while (hashmap.hasNext()) {
+    *   while (!shouldStop() && hashmap.hasNext()) {
     *     row = hashmap.next();
     *     # build the aggregation results
-    *     # create varialbles for results
-    *     # call consume(), wich will call parent.doConsume()
+    *     # create variables for results
+    *     # call consume(), which will call parent.doConsume()
     *   }
     */
   protected def doProduce(ctx: CodegenContext): String
@@ -114,27 +117,71 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-    * Consume the columns generated from it's child, call doConsume() or emit the rows.
+    * Returns source code to evaluate all the variables, and clear the code of them, to prevent
+    * them to be evaluated twice.
     */
+  protected def evaluateVariables(variables: Seq[ExprCode]): String = {
+    val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
+    variables.foreach(_.code = "")
+    evaluate
+  }
+
+  /**
+    * Returns source code to evaluate the variables for required attributes, and clear the code
+    * of evaluated variables, to prevent them to be evaluated twice..
+    */
+  protected def evaluateRequiredVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      required: AttributeSet): String = {
+    var evaluateVars = ""
+    variables.zipWithIndex.foreach { case (ev, i) =>
+      if (ev.code != "" && required.contains(attributes(i))) {
+        evaluateVars += ev.code.trim + "\n"
+        ev.code = ""
+      }
+    }
+    evaluateVars
+  }
+
+  /**
+   * The subset of inputSet those should be evaluated before this plan.
+   *
+   * We will use this to insert some code to access those columns that are actually used by current
+   * plan before calling doConsume().
+   */
+  def usedInputs: AttributeSet = references
+
+  /**
+   * Consume the columns generated from its child, call doConsume() or emit the rows.
+   *
+   * An operator could generate variables for the output, or a row, either one could be null.
+   *
+   * If the row is not null, we create variables to access the columns that are actually used by
+   * current plan before calling doConsume().
+   */
   def consumeChild(
       ctx: CodegenContext,
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
     ctx.freshNamePrefix = variablePrefix
-    if (row != null) {
-      ctx.currentVars = null
-      ctx.INPUT_ROW = row
-      val evals = child.output.zipWithIndex.map { case (attr, i) =>
-        BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+    val inputVars =
+      if (row != null) {
+        ctx.currentVars = null
+        ctx.INPUT_ROW = row
+        child.output.zipWithIndex.map { case (attr, i) =>
+          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+        }
+      } else {
+        input
       }
-      s"""
-         | ${evals.map(_.code).mkString("\n")}
-         | ${doConsume(ctx, evals)}
-       """.stripMargin
-    } else {
-      doConsume(ctx, input)
-    }
+    s"""
+       |
+       |/*** CONSUME: ${toCommentSafeString(this.simpleString)} */
+       |${evaluateRequiredVariables(child.output, inputVars, usedInputs)}
+       |${doConsume(ctx, inputVars)}
+     """.stripMargin
   }
 
   /**
@@ -145,9 +192,8 @@ trait CodegenSupport extends SparkPlan {
     * For example, Filter will generate the code like this:
     *
     *   # code to evaluate the predicate expression, result is isNull1 and value2
-    *   if (isNull1 || value2) {
-    *     # call consume(), which will call parent.doConsume()
-    *   }
+    *   if (isNull1 || !value2) continue;
+    *   # call consume(), which will call parent.doConsume()
     */
   protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     throw new UnsupportedOperationException
@@ -190,13 +236,9 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       | while ($input.hasNext()) {
+       | while (!shouldStop() && $input.hasNext()) {
        |   InternalRow $row = (InternalRow) $input.next();
-       |   ${columns.map(_.code).mkString("\n").trim}
        |   ${consume(ctx, columns).trim}
-       |   if (shouldStop()) {
-       |     return;
-       |   }
        | }
      """.stripMargin
   }
@@ -332,10 +374,12 @@ case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSup
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable)
         }
+        val evaluateInputs = evaluateVariables(input)
         // generate the code to create a UnsafeRow
         ctx.currentVars = input
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
+           |$evaluateInputs
            |${code.code.trim}
            |append(${code.value}.copy());
          """.stripMargin.trim
@@ -372,6 +416,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
+    case e: CaseWhen => e.shouldCodegen
     // CodegenFallback requires the input to be an InternalRow
     case e: CodegenFallback => false
     case _ => true
