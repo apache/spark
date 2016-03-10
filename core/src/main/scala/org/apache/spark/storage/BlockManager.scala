@@ -791,6 +791,11 @@ private[spark] class BlockManager(
           c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
         }
       }
+      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+      if (level.replication > 1) {
+        // Wait for asynchronous replication to finish
+        Await.ready(replicationFuture, Duration.Inf)
+      }
     } finally {
       if (blockWasSuccessfullyStored) {
         if (keepReadLock) {
@@ -803,11 +808,8 @@ private[spark] class BlockManager(
         logWarning(s"Putting block $blockId failed")
       }
     }
-    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
     if (level.replication > 1) {
-      // Wait for asynchronous replication to finish
-      Await.ready(replicationFuture, Duration.Inf)
       logDebug("Putting block %s with replication took %s"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     } else {
