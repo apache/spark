@@ -3,7 +3,10 @@ a.navbar-brand span {
     color: white;
 }
 .modal-backdrop{
-    z-index: 10;
+    z-index: 0;
+}
+.modal-content{
+    z-index: 5;
 }
 nav{
     -webkit-box-shadow: 0px 3px 3px #AAA;
