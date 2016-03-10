@@ -763,6 +763,7 @@ private[deploy] class Master(
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
         exec.id, ExecutorState.LOST, Some("worker lost"), None))
+      exec.state = ExecutorState.LOST
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
