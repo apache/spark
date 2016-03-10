@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -56,8 +57,12 @@ private[sql] object Dataset {
   def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
     val qe = sqlContext.executePlan(logicalPlan)
     qe.assertAnalyzed()
-    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](sqlContext, qe, RowEncoder(qe.analyzed.schema))
   }
+
+  private[this] val nextDataFrameId = new AtomicLong(0)
+
+  def newDataFrameName: String = s"dataframe_${nextDataFrameId.getAndIncrement()}"
 }
 
 /**
@@ -249,7 +254,7 @@ class Dataset[T] private[sql](
         s"New column names (${colNames.size}): " + colNames.mkString(", "))
 
     val newCols = logicalPlan.output.zip(colNames).map { case (oldAttribute, newName) =>
-      Column(oldAttribute).as(newName)
+      Column(Alias(oldAttribute, newName)(qualifiers = oldAttribute.qualifiers))
     }
     select(newCols : _*)
   }
@@ -551,47 +556,8 @@ class Dataset[T] private[sql](
    * @group dfops
    * @since 1.3.0
    */
-  def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = {
-    // Note that in this function, we introduce a hack in the case of self-join to automatically
-    // resolve ambiguous join conditions into ones that might make sense [SPARK-6231].
-    // Consider this case: df.join(df, df("key") === df("key"))
-    // Since df("key") === df("key") is a trivially true condition, this actually becomes a
-    // cartesian join. However, most likely users expect to perform a self join using "key".
-    // With that assumption, this hack turns the trivially true condition into equality on join
-    // keys that are resolved to both sides.
-
-    // Trigger analysis so in the case of self-join, the analyzer will clone the plan.
-    // After the cloning, left and right side will have distinct expression ids.
-    val plan = withPlan(
-      Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr)))
-      .queryExecution.analyzed.asInstanceOf[Join]
-
-    // If auto self join alias is disabled, return the plan.
-    if (!sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
-      return withPlan(plan)
-    }
-
-    // If left/right have no output set intersection, return the plan.
-    val lanalyzed = withPlan(this.logicalPlan).queryExecution.analyzed
-    val ranalyzed = withPlan(right.logicalPlan).queryExecution.analyzed
-    if (lanalyzed.outputSet.intersect(ranalyzed.outputSet).isEmpty) {
-      return withPlan(plan)
-    }
-
-    // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
-    // By the time we get here, since we have already run analysis, all attributes should've been
-    // resolved and become AttributeReference.
-    val cond = plan.condition.map { _.transform {
-      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
-          if a.sameRef(b) =>
-        catalyst.expressions.EqualTo(
-          withPlan(plan.left).resolve(a.name),
-          withPlan(plan.right).resolve(b.name))
-    }}
-
-    withPlan {
-      plan.copy(condition = cond)
-    }
+  def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame = withPlan {
+    Join(logicalPlan, right.logicalPlan, JoinType(joinType), Some(joinExprs.expr))
   }
 
   /**
@@ -741,8 +707,11 @@ class Dataset[T] private[sql](
     case "*" =>
       Column(ResolvedStar(queryExecution.analyzed.output))
     case _ =>
-      val expr = resolve(colName)
-      Column(expr)
+      val col = resolve(colName) match {
+        case attr: Attribute => UnresolvedAttribute(attr.qualifiers :+ attr.name)
+        case Alias(child, _) => UnresolvedAttribute.quotedString(child.sql)
+      }
+      Column(col)
   }
 
   /**
@@ -1451,7 +1420,7 @@ class Dataset[T] private[sql](
     if (shouldRename) {
       val columns = output.map { col =>
         if (resolver(col.name, existingName)) {
-          Column(col).as(newName)
+          Column(Alias(col, newName)(qualifiers = col.qualifiers))
         } else {
           Column(col)
         }

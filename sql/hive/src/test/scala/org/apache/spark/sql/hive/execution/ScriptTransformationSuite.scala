@@ -53,7 +53,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => new ScriptTransformation(
-        input = Seq(rowsDf.col("a").expr),
+        input = Seq(rowsDf.resolve("a")),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
@@ -67,7 +67,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => new ScriptTransformation(
-        input = Seq(rowsDf.col("a").expr),
+        input = Seq(rowsDf.resolve("a")),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
@@ -82,7 +82,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => new ScriptTransformation(
-          input = Seq(rowsDf.col("a").expr),
+          input = Seq(rowsDf.resolve("a")),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
@@ -99,7 +99,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => new ScriptTransformation(
-          input = Seq(rowsDf.col("a").expr),
+          input = Seq(rowsDf.resolve("a")),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),

@@ -53,18 +53,18 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("count is partially aggregated") {
-    val query = testData.groupBy('value).agg(count('key)).queryExecution.analyzed
+    val query = testData.groupBy('value).agg(count('key)).queryExecution.optimizedPlan
     testPartialAggregationPlan(query)
   }
 
   test("count distinct is partially aggregated") {
-    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.analyzed
+    val query = testData.groupBy('value).agg(countDistinct('key)).queryExecution.optimizedPlan
     testPartialAggregationPlan(query)
   }
 
   test("mixed aggregates are partially aggregated") {
     val query =
-      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.analyzed
+      testData.groupBy('value).agg(count('value), countDistinct('key)).queryExecution.optimizedPlan
     testPartialAggregationPlan(query)
   }
 
@@ -167,7 +167,8 @@ class PlannerSuite extends SharedSQLContext {
     val query = testData.select('key, 'value).sort('key).limit(2)
     val planned = query.queryExecution.executedPlan
     assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
-    assert(planned.output === testData.select('key, 'value).logicalPlan.output)
+    assert(planned.output ===
+      testData.select('key, 'value).logicalPlan.output.map(_.withQualifiers(Nil)))
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {

@@ -175,7 +175,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     val exploded = df.select(explode('intList).as('i))
 
     checkAnswer(
-      exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
+      exploded.join(exploded, "i").agg(count("*")),
       Row(3) :: Nil)
   }
 

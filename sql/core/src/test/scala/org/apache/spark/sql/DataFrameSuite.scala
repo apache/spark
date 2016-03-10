@@ -53,7 +53,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("dataframe toString") {
     assert(testData.toString === "[key: int, value: string]")
-    assert(testData("key").toString === "key")
+    assert(testData("key").toString.endsWith("key"))
     assert($"test".toString === "test")
   }
 
@@ -1374,5 +1374,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
+  }
+
+  test("Un-direct self-join") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+    val df2 = df.filter($"i" > 0)
+
+    intercept[AnalysisException](df.join(df2, (df("i") + 1) === df2("i")))
+
+    val namedDf = df.as("x")
+    val namedDf2 = df2.as("y")
+    checkAnswer(
+      namedDf.join(namedDf2, (namedDf("i") + 1) === namedDf2("i")),
+      Row(1, "a", 2, "b") :: Nil
+    )
+    checkAnswer(
+      namedDf.join(namedDf2, ($"x.i" + 1) === $"y.i"),
+      Row(1, "a", 2, "b") :: Nil
+    )
   }
 }

@@ -418,7 +418,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * TODO: This can be optimized to use broadcast join when replacementMap is large.
    */
   private def replaceCol(col: StructField, replacementMap: Map[_, _]): Column = {
-    val keyExpr = df.col(col.name).expr
+    val keyExpr = df.resolve(col.name)
     def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
     val branches = replacementMap.flatMap { case (source, target) =>
       Seq(buildExpr(source), buildExpr(target))
