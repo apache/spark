@@ -72,19 +72,6 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def sql: String = quoteIdentifier(name)
 }
 
-/**
- * Holds the name of columns referenced in an USING clause of JOIN source.
- */
-case class UnresolvedUsingAttributes(usingCols: Seq[String])
-  extends LeafExpression with Unevaluable  {
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-
-  override lazy val resolved = false
-  override def toString: String = s"${usingCols.mkString(",")}"
-}
-
 object UnresolvedAttribute {
   /**
    * Creates an [[UnresolvedAttribute]], parsing segments separated by dots ('.').

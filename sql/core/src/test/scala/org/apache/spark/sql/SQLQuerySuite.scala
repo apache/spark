@@ -2190,7 +2190,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       df1.registerTempTable("t1")
       df2.registerTempTable("t2")
       df3.registerTempTable("t3")
-      // innser join with one using column
+      // inner join with one using column
       checkAnswer(
         sql("SELECT * FROM t1 join t2 using (c1)"),
         Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t2r1c3") ::

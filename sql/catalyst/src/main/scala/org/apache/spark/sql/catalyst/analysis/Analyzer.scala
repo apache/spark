@@ -1334,12 +1334,12 @@ class Analyzer(
    */
   object ResolveNaturalJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case j @ Join(left, right, joinType, u @ Some(UnresolvedUsingAttributes(cols)))
+      case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
         if left.resolved && right.resolved =>
         // Resolve the column names referenced in using clause from both the legs of join.
-        val lCols = cols.flatMap(col => left.resolveQuoted(col, resolver))
-        val rCols = cols.flatMap(col => right.resolveQuoted(col, resolver))
-        if ((lCols.length == cols.length) && (rCols.length == cols.length))
+        val lCols = usingCols.flatMap(col => left.resolveQuoted(col.name, resolver))
+        val rCols = usingCols.flatMap(col => right.resolveQuoted(col.name, resolver))
+        if ((lCols.length == usingCols.length) && (rCols.length == usingCols.length))
         {
           val joinNames = lCols.map(exp => exp.name)
           commonNaturalJoinProcessing(left, right, joinType, joinNames, None)
@@ -1376,6 +1376,8 @@ class Analyzer(
     val projectList = joinType match {
       case LeftOuter =>
         leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true))
+      case LeftSemi =>
+        leftKeys ++ lUniqueOutput
       case RightOuter =>
         rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput
       case FullOuter =>
@@ -1385,7 +1387,7 @@ class Analyzer(
           lUniqueOutput.map(_.withNullability(true)) ++
           rUniqueOutput.map(_.withNullability(true))
       case Inner =>
-        rightKeys ++ lUniqueOutput ++ rUniqueOutput
+        leftKeys ++ lUniqueOutput ++ rUniqueOutput
       case _ =>
         sys.error("Unsupported natural join type " + joinType)
     }

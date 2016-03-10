@@ -419,38 +419,44 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           sys.error(s"Unsupported join operation: $other")
         }
 
-        val joinType = joinToken match {
-          case "TOK_JOIN" => Inner
-          case "TOK_CROSSJOIN" => Inner
-          case "TOK_RIGHTOUTERJOIN" => RightOuter
-          case "TOK_LEFTOUTERJOIN" => LeftOuter
-          case "TOK_FULLOUTERJOIN" => FullOuter
-          case "TOK_LEFTSEMIJOIN" => LeftSemi
-          case "TOK_UNIQUEJOIN" => noParseRule("Unique Join", node)
-          case "TOK_ANTIJOIN" => noParseRule("Anti Join", node)
-          case "TOK_NATURALJOIN" => NaturalJoin(Inner)
-          case "TOK_NATURALRIGHTOUTERJOIN" => NaturalJoin(RightOuter)
-          case "TOK_NATURALLEFTOUTERJOIN" => NaturalJoin(LeftOuter)
-          case "TOK_NATURALFULLOUTERJOIN" => NaturalJoin(FullOuter)
-        }
+        val (joinType, joinCondition) = getJoinInfo(joinToken, other, node)
+
         Join(nodeToRelation(relation1),
           nodeToRelation(relation2),
           joinType,
-          getJoinCond(other))
+          joinCondition)
       case _ =>
         noParseRule("Relation", node)
     }
   }
 
-  protected def getJoinCond(joinConditionNodes: Seq[ASTNode]): Option[Expression] = {
-    joinConditionNodes match {
+  protected def getJoinInfo(
+     joinToken: String,
+     joinConditionToken: Seq[ASTNode],
+     node: ASTNode): (JoinType, Option[Expression]) = {
+    val joinType = joinToken match {
+      case "TOK_JOIN" => Inner
+      case "TOK_CROSSJOIN" => Inner
+      case "TOK_RIGHTOUTERJOIN" => RightOuter
+      case "TOK_LEFTOUTERJOIN" => LeftOuter
+      case "TOK_FULLOUTERJOIN" => FullOuter
+      case "TOK_LEFTSEMIJOIN" => LeftSemi
+      case "TOK_UNIQUEJOIN" => noParseRule("Unique Join", node)
+      case "TOK_ANTIJOIN" => noParseRule("Anti Join", node)
+      case "TOK_NATURALJOIN" => NaturalJoin(Inner)
+      case "TOK_NATURALRIGHTOUTERJOIN" => NaturalJoin(RightOuter)
+      case "TOK_NATURALLEFTOUTERJOIN" => NaturalJoin(LeftOuter)
+      case "TOK_NATURALFULLOUTERJOIN" => NaturalJoin(FullOuter)
+    }
+
+    joinConditionToken match {
       case Token("TOK_USING", columnList :: Nil) :: Nil =>
         val colNames = columnList.children.collect {
-          case Token(name, Nil) => name
+          case Token(name, Nil) => UnresolvedAttribute(name)
         }
-        Some(UnresolvedUsingAttributes(colNames))
+        (UsingJoin(joinType, colNames), None)
       /* Join expression specified using ON clause */
-      case _ => joinConditionNodes.headOption.map(nodeToExpr)
+      case _ => (joinType, joinConditionToken.headOption.map(nodeToExpr))
     }
   }
 
