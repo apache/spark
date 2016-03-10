@@ -668,13 +668,8 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true): Boolean = {
     require(values != null, "Values is null")
-    val maybeIterator = doPutIterator(
-      blockId,
-      () => values,
-      level,
-      tellMaster)
     // If doPut() didn't hand work back to us, then block already existed or was successfully stored
-    maybeIterator.isEmpty
+    doPutIterator(blockId, () => values, level, tellMaster).isEmpty
   }
 
   /**
