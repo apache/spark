@@ -910,6 +910,18 @@ private[spark] class BlockManager(
         Option(TaskContext.get()).foreach { c =>
           c.taskMetrics().incUpdatedBlockStatuses(Seq((blockId, putBlockStatus)))
         }
+        logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+        if (level.replication > 1 && blockWasSuccessfullyStored) {
+          val remoteStartTime = System.currentTimeMillis
+          val bytesToReplicate = doGetLocalBytes(blockId, putBlockInfo)
+          try {
+            replicate(blockId, bytesToReplicate, level)
+          } finally {
+            BlockManager.dispose(bytesToReplicate)
+          }
+          logDebug("Put block %s remotely took %s"
+            .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
+        }
       }
     } finally {
       if (blockWasSuccessfullyStored) {
@@ -922,18 +934,6 @@ private[spark] class BlockManager(
         blockInfoManager.removeBlock(blockId)
         logWarning(s"Putting block $blockId failed")
       }
-    }
-    logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-    if (level.replication > 1 && blockWasSuccessfullyStored) {
-      val remoteStartTime = System.currentTimeMillis
-      val bytesToReplicate = doGetLocalBytes(blockId, putBlockInfo)
-      try {
-        replicate(blockId, bytesToReplicate, level)
-      } finally {
-        BlockManager.dispose(bytesToReplicate)
-      }
-      logDebug("Put block %s remotely took %s"
-        .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
     }
 
     if (level.replication > 1) {
