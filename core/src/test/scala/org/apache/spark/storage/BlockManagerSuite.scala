@@ -615,8 +615,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(accessMethod("a3").isDefined, "a3 was not in store")
     assert(accessMethod("a1").isDefined, "a1 was not in store")
     val dataShouldHaveBeenCachedBackIntoMemory = {
-      if (storageLevel.deserialized) !getAsBytes
-      else getAsBytes
+      if (storageLevel.deserialized) {
+        !getAsBytes
+      } else {
+        // If the block's storage level is serialized, then always cache the bytes in memory, even
+        // if the caller requested values.
+        true
+      }
     }
     if (dataShouldHaveBeenCachedBackIntoMemory) {
       assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
