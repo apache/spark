@@ -165,6 +165,9 @@ private[orc] class OrcOutputWriter(
       val name = conf.get(OrcTableProperties.COMPRESSION.getPropName)
       OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
     }
+    // It has the `.orc` extension at the end because (de)compression tools
+    // such as gunzip would not be able to decompress this as the compression
+    // is not applied on this whole file but on each "stream" in ORC format.
     val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString$compressionExtension.orc"
 
     new OrcOutputFormat().getRecordWriter(
