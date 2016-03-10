@@ -458,13 +458,7 @@ private[spark] class BlockManager(
       Option(
         shuffleBlockResolver.getBlockData(blockId.asInstanceOf[ShuffleBlockId]).nioByteBuffer())
     } else {
-      blockInfoManager.lockForReading(blockId) match {
-        case None =>
-          logDebug(s"Block $blockId was not found")
-          None
-        case Some(info) =>
-          Some(doGetLocalBytes(blockId, info))
-      }
+      blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
     }
   }
 
