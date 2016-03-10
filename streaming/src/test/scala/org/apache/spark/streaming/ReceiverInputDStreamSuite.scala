@@ -155,6 +155,6 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
     } else {
       new BlockManagerBasedStoreResult(blockId, None)
     }
-    new ReceivedBlockInfo(0, None, None, storeResult)
+    new ReceivedBlockInfo(0, None, None, None, storeResult)
   }
 }

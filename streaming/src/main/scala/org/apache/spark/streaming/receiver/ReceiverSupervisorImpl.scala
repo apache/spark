@@ -105,8 +105,8 @@ private[streaming] class ReceiverSupervisorImpl(
       reportError(message, throwable)
     }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
-      pushArrayBuffer(arrayBuffer, None, Some(blockId))
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_], numRecordsLimit: Long) {
+      pushArrayBuffer(arrayBuffer, None, Some(blockId), Some(numRecordsLimit))
     }
   }
   private val defaultBlockGenerator = createBlockGenerator(defaultBlockGeneratorListener)
@@ -123,41 +123,49 @@ private[streaming] class ReceiverSupervisorImpl(
   def pushArrayBuffer(
       arrayBuffer: ArrayBuffer[_],
       metadataOption: Option[Any],
-      blockIdOption: Option[StreamBlockId]
+      blockIdOption: Option[StreamBlockId],
+      numRecordsLimitOption: Option[Long]
     ) {
-    pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption)
+    pushAndReportBlock(ArrayBufferBlock(arrayBuffer), metadataOption, blockIdOption,
+                       numRecordsLimitOption)
   }
 
   /** Store a iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       metadataOption: Option[Any],
-      blockIdOption: Option[StreamBlockId]
+      blockIdOption: Option[StreamBlockId],
+      numRecordsLimitOption: Option[Long]
     ) {
-    pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption)
+    pushAndReportBlock(IteratorBlock(iterator), metadataOption, blockIdOption,
+                       numRecordsLimitOption)
   }
 
   /** Store the bytes of received data as a data block into Spark's memory. */
   def pushBytes(
       bytes: ByteBuffer,
       metadataOption: Option[Any],
-      blockIdOption: Option[StreamBlockId]
+      blockIdOption: Option[StreamBlockId],
+      numRecordsLimitOption: Option[Long]
     ) {
-    pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption)
+    pushAndReportBlock(ByteBufferBlock(bytes), metadataOption, blockIdOption,
+                       numRecordsLimitOption)
   }
 
   /** Store block and report it to driver */
   def pushAndReportBlock(
       receivedBlock: ReceivedBlock,
       metadataOption: Option[Any],
-      blockIdOption: Option[StreamBlockId]
+      blockIdOption: Option[StreamBlockId],
+      numRecordsLimitOption: Option[Long]
     ) {
     val blockId = blockIdOption.getOrElse(nextBlockId)
     val time = System.currentTimeMillis
     val blockStoreResult = receivedBlockHandler.storeBlock(blockId, receivedBlock)
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
     val numRecords = blockStoreResult.numRecords
-    val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
+    val blockInfo = ReceivedBlockInfo(streamId, numRecords, numRecordsLimitOption,
+                                      metadataOption, blockStoreResult)
     trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))
     logDebug(s"Reported block $blockId")
   }

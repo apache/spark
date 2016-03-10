@@ -298,22 +298,25 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     def pushBytes(
         bytes: ByteBuffer,
-        optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        metadataOption: Option[Any],
+        blockIdOption: Option[StreamBlockId],
+        numRecordsLimitOption: Option[Long]) {
       byteBuffers += bytes
     }
 
     def pushIterator(
         iterator: Iterator[_],
-        optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        metadataOption: Option[Any],
+        blockIdOption: Option[StreamBlockId],
+        numRecordsLimitOption: Option[Long]) {
       iterators += iterator
     }
 
     def pushArrayBuffer(
         arrayBuffer: ArrayBuffer[_],
-        optionalMetadata: Option[Any],
-        optionalBlockId: Option[StreamBlockId]) {
+        metadataOption: Option[Any],
+        blockIdOption: Option[StreamBlockId],
+        numRecordsLimitOption: Option[Long]) {
       arrayBuffers +=  arrayBuffer
     }
 
@@ -341,7 +344,7 @@ class ReceiverSuite extends TestSuiteBase with Timeouts with Serializable {
 
     def onGenerateBlock(blockId: StreamBlockId) { }
 
-    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
+    def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_], numRecordsLimit: Long) {
       val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])
       arrayBuffers += bufferOfInts
       Thread.sleep(0)
