@@ -229,7 +229,7 @@ class LogisticRegressionModel(JavaModel):
         `trainingSummary == None`.
         """
         java_blrt_summary = self._call_java("summary")
-        return BinaryLogisticRegressionTrainingSummary._fromActiveSparkContext(java_blrt_summary)
+        return BinaryLogisticRegressionTrainingSummary.fromActiveSparkContext(java_blrt_summary)
 
     @property
     @since("2.0.0")
@@ -265,7 +265,7 @@ class LogisticRegressionSummary(JavaCallable):
         """
         Dataframe outputted by the model's `transform` method.
         """
-        return self._call("predictions")
+        return self.call("predictions")
 
     @property
     @since("2.0.0")
@@ -274,7 +274,7 @@ class LogisticRegressionSummary(JavaCallable):
         Field in "predictions" which gives the calibrated probability
         of each instance as a vector.
         """
-        return self._call("probabilityCol")
+        return self.call("probabilityCol")
 
     @property
     @since("2.0.0")
@@ -283,7 +283,7 @@ class LogisticRegressionSummary(JavaCallable):
         Field in "predictions" which gives the true label of each
         instance.
         """
-        return self._call("labelCol")
+        return self.call("labelCol")
 
     @property
     @since("2.0.0")
@@ -292,7 +292,7 @@ class LogisticRegressionSummary(JavaCallable):
         Field in "predictions" which gives the features of each instance
         as a vector.
         """
-        return self._call("featuresCol")
+        return self.call("featuresCol")
 
 
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
@@ -310,7 +310,7 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
         """
         Objective function (scaled loss + regularization) at each iteration.
         """
-        return self._call("objectiveHistory")
+        return self.call("objectiveHistory")
 
     @property
     @since("2.0.0")
@@ -318,7 +318,7 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
         """
         Number of training iterations until termination.
         """
-        return self._call("totalIterations")
+        return self.call("totalIterations")
 
 
 class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
@@ -343,7 +343,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("roc")
+        return self.call("roc")
 
     @property
     @since("2.0.0")
@@ -356,7 +356,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("areaUnderROC")
+        return self.call("areaUnderROC")
 
     @property
     @since("2.0.0")
@@ -369,7 +369,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("pr")
+        return self.call("pr")
 
     @property
     @since("2.0.0")
@@ -382,7 +382,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("fMeasureByThreshold")
+        return self.call("fMeasureByThreshold")
 
     @property
     @since("2.0.0")
@@ -396,7 +396,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("precisionByThreshold")
+        return self.call("precisionByThreshold")
 
     @property
     @since("2.0.0")
@@ -410,7 +410,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("recallByThreshold")
+        return self.call("recallByThreshold")
 
 
 class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,

@@ -160,7 +160,7 @@ class LinearRegressionModel(JavaModel, MLWritable, MLReadable):
         `trainingSummary == None`.
         """
         java_lrt_summary = self._call_java("summary")
-        return LinearRegressionTrainingSummary._fromActiveSparkContext(java_lrt_summary)
+        return LinearRegressionTrainingSummary.fromActiveSparkContext(java_lrt_summary)
 
     @property
     @since("2.0.0")
@@ -198,7 +198,7 @@ class LinearRegressionSummary(JavaCallable):
         """
         Dataframe outputted by the model's `transform` method.
         """
-        return self._call("predictions")
+        return self.call("predictions")
 
     @property
     @since("2.0.0")
@@ -207,7 +207,7 @@ class LinearRegressionSummary(JavaCallable):
         Field in "predictions" which gives the predicted value of
         the label at each instance.
         """
-        return self._call("predictionCol")
+        return self.call("predictionCol")
 
     @property
     @since("2.0.0")
@@ -216,7 +216,7 @@ class LinearRegressionSummary(JavaCallable):
         Field in "predictions" which gives the true label of each
         instance.
         """
-        return self._call("labelCol")
+        return self.call("labelCol")
 
     @property
     @since("2.0.0")
@@ -230,7 +230,7 @@ class LinearRegressionSummary(JavaCallable):
         `LinearRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("explainedVariance")
+        return self.call("explainedVariance")
 
     @property
     @since("2.0.0")
@@ -244,7 +244,7 @@ class LinearRegressionSummary(JavaCallable):
         `LinearRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("meanAbsoluteError")
+        return self.call("meanAbsoluteError")
 
     @property
     @since("2.0.0")
@@ -258,7 +258,7 @@ class LinearRegressionSummary(JavaCallable):
         `LinearRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("meanSquaredError")
+        return self.call("meanSquaredError")
 
     @property
     @since("2.0.0")
@@ -271,7 +271,7 @@ class LinearRegressionSummary(JavaCallable):
         `LinearRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("rootMeanSquaredError")
+        return self.call("rootMeanSquaredError")
 
     @property
     @since("2.0.0")
@@ -284,7 +284,7 @@ class LinearRegressionSummary(JavaCallable):
         `LinearRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self._call("r2")
+        return self.call("r2")
 
     @property
     @since("2.0.0")
@@ -292,7 +292,7 @@ class LinearRegressionSummary(JavaCallable):
         """
         Residuals (label - predicted value)
         """
-        return self._call("residuals")
+        return self.call("residuals")
 
     @property
     @since("2.0.0")
@@ -300,7 +300,7 @@ class LinearRegressionSummary(JavaCallable):
         """
         Number of instances in DataFrame predictions
         """
-        return self._call("numInstances")
+        return self.call("numInstances")
 
     @property
     @since("2.0.0")
@@ -309,7 +309,7 @@ class LinearRegressionSummary(JavaCallable):
         The weighted residuals, the usual residuals rescaled by the
         square root of the instance weights.
         """
-        return self._call("devianceResiduals")
+        return self.call("devianceResiduals")
 
     @property
     @since("2.0.0")
@@ -317,7 +317,7 @@ class LinearRegressionSummary(JavaCallable):
         """
         Standard error of estimated coefficients and intercept.
         """
-        return self._call("coefficientStandardErrors")
+        return self.call("coefficientStandardErrors")
 
     @property
     @since("2.0.0")
@@ -325,7 +325,7 @@ class LinearRegressionSummary(JavaCallable):
         """
         T-statistic of estimated coefficients and intercept.
         """
-        return self._call("tValues")
+        return self.call("tValues")
 
     @property
     @since("2.0.0")
@@ -333,7 +333,7 @@ class LinearRegressionSummary(JavaCallable):
         """
         Two-sided p-value of estimated coefficients and intercept.
         """
-        return self._call("pValues")
+        return self.call("pValues")
 
 
 class LinearRegressionTrainingSummary(LinearRegressionSummary):
@@ -352,7 +352,7 @@ class LinearRegressionTrainingSummary(LinearRegressionSummary):
         """
         Number of training iterations until termination.
         """
-        return self._call("totalIterations")
+        return self.call("totalIterations")
 
 
 @inherit_doc

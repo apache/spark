@@ -142,12 +142,12 @@ class JavaCallable(object):
         self._sc._gateway.detach(self._java_obj)
 
     @classmethod
-    def _fromActiveSparkContext(cls, java_obj):
+    def fromActiveSparkContext(cls, java_obj):
         """Create from a currently active context"""
         sc = SparkContext._active_spark_context
         return cls(sc, java_obj)
 
-    def _call(self, name, *a):
+    def call(self, name, *a):
         """Call method of java_obj"""
         return callJavaFunc(self._sc, getattr(self._java_obj, name), *a)
 
@@ -159,6 +159,10 @@ class JavaModelWrapper(JavaCallable):
     def __init__(self, java_model):
         sc = SparkContext.getOrCreate()
         super(JavaModelWrapper, self).__init__(sc, java_model)
+
+    @property
+    def _java_model(self):
+        return self._java_obj
 
 
 def inherit_doc(cls):
