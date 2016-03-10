@@ -17,12 +17,10 @@
 
 package org.apache.spark.launcher;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
@@ -76,26 +74,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
       javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
       javaOptsKeys.add("SPARK_SHUFFLE_OPTS");
       memKey = "SPARK_DAEMON_MEMORY";
-    } else if (className.startsWith("org.apache.spark.tools.")) {
-      String sparkHome = getSparkHome();
-      File toolsDir = new File(join(File.separator, sparkHome, "tools", "target",
-        "scala-" + getScalaVersion()));
-      checkState(toolsDir.isDirectory(), "Cannot find tools build directory.");
-
-      Pattern re = Pattern.compile("spark-tools_.*\\.jar");
-      for (File f : toolsDir.listFiles()) {
-        if (re.matcher(f.getName()).matches()) {
-          extraClassPath = f.getAbsolutePath();
-          break;
-        }
-      }
-
-      checkState(extraClassPath != null,
-        "Failed to find Spark Tools Jar in %s.\n" +
-        "You need to run \"build/sbt tools/package\" before running %s.",
-        toolsDir.getAbsolutePath(), className);
-
-      javaOptsKeys.add("SPARK_JAVA_OPTS");
     } else {
       javaOptsKeys.add("SPARK_JAVA_OPTS");
       memKey = "SPARK_DRIVER_MEMORY";
