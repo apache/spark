@@ -170,7 +170,7 @@ private[spark] class PipedRDD[T: ClassTag](
 
       private def propagateChildThreadException(): Unit = {
         if (childThreadException.get() != null) {
-          proc.destroyForcibly()
+          proc.destroy()
           throw childThreadException.get()
         }
       }
