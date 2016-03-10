@@ -138,15 +138,14 @@ class KMeansModel private[ml] (
   @Since("1.6.0")
   override def write: MLWriter = new KMeansModel.KMeansModelWriter(this)
 
-  override def hashCode(): Int =
-    this.getClass.hashCode() + uid.hashCode() + clusterCenters.map(_.hashCode()).sum
+  override def hashCode(): Int = {
+    (Array(this.getClass, uid) ++ clusterCenters)
+      .foldLeft(17) { case (hash, obj) => hash * 31 + obj.hashCode() }
+  }
 
   override def equals(other: Any): Boolean = other match {
     case that: KMeansModel =>
-      this.uid == that.uid &&
-        this.clusterCenters.length == that.clusterCenters.length &&
-        this.clusterCenters.zip(that.clusterCenters)
-        .foldLeft(true) { case (indicator, (v1, v2)) => indicator && (v1 == v2) }
+      this.uid == that.uid && this.clusterCenters.sameElements(that.clusterCenters)
     case _ => false
   }
 
