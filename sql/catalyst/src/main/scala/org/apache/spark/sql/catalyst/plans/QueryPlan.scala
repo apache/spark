@@ -68,17 +68,18 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * additional constraint of the form `b = 5`
    */
   private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
-    constraints.map {
+    var inferredConstraints = Set.empty[Expression]
+    constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        (constraints -- Set(eq)).map(_ transform {
+        inferredConstraints ++= (constraints - eq).map(_ transform {
           case a: Attribute if a.semanticEquals(l) => r
-        }).union(
-          (constraints -- Set(eq)).map(_ transform {
-            case a: Attribute if a.semanticEquals(r) => l
-          }))
-      case _ =>
-        Set.empty[Expression]
-    }.foldLeft(Set.empty[Expression])(_ union _) -- constraints
+        })
+        inferredConstraints ++= (constraints - eq).map(_ transform {
+          case a: Attribute if a.semanticEquals(r) => l
+        })
+      case _ => // No inference
+    }
+    inferredConstraints -- constraints
   }
 
   /**
