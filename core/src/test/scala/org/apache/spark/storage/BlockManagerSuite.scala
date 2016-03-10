@@ -17,8 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.nio.{ByteBuffer, MappedByteBuffer}
-import java.util.Arrays
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -614,11 +613,15 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a3", a3, storageLevel)
     assert(accessMethod("a2").isDefined, "a2 was not in store")
     assert(accessMethod("a3").isDefined, "a3 was not in store")
-    assert(!store.memoryStore.contains("a1"), "a1 was in memory store")
     assert(accessMethod("a1").isDefined, "a1 was not in store")
     val dataShouldHaveBeenCachedBackIntoMemory = {
-      if (storageLevel.deserialized) !getAsBytes
-      else getAsBytes
+      if (storageLevel.deserialized) {
+        !getAsBytes
+      } else {
+        // If the block's storage level is serialized, then always cache the bytes in memory, even
+        // if the caller requested values.
+        true
+      }
     }
     if (dataShouldHaveBeenCachedBackIntoMemory) {
       assert(store.memoryStore.contains("a1"), "a1 was not in memory store")
@@ -735,7 +738,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putSingle("a1", new Array[Byte](10000), StorageLevel.MEMORY_ONLY)
     assert(store.getSingleAndReleaseLock("a1") === None, "a1 was in store")
     store.putSingle("a2", new Array[Byte](10000), StorageLevel.MEMORY_AND_DISK)
-    assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
+    assert(!store.memoryStore.contains("a2"), "a2 was in memory store")
     assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was not in store")
   }
 
@@ -827,50 +830,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     failAfter(1 second) {
       assert(store.getSingleAndReleaseLock("a1").isEmpty, "a1 should not be in store")
     }
-  }
-
-  test("reads of memory-mapped and non memory-mapped files are equivalent") {
-    val confKey = "spark.storage.memoryMapThreshold"
-
-    // Create a non-trivial (not all zeros) byte array
-    var counter = 0.toByte
-    def incr: Byte = {counter = (counter + 1).toByte; counter;}
-    val bytes = Array.fill[Byte](1000)(incr)
-    val byteBuffer = ByteBuffer.wrap(bytes)
-
-    val blockId = BlockId("rdd_1_2")
-
-    // This sequence of mocks makes these tests fairly brittle. It would
-    // be nice to refactor classes involved in disk storage in a way that
-    // allows for easier testing.
-    val blockManager = mock(classOf[BlockManager])
-    when(blockManager.conf).thenReturn(conf.clone.set(confKey, "0"))
-    val diskBlockManager = new DiskBlockManager(blockManager, conf)
-
-    val diskStoreMapped = new DiskStore(blockManager, diskBlockManager)
-    diskStoreMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
-    val mapped = diskStoreMapped.getBytes(blockId).get
-
-    when(blockManager.conf).thenReturn(conf.clone.set(confKey, "1m"))
-    val diskStoreNotMapped = new DiskStore(blockManager, diskBlockManager)
-    diskStoreNotMapped.putBytes(blockId, byteBuffer, StorageLevel.DISK_ONLY)
-    val notMapped = diskStoreNotMapped.getBytes(blockId).get
-
-    // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
-      "Expected HeapByteBuffer for un-mapped read")
-    assert(mapped.isInstanceOf[MappedByteBuffer], "Expected MappedByteBuffer for mapped read")
-
-    def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
-      val array = new Array[Byte](in.remaining())
-      in.get(array)
-      array
-    }
-
-    val mappedAsArray = arrayFromByteBuffer(mapped)
-    val notMappedAsArray = arrayFromByteBuffer(notMapped)
-    assert(Arrays.equals(mappedAsArray, bytes))
-    assert(Arrays.equals(notMappedAsArray, bytes))
   }
 
   test("updated block statuses") {
@@ -1232,19 +1191,16 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store.putIterator("b3", smallIterator, StorageLevel.MEMORY_ONLY)
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
 
-    // Unroll huge block with not enough space. This should fail and drop the new block to disk
-    // directly in addition to kicking out b2 in the process. Memory store should contain only
-    // b3, while disk store should contain b1, b2 and b4.
+    // Unroll huge block with not enough space. This should fail and return an iterator so that
+    // the block may be stored to disk. During the unrolling process, block "b2" should be kicked
+    // out, so the memory store should contain only b3, while the disk store should contain
+    // b1, b2 and b4.
     val result4 = memoryStore.putIterator("b4", bigIterator, memAndDisk)
-    assert(result4.isRight)
+    assert(result4.isLeft)
     assert(!memoryStore.contains("b1"))
     assert(!memoryStore.contains("b2"))
     assert(memoryStore.contains("b3"))
     assert(!memoryStore.contains("b4"))
-    assert(diskStore.contains("b1"))
-    assert(diskStore.contains("b2"))
-    assert(!diskStore.contains("b3"))
-    assert(diskStore.contains("b4"))
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
   }
 
@@ -1366,7 +1322,7 @@ private object BlockManagerSuite {
       getLocalAndReleaseLock(blockId).isDefined
     }
 
-    val getLocalAndReleaseLock: (BlockId) => Option[BlockResult] = wrapGet(store.getLocal)
+    val getLocalAndReleaseLock: (BlockId) => Option[BlockResult] = wrapGet(store.getLocalValues)
     val getAndReleaseLock: (BlockId) => Option[BlockResult] = wrapGet(store.get)
     val getSingleAndReleaseLock: (BlockId) => Option[Any] = wrapGet(store.getSingle)
     val getLocalBytesAndReleaseLock: (BlockId) => Option[ByteBuffer] = wrapGet(store.getLocalBytes)
