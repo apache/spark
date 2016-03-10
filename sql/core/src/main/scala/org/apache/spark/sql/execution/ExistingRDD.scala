@@ -118,7 +118,7 @@ private[sql] case class PhysicalRDD(
   }
 
   override def simpleString: String = {
-    s"RDD $nodeName${output.mkString("[", ",", "]")}"
+    s"Scan $nodeName${output.mkString("[", ",", "]")}"
   }
 }
 
