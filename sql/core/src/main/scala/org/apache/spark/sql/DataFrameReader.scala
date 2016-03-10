@@ -21,18 +21,14 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.util.StringUtils
-
 import org.apache.spark.{Logging, Partition}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
-import org.apache.spark.sql.execution.datasources.json.JSONRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
+import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
@@ -126,14 +122,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def load(): DataFrame = {
-    val resolved = ResolvedDataSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
-      provider = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, LogicalRelation(resolved.relation))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    DataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -154,7 +149,17 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
-    option("paths", paths.map(StringUtils.escapeString(_, '\\', ',')).mkString(",")).load()
+    if (paths.isEmpty) {
+      sqlContext.emptyDataFrame
+    } else {
+      sqlContext.baseRelationToDataFrame(
+        DataSource.apply(
+          sqlContext,
+          paths = paths,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
+    }
   }
 
   /**
@@ -164,12 +169,13 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 2.0.0
    */
   def stream(): DataFrame = {
-    val resolved = ResolvedDataSource.createSource(
-      sqlContext,
-      userSpecifiedSchema = userSpecifiedSchema,
-      providerName = source,
-      options = extraOptions.toMap)
-    DataFrame(sqlContext, StreamingRelation(resolved))
+    val dataSource =
+      DataSource(
+        sqlContext,
+        userSpecifiedSchema = userSpecifiedSchema,
+        className = source,
+        options = extraOptions.toMap)
+    DataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
   }
 
   /**
@@ -334,14 +340,20 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
-    sqlContext.baseRelationToDataFrame(
-      new JSONRelation(
-        Some(jsonRDD),
-        maybeDataSchema = userSpecifiedSchema,
-        maybePartitionSpec = None,
-        userDefinedPartitionColumns = None,
-        parameters = extraOptions.toMap)(sqlContext)
-    )
+    val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
+    val schema = userSpecifiedSchema.getOrElse {
+      InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
+    }
+
+    new DataFrame(
+      sqlContext,
+      LogicalRDD(
+        schema.toAttributes,
+        JacksonParser.parse(
+          jsonRDD,
+          schema,
+          sqlContext.conf.columnNameOfCorruptRecord,
+          parsedOptions))(sqlContext))
   }
 
   /**
@@ -363,20 +375,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   @scala.annotation.varargs
   def parquet(paths: String*): DataFrame = {
-    if (paths.isEmpty) {
-      sqlContext.emptyDataFrame
-    } else {
-      val globbedPaths = paths.flatMap { path =>
-        val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified)
-      }.toArray
-
-      sqlContext.baseRelationToDataFrame(
-        new ParquetRelation(
-          globbedPaths.map(_.toString), userSpecifiedSchema, None, extraOptions.toMap)(sqlContext))
-    }
+    format("parquet").load(paths: _*)
   }
 
   /**

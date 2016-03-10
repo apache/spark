@@ -25,7 +25,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
-import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, ResolvedDataSource}
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.HadoopFsRelation
@@ -195,14 +195,14 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def save(): Unit = {
     assertNotBucketed()
-    ResolvedDataSource(
+    val dataSource = DataSource(
       df.sqlContext,
-      source,
-      partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
-      getBucketSpec,
-      mode,
-      extraOptions.toMap,
-      df)
+      className = source,
+      partitionColumns = partitioningColumns.getOrElse(Nil),
+      bucketSpec = getBucketSpec,
+      options = extraOptions.toMap)
+
+    dataSource.write(mode, df)
   }
 
   /**
@@ -235,14 +235,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def stream(): ContinuousQuery = {
-    val sink = ResolvedDataSource.createSink(
-      df.sqlContext,
-      source,
-      extraOptions.toMap,
-      normalizedParCols.getOrElse(Nil))
+    val dataSource =
+      DataSource(
+        df.sqlContext,
+        className = source,
+        options = extraOptions.toMap,
+        partitionColumns = normalizedParCols.getOrElse(Nil))
 
     df.sqlContext.continuousQueryManager.startQuery(
-      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, sink)
+      extraOptions.getOrElse("queryName", StreamExecution.nextName), df, dataSource.createSink())
   }
 
   /**
@@ -365,13 +366,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       case (true, SaveMode.ErrorIfExists) =>
         throw new AnalysisException(s"Table $tableIdent already exists.")
-
-      case (true, SaveMode.Append) =>
-        // If it is Append, we just ask insertInto to handle it. We will not use insertInto
-        // to handle saveAsTable with Overwrite because saveAsTable can change the schema of
-        // the table. But, insertInto with Overwrite requires the schema of data be the same
-        // the schema of the table.
-        insertInto(tableIdent)
 
       case _ =>
         val cmd =

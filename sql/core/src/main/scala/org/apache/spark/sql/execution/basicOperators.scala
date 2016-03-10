@@ -39,15 +39,26 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan)
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def usedInputs: AttributeSet = {
+    // only the attributes those are used at least twice should be evaluated before this plan,
+    // otherwise we could defer the evaluation until output attribute is actually used.
+    val usedExprIds = projectList.flatMap(_.collect {
+      case a: Attribute => a.exprId
+    })
+    val usedMoreThanOnce = usedExprIds.groupBy(id => id).filter(_._2.size > 1).keySet
+    references.filter(a => usedMoreThanOnce.contains(a.exprId))
+  }
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val exprs = projectList.map(x =>
       ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
     ctx.currentVars = input
-    val output = exprs.map(_.gen(ctx))
+    val resultVars = exprs.map(_.gen(ctx))
+    // Evaluation of non-deterministic expressions can't be deferred.
+    val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
-       | ${output.map(_.code).mkString("\n")}
-       |
-       | ${consume(ctx, output)}
+       |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
+       |${consume(ctx, resultVars)}
      """.stripMargin
   }
 
@@ -89,11 +100,10 @@ case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode wit
       s""
     }
     s"""
-       | ${eval.code}
-       | if ($nullCheck ${eval.value}) {
-       |   $numOutput.add(1);
-       |   ${consume(ctx, ctx.currentVars)}
-       | }
+       |${eval.code}
+       |if (!($nullCheck ${eval.value})) continue;
+       |$numOutput.add(1);
+       |${consume(ctx, ctx.currentVars)}
      """.stripMargin
   }
 
@@ -155,6 +165,9 @@ case class Range(
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  // output attributes should not affect the results
+  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
 
   override def upstreams(): Seq[RDD[InternalRow]] = {
     sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
@@ -228,15 +241,13 @@ case class Range(
       |   }
       | }
       |
-      | while (!$overflow && $checkEnd) {
+      | while (!$overflow && $checkEnd && !shouldStop()) {
       |  long $value = $number;
       |  $number += ${step}L;
       |  if ($number < $value ^ ${step}L < 0) {
       |    $overflow = true;
       |  }
       |  ${consume(ctx, Seq(ev))}
-      |
-      |  if (shouldStop()) return;
       | }
      """.stripMargin
   }

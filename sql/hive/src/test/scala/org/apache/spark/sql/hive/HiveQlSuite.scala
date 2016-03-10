@@ -71,7 +71,7 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       CatalogColumn("dt", "string", comment = Some("date type")) ::
       CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
     assert(desc.storage.serdeProperties ==
-      Map((serdeConstants.SERIALIZATION_FORMAT, "\054"), (serdeConstants.FIELD_DELIM, "\054")))
+      Map((serdeConstants.SERIALIZATION_FORMAT, "\u002C"), (serdeConstants.FIELD_DELIM, "\u002C")))
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde ==
@@ -206,6 +206,26 @@ class HiveQlSuite extends SparkFunSuite with BeforeAndAfterAll {
       """SELECT `t`.`thing1`
         |FROM (SELECT TRANSFORM (`parquet_t1`.`key`, `parquet_t1`.`value`)
         |USING 'cat' AS (`thing1` int, `thing2` string) FROM `default`.`parquet_t1`) AS t
+      """.stripMargin)
+  }
+
+  test("use backticks in output of Generator") {
+    val plan = parser.parsePlan(
+      """
+        |SELECT `gentab2`.`gencol2`
+        |FROM `default`.`src`
+        |LATERAL VIEW explode(array(array(1, 2, 3))) `gentab1` AS `gencol1`
+        |LATERAL VIEW explode(`gentab1`.`gencol1`) `gentab2` AS `gencol2`
+      """.stripMargin)
+  }
+
+  test("use escaped backticks in output of Generator") {
+    val plan = parser.parsePlan(
+      """
+        |SELECT `gen``tab2`.`gen``col2`
+        |FROM `default`.`src`
+        |LATERAL VIEW explode(array(array(1, 2,  3))) `gen``tab1` AS `gen``col1`
+        |LATERAL VIEW explode(`gen``tab1`.`gen``col1`) `gen``tab2` AS `gen``col2`
       """.stripMargin)
   }
 }

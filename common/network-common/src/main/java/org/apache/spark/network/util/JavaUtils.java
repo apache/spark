@@ -159,10 +159,10 @@ public class JavaUtils {
       .build();
 
   /**
-   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count for
-   * internal use. If no suffix is provided a direct conversion is attempted.
+   * Convert a passed time string (e.g. 50s, 100ms, or 250us) to a time count in the given unit.
+   * The unit is also considered the default if the given string does not specify a unit.
    */
-  private static long parseTimeString(String str, TimeUnit unit) {
+  public static long timeStringAs(String str, TimeUnit unit) {
     String lower = str.toLowerCase().trim();
 
     try {
@@ -195,7 +195,7 @@ public class JavaUtils {
    * no suffix is provided, the passed number is assumed to be in ms.
    */
   public static long timeStringAsMs(String str) {
-    return parseTimeString(str, TimeUnit.MILLISECONDS);
+    return timeStringAs(str, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -203,15 +203,14 @@ public class JavaUtils {
    * no suffix is provided, the passed number is assumed to be in seconds.
    */
   public static long timeStringAsSec(String str) {
-    return parseTimeString(str, TimeUnit.SECONDS);
+    return timeStringAs(str, TimeUnit.SECONDS);
   }
 
   /**
-   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to a ByteUnit for
-   * internal use. If no suffix is provided a direct conversion of the provided default is
-   * attempted.
+   * Convert a passed byte string (e.g. 50b, 100kb, or 250mb) to the given. If no suffix is
+   * provided, a direct conversion to the provided unit is attempted.
    */
-  private static long parseByteString(String str, ByteUnit unit) {
+  public static long byteStringAs(String str, ByteUnit unit) {
     String lower = str.toLowerCase().trim();
 
     try {
@@ -252,7 +251,7 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in bytes.
    */
   public static long byteStringAsBytes(String str) {
-    return parseByteString(str, ByteUnit.BYTE);
+    return byteStringAs(str, ByteUnit.BYTE);
   }
 
   /**
@@ -262,7 +261,7 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in kibibytes.
    */
   public static long byteStringAsKb(String str) {
-    return parseByteString(str, ByteUnit.KiB);
+    return byteStringAs(str, ByteUnit.KiB);
   }
 
   /**
@@ -272,7 +271,7 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in mebibytes.
    */
   public static long byteStringAsMb(String str) {
-    return parseByteString(str, ByteUnit.MiB);
+    return byteStringAs(str, ByteUnit.MiB);
   }
 
   /**
@@ -282,7 +281,7 @@ public class JavaUtils {
    * If no suffix is provided, the passed number is assumed to be in gibibytes.
    */
   public static long byteStringAsGb(String str) {
-    return parseByteString(str, ByteUnit.GiB);
+    return byteStringAs(str, ByteUnit.GiB);
   }
 
   /**
