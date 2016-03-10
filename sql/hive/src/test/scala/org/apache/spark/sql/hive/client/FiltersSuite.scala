@@ -50,21 +50,35 @@ class FiltersSuite extends SparkFunSuite with Logging {
 
   filterTest("int filter",
     (a("intcol", IntegerType) === Literal(1)) :: Nil,
-    "intcol = 1")
+    Map("intcol" -> "1"))
 
   filterTest("int filter backwards",
     (Literal(1) === a("intcol", IntegerType)) :: Nil,
-    "1 = intcol")
+    Map("intcol" -> "1"))
 
   filterTest("int and string filter",
     (Literal(1) === a("intcol", IntegerType)) :: (Literal("a") === a("strcol", IntegerType)) :: Nil,
-    "1 = intcol and \"a\" = strcol")
+    Map(
+      "intcol" -> "1",
+      "strcol" -> "a"
+  ))
 
   filterTest("skip varchar",
     (Literal("") === a("varchar", StringType)) :: Nil,
-    "")
+    EmptyPushdown)
 
-  private def filterTest(name: String, filters: Seq[Expression], result: String) = {
+  private def filterTest(name: String, filters: Seq[Expression], result: String): Unit = {
+    filterTest(name, filters, PartitionExpr(result))
+  }
+
+  private def filterTest(
+      name: String,
+      filters: Seq[Expression],
+      result: Map[String, String]): Unit = {
+    filterTest(name, filters, new PartitionSpec(result))
+  }
+
+  private def filterTest(name: String, filters: Seq[Expression], result: FilterPushdown): Unit = {
     test(name){
       val converted = shim.convertFilters(testTable, filters)
       if (converted != result) {
