@@ -10,7 +10,7 @@ class GoogleCloudStorageToBigQueryOperator(BaseOperator):
     """
     Loads files from Google cloud storage into BigQuery.
     """
-    template_fields = ('bucket','source_objects','schema_object','destination_dataset_table')
+    template_fields = ('bucket','source_objects','schema_object','destination_project_dataset_table')
     template_ext = ('.sql',)
     ui_color = '#f0eee4'
 

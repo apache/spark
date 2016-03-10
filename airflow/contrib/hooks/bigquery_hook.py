@@ -249,7 +249,7 @@ class BigQueryBaseCursor(object):
                  source_project_dataset_tables,
                  destination_project_dataset_table,
                  write_disposition='WRITE_EMPTY',
-                 reate_disposition='CREATE_IF_NEEDED'):
+                 create_disposition='CREATE_IF_NEEDED'):
         """
         Executes a BigQuery copy command to copy data from one BigQuery table
         to another. See here:
