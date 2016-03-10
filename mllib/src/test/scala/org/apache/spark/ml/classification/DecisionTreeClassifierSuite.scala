@@ -353,13 +353,19 @@ class DecisionTreeClassifierSuite
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
 
+    // Categorical splits with tree depth 2
     val categoricalData: DataFrame =
       TreeTests.setMetadata(rdd, Map(0 -> 2, 1 -> 3), numClasses = 2)
     testEstimatorAndModelReadWrite(dt, categoricalData, allParamSettings, checkModelData)
 
+    // Continuous splits with tree depth 2
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings, checkModelData)
+
+    // Continuous splits with tree depth 0
+    testEstimatorAndModelReadWrite(dt, continuousData, allParamSettings ++ Map("maxDepth" -> 0),
+      checkModelData)
   }
 }
 

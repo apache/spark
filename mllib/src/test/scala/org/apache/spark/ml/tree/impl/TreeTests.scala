@@ -144,7 +144,6 @@ private[ml] object TreeTests extends SparkFunSuite {
   }
 
   /**
-<<<<<<< HEAD:mllib/src/test/scala/org/apache/spark/ml/impl/TreeTests.scala
    * Create some toy data for testing feature importances.
    */
   def featureImportanceData(sc: SparkContext): RDD[LabeledPoint] = sc.parallelize(Seq(
@@ -154,7 +153,8 @@ private[ml] object TreeTests extends SparkFunSuite {
     new LabeledPoint(0, Vectors.dense(1, 0, 0, 0, 0)),
     new LabeledPoint(1, Vectors.dense(1, 1, 0, 0, 0))
   ))
-=======
+
+  /**
    * Mapping from all Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.
    * This excludes input columns to simplify some tests.
@@ -185,5 +185,4 @@ private[ml] object TreeTests extends SparkFunSuite {
       LabeledPoint(1.0, Vectors.dense(1.0, 2.0)))
     sc.parallelize(arr)
   }
->>>>>>> DecisionTreeClassifier,Regressor and Models support save,load.  Fixed bug in DefaultReadWriteTest.testEstimatorAndModelReadWrite where it never called checkModelData function.:mllib/src/test/scala/org/apache/spark/ml/tree/impl/TreeTests.scala
 }
