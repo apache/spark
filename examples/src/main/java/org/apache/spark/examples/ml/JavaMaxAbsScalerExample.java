@@ -19,9 +19,11 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+// $example on$
 import org.apache.spark.ml.feature.MaxAbsScaler;
 import org.apache.spark.ml.feature.MaxAbsScalerModel;
 import org.apache.spark.sql.DataFrame;
+// $example off$
 import org.apache.spark.sql.SQLContext;
 
 public class JavaMaxAbsScalerExample {
@@ -40,7 +42,7 @@ public class JavaMaxAbsScalerExample {
     // Compute summary statistics and generate MaxAbsScalerModel
     MaxAbsScalerModel scalerModel = scaler.fit(dataFrame);
 
-    // rescale each feature to range [min, max].
+    // rescale each feature to range [-1, 1].
     DataFrame scaledData = scalerModel.transform(dataFrame);
     scaledData.show();
     // $example off$
