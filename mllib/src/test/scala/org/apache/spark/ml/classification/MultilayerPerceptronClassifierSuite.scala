@@ -112,13 +112,13 @@ class MultilayerPerceptronClassifierSuite
       .setLabelCol("myLabel")
       .setPredictionCol("myPrediction")
 
-    testDefaultReadWrite(mlp)
+    testDefaultReadWrite(mlp, testParams = true)
   }
 
   test("read/write: MultilayerPerceptronClassificationModel") {
     val mlp = new MultilayerPerceptronClassifier().setLayers(Array(2, 3, 2)).setMaxIter(5)
     val mlpModel = mlp.fit(dataset)
-    val newMlpModel = testDefaultReadWrite(mlpModel)
+    val newMlpModel = testDefaultReadWrite(mlpModel, testParams = true)
     assert(newMlpModel.layers === mlpModel.layers)
     assert(newMlpModel.weights === mlpModel.weights)
   }

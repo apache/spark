@@ -257,6 +257,7 @@ object MultilayerPerceptronClassificationModel
       sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
+
   private class MultilayerPerceptronClassificationModelReader
     extends MLReader[MultilayerPerceptronClassificationModel] {
 
