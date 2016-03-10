@@ -131,6 +131,13 @@ selectItem
     :
     (tableAllColumns) => tableAllColumns -> ^(TOK_SELEXPR tableAllColumns)
     |
+    namedExpression
+    ;
+
+namedExpression
+@init { gParent.pushMsg("select named expression", state); }
+@after { gParent.popMsg(state); }
+    :
     ( expression
       ((KW_AS? identifier) | (KW_AS LPAREN identifier (COMMA identifier)* RPAREN))?
     ) -> ^(TOK_SELEXPR expression identifier*)

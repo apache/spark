@@ -17,13 +17,13 @@
 
 package org.apache.spark
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
+import org.apache.spark.util._
 
 private[spark] class TaskContextImpl(
     val stageId: Int,
@@ -32,14 +32,20 @@ private[spark] class TaskContextImpl(
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
     @transient private val metricsSystem: MetricsSystem,
-    internalAccumulators: Seq[Accumulator[Long]],
-    val runningLocally: Boolean = false,
-    val taskMetrics: TaskMetrics = TaskMetrics.empty)
+    initialAccumulators: Seq[Accumulator[_]] = InternalAccumulator.createAll())
   extends TaskContext
   with Logging {
 
-  // List of callback functions to execute when the task completes.
+  /**
+   * Metrics associated with this task.
+   */
+  override val taskMetrics: TaskMetrics = new TaskMetrics(initialAccumulators)
+
+  /** List of callback functions to execute when the task completes. */
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
+
+  /** List of callback functions to execute when the task fails. */
+  @transient private val onFailureCallbacks = new ArrayBuffer[TaskFailureListener]
 
   // Whether the corresponding task has been killed.
   @volatile private var interrupted: Boolean = false
@@ -47,19 +53,41 @@ private[spark] class TaskContextImpl(
   // Whether the task has completed.
   @volatile private var completed: Boolean = false
 
+  // Whether the task has failed.
+  @volatile private var failed: Boolean = false
+
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
     this
   }
 
-  override def addTaskCompletionListener(f: TaskContext => Unit): this.type = {
-    onCompleteCallbacks += new TaskCompletionListener {
-      override def onTaskCompletion(context: TaskContext): Unit = f(context)
-    }
+  override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
+    onFailureCallbacks += listener
     this
   }
 
-  /** Marks the task as completed and triggers the listeners. */
+  /** Marks the task as failed and triggers the failure listeners. */
+  private[spark] def markTaskFailed(error: Throwable): Unit = {
+    // failure callbacks should only be called once
+    if (failed) return
+    failed = true
+    val errorMsgs = new ArrayBuffer[String](2)
+    // Process failure callbacks in the reverse order of registration
+    onFailureCallbacks.reverse.foreach { listener =>
+      try {
+        listener.onTaskFailure(this, error)
+      } catch {
+        case e: Throwable =>
+          errorMsgs += e.getMessage
+          logError("Error in TaskFailureListener", e)
+      }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskCompletionListenerException(errorMsgs, Option(error))
+    }
+  }
+
+  /** Marks the task as completed and triggers the completion listeners. */
   private[spark] def markTaskCompleted(): Unit = {
     completed = true
     val errorMsgs = new ArrayBuffer[String](2)
@@ -85,31 +113,15 @@ private[spark] class TaskContextImpl(
 
   override def isCompleted(): Boolean = completed
 
-  override def isRunningLocally(): Boolean = runningLocally
+  override def isRunningLocally(): Boolean = false
 
   override def isInterrupted(): Boolean = interrupted
 
   override def getMetricsSources(sourceName: String): Seq[Source] =
     metricsSystem.getSourcesByName(sourceName)
 
-  @transient private val accumulators = new HashMap[Long, Accumulable[_, _]]
-
-  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = synchronized {
-    accumulators(a.id) = a
+  private[spark] override def registerAccumulator(a: Accumulable[_, _]): Unit = {
+    taskMetrics.registerAccumulator(a)
   }
 
-  private[spark] override def collectInternalAccumulators(): Map[Long, Any] = synchronized {
-    accumulators.filter(_._2.isInternal).mapValues(_.localValue).toMap
-  }
-
-  private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
-    accumulators.mapValues(_.localValue).toMap
-  }
-
-  private[spark] override val internalMetricsToAccumulators: Map[String, Accumulator[Long]] = {
-    // Explicitly register internal accumulators here because these are
-    // not captured in the task closure and are already deserialized
-    internalAccumulators.foreach(registerAccumulator)
-    internalAccumulators.map { a => (a.name.get, a) }.toMap
-  }
 }

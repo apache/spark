@@ -368,7 +368,7 @@ private[parquet] class CatalystRowConverter(
     }
 
     protected def decimalFromBinary(value: Binary): Decimal = {
-      if (precision <= CatalystSchemaConverter.MAX_PRECISION_FOR_INT64) {
+      if (precision <= Decimal.MAX_LONG_DIGITS) {
         // Constructs a `Decimal` with an unscaled `Long` value if possible.
         val unscaled = CatalystRowConverter.binaryToUnscaledLong(value)
         Decimal(unscaled, precision, scale)

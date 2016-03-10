@@ -282,8 +282,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
   test("kryo with fold") {
     val control = 1 :: 2 :: Nil
     // zeroValue must not be a ClassWithoutNoArgConstructor instance because it will be
-    // serialized by spark.closure.serializer but spark.closure.serializer only supports
-    // the default Java serializer.
+    // serialized by the Java serializer.
     val result = sc.parallelize(control, 2).map(new ClassWithoutNoArgConstructor(_))
       .fold(null)((t1, t2) => {
       val t1x = if (t1 == null) 0 else t1.x
@@ -362,17 +361,33 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     bitmap.add(1)
     bitmap.add(3)
     bitmap.add(5)
-    bitmap.serialize(new KryoOutputDataOutputBridge(output))
+    // Ignore Kryo because it doesn't use writeObject
+    bitmap.serialize(new KryoOutputObjectOutputBridge(null, output))
     output.flush()
     output.close()
 
     val inStream = new FileInputStream(tmpfile)
     val input = new KryoInput(inStream)
     val ret = new RoaringBitmap
-    ret.deserialize(new KryoInputDataInputBridge(input))
+    // Ignore Kryo because it doesn't use readObject
+    ret.deserialize(new KryoInputObjectInputBridge(null, input))
     input.close()
     assert(ret == bitmap)
     Utils.deleteRecursively(dir)
+  }
+
+  test("KryoOutputObjectOutputBridge.writeObject and KryoInputObjectInputBridge.readObject") {
+    val kryo = new KryoSerializer(conf).newKryo()
+
+    val bytesOutput = new ByteArrayOutputStream()
+    val objectOutput = new KryoOutputObjectOutputBridge(kryo, new KryoOutput(bytesOutput))
+    objectOutput.writeObject("test")
+    objectOutput.close()
+
+    val bytesInput = new ByteArrayInputStream(bytesOutput.toByteArray)
+    val objectInput = new KryoInputObjectInputBridge(kryo, new KryoInput(bytesInput))
+    assert(objectInput.readObject() === "test")
+    objectInput.close()
   }
 
   test("getAutoReset") {

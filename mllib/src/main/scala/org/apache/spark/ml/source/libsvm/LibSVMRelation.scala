@@ -17,54 +17,60 @@
 
 package org.apache.spark.ml.source.libsvm
 
-import com.google.common.base.Objects
+import java.io.IOException
 
-import org.apache.spark.Logging
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+
 import org.apache.spark.annotation.Since
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.collection.BitSet
 
-/**
- * LibSVMRelation provides the DataFrame constructed from LibSVM format data.
- * @param path File path of LibSVM format
- * @param numFeatures The number of features
- * @param vectorType The type of vector. It can be 'sparse' or 'dense'
- * @param sqlContext The Spark SQLContext
- */
-private[libsvm] class LibSVMRelation(val path: String, val numFeatures: Int, val vectorType: String)
-    (@transient val sqlContext: SQLContext)
-  extends BaseRelation with TableScan with Logging with Serializable {
+private[libsvm] class LibSVMOutputWriter(
+    path: String,
+    dataSchema: StructType,
+    context: TaskAttemptContext)
+  extends OutputWriter {
 
-  override def schema: StructType = StructType(
-    StructField("label", DoubleType, nullable = false) ::
-      StructField("features", new VectorUDT(), nullable = false) :: Nil
-  )
+  private[this] val buffer = new Text()
 
-  override def buildScan(): RDD[Row] = {
-    val sc = sqlContext.sparkContext
-    val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
-    val sparse = vectorType == "sparse"
-    baseRdd.map { pt =>
-      val features = if (sparse) pt.features.toSparse else pt.features.toDense
-      Row(pt.label, features)
+  private val recordWriter: RecordWriter[NullWritable, Text] = {
+    new TextOutputFormat[NullWritable, Text]() {
+      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+        val configuration = context.getConfiguration
+        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val taskAttemptId = context.getTaskAttemptID
+        val split = taskAttemptId.getTaskID.getId
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+      }
+    }.getRecordWriter(context)
+  }
+
+  override def write(row: Row): Unit = {
+    val label = row.get(0)
+    val vector = row.get(1).asInstanceOf[Vector]
+    val sb = new StringBuilder(label.toString)
+    vector.foreachActive { case (i, v) =>
+      sb += ' '
+      sb ++= s"${i + 1}:$v"
     }
+    buffer.set(sb.mkString)
+    recordWriter.write(NullWritable.get(), buffer)
   }
 
-  override def hashCode(): Int = {
-    Objects.hashCode(path, Double.box(numFeatures), vectorType)
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case that: LibSVMRelation =>
-      path == that.path &&
-        numFeatures == that.numFeatures &&
-        vectorType == that.vectorType
-    case _ =>
-      false
+  override def close(): Unit = {
+    recordWriter.close(context)
   }
 }
 
@@ -99,18 +105,75 @@ private[libsvm] class LibSVMRelation(val path: String, val numFeatures: Int, val
  *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
  */
 @Since("1.6.0")
-class DefaultSource extends RelationProvider with DataSourceRegister {
+class DefaultSource extends FileFormat with DataSourceRegister {
 
   @Since("1.6.0")
   override def shortName(): String = "libsvm"
 
-  @Since("1.6.0")
-  override def createRelation(sqlContext: SQLContext, parameters: Map[String, String])
-    : BaseRelation = {
-    val path = parameters.getOrElse("path",
-      throw new IllegalArgumentException("'path' must be specified"))
-    val numFeatures = parameters.getOrElse("numFeatures", "-1").toInt
-    val vectorType = parameters.getOrElse("vectorType", "sparse")
-    new LibSVMRelation(path, numFeatures, vectorType)(sqlContext)
+  private def verifySchema(dataSchema: StructType): Unit = {
+    if (dataSchema.size != 2 ||
+      (!dataSchema(0).dataType.sameType(DataTypes.DoubleType)
+        || !dataSchema(1).dataType.sameType(new VectorUDT()))) {
+      throw new IOException(s"Illegal schema for libsvm data, schema=${dataSchema}")
+    }
+  }
+  override def inferSchema(
+      sqlContext: SQLContext,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Option[StructType] = {
+    Some(
+      StructType(
+        StructField("label", DoubleType, nullable = false) ::
+        StructField("features", new VectorUDT(), nullable = false) :: Nil))
+  }
+
+  override def prepareWrite(
+      sqlContext: SQLContext,
+      job: Job,
+      options: Map[String, String],
+      dataSchema: StructType): OutputWriterFactory = {
+    new OutputWriterFactory {
+      override def newInstance(
+          path: String,
+          bucketId: Option[Int],
+          dataSchema: StructType,
+          context: TaskAttemptContext): OutputWriter = {
+        if (bucketId.isDefined) { sys.error("LibSVM doesn't support bucketing") }
+        new LibSVMOutputWriter(path, dataSchema, context)
+      }
+    }
+  }
+
+  override def buildInternalScan(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      requiredColumns: Array[String],
+      filters: Array[Filter],
+      bucketSet: Option[BitSet],
+      inputFiles: Array[FileStatus],
+      broadcastedConf: Broadcast[SerializableConfiguration],
+      options: Map[String, String]): RDD[InternalRow] = {
+    // TODO: This does not handle cases where column pruning has been performed.
+
+    verifySchema(dataSchema)
+    val dataFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
+
+    val path = if (dataFiles.length == 1) dataFiles(0).getPath.toUri.toString
+    else if (dataFiles.isEmpty) throw new IOException("No input path specified for libsvm data")
+    else throw new IOException("Multiple input paths are not supported for libsvm data.")
+
+    val numFeatures = options.getOrElse("numFeatures", "-1").toInt
+    val vectorType = options.getOrElse("vectorType", "sparse")
+
+    val sc = sqlContext.sparkContext
+    val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
+    val sparse = vectorType == "sparse"
+    baseRdd.map { pt =>
+      val features = if (sparse) pt.features.toSparse else pt.features.toDense
+      Row(pt.label, features)
+    }.mapPartitions { externalRows =>
+      val converter = RowEncoder(dataSchema)
+      externalRows.map(converter.toRow)
+    }
   }
 }

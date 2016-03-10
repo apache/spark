@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.{TaskCompletionListener, TaskFailureListener}
 
 
 object TaskContext {
@@ -64,7 +64,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
+    new TaskContextImpl(0, 0, 0, 0, null, null)
   }
 
 }
@@ -97,14 +97,17 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Returns true if the task is running locally in the driver program.
-   * @return
+   * @return false
    */
+  @deprecated("Local execution was removed, so this always returns false", "2.0.0")
   def isRunningLocally(): Boolean
 
   /**
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
@@ -112,8 +115,30 @@ abstract class TaskContext extends Serializable {
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
-  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
+  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext = {
+    addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = f(context)
+    })
+  }
+
+  /**
+   * Adds a listener to be executed on task failure.
+   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   */
+  def addTaskFailureListener(listener: TaskFailureListener): TaskContext
+
+  /**
+   * Adds a listener to be executed on task failure.
+   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   */
+  def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
+    addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
+    })
+  }
 
   /**
    * The ID of the stage that this task belong to.
@@ -137,7 +162,6 @@ abstract class TaskContext extends Serializable {
    */
   def taskAttemptId(): Long
 
-  /** ::DeveloperApi:: */
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 
@@ -160,20 +184,4 @@ abstract class TaskContext extends Serializable {
    */
   private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
 
-  /**
-   * Return the local values of internal accumulators that belong to this task. The key of the Map
-   * is the accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectInternalAccumulators(): Map[Long, Any]
-
-  /**
-   * Return the local values of accumulators that belong to this task. The key of the Map is the
-   * accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectAccumulators(): Map[Long, Any]
-
-  /**
-   * Accumulators for tracking internal metrics indexed by the name.
-   */
-  private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
 }

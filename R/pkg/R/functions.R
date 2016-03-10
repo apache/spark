@@ -275,6 +275,64 @@ setMethod("corr", signature(x = "Column"),
             column(jc)
           })
 
+#' cov
+#'
+#' Compute the sample covariance between two expressions.
+#'
+#' @rdname cov
+#' @name cov
+#' @family math_funcs
+#' @export
+#' @examples
+#' \dontrun{
+#' cov(df$c, df$d)
+#' cov("c", "d")
+#' covar_samp(df$c, df$d)
+#' covar_samp("c", "d")
+#' }
+setMethod("cov", signature(x = "characterOrColumn"),
+          function(x, col2) {
+            stopifnot(is(class(col2), "characterOrColumn"))
+            covar_samp(x, col2)
+          })
+
+#' @rdname cov
+#' @name covar_samp
+setMethod("covar_samp", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
+          function(col1, col2) {
+            stopifnot(class(col1) == class(col2))
+            if (class(col1) == "Column") {
+              col1 <- col1@jc
+              col2 <- col2@jc
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "covar_samp", col1, col2)
+            column(jc)
+          })
+
+#' covar_pop
+#'
+#' Compute the population covariance between two expressions.
+#'
+#' @rdname covar_pop
+#' @name covar_pop
+#' @family math_funcs
+#' @export
+#' @examples
+#' \dontrun{
+#' covar_pop(df$c, df$d)
+#' covar_pop("c", "d")
+#' }
+setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOrColumn"),
+          function(col1, col2) {
+            stopifnot(class(col1) == class(col2))
+            if (class(col1) == "Column") {
+              col1 <- col1@jc
+              col2 <- col2@jc
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "covar_pop", col1, col2)
+            column(jc)
+          })
+
 #' cos
 #'
 #' Computes the cosine of the given value.
@@ -337,6 +395,26 @@ setMethod("crc32",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "crc32", x@jc)
+            column(jc)
+          })
+
+#' hash
+#'
+#' Calculates the hash code of given columns, and returns the result as a int column.
+#'
+#' @rdname hash
+#' @name hash
+#' @family misc_funcs
+#' @export
+#' @examples \dontrun{hash(df$c)}
+setMethod("hash",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(x, ...), function (x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "hash", jcols)
             column(jc)
           })
 
@@ -1884,7 +1962,7 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 
 #' shiftLeft
 #'
-#' Shift the the given value numBits left. If the given value is a long value, this function
+#' Shift the given value numBits left. If the given value is a long value, this function
 #' will return a long value else it will return an integer value.
 #'
 #' @family math_funcs
@@ -1902,7 +1980,7 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 
 #' shiftRight
 #'
-#' Shift the the given value numBits right. If the given value is a long value, it will return
+#' Shift the given value numBits right. If the given value is a long value, it will return
 #' a long value else it will return an integer value.
 #'
 #' @family math_funcs
@@ -1920,7 +1998,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 
 #' shiftRightUnsigned
 #'
-#' Unsigned shift the the given value numBits right. If the given value is a long value,
+#' Unsigned shift the given value numBits right. If the given value is a long value,
 #' it will return a long value else it will return an integer value.
 #'
 #' @family math_funcs

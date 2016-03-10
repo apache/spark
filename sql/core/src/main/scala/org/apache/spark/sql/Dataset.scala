@@ -19,13 +19,14 @@ package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAlias
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{Queryable, QueryExecution}
@@ -73,6 +74,7 @@ class Dataset[T] private[sql](
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(tEncoder)
+  unresolvedTEncoder.validate(logicalPlan.output)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
@@ -84,7 +86,7 @@ class Dataset[T] private[sql](
    */
   private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
 
-  private implicit def classTag = resolvedTEncoder.clsTag
+  private implicit def classTag = unresolvedTEncoder.clsTag
 
   private[sql] def this(sqlContext: SQLContext, plan: LogicalPlan)(implicit encoder: Encoder[T]) =
     this(sqlContext, new QueryExecution(sqlContext, plan), encoder)
@@ -140,7 +142,7 @@ class Dataset[T] private[sql](
    * the same name after two Datasets have been joined.
    * @since 1.6.0
    */
-  def as(alias: String): Dataset[T] = withPlan(Subquery(alias, _))
+  def as(alias: String): Dataset[T] = withPlan(SubqueryAlias(alias, _))
 
   /**
    * Converts this strongly typed collection of data to generic Dataframe.  In contrast to the
@@ -336,12 +338,7 @@ class Dataset[T] private[sql](
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sqlContext,
-      MapPartitions[T, U](
-        func,
-        resolvedTEncoder,
-        encoderFor[U],
-        encoderFor[U].schema.toAttributes,
-        logicalPlan))
+      MapPartitions[T, U](func, logicalPlan))
   }
 
   /**
@@ -350,7 +347,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def mapPartitions[U](f: MapPartitionsFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).iterator.asScala
+    val func: (Iterator[T]) => Iterator[U] = x => f.call(x.asJava).asScala
     mapPartitions(func)(encoder)
   }
 
@@ -370,7 +367,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def flatMap[U](f: FlatMapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
-    val func: (T) => Iterable[U] = x => f.call(x).asScala
+    val func: (T) => Iterator[U] = x => f.call(x).asScala
     flatMap(func)(encoder)
   }
 
@@ -434,7 +431,7 @@ class Dataset[T] private[sql](
    */
   def groupBy[K : Encoder](func: T => K): GroupedDataset[K, T] = {
     val inputPlan = logicalPlan
-    val withGroupingKey = AppendColumns(func, resolvedTEncoder, inputPlan)
+    val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sqlContext.executePlan(withGroupingKey)
 
     new GroupedDataset(
@@ -567,7 +564,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Long) : Dataset[T] =
-    withPlan(Sample(0.0, fraction, withReplacement, seed, _))
+    withPlan(Sample(0.0, fraction, withReplacement, seed, _)())
 
   /**
    * Returns a new [[Dataset]] by sampling a fraction of records, using a random seed.
@@ -608,7 +605,11 @@ class Dataset[T] private[sql](
    * duplicate items.  As such, it is analogous to `UNION ALL` in SQL.
    * @since 1.6.0
    */
-  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other)(Union)
+  def union(other: Dataset[T]): Dataset[T] = withPlan[T](other){ (left, right) =>
+    // This breaks caching, but it's usually ok because it addresses a very specific use case:
+    // using union to union many files or partitions.
+    CombineUnions(Union(left, right))
+  }
 
   /**
    * Returns a new [[Dataset]] where any elements present in `other` have been removed.

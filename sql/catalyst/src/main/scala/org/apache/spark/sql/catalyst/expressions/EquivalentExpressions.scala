@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+
 /**
  * This class is used to compute equality of (sub)expression trees. Expressions can be added
  * to this class and they subsequently query for expression equality. Expression trees are
@@ -67,7 +69,8 @@ class EquivalentExpressions {
    */
   def addExprTree(root: Expression, ignoreLeaf: Boolean = true): Unit = {
     val skip = root.isInstanceOf[LeafExpression] && ignoreLeaf
-    if (!skip && !addExpr(root)) {
+    // the children of CodegenFallback will not be used to generate code (call eval() instead)
+    if (!skip && !addExpr(root) && !root.isInstanceOf[CodegenFallback]) {
       root.children.foreach(addExprTree(_, ignoreLeaf))
     }
   }

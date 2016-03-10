@@ -20,7 +20,6 @@ package org.apache.spark.shuffle.hash
 import java.io.IOException
 
 import org.apache.spark._
-import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle._
@@ -42,8 +41,7 @@ private[spark] class HashShuffleWriter[K, V](
   // we don't try deleting files, etc twice.
   private var stopping = false
 
-  private val writeMetrics = new ShuffleWriteMetrics()
-  metrics.shuffleWriteMetrics = Some(writeMetrics)
+  private val writeMetrics = metrics.registerShuffleWriteMetrics()
 
   private val blockManager = SparkEnv.get.blockManager
   private val ser = Serializer.getSerializer(dep.serializer.getOrElse(null))

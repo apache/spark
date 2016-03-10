@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
+import org.apache.spark.sql.internal.SQLConf
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -118,6 +119,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       // expr = (not leaf-0)
       assertResult(10) {
         sql("SELECT name, contacts FROM t where age > 5")
+          .rdd
           .flatMap(_.getAs[Seq[_]]("contacts"))
           .count()
       }
@@ -130,7 +132,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age > 5 AND age < 8")
         assert(df.count() === 2)
         assertResult(4) {
-          df.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
         }
       }
 
@@ -142,7 +144,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val df = sql("SELECT name, contacts FROM t WHERE age < 2 OR age > 8")
         assert(df.count() === 3)
         assertResult(6) {
-          df.flatMap(_.getAs[Seq[_]]("contacts")).count()
+          df.rdd.flatMap(_.getAs[Seq[_]]("contacts")).count()
         }
       }
     }
@@ -328,7 +330,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
             sqlContext.read.orc(path)
           }.getMessage
 
-          assert(errorMessage.contains("Failed to discover schema from ORC files"))
+          assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
           singleRowDF.registerTempTable("single")
@@ -361,7 +363,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           val nullValue: Option[String] = None
           (maybeInt, nullValue)
         }
-        createDataFrame(data).toDF("a", "b").write.orc(path)
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a", "b").repartition(10).write.orc(path)
         val df = sqlContext.read.orc(path)
 
         def checkPredicate(pred: Column, answer: Seq[Row]): Unit = {
@@ -374,8 +378,9 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           // A tricky part is, ORC does not process filter rows fully but return some possible
           // results. So, this checks if the number of result is less than the original count
           // of data, and then checks if it contains the expected data.
-          val isOrcFiltered = sourceDf.count < 10 && expectedData.subsetOf(data)
-          assert(isOrcFiltered)
+          assert(
+            sourceDf.count < 10 && expectedData.subsetOf(data),
+            s"No data was filtered for predicate: $pred")
         }
 
         checkPredicate('a === 5, List(5).map(Row(_, null)))

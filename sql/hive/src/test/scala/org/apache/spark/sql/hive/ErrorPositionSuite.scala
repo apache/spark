@@ -19,18 +19,32 @@ package org.apache.spark.sql.hive
 
 import scala.util.Try
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.catalyst.parser.ParseDriver
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.parser.ParseDriver
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
   import hiveContext.implicits._
 
-  before {
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    if (sqlContext.tableNames().contains("src")) {
+      sqlContext.dropTempTable("src")
+    }
+    Seq((1, "")).toDF("key", "value").registerTempTable("src")
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
+  }
+
+  override protected def afterEach(): Unit = {
+    try {
+      sqlContext.dropTempTable("src")
+      sqlContext.dropTempTable("dupAttributes")
+    } finally {
+      super.afterEach()
+    }
   }
 
   positionTest("ambiguous attribute reference 1",
@@ -117,9 +131,8 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
    * @param token a unique token in the string that should be indicated by the exception
    */
   def positionTest(name: String, query: String, token: String): Unit = {
-    def ast = ParseDriver.parse(query, hiveContext.conf)
-    def parseTree =
-      Try(quietly(ast.treeString)).getOrElse("<failed to parse>")
+    def ast = ParseDriver.parsePlan(query, hiveContext.conf)
+    def parseTree = Try(quietly(ast.treeString)).getOrElse("<failed to parse>")
 
     test(name) {
       val error = intercept[AnalysisException] {

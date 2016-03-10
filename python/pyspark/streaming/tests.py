@@ -1013,11 +1013,11 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self._kafkaTestUtils.setup()
 
     def tearDown(self):
+        super(KafkaStreamTests, self).tearDown()
+
         if self._kafkaTestUtils is not None:
             self._kafkaTestUtils.teardown()
             self._kafkaTestUtils = None
-
-        super(KafkaStreamTests, self).tearDown()
 
     def _randomTopic(self):
         return "topic-%d" % random.randint(0, 10000)
@@ -1619,7 +1619,7 @@ def search_mqtt_test_jar():
 
 def search_kinesis_asl_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "extras/kinesis-asl-assembly")
+    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
     jars = search_jar(kinesis_asl_assembly_dir, "spark-streaming-kinesis-asl-assembly")
     if not jars:
         return None
@@ -1635,6 +1635,7 @@ kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
 if __name__ == "__main__":
+    from pyspark.streaming.tests import *
     kafka_assembly_jar = search_kafka_assembly_jar()
     flume_assembly_jar = search_flume_assembly_jar()
     mqtt_assembly_jar = search_mqtt_assembly_jar()

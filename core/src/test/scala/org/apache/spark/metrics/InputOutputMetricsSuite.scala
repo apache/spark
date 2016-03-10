@@ -212,7 +212,7 @@ class InputOutputMetricsSuite extends SparkFunSuite with SharedSparkContext
         metrics.inputMetrics.foreach(inputRead += _.recordsRead)
         metrics.outputMetrics.foreach(outputWritten += _.recordsWritten)
         metrics.shuffleReadMetrics.foreach(shuffleRead += _.recordsRead)
-        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.shuffleRecordsWritten)
+        metrics.shuffleWriteMetrics.foreach(shuffleWritten += _.recordsWritten)
       }
     })
 

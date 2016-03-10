@@ -77,7 +77,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
       This implementation is non-blocking, asynchronously handling the
       results of each job and triggering the next job using callbacks on futures.
      */
-    def continue(partsScanned: Long)(implicit jobSubmitter: JobSubmitter) : Future[Seq[T]] =
+    def continue(partsScanned: Int)(implicit jobSubmitter: JobSubmitter): Future[Seq[T]] =
       if (results.size >= num || partsScanned >= totalParts) {
         Future.successful(results.toSeq)
       } else {
@@ -99,7 +99,7 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
         }
 
         val left = num - results.size
-        val p = partsScanned.toInt until math.min(partsScanned + numPartsToTry, totalParts).toInt
+        val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
 
         val buf = new Array[Array[T]](p.size)
         self.context.setCallSite(callSite)
@@ -109,13 +109,13 @@ class AsyncRDDActions[T: ClassTag](self: RDD[T]) extends Serializable with Loggi
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
           Unit)
-        job.flatMap {_ =>
+        job.flatMap { _ =>
           buf.foreach(results ++= _.take(num - results.size))
           continue(partsScanned + p.size)
         }
       }
 
-    new ComplexFutureAction[Seq[T]](continue(0L)(_))
+    new ComplexFutureAction[Seq[T]](continue(0)(_))
   }
 
   /**

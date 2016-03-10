@@ -18,7 +18,7 @@
 // scalastyle:off println
 package org.apache.spark.examples.streaming
 
-import java.io.{BufferedReader, InputStream, InputStreamReader}
+import java.io.{BufferedReader, InputStreamReader}
 import java.net.Socket
 
 import org.apache.spark.{Logging, SparkConf}

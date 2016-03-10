@@ -18,11 +18,16 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, GenericMutableRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
+import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, HadoopFsRelation}
 import org.apache.spark.sql.types.DataType
 
@@ -98,11 +103,15 @@ private[sql] case class PhysicalRDD(
     rdd: RDD[InternalRow],
     override val nodeName: String,
     override val metadata: Map[String, String] = Map.empty,
-    isUnsafeRow: Boolean = false)
-  extends LeafNode {
+    isUnsafeRow: Boolean = false,
+    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
+  extends LeafNode with CodegenSupport {
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (isUnsafeRow) {
+    val unsafeRow = if (isUnsafeRow) {
       rdd
     } else {
       rdd.mapPartitionsInternal { iter =>
@@ -110,11 +119,105 @@ private[sql] case class PhysicalRDD(
         iter.map(proj)
       }
     }
+
+    val numOutputRows = longMetric("numOutputRows")
+    unsafeRow.map { r =>
+      numOutputRows += 1
+      r
+    }
   }
 
   override def simpleString: String = {
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
     s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+  }
+
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    rdd :: Nil
+  }
+
+  // Support codegen so that we can avoid the UnsafeRow conversion in all cases. Codegen
+  // never requires UnsafeRow as input.
+  override protected def doProduce(ctx: CodegenContext): String = {
+    val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+    val input = ctx.freshName("input")
+    val idx = ctx.freshName("batchIdx")
+    val batch = ctx.freshName("batch")
+    // PhysicalRDD always just has one input
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    ctx.addMutableState("int", idx, s"$idx = 0;")
+
+    val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
+    val row = ctx.freshName("row")
+    val numOutputRows = metricTerm(ctx, "numOutputRows")
+
+    // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
+    // by looking at the first value of the RDD and then calling the function which will process
+    // the remaining. It is faster to return batches.
+    // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
+    // here which path to use. Fix this.
+
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns1 = exprs.map(_.gen(ctx))
+    val scanBatches = ctx.freshName("processBatches")
+    ctx.addNewFunction(scanBatches,
+      s"""
+      | private void $scanBatches() throws java.io.IOException {
+      |  while (true) {
+      |     int numRows = $batch.numRows();
+      |     if ($idx == 0) $numOutputRows.add(numRows);
+      |
+      |     while (!shouldStop() && $idx < numRows) {
+      |       InternalRow $row = $batch.getRow($idx++);
+      |       ${consume(ctx, columns1).trim}
+      |     }
+      |     if (shouldStop()) return;
+      |
+      |     if (!$input.hasNext()) {
+      |       $batch = null;
+      |       break;
+      |     }
+      |     $batch = ($columnarBatchClz)$input.next();
+      |     $idx = 0;
+      |   }
+      | }""".stripMargin)
+
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    val columns2 = exprs.map(_.gen(ctx))
+    val inputRow = if (isUnsafeRow) row else null
+    val scanRows = ctx.freshName("processRows")
+    ctx.addNewFunction(scanRows,
+      s"""
+       | private void $scanRows(InternalRow $row) throws java.io.IOException {
+       |   boolean firstRow = true;
+       |   while (!shouldStop() && (firstRow || $input.hasNext())) {
+       |     if (firstRow) {
+       |       firstRow = false;
+       |     } else {
+       |       $row = (InternalRow) $input.next();
+       |     }
+       |     $numOutputRows.add(1);
+       |     ${consume(ctx, columns2, inputRow).trim}
+       |   }
+       | }""".stripMargin)
+
+    val value = ctx.freshName("value")
+    s"""
+       | if ($batch != null) {
+       |   $scanBatches();
+       | } else if ($input.hasNext()) {
+       |   Object $value = $input.next();
+       |   if ($value instanceof $columnarBatchClz) {
+       |     $batch = ($columnarBatchClz)$value;
+       |     $scanBatches();
+       |   } else {
+       |     $scanRows((InternalRow) $value);
+       |   }
+       | }
+     """.stripMargin
   }
 }
 
@@ -128,8 +231,32 @@ private[sql] object PhysicalRDD {
       rdd: RDD[InternalRow],
       relation: BaseRelation,
       metadata: Map[String, String] = Map.empty): PhysicalRDD = {
-    // All HadoopFsRelations output UnsafeRows
-    val outputUnsafeRows = relation.isInstanceOf[HadoopFsRelation]
-    PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+
+    val outputUnsafeRows = relation match {
+      case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
+        !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+      case _: HadoopFsRelation => true
+      case _ => false
+    }
+
+    val bucketSpec = relation match {
+      // TODO: this should be closer to bucket planning.
+      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled() => r.bucketSpec
+      case _ => None
+    }
+
+    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
+      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
+        s"(${output.map(_.name).mkString(", ")})")
+    }
+
+    bucketSpec.map { spec =>
+      val numBuckets = spec.numBuckets
+      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+      val partitioning = HashPartitioning(bucketColumns, numBuckets)
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
+    }.getOrElse {
+      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
+    }
   }
 }

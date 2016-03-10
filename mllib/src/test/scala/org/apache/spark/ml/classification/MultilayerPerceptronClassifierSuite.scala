@@ -85,8 +85,9 @@ class MultilayerPerceptronClassifierSuite
     val model = trainer.fit(dataFrame)
     val numFeatures = dataFrame.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
-    val mlpPredictionAndLabels = model.transform(dataFrame).select("prediction", "label")
-      .map { case Row(p: Double, l: Double) => (p, l) }
+    val mlpPredictionAndLabels = model.transform(dataFrame).select("prediction", "label").rdd.map {
+      case Row(p: Double, l: Double) => (p, l)
+    }
     // train multinomial logistic regression
     val lr = new LogisticRegressionWithLBFGS()
       .setIntercept(true)

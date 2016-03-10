@@ -19,6 +19,8 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
 
+import org.apache.avro.reflect.Nullable;
+
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
@@ -66,7 +68,9 @@ public final class UnsafeInMemorySorter {
 
   private final MemoryConsumer consumer;
   private final TaskMemoryManager memoryManager;
+  @Nullable
   private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
+  @Nullable
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
@@ -98,10 +102,11 @@ public final class UnsafeInMemorySorter {
       LongArray array) {
     this.consumer = consumer;
     this.memoryManager = memoryManager;
-    this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
     if (recordComparator != null) {
+      this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
     } else {
+      this.sorter = null;
       this.sortComparator = null;
     }
     this.array = array;
@@ -111,8 +116,10 @@ public final class UnsafeInMemorySorter {
    * Free the memory used by pointer array.
    */
   public void free() {
-    consumer.freeArray(array);
-    array = null;
+    if (consumer != null) {
+      consumer.freeArray(array);
+      array = null;
+    }
   }
 
   public void reset() {
@@ -157,7 +164,7 @@ public final class UnsafeInMemorySorter {
    */
   public void insertRecord(long recordPointer, long keyPrefix) {
     if (!hasSpaceForAnotherRecord()) {
-      expandPointerArray(consumer.allocateArray(array.size() * 2));
+      throw new IllegalStateException("There is no space for new record");
     }
     array.set(pos, recordPointer);
     pos++;
@@ -165,7 +172,7 @@ public final class UnsafeInMemorySorter {
     pos++;
   }
 
-  public final class SortedIterator extends UnsafeSorterIterator {
+  public final class SortedIterator extends UnsafeSorterIterator implements Cloneable {
 
     private final int numRecords;
     private int position;
@@ -190,12 +197,13 @@ public final class UnsafeInMemorySorter {
     }
 
     @Override
-    public boolean hasNext() {
-      return position / 2 < numRecords;
+    public int getNumRecords() {
+      return numRecords;
     }
 
-    public int numRecordsLeft() {
-      return numRecords - position / 2;
+    @Override
+    public boolean hasNext() {
+      return position / 2 < numRecords;
     }
 
     @Override
@@ -227,7 +235,7 @@ public final class UnsafeInMemorySorter {
    * {@code next()} will return the same mutable object.
    */
   public SortedIterator getSortedIterator() {
-    if (sortComparator != null) {
+    if (sorter != null) {
       sorter.sort(array, 0, pos / 2, sortComparator);
     }
     return new SortedIterator(pos / 2);

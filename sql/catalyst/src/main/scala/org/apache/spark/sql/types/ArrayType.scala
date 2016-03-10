@@ -77,6 +77,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 
   override def simpleString: String = s"array<${elementType.simpleString}>"
 
+  override def sql: String = s"ARRAY<${elementType.sql}>"
+
   override private[spark] def asNullable: ArrayType =
     ArrayType(elementType.asNullable, containsNull = true)
 

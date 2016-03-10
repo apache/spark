@@ -17,9 +17,8 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
 import org.apache.spark.rdd.RDD
 
@@ -41,8 +40,8 @@ class ReplicatedVertexView[VD: ClassTag, ED: ClassTag](
    * shipping level.
    */
   def withEdges[VD2: ClassTag, ED2: ClassTag](
-      edges_ : EdgeRDDImpl[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
-    new ReplicatedVertexView(edges_, hasSrcId, hasDstId)
+      _edges: EdgeRDDImpl[ED2, VD2]): ReplicatedVertexView[VD2, ED2] = {
+    new ReplicatedVertexView(_edges, hasSrcId, hasDstId)
   }
 
   /**

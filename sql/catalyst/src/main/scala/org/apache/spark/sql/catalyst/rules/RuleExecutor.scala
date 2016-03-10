@@ -37,7 +37,7 @@ object RuleExecutor {
     val maxSize = map.keys.map(_.toString.length).max
     map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
       s"${k.padTo(maxSize, " ").mkString} $v"
-    }.mkString("\n")
+    }.mkString("\n", "\n", "")
   }
 }
 

@@ -17,11 +17,9 @@
 
 package org.apache.spark.streaming
 
-import com.google.common.base.Optional
-
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.{JavaPairRDD, JavaUtils}
+import org.apache.spark.api.java.{JavaPairRDD, JavaUtils, Optional}
 import org.apache.spark.api.java.function.{Function3 => JFunction3, Function4 => JFunction4}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ClosureCleaner
@@ -32,9 +30,8 @@ import org.apache.spark.util.ClosureCleaner
  * `mapWithState` operation of a
  * [[org.apache.spark.streaming.dstream.PairDStreamFunctions pair DStream]] (Scala) or a
  * [[org.apache.spark.streaming.api.java.JavaPairDStream JavaPairDStream]] (Java).
- * Use the [[org.apache.spark.streaming.StateSpec StateSpec.apply()]] or
- * [[org.apache.spark.streaming.StateSpec StateSpec.create()]] to create instances of
- * this class.
+ * Use [[org.apache.spark.streaming.StateSpec.function() StateSpec.function]] factory methods
+ * to create instances of this class.
  *
  * Example in Scala:
  * {{{
@@ -200,7 +197,11 @@ object StateSpec {
     StateSpec[KeyType, ValueType, StateType, MappedType] = {
     val wrappedFunc = (time: Time, k: KeyType, v: Option[ValueType], s: State[StateType]) => {
       val t = mappingFunction.call(time, k, JavaUtils.optionToOptional(v), s)
-      Option(t.orNull)
+      if (t.isPresent) {
+        Some(t.get)
+      } else {
+        None
+      }
     }
     StateSpec.function(wrappedFunc)
   }
@@ -220,7 +221,7 @@ object StateSpec {
       mappingFunction: JFunction3[KeyType, Optional[ValueType], State[StateType], MappedType]):
     StateSpec[KeyType, ValueType, StateType, MappedType] = {
     val wrappedFunc = (k: KeyType, v: Option[ValueType], s: State[StateType]) => {
-      mappingFunction.call(k, Optional.fromNullable(v.get), s)
+      mappingFunction.call(k, JavaUtils.optionToOptional(v), s)
     }
     StateSpec.function(wrappedFunc)
   }

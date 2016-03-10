@@ -123,7 +123,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter;
       import org.apache.spark.sql.execution.columnar.MutableUnsafeRow;
 
-      public SpecificColumnarIterator generate($exprType[] expr) {
+      public SpecificColumnarIterator generate(Object[] references) {
         return new SpecificColumnarIterator();
       }
 
@@ -132,8 +132,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
         private UnsafeRow unsafeRow = new UnsafeRow($numFields);
-        private BufferHolder bufferHolder = new BufferHolder();
-        private UnsafeRowWriter rowWriter = new UnsafeRowWriter();
+        private BufferHolder bufferHolder = new BufferHolder(unsafeRow);
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter(bufferHolder, $numFields);
         private MutableUnsafeRow mutableRow = null;
 
         private int currentRow = 0;
@@ -143,14 +143,14 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         private DataType[] columnTypes = null;
         private int[] columnIndexes = null;
 
-        ${declareMutableStates(ctx)}
+        ${ctx.declareMutableStates()}
 
         public SpecificColumnarIterator() {
           this.nativeOrder = ByteOrder.nativeOrder();
           this.buffers = new byte[${columnTypes.length}][];
           this.mutableRow = new MutableUnsafeRow(rowWriter);
 
-          ${initMutableStates(ctx)}
+          ${ctx.initMutableStates()}
         }
 
         public void initialize(Iterator input, DataType[] columnTypes, int[] columnIndexes) {
@@ -181,15 +181,15 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         public InternalRow next() {
           currentRow += 1;
           bufferHolder.reset();
-          rowWriter.initialize(bufferHolder, $numFields);
+          rowWriter.zeroOutNullBytes();
           ${extractors.mkString("\n")}
-          unsafeRow.pointTo(bufferHolder.buffer, bufferHolder.totalSize());
+          unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;
         }
       }"""
 
     logDebug(s"Generated ColumnarIterator: ${CodeFormatter.format(code)}")
 
-    compile(code).generate(ctx.references.toArray).asInstanceOf[ColumnarIterator]
+    CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
   }
 }

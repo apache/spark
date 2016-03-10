@@ -28,7 +28,7 @@ private[graphx]
 class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexId], val attrs: Array[VD])
   extends Serializable {
   def iterator: Iterator[(VertexId, VD)] =
-    (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
+    (0 until vids.length).iterator.map { i => (vids(i), attrs(i)) }
 }
 
 private[graphx]
@@ -102,8 +102,8 @@ class ShippableVertexPartition[VD: ClassTag](
   extends VertexPartitionBase[VD] {
 
   /** Return a new ShippableVertexPartition with the specified routing table. */
-  def withRoutingTable(routingTable_ : RoutingTablePartition): ShippableVertexPartition[VD] = {
-    new ShippableVertexPartition(index, values, mask, routingTable_)
+  def withRoutingTable(_routingTable: RoutingTablePartition): ShippableVertexPartition[VD] = {
+    new ShippableVertexPartition(index, values, mask, _routingTable)
   }
 
   /**

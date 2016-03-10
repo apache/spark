@@ -152,6 +152,8 @@ class DataFrameReader(object):
         You can set the following JSON-specific options to deal with non-standard JSON files:
             * ``primitivesAsString`` (default ``false``): infers all primitive values as a string \
                 type
+            * `floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal \
+                type
             * ``allowComments`` (default ``false``): ignores Java/C++ style comment in JSON records
             * ``allowUnquotedFieldNames`` (default ``false``): allows unquoted JSON field names
             * ``allowSingleQuotes`` (default ``true``): allows single quotes in addition to double \
@@ -230,6 +232,23 @@ class DataFrameReader(object):
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
+
+    @since(2.0)
+    def csv(self, paths):
+        """Loads a CSV file and returns the result as a [[DataFrame]].
+
+        This function goes through the input once to determine the input schema. To avoid going
+        through the entire data once, specify the schema explicitly using [[schema]].
+
+        :param paths: string, or list of strings, for input path(s).
+
+        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
+        >>> df.dtypes
+        [('C0', 'string'), ('C1', 'string')]
+        """
+        if isinstance(paths, basestring):
+            paths = [paths]
+        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(paths)))
 
     @since(1.5)
     def orc(self, path):
@@ -435,7 +454,7 @@ class DataFrameWriter(object):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode=None):
+    def json(self, path, mode=None, compression=None):
         """Saves the content of the :class:`DataFrame` in JSON format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -445,13 +464,19 @@ class DataFrameWriter(object):
             * ``overwrite``: Overwrite existing data.
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
-        self.mode(mode)._jwrite.json(path)
+        self.mode(mode)
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.json(path)
 
     @since(1.4)
-    def parquet(self, path, mode=None, partitionBy=None):
+    def parquet(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in Parquet format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -462,25 +487,60 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, gzip, and lzo).
+                            This will overwrite ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, path):
+    def text(self, path, compression=None):
         """Saves the content of the DataFrame in a text file at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
         """
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.text(path)
 
+    @since(2.0)
+    def csv(self, path, mode=None, compression=None):
+        """Saves the content of the [[DataFrame]] in CSV format at the specified path.
+
+        :param path: the path in any Hadoop supported file system
+        :param mode: specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` (default case): Throw an exception if data already exists.
+
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, bzip2, gzip, lz4,
+                            snappy and deflate).
+
+        >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
+        """
+        self.mode(mode)
+        if compression is not None:
+            self.option("compression", compression)
+        self._jwrite.csv(path)
+
     @since(1.5)
-    def orc(self, path, mode=None, partitionBy=None):
+    def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
         ::Note: Currently ORC support is only available together with
@@ -494,6 +554,9 @@ class DataFrameWriter(object):
             * ``ignore``: Silently ignore this operation if data already exists.
             * ``error`` (default case): Throw an exception if data already exists.
         :param partitionBy: names of partitioning columns
+        :param compression: compression codec to use when saving to file. This can be one of the
+                            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+                            This will overwrite ``orc.compress``.
 
         >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
@@ -501,6 +564,8 @@ class DataFrameWriter(object):
         self.mode(mode)
         if partitionBy is not None:
             self.partitionBy(partitionBy)
+        if compression is not None:
+            self.option("compression", compression)
         self._jwrite.orc(path)
 
     @since(1.4)

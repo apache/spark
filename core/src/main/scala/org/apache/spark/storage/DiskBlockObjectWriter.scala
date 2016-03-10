@@ -102,7 +102,7 @@ private[spark] class DiskBlockObjectWriter(
           objOut.flush()
           val start = System.nanoTime()
           fos.getFD.sync()
-          writeMetrics.incShuffleWriteTime(System.nanoTime() - start)
+          writeMetrics.incWriteTime(System.nanoTime() - start)
         }
       } {
         objOut.close()
@@ -132,7 +132,7 @@ private[spark] class DiskBlockObjectWriter(
       close()
       finalPosition = file.length()
       // In certain compression codecs, more bytes are written after close() is called
-      writeMetrics.incShuffleBytesWritten(finalPosition - reportedPosition)
+      writeMetrics.incBytesWritten(finalPosition - reportedPosition)
     } else {
       finalPosition = file.length()
     }
@@ -152,8 +152,8 @@ private[spark] class DiskBlockObjectWriter(
     // truncating the file to its initial position.
     try {
       if (initialized) {
-        writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
-        writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
+        writeMetrics.decBytesWritten(reportedPosition - initialPosition)
+        writeMetrics.decRecordsWritten(numRecordsWritten)
         objOut.flush()
         bs.flush()
         close()
@@ -201,8 +201,9 @@ private[spark] class DiskBlockObjectWriter(
    */
   def recordWritten(): Unit = {
     numRecordsWritten += 1
-    writeMetrics.incShuffleRecordsWritten(1)
+    writeMetrics.incRecordsWritten(1)
 
+    // TODO: call updateBytesWritten() less frequently.
     if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
     }
@@ -226,7 +227,7 @@ private[spark] class DiskBlockObjectWriter(
    */
   private def updateBytesWritten() {
     val pos = channel.position()
-    writeMetrics.incShuffleBytesWritten(pos - reportedPosition)
+    writeMetrics.incBytesWritten(pos - reportedPosition)
     reportedPosition = pos
   }
 

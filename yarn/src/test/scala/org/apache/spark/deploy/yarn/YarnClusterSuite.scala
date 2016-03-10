@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.URL
-import java.util.{HashMap => JHashMap, Properties}
+import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -115,7 +115,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .setSparkHome(sys.props("spark.test.home"))
       .setConf("spark.ui.enabled", "false")
       .setPropertiesFile(propsFile)
-      .setMaster("yarn-client")
+      .setMaster("yarn")
+      .setDeployMode("client")
       .setAppResource("spark-internal")
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
       .startApplication()
@@ -151,9 +152,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // When running tests, let's not assume the user has built the assembly module, which also
     // creates the pyspark archive. Instead, let's use PYSPARK_ARCHIVES_PATH to point at the
     // needed locations.
-    val sparkHome = sys.props("spark.test.home");
+    val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.9-src.zip",
+        s"$sparkHome/python/lib/py4j-0.9.1-src.zip",
         s"$sparkHome/python")
     val extraEnv = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),

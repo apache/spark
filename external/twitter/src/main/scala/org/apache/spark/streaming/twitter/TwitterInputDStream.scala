@@ -39,11 +39,11 @@ import org.apache.spark.streaming.receiver.Receiver
 */
 private[streaming]
 class TwitterInputDStream(
-    ssc_ : StreamingContext,
+    _ssc: StreamingContext,
     twitterAuth: Option[Authorization],
     filters: Seq[String],
     storageLevel: StorageLevel
-  ) extends ReceiverInputDStream[Status](ssc_)  {
+  ) extends ReceiverInputDStream[Status](_ssc)  {
 
   private def createOAuthAuthorization(): Authorization = {
     new OAuthAuthorization(new ConfigurationBuilder().build())
