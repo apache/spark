@@ -118,6 +118,7 @@ private[spark] class PipedRDD[T: ClassTag](
 
     val proc = pb.start()
     val env = SparkEnv.get
+    @volatile var exception: Option[Throwable] = None
 
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for " + command) {
@@ -133,23 +134,30 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
-        TaskContext.setTaskContext(context)
         val out = new PrintWriter(proc.getOutputStream)
 
-        // scalastyle:off println
-        // input the pipe context firstly
-        if (printPipeContext != null) {
-          printPipeContext(out.println(_))
-        }
-        for (elem <- firstParent[T].iterator(split, context)) {
-          if (printRDDElement != null) {
-            printRDDElement(elem, out.println(_))
-          } else {
-            out.println(elem)
+        try {
+          TaskContext.setTaskContext(context)
+
+          // scalastyle:off println
+          // input the pipe context firstly
+          if (printPipeContext != null) {
+            printPipeContext(out.println(_))
           }
+          for (elem <- firstParent[T].iterator(split, context)) {
+            if (printRDDElement != null) {
+              printRDDElement(elem, out.println(_))
+            } else {
+              out.println(elem)
+            }
+          }
+          // scalastyle:on println
+        } catch {
+          case throwable: Throwable =>
+            exception = Some(throwable)
+        } finally {
+          out.close()
         }
-        // scalastyle:on println
-        out.close()
       }
     }.start()
 
@@ -157,8 +165,18 @@ private[spark] class PipedRDD[T: ClassTag](
     val lines = Source.fromInputStream(proc.getInputStream).getLines()
     new Iterator[String] {
       def next(): String = lines.next()
+
+      private def propagateChildThreadException(): Unit = {
+        exception match {
+          case Some(e) =>
+            proc.destroyForcibly()
+            throw e
+          case None =>
+        }
+      }
+
       def hasNext: Boolean = {
-        if (lines.hasNext) {
+        val result = if (lines.hasNext) {
           true
         } else {
           val exitStatus = proc.waitFor()
@@ -176,6 +194,8 @@ private[spark] class PipedRDD[T: ClassTag](
 
           false
         }
+        propagateChildThreadException()
+        result
       }
     }
   }
