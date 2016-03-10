@@ -19,7 +19,6 @@ package org.apache.spark.ml.regression
 
 import breeze.stats.distributions.{Gaussian => GD}
 import org.apache.hadoop.fs.Path
-import org.apache.spark.sql.types.{StructType, DataType}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.annotation.{Experimental, Since}
@@ -33,6 +32,7 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Params for Generalized Linear Regression.
