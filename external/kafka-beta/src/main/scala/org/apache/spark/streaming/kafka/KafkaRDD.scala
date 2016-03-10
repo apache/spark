@@ -42,7 +42,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 
 class KafkaRDD[
   K: ClassTag,
-  V: ClassTag] private[kafka] (
+  V: ClassTag] private[spark] (
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
@@ -59,7 +59,8 @@ class KafkaRDD[
     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
       " must be set to false for executor kafka params, else offsets may commit before processing")
 
-  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms", 64)
+  // TODO is it necessary to have separate configs for initial poll time vs ongoing poll time?
+  private val pollTimeout = conf.getLong("spark.streaming.kafka.consumer.poll.ms", 256)
   private val cacheInitialCapacity =
     conf.getInt("spark.streaming.kafka.consumer.cache.initialCapacity", 16)
   private val cacheMaxCapacity =
@@ -115,16 +116,11 @@ class KafkaRDD[
     buf.toArray
   }
 
-  // TODO is there a better way to get executors
-  @transient private var sortedExecutors: Array[ExecutorCacheTaskLocation] = null
   private def executors(): Array[ExecutorCacheTaskLocation] = {
-    if (null == sortedExecutors) {
-      val bm = sparkContext.env.blockManager
-      sortedExecutors = bm.master.getPeers(bm.blockManagerId).toArray
-        .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
-        .sortWith((a, b) => a.host > b.host || a.executorId > b.executorId)
-    }
-    sortedExecutors
+    val bm = sparkContext.env.blockManager
+    bm.master.getPeers(bm.blockManagerId).toArray
+      .map(x => ExecutorCacheTaskLocation(x.host, x.executorId))
+      .sortWith((a, b) => a.host > b.host || a.executorId > b.executorId)
   }
 
   // non-negative modulus, from java 8 math
@@ -138,10 +134,14 @@ class KafkaRDD[
     val prefHost = preferredHosts.get(tp)
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
-    val index = floorMod(tp.hashCode, execs.length)
-    val chosen = execs(index)
+    if (execs.isEmpty) {
+      Seq()
+    } else {
+      val index = this.floorMod(tp.hashCode, execs.length)
+      val chosen = execs(index)
 
-    Seq(chosen.toString)
+      Seq(chosen.toString)
+    }
   }
 
   private def errBeginAfterEnd(part: KafkaRDDPartition): String =
@@ -193,33 +193,42 @@ class KafkaRDD[
 }
 
 object KafkaRDD extends Logging {
+  import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
+
   private[kafka] def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
     log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for executor")
     kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
 
     log.warn(s"overriding ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} to none for executor")
     kafkaParams.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
-
-    // this probably doesnt matter since executors are manually assigned partitions, but just in case
-    if (null != kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)) {
-      val id = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG) + "-executor"
-      log.warn(s"overriding ${ConsumerConfig.GROUP_ID_CONFIG} to ${id} for executor")
-      kafkaParams.put(ConsumerConfig.GROUP_ID_CONFIG, id)
-    }
   }
 
-  def apply[
-    K: ClassTag,
-    V: ClassTag](
-    sc: SparkContext,
-    kafkaParams: ju.Map[String, Object],
-    offsetRanges: Array[OffsetRange],
-    preferredHosts: ju.Map[TopicPartition, String]
+  def apply[K: ClassTag, V: ClassTag](
+      sc: SparkContext,
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      preferredHosts: ju.Map[TopicPartition, String]
     ): KafkaRDD[K, V] = {
     val kp = new ju.HashMap[String, Object](kafkaParams)
+    fixKafkaParams(kp)
     val osr = offsetRanges.clone()
     val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
 
     new KafkaRDD[K, V](sc, kp, osr, ph)
   }
+
+  def create[K, V](
+      jsc: JavaSparkContext,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      kafkaParams: ju.Map[String, Object],
+      offsetRanges: Array[OffsetRange],
+      preferredHosts: ju.Map[TopicPartition, String]
+    ): JavaRDD[ConsumerRecord[K, V]] = {
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+
+    new JavaRDD(KafkaRDD[K, V](jsc.sc, kafkaParams, offsetRanges, preferredHosts))
+  }
+
 }

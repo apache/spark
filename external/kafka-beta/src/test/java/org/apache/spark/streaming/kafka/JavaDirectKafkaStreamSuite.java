@@ -21,11 +21,10 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-import scala.Tuple2;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
-import kafka.common.TopicAndPartition;
-import kafka.message.MessageAndMetadata;
-import kafka.serializer.StringDecoder;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -38,6 +37,7 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
 public class JavaDirectKafkaStreamSuite implements Serializable {
@@ -80,23 +80,36 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     sent.addAll(Arrays.asList(topic1data));
     sent.addAll(Arrays.asList(topic2data));
 
-    Map<String, String> kafkaParams = new HashMap<>();
-    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
-    kafkaParams.put("auto.offset.reset", "smallest");
+    Random random = new Random();
 
-    JavaDStream<String> stream1 = KafkaUtils.createDirectStream(
+    Map<String, Object> kafkaParams = new HashMap<>();
+    kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());
+    kafkaParams.put("key.deserializer", StringDeserializer.class);
+    kafkaParams.put("value.deserializer", StringDeserializer.class);
+    kafkaParams.put("auto.offset.reset", "earliest");
+    kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
+
+    Map<TopicPartition, String> preferredHosts = new HashMap<>();
+
+    JavaInputDStream istream1 = DirectKafkaInputDStream.create(
         ssc,
         String.class,
         String.class,
-        StringDecoder.class,
-        StringDecoder.class,
         kafkaParams,
-        topicToSet(topic1)
-    ).transformToPair(
+        kafkaParams,
+        preferredHosts
+    );
+
+    ((DirectKafkaInputDStream) istream1.inputDStream()).subscribe(Arrays.asList(topic1));
+
+    JavaDStream<String> stream1 = istream1.transform(
         // Make sure you can get offset ranges from the rdd
-        new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
+      new Function<JavaRDD<ConsumerRecord<String, String>>,
+        JavaRDD<ConsumerRecord<String, String>>>() {
           @Override
-          public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) {
+          public JavaRDD<ConsumerRecord<String, String>> call(
+            JavaRDD<ConsumerRecord<String, String>> rdd
+          ) {
             OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
             offsetRanges.set(offsets);
             Assert.assertEquals(topic1, offsets[0].topic());
@@ -104,30 +117,50 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
           }
         }
     ).map(
-        new Function<Tuple2<String, String>, String>() {
+        new Function<ConsumerRecord<String, String>, String>() {
           @Override
-          public String call(Tuple2<String, String> kv) {
-            return kv._2();
+          public String call(ConsumerRecord<String, String> r) {
+            return r.value();
           }
         }
     );
 
-    JavaDStream<String> stream2 = KafkaUtils.createDirectStream(
+    kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
+
+    JavaInputDStream istream2 = DirectKafkaInputDStream.create(
         ssc,
         String.class,
         String.class,
-        StringDecoder.class,
-        StringDecoder.class,
-        String.class,
         kafkaParams,
-        topicOffsetToMap(topic2, 0L),
-        new Function<MessageAndMetadata<String, String>, String>() {
+        kafkaParams,
+        preferredHosts
+    );
+
+    ((DirectKafkaInputDStream) istream2.inputDStream()).subscribe(Arrays.asList(topic2));
+
+    JavaDStream<String> stream2 = istream2.transform(
+        // Make sure you can get offset ranges from the rdd
+      new Function<JavaRDD<ConsumerRecord<String, String>>,
+        JavaRDD<ConsumerRecord<String, String>>>() {
           @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) {
-            return msgAndMd.message();
+          public JavaRDD<ConsumerRecord<String, String>> call(
+            JavaRDD<ConsumerRecord<String, String>> rdd
+          ) {
+            OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+            offsetRanges.set(offsets);
+            Assert.assertEquals(topic2, offsets[0].topic());
+            return rdd;
+          }
+        }
+    ).map(
+        new Function<ConsumerRecord<String, String>, String>() {
+          @Override
+          public String call(ConsumerRecord<String, String> r) {
+            return r.value();
           }
         }
     );
+
     JavaDStream<String> unifiedStream = stream1.union(stream2);
 
     final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
@@ -152,18 +185,6 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     }
     Assert.assertEquals(sent, result);
     ssc.stop();
-  }
-
-  private static Set<String> topicToSet(String topic) {
-    Set<String> topicSet = new HashSet<>();
-    topicSet.add(topic);
-    return topicSet;
-  }
-
-  private static Map<TopicAndPartition, Long> topicOffsetToMap(String topic, Long offsetToStart) {
-    Map<TopicAndPartition, Long> topicMap = new HashMap<>();
-    topicMap.put(new TopicAndPartition(topic, 0), offsetToStart);
-    return topicMap;
   }
 
   private  String[] createTopicAndSendData(String topic) {

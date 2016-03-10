@@ -17,11 +17,11 @@
 
 package org.apache.spark.streaming.kafka
 
+import scala.collection.JavaConverters._
 import scala.util.Random
 
-import kafka.common.TopicAndPartition
-import kafka.message.MessageAndMetadata
-import kafka.serializer.StringDecoder
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
@@ -52,21 +52,28 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  private def getKafkaParams() = Map[String, Object](
+    "bootstrap.servers" -> kafkaTestUtils.brokerAddress,
+    "key.deserializer" -> classOf[StringDeserializer],
+    "value.deserializer" -> classOf[StringDeserializer],
+    "group.id" -> s"test-consumer-${Random.nextInt}"
+  ).asJava
+
+  private val preferredHosts = Map[TopicPartition, String]().asJava
+
   test("basic usage") {
     val topic = s"topicbasic-${Random.nextInt}"
     kafkaTestUtils.createTopic(topic)
     val messages = Array("the", "quick", "brown", "fox")
     kafkaTestUtils.sendMessages(topic, messages)
 
-    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt}")
+    val kafkaParams = getKafkaParams()
 
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
-    val rdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
-      sc, kafkaParams, offsetRanges)
+    val rdd = KafkaRDD[String, String](sc, kafkaParams, offsetRanges, preferredHosts).map(_.value)
 
-    val received = rdd.map(_._2).collect.toSet
+    val received = rdd.collect.toSet
     assert(received === messages.toSet)
 
     // size-related method optimizations return sane results
@@ -74,19 +81,20 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.countApprox(0).getFinalValue.mean === messages.size)
     assert(!rdd.isEmpty)
     assert(rdd.take(1).size === 1)
-    assert(rdd.take(1).head._2 === messages.head)
+    assert(rdd.take(1).head === messages.head)
     assert(rdd.take(messages.size + 10).size === messages.size)
 
-    val emptyRdd = KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
-      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)))
+    val emptyRdd = KafkaRDD[String, String](
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
     assert(emptyRdd.isEmpty)
 
     // invalid offset ranges throw exceptions
     val badRanges = Array(OffsetRange(topic, 0, 0, messages.size + 1))
     intercept[SparkException] {
-      KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder](
-        sc, kafkaParams, badRanges)
+      val result = KafkaRDD[String, String](sc, kafkaParams, badRanges, preferredHosts)
+        .map(_.value)
+        .collect()
     }
   }
 
@@ -96,80 +104,42 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
     kafkaTestUtils.createTopic(topic)
 
-    val kafkaParams = Map("metadata.broker.list" -> kafkaTestUtils.brokerAddress,
-      "group.id" -> s"test-consumer-${Random.nextInt}")
-
-    val kc = new KafkaCluster(kafkaParams)
+    val kafkaParams = getKafkaParams()
 
     // this is the "lots of messages" case
     kafkaTestUtils.sendMessages(topic, sent)
-    val sentCount = sent.values.sum
+    var sentCount = sent.values.sum
 
-    // rdd defined from leaders after sending messages, should get the number sent
-    val rdd = getRdd(kc, Set(topic))
+    val rdd = KafkaRDD[String, String](sc, kafkaParams,
+      Array(OffsetRange(topic, 0, 0, sentCount)), preferredHosts)
 
-    assert(rdd.isDefined)
-
-    val ranges = rdd.get.asInstanceOf[HasOffsetRanges].offsetRanges
+    val ranges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
     val rangeCount = ranges.map(o => o.untilOffset - o.fromOffset).sum
 
     assert(rangeCount === sentCount, "offset range didn't include all sent messages")
-    assert(rdd.get.count === sentCount, "didn't get all sent messages")
-
-    val rangesMap = ranges.map(o => TopicAndPartition(o.topic, o.partition) -> o.untilOffset).toMap
-
-    // make sure consumer offsets are committed before the next getRdd call
-    kc.setConsumerOffsets(kafkaParams("group.id"), rangesMap).fold(
-      err => throw new Exception(err.mkString("\n")),
-      _ => ()
-    )
+    assert(rdd.map(_.offset).collect.sorted === (0 until sentCount).toArray,
+      "didn't get all sent messages")
 
     // this is the "0 messages" case
-    val rdd2 = getRdd(kc, Set(topic))
+    val rdd2 = KafkaRDD[String, String](sc, kafkaParams,
+      Array(OffsetRange(topic, 0, sentCount, sentCount)), preferredHosts)
+
     // shouldn't get anything, since message is sent after rdd was defined
     val sentOnlyOne = Map("d" -> 1)
 
     kafkaTestUtils.sendMessages(topic, sentOnlyOne)
 
-    assert(rdd2.isDefined)
-    assert(rdd2.get.count === 0, "got messages when there shouldn't be any")
+    assert(rdd2.map(_.value).collect.size === 0, "got messages when there shouldn't be any")
 
     // this is the "exactly 1 message" case, namely the single message from sentOnlyOne above
-    val rdd3 = getRdd(kc, Set(topic))
+    val rdd3 = KafkaRDD[String, String](sc, kafkaParams,
+      Array(OffsetRange(topic, 0, sentCount, sentCount + 1)), preferredHosts)
+
     // send lots of messages after rdd was defined, they shouldn't show up
     kafkaTestUtils.sendMessages(topic, Map("extra" -> 22))
 
-    assert(rdd3.isDefined)
-    assert(rdd3.get.count === sentOnlyOne.values.sum, "didn't get exactly one message")
-
+    assert(rdd3.map(_.value).collect.head === sentOnlyOne.keys.head,
+      "didn't get exactly one message")
   }
 
-  // get an rdd from the committed consumer offsets until the latest leader offsets,
-  private def getRdd(kc: KafkaCluster, topics: Set[String]) = {
-    val groupId = kc.kafkaParams("group.id")
-    def consumerOffsets(topicPartitions: Set[TopicAndPartition]) = {
-      kc.getConsumerOffsets(groupId, topicPartitions).right.toOption.orElse(
-        kc.getEarliestLeaderOffsets(topicPartitions).right.toOption.map { offs =>
-          offs.map(kv => kv._1 -> kv._2.offset)
-        }
-      )
-    }
-    kc.getPartitions(topics).right.toOption.flatMap { topicPartitions =>
-      consumerOffsets(topicPartitions).flatMap { from =>
-        kc.getLatestLeaderOffsets(topicPartitions).right.toOption.map { until =>
-          val offsetRanges = from.map { case (tp: TopicAndPartition, fromOffset: Long) =>
-              OffsetRange(tp.topic, tp.partition, fromOffset, until(tp).offset)
-          }.toArray
-
-          val leaders = until.map { case (tp: TopicAndPartition, lo: KafkaCluster.LeaderOffset) =>
-              tp -> Broker(lo.host, lo.port)
-          }.toMap
-
-          KafkaUtils.createRDD[String, String, StringDecoder, StringDecoder, String](
-            sc, kc.kafkaParams, offsetRanges, leaders,
-            (mmd: MessageAndMetadata[String, String]) => s"${mmd.offset} ${mmd.message}")
-        }
-      }
-    }
-  }
 }

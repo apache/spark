@@ -51,7 +51,7 @@ import scala.collection.JavaConverters._
  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
  */
 
-class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[kafka] (
+class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     _ssc: StreamingContext,
     val driverKafkaParams: ju.Map[String, Object],
     val executorKafkaParams: ju.Map[String, Object],
@@ -155,9 +155,17 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[kafka] (
     consumer.partitionsFor(topic)
   }
 
-  /** Necessary to fetch metadata and update subscriptions, won't actually return useful data */
+  /** Necessary to fetch metadata and update subscriptions,
+    * driver shouldn't be reading messages, so don't call this with non-zero timeout */
   def poll(timeout: Long): Unit = this.synchronized {
     consumer.poll(timeout)
+  }
+
+  /** Get the offset of the next record that will be fetched
+    *  (if a record with that offset exists).
+    */
+  def position(partition: TopicPartition): Long = this.synchronized {
+    consumer.position(partition)
   }
 
   def seek(partition: TopicPartition, offset: Long): Unit = this.synchronized {
@@ -220,8 +228,8 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[kafka] (
   private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
     "spark.streaming.kafka.maxRatePerPartition", 0)
 
-    protected[streaming] def maxMessagesPerPartition(
-      offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
+  protected[streaming] def maxMessagesPerPartition(
+    offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
     val estimatedRateLimit = rateController.map(_.getLatestRate().toInt)
 
     // calculate a per-partition rate limit based on current lag
@@ -360,6 +368,8 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[kafka] (
 }
 
 object DirectKafkaInputDStream extends Logging {
+  import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
+
   protected val defaultListener =
     "org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener"
   /** There are several different ways of specifying partition assignment,
@@ -379,27 +389,60 @@ object DirectKafkaInputDStream extends Logging {
   /** Not yet assigned */
   protected case object Unassigned extends PartitionAssignment
 
-  private def fixKafkaParams(kafkaParams: ju.HashMap[String, Object]): Unit = {
+  private def fixKafkaParams(
+    dkp: ju.HashMap[String, Object],
+    ekp: ju.HashMap[String, Object]
+  ): Unit = {
     // wouldn't this be nice to have...  0.10 has it, but with a minimum of 1
     // log.warn(s"overriding ${ConsumerConfig.MAX_POLL_RECORDS_CONFIG} to 0 for driver")
-    // kafkaParams.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 0: Integer)
+    // dkp.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 0: Integer)
 
     log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for driver")
-    kafkaParams.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+    dkp.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
+
+    // this probably doesnt matter since executors are manually assigned partitions, but just in case
+    if (null != ekp.get(ConsumerConfig.GROUP_ID_CONFIG) &&
+      ekp.get(ConsumerConfig.GROUP_ID_CONFIG) ==
+      dkp.get(ConsumerConfig.GROUP_ID_CONFIG)
+    ) {
+      val id = ekp.get(ConsumerConfig.GROUP_ID_CONFIG) + "-executor"
+      log.warn(s"overriding ${ConsumerConfig.GROUP_ID_CONFIG} to ${id} for executor")
+      ekp.put(ConsumerConfig.GROUP_ID_CONFIG, id)
+    }
+
   }
 
   def apply[K: ClassTag, V: ClassTag](
-    ssc: StreamingContext,
-    driverKafkaParams: ju.Map[String, Object],
-    executorKafkaParams: ju.Map[String, Object],
-    preferredHosts: ju.Map[TopicPartition, String]): DirectKafkaInputDStream[K, V] = {
+      ssc: StreamingContext,
+      driverKafkaParams: ju.Map[String, Object],
+      executorKafkaParams: ju.Map[String, Object],
+      preferredHosts: ju.Map[TopicPartition, String]
+    ): DirectKafkaInputDStream[K, V] = {
     val dkp = new ju.HashMap[String, Object](driverKafkaParams)
     val ekp = new ju.HashMap[String, Object](executorKafkaParams)
     val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
 
-    fixKafkaParams(dkp)
+    fixKafkaParams(dkp, ekp)
     KafkaRDD.fixKafkaParams(ekp)
 
     new DirectKafkaInputDStream[K, V](ssc, dkp, ekp, ph)
   }
+
+  def create[K, V](
+      jssc: JavaStreamingContext,
+      keyClass: Class[K],
+      valueClass: Class[V],
+      driverKafkaParams: ju.Map[String, Object],
+      executorKafkaParams: ju.Map[String, Object],
+      preferredHosts: ju.Map[TopicPartition, String]
+    ): JavaInputDStream[ConsumerRecord[K, V]] = {
+
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueClass)
+
+    new JavaInputDStream(
+      DirectKafkaInputDStream[K, V](
+        jssc.ssc, driverKafkaParams, executorKafkaParams, preferredHosts))
+  }
+
 }

@@ -21,11 +21,9 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-import scala.Tuple2;
-
-import kafka.common.TopicAndPartition;
-import kafka.message.MessageAndMetadata;
-import kafka.serializer.StringDecoder;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -70,81 +68,54 @@ public class JavaKafkaRDDSuite implements Serializable {
     createTopicAndSendData(topic1);
     createTopicAndSendData(topic2);
 
-    Map<String, String> kafkaParams = new HashMap<>();
-    kafkaParams.put("metadata.broker.list", kafkaTestUtils.brokerAddress());
+    Map<String, Object> kafkaParams = new HashMap<>();
+    kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());
+    kafkaParams.put("key.deserializer", StringDeserializer.class);
+    kafkaParams.put("value.deserializer", StringDeserializer.class);
 
     OffsetRange[] offsetRanges = {
       OffsetRange.create(topic1, 0, 0, 1),
       OffsetRange.create(topic2, 0, 0, 1)
     };
 
-    Map<TopicAndPartition, Broker> emptyLeaders = new HashMap<>();
-    Map<TopicAndPartition, Broker> leaders = new HashMap<>();
+    Map<TopicPartition, String> emptyLeaders = new HashMap<>();
+    Map<TopicPartition, String> leaders = new HashMap<>();
     String[] hostAndPort = kafkaTestUtils.brokerAddress().split(":");
-    Broker broker = Broker.create(hostAndPort[0], Integer.parseInt(hostAndPort[1]));
-    leaders.put(new TopicAndPartition(topic1, 0), broker);
-    leaders.put(new TopicAndPartition(topic2, 0), broker);
+    String broker = hostAndPort[0];
+    leaders.put(offsetRanges[0].topicPartition(), broker);
+    leaders.put(offsetRanges[1].topicPartition(), broker);
 
-    JavaRDD<String> rdd1 = KafkaUtils.createRDD(
-        sc,
-        String.class,
-        String.class,
-        StringDecoder.class,
-        StringDecoder.class,
-        kafkaParams,
-        offsetRanges
-    ).map(
-        new Function<Tuple2<String, String>, String>() {
-          @Override
-          public String call(Tuple2<String, String> kv) {
-            return kv._2();
-          }
+    Function<ConsumerRecord<String, String>, String> handler =
+      new Function<ConsumerRecord<String, String>, String>() {
+        @Override
+        public String call(ConsumerRecord<String, String> r) {
+          return r.value();
         }
-    );
+      };
 
-    JavaRDD<String> rdd2 = KafkaUtils.createRDD(
+    JavaRDD<String> rdd1 = KafkaRDD.create(
         sc,
         String.class,
-        String.class,
-        StringDecoder.class,
-        StringDecoder.class,
         String.class,
         kafkaParams,
         offsetRanges,
-        emptyLeaders,
-        new Function<MessageAndMetadata<String, String>, String>() {
-          @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) {
-            return msgAndMd.message();
-          }
-        }
-    );
+        leaders
+    ).map(handler);
 
-    JavaRDD<String> rdd3 = KafkaUtils.createRDD(
+    JavaRDD<String> rdd2 = KafkaRDD.create(
         sc,
         String.class,
         String.class,
-        StringDecoder.class,
-        StringDecoder.class,
-        String.class,
         kafkaParams,
         offsetRanges,
-        leaders,
-        new Function<MessageAndMetadata<String, String>, String>() {
-          @Override
-          public String call(MessageAndMetadata<String, String> msgAndMd) {
-            return msgAndMd.message();
-          }
-        }
-    );
+        emptyLeaders
+    ).map(handler);
 
     // just making sure the java user apis work; the scala tests handle logic corner cases
     long count1 = rdd1.count();
     long count2 = rdd2.count();
-    long count3 = rdd3.count();
     Assert.assertTrue(count1 > 0);
     Assert.assertEquals(count1, count2);
-    Assert.assertEquals(count1, count3);
   }
 
   private  String[] createTopicAndSendData(String topic) {

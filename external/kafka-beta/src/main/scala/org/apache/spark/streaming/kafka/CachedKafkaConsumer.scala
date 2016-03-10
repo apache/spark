@@ -48,6 +48,8 @@ class CachedKafkaConsumer[K, V] private(
     c
   }
 
+  // TODO if the buffer was kept around as a random-access structure,
+  // could possibly optimize re-calculating of an RDD in the same batch
   protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
   protected var nextOffset = -2L
 
