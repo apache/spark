@@ -22,12 +22,14 @@ import java.io.FilenameFilter
 import java.io.IOException
 import java.io.PrintWriter
 import java.util.StringTokenizer
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
@@ -118,7 +120,7 @@ private[spark] class PipedRDD[T: ClassTag](
 
     val proc = pb.start()
     val env = SparkEnv.get
-    @volatile var exception: Option[Throwable] = None
+    val childThreadException = new AtomicReference[Throwable](null)
 
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for " + command) {
@@ -153,8 +155,8 @@ private[spark] class PipedRDD[T: ClassTag](
           }
           // scalastyle:on println
         } catch {
-          case throwable: Throwable =>
-            exception = Some(throwable)
+          case NonFatal(e) =>
+            childThreadException.set(e)
         } finally {
           out.close()
         }
@@ -167,11 +169,9 @@ private[spark] class PipedRDD[T: ClassTag](
       def next(): String = lines.next()
 
       private def propagateChildThreadException(): Unit = {
-        exception match {
-          case Some(e) =>
-            proc.destroyForcibly()
-            throw e
-          case None =>
+        if (childThreadException.get() != null) {
+          proc.destroyForcibly()
+          throw childThreadException.get()
         }
       }
 
