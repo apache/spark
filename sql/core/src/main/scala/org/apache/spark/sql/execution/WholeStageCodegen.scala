@@ -240,33 +240,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport 
     val input = ctx.freshName("input")
     // Right now, InputAdapter is only used when there is one upstream.
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
-    val row = ctx.freshName("row")
-    s"""
-       | while ($input.hasNext()) {
-       |   InternalRow $row = (InternalRow) $input.next();
-       |   ${consume(ctx, null, row).trim}
-       |   if (shouldStop()) return;
-       | }
-     """.stripMargin
-  }
-
-  override def simpleString: String = "INPUT"
-
-  override def treeChildren: Seq[SparkPlan] = Nil
-}
-
-object WholeStageCodegen {
-  val PIPELINE_DURATION_METRIC = "duration"
-}
-
-/**
-  * WholeStageCodegen compile a subtree of plans that support codegen together into single Java
-  * function.
-  *
-  * Here is the call graph of to generate Java source (plan A support codegen, but plan B does not):
-  *
-  *   WholeStageCodegen       Plan A               FakeInput        Plan B
-  * =========================================================================
+=========================================================================
   *
   * -> execute()
   *     |
