@@ -39,7 +39,7 @@ import org.apache.spark.util.Utils
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
  */
-private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logging {
+private[spark] class YarnRMClient extends Logging {
 
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
@@ -72,8 +72,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
-    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), args,
-      securityMgr)
+    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr)
   }
 
   /**

@@ -118,7 +118,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val sparkConf = new SparkConf()
       .set(SPARK_JARS, Seq(SPARK))
       .set(USER_CLASS_PATH_FIRST, true)
-      .set("spark.jars", ADDED)
+      .set("spark.yarn.dist.jars", ADDED)
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER))
 
@@ -142,7 +142,7 @@ class ClientSuite extends SparkFunSuite with Matchers with BeforeAndAfterAll
     val conf = new Configuration()
     val sparkConf = new SparkConf()
       .set(SPARK_JARS, Seq(SPARK))
-      .set("spark.jars", ADDED)
+      .set("spark.yarn.dist.jars", ADDED)
     val client = createClient(sparkConf, args = Array("--jar", USER))
 
     val tempDir = Utils.createTempDir()

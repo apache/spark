@@ -95,7 +95,6 @@ private[spark] class Client(
   private val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
-  private val executorCores = sparkConf.get(EXECUTOR_CORES)
 
   private val distCacheMgr = new ClientDistributedCacheManager()
 
@@ -541,7 +540,7 @@ private[spark] class Client(
       .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orNull
     List(
-      (sparkConf.getOption("spark.jars").orNull, LocalResourceType.FILE, true),
+      (sparkConf.get(JARS_TO_DISTRIBUTE).orNull, LocalResourceType.FILE, true),
       (files, LocalResourceType.FILE, false),
       (archives, LocalResourceType.ARCHIVE, false)
     ).foreach { case (flist, resType, addToClasspath) =>
@@ -925,8 +924,6 @@ private[spark] class Client(
     val amArgs =
       Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++
         userArgs ++ Seq(
-          "--executor-memory", executorMemory.toString + "m",
-          "--executor-cores", executorCores.toString,
           "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
             LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
 
@@ -1130,7 +1127,7 @@ private[spark] class Client(
 
 }
 
-object Client extends Logging {
+private object Client extends Logging {
 
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
@@ -1290,7 +1287,7 @@ object Client extends Logging {
 
       val secondaryJars =
         if (args != null) {
-          getSecondaryJarUris(sparkConf.getOption("spark.jars").map(_.split(",").toSeq))
+          getSecondaryJarUris(sparkConf.get(JARS_TO_DISTRIBUTE).map(_.split(",").toSeq))
         } else {
           getSecondaryJarUris(sparkConf.get(SECONDARY_JARS))
         }

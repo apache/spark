@@ -36,6 +36,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
@@ -61,7 +62,6 @@ private[yarn] class YarnAllocator(
     sparkConf: SparkConf,
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
-    args: ApplicationMasterArguments,
     securityMgr: SecurityManager)
   extends Logging {
 
@@ -107,12 +107,12 @@ private[yarn] class YarnAllocator(
   private val containerIdToExecutorId = new HashMap[ContainerId, String]
 
   // Executor memory in MB.
-  protected val executorMemory = args.executorMemory
+  protected val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
   // Additional memory overhead.
   protected val memoryOverhead: Int = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN)).toInt
   // Number of cores per executor.
-  protected val executorCores = args.executorCores
+  protected val executorCores = sparkConf.get(EXECUTOR_CORES)
   // Resource capability requested for each executors
   private[yarn] val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
 
