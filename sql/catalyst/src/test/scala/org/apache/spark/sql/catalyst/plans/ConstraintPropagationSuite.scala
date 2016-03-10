@@ -64,10 +64,10 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     verifyConstraints(tr
       .where('a.attr > 10)
       .select('c.attr, 'a.attr)
-      .where('c.attr < 100)
+      .where('c.attr =!= 100)
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr, "a") > 10,
-        resolveColumn(tr, "c") < 100,
+        resolveColumn(tr, "c") =!= 100,
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "c")))))
   }
