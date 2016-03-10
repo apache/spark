@@ -68,9 +68,9 @@ trait CodegenSupport extends SparkPlan {
   protected var parent: CodegenSupport = null
 
   /**
-    * Whether this SparkPlan accepts UnsafeRow as input in doConsume.
+    * Whether this SparkPlan prefers to accept UnsafeRow as input in doConsume.
     */
-  def consumeUnsafeRow: Boolean = false
+  def preferUnsafeRow: Boolean = false
 
   /**
     * Returns all the RDDs of InternalRow which generates the input rows.
@@ -115,10 +115,7 @@ trait CodegenSupport extends SparkPlan {
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
   final def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
-    // We check if input expressions has same length as output when:
-    // 1. parent can't consume UnsafeRow and input is not null.
-    // 2. parent consumes UnsafeRow and row is null.
-    if ((input != null && !parent.consumeUnsafeRow) || (parent.consumeUnsafeRow && row == null)) {
+    if (input != null) {
       assert(input.length == output.length)
     }
     parent.consumeChild(ctx, this, input, row)
@@ -174,15 +171,6 @@ trait CodegenSupport extends SparkPlan {
       input: Seq[ExprCode],
       row: String = null): String = {
     ctx.freshNamePrefix = variablePrefix
-    val realUsedInput =
-      if (row != null && consumeUnsafeRow) {
-        // If this SparkPlan consumes UnsafeRow and there is an UnsafeRow passed in,
-        // we don't need to evaluate inputs because doConsume will directly consume the UnsafeRow.
-        AttributeSet.empty
-      } else {
-        usedInputs
-      }
-
     val inputVars =
       if (row != null) {
         ctx.currentVars = null
@@ -193,10 +181,19 @@ trait CodegenSupport extends SparkPlan {
       } else {
         input
       }
+
+    val evaluated =
+      if (row != null && preferUnsafeRow) {
+        // Current plan can consume UnsafeRows directly.
+        ""
+      } else {
+        evaluateRequiredVariables(child.output, inputVars, usedInputs)
+      }
+
     s"""
        |
        |/*** CONSUME: ${toCommentSafeString(this.simpleString)} */
-       |${evaluateRequiredVariables(child.output, inputVars, realUsedInput)}
+       |${evaluated}
        |${doConsume(ctx, inputVars, row)}
      """.stripMargin
   }
