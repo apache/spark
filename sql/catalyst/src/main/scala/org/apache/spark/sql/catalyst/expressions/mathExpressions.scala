@@ -748,7 +748,7 @@ case class Round(child: Expression, scale: Expression)
         if (f.isNaN || f.isInfinite) {
           f
         } else {
-          BigDecimal(f).setScale(_scale, HALF_UP).toFloat
+          BigDecimal.decimal(f).setScale(_scale, HALF_UP).toFloat
         }
       case DoubleType =>
         val d = input1.asInstanceOf[Double]
