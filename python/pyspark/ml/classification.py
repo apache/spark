@@ -355,7 +355,7 @@ class DecisionTreeClassificationModel(DecisionTreeModel):
     """
 
     @property
-    @since("1.6.0")
+    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
