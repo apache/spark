@@ -199,6 +199,7 @@ private[sql] case class DataSourceScan(
   // never requires UnsafeRow as input.
   override protected def doProduce(ctx: CodegenContext): String = {
     val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+    val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
     val input = ctx.freshName("input")
     val idx = ctx.freshName("batchIdx")
     val batch = ctx.freshName("batch")
@@ -209,6 +210,7 @@ private[sql] case class DataSourceScan(
 
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
+    val col = ctx.freshName("col")
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
     // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
@@ -217,10 +219,14 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-    ctx.INPUT_ROW = row
+    ctx.isRow = false
+    ctx.INPUT_ROW = col
+    ctx.INPUT_COLORDINAL = idx
     ctx.currentVars = null
     val columns1 = exprs.map(_.gen(ctx))
     val scanBatches = ctx.freshName("processBatches")
+    val colDeclarations = output.zipWithIndex.map(x =>
+      (columnVectorClz + " " + col + x._2 + " = " + batch + ".column(" + x._2 + ");\n").trim)
     ctx.addNewFunction(scanBatches,
       s"""
       | private void $scanBatches() throws java.io.IOException {
@@ -229,8 +235,9 @@ private[sql] case class DataSourceScan(
       |     if ($idx == 0) $numOutputRows.add(numRows);
       |
       |     while (!shouldStop() && $idx < numRows) {
-      |       InternalRow $row = $batch.getRow($idx++);
+      |       ${colDeclarations.mkString}
       |       ${consume(ctx, columns1).trim}
+      |       $idx++;
       |     }
       |     if (shouldStop()) return;
       |
@@ -243,6 +250,7 @@ private[sql] case class DataSourceScan(
       |   }
       | }""".stripMargin)
 
+    ctx.isRow = true
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprs.map(_.gen(ctx))

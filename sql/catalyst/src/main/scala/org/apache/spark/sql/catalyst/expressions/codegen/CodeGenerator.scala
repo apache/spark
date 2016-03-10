@@ -168,6 +168,10 @@ class CodegenContext {
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
 
+  /** The variable name of the input col in generated code. */
+  var INPUT_COLORDINAL = "idx"
+  var isRow = true
+
   /**
     * The map from a variable name to it's next ID.
     */
