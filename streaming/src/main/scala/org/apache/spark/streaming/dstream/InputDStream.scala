@@ -52,6 +52,16 @@ abstract class InputDStream[T: ClassTag] (_ssc: StreamingContext)
   // Keep track of the freshest rate for this stream using the rateEstimator
   protected[streaming] val rateController: Option[RateController] = None
 
+  /** Is this InputDStream under rate control.
+   *
+   * A InputDStream is under rate control when:
+   * - its rateController is defined and,
+   * - for a ReceiverInputDStream, it stores data via store(dataItem), rather than other store()
+   *   methods such as store(ByteBuffer), store(ArrayBuffer), store(Iterator).
+   * See SPARK-13618 for details.
+   */
+  protected[streaming] lazy val underRateControl: Boolean = false
+
   /** A human-readable name of this InputDStream */
   private[streaming] def name: String = {
     // e.g. FlumePollingDStream -> "Flume polling stream"
