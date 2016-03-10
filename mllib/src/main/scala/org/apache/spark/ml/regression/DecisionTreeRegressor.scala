@@ -136,8 +136,7 @@ final class DecisionTreeRegressionModel private[ml] (
 
   /**
    * Construct a decision tree regression model.
-    *
-    * @param rootNode  Root node of tree, with other nodes attached.
+   * @param rootNode  Root node of tree, with other nodes attached.
    */
   private[ml] def this(rootNode: Node, numFeatures: Int) =
     this(Identifiable.randomUID("dtr"), rootNode, numFeatures)
