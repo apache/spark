@@ -19,7 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import java.io.File
 import java.net.URL
-import java.util.{HashMap => JHashMap, Properties}
+import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
@@ -115,7 +115,8 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .setSparkHome(sys.props("spark.test.home"))
       .setConf("spark.ui.enabled", "false")
       .setPropertiesFile(propsFile)
-      .setMaster("yarn-client")
+      .setMaster("yarn")
+      .setDeployMode("client")
       .setAppResource("spark-internal")
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
       .startApplication()

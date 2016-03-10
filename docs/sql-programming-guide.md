@@ -760,7 +760,7 @@ JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
 String schemaString = "name age";
 
 // Generate the schema based on the string of schema
-List<StructField> fields = new ArrayList<StructField>();
+List<StructField> fields = new ArrayList<>();
 for (String fieldName: schemaString.split(" ")) {
   fields.add(DataTypes.createStructField(fieldName, DataTypes.StringType, true));
 }
@@ -1372,7 +1372,7 @@ Hive metastore Parquet table to a Spark SQL Parquet table. The reconciliation ru
 1. The reconciled schema contains exactly those fields defined in Hive metastore schema.
 
    - Any fields that only appear in the Parquet schema are dropped in the reconciled schema.
-   - Any fileds that only appear in the Hive metastore schema are added as nullable field in the
+   - Any fields that only appear in the Hive metastore schema are added as nullable field in the
      reconciled schema.
 
 #### Metadata Refreshing
@@ -1869,7 +1869,7 @@ spark classpath. For example, to connect to postgres from the Spark Shell you wo
 following command:
 
 {% highlight bash %}
-SPARK_CLASSPATH=postgresql-9.3-1102-jdbc41.jar bin/spark-shell
+bin/spark-shell --driver-class-path postgresql-9.4.1207.jar --jars postgresql-9.4.1207.jar
 {% endhighlight %}
 
 Tables from the remote database can be loaded as a DataFrame or Spark SQL Temporary table using
@@ -1935,7 +1935,7 @@ val jdbcDF = sqlContext.read.format("jdbc").options(
 
 {% highlight java %}
 
-Map<String, String> options = new HashMap<String, String>();
+Map<String, String> options = new HashMap<>();
 options.put("url", "jdbc:postgresql:dbserver");
 options.put("dbtable", "schema.tablename");
 
@@ -2389,7 +2389,7 @@ let user control table caching explicitly:
     CACHE TABLE logs_last_month;
     UNCACHE TABLE logs_last_month;
 
-**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don’t need to trigger cache materialization manually anymore.
+**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don't need to trigger cache materialization manually anymore.
 
 Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
 

@@ -17,10 +17,8 @@
 
 package org.apache.spark.memory
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.storage.BlockId
 
 class TestMemoryManager(conf: SparkConf)
   extends MemoryManager(conf, numCores = 1, Long.MaxValue, Long.MaxValue) {

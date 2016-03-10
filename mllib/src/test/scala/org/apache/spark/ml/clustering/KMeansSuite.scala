@@ -93,10 +93,12 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     expectedColumns.foreach { column =>
       assert(transformed.columns.contains(column))
     }
-    val clusters = transformed.select(predictionColName).map(_.getInt(0)).distinct().collect().toSet
+    val clusters =
+      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
     assert(clusters.size === k)
     assert(clusters === Set(0, 1, 2, 3, 4))
     assert(model.computeCost(dataset) < 0.1)
+    assert(model.hasParent)
   }
 
   test("read/write") {

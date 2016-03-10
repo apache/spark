@@ -111,7 +111,7 @@ public class JavaApplySchemaSuite implements Serializable {
     df.registerTempTable("people");
     Row[] actual = sqlContext.sql("SELECT * FROM people").collect();
 
-    List<Row> expected = new ArrayList<Row>(2);
+    List<Row> expected = new ArrayList<>(2);
     expected.add(RowFactory.create("Michael", 29));
     expected.add(RowFactory.create("Yin", 28));
 

@@ -224,6 +224,13 @@ private[spark] class EventLoggingListener(
       }
     }
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
+    // touch file to ensure modtime is current across those filesystems where rename()
+    // does not set it, -and which support setTimes(); it's a no-op on most object stores
+    try {
+      fileSystem.setTimes(target, System.currentTimeMillis(), -1)
+    } catch {
+      case e: Exception => logDebug(s"failed to set time of $target", e)
+    }
   }
 
 }

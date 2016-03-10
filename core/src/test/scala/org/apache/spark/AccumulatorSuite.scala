@@ -34,6 +34,14 @@ import org.apache.spark.serializer.JavaSerializer
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
   import AccumulatorParam._
 
+  override def afterEach(): Unit = {
+    try {
+      Accumulators.clear()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   implicit def setAccum[A]: AccumulableParam[mutable.Set[A], A] =
     new AccumulableParam[mutable.Set[A], A] {
       def addInPlace(t1: mutable.Set[A], t2: mutable.Set[A]) : mutable.Set[A] = {
@@ -339,7 +347,7 @@ private class SaveInfoListener extends SparkListener {
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
-    completedTaskInfos.get((stageId, stageAttemptId)).getOrElse(Seq.empty[TaskInfo])
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
 
   /**
    * If `jobCompletionCallback` is set, block until the next call has finished.

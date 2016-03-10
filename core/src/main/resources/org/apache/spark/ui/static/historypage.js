@@ -37,6 +37,22 @@ function formatDuration(milliseconds) {
   return hours.toFixed(1) + " h";
 }
 
+function makeIdNumeric(id) {
+  var strs = id.split("_");
+  if (strs.length < 3) {
+    return id;
+  }
+  var appSeqNum = strs[2];
+  var resl = strs[0] + "_" + strs[1] + "_";
+  var diff = 10 - appSeqNum.length;
+  while (diff > 0) {
+      resl += "0"; // padding 0 before the app sequence number to make sure it has 10 characters
+      diff--;
+  }
+  resl += appSeqNum;
+  return resl;
+}
+
 function formatDate(date) {
   return date.split(".")[0].replace("T", " ");
 }
@@ -62,6 +78,21 @@ jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     }
 } );
 
+jQuery.extend( jQuery.fn.dataTableExt.oSort, {
+    "appid-numeric-pre": function ( a ) {
+        var x = a.match(/title="*(-?[0-9a-zA-Z\-\_]+)/)[1];
+        return makeIdNumeric(x);
+    },
+
+    "appid-numeric-asc": function ( a, b ) {
+        return ((a < b) ? -1 : ((a > b) ? 1 : 0));
+    },
+
+    "appid-numeric-desc": function ( a, b ) {
+        return ((a < b) ? 1 : ((a > b) ? -1 : 0));
+    }
+} );
+
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function(){
     $.blockUI({ message: '<h3>Loading history summary...</h3>'});
@@ -79,7 +110,7 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("/api/v1/applications", function(response,status,jqXHR) {
+    $.getJSON("api/v1/applications", function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
@@ -92,24 +123,39 @@ $(document).ready(function() {
         if (app["attempts"].length > 1) {
             hasMultipleAttempts = true;
         }
-        var num = app["attempts"].length;
+
+        var maxAttemptId = null
         for (j in app["attempts"]) {
           var attempt = app["attempts"][j];
+          if (attempt['attemptId'] != null) {
+            if (maxAttemptId == null || attempt['attemptId'] > maxAttemptId) {
+              maxAttemptId = attempt['attemptId']
+            }
+          }
+
           attempt["startTime"] = formatDate(attempt["startTime"]);
           attempt["endTime"] = formatDate(attempt["endTime"]);
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
-          var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
+
+          var url = null
+          if (maxAttemptId == null) {
+            url = "history/" + id + "/"
+          } else {
+            url = "history/" + id + "/" + maxAttemptId + "/"
+          }
+
+          var app_clone = {"id" : id, "name" : name, "url" : url, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
 
       var data = {"applications": array}
-      $.get("/static/historypage-template.html", function(template) {
+      $.get("static/historypage-template.html", function(template) {
         historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
         var conf = {
                     "columns": [
-                        {name: 'first'},
+                        {name: 'first', type: "appid-numeric"},
                         {name: 'second'},
                         {name: 'third'},
                         {name: 'fourth'},
@@ -118,6 +164,8 @@ $(document).ready(function() {
                         {name: 'seventh'},
                         {name: 'eighth'},
                     ],
+                    "autoWidth": false,
+                    "order": [[ 4, "desc" ]]
         };
 
         var rowGroupConf = {

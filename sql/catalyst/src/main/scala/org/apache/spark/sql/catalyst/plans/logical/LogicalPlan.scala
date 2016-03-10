@@ -91,6 +91,14 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   }
 
   /**
+   * Returns the maximum number of rows that this plan may compute.
+   *
+   * Any operator that a Limit can be pushed passed should override this function (e.g., Union).
+   * Any operator that can push through a Limit should override this function (e.g., Project).
+   */
+  def maxRows: Option[Long] = None
+
+  /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it still contains any unresolved placeholders. Implementations of LogicalPlan
    * can override this (e.g.
@@ -106,59 +114,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def childrenResolved: Boolean = children.forall(_.resolved)
 
-  /**
-   * Returns true when the given logical plan will return the same results as this logical plan.
-   *
-   * Since its likely undecidable to generally determine if two given plans will produce the same
-   * results, it is okay for this function to return false, even if the results are actually
-   * the same.  Such behavior will not affect correctness, only the application of performance
-   * enhancements like caching.  However, it is not acceptable to return true if the results could
-   * possibly be different.
-   *
-   * By default this function performs a modified version of equality that is tolerant of cosmetic
-   * differences like attribute naming and or expression id differences.  Logical operators that
-   * can do better should override this function.
-   */
-  def sameResult(plan: LogicalPlan): Boolean = {
-    val cleanLeft = EliminateSubQueries(this)
-    val cleanRight = EliminateSubQueries(plan)
-
-    cleanLeft.getClass == cleanRight.getClass &&
-      cleanLeft.children.size == cleanRight.children.size && {
-      logDebug(
-        s"[${cleanRight.cleanArgs.mkString(", ")}] == [${cleanLeft.cleanArgs.mkString(", ")}]")
-      cleanRight.cleanArgs == cleanLeft.cleanArgs
-    } &&
-    (cleanLeft.children, cleanRight.children).zipped.forall(_ sameResult _)
-  }
-
-  /** Args that have cleaned such that differences in expression id should not affect equality */
-  protected lazy val cleanArgs: Seq[Any] = {
-    val input = children.flatMap(_.output)
-    def cleanExpression(e: Expression) = e match {
-      case a: Alias =>
-        // As the root of the expression, Alias will always take an arbitrary exprId, we need
-        // to erase that for equality testing.
-        val cleanedExprId = Alias(a.child, a.name)(ExprId(-1), a.qualifiers)
-        BindReferences.bindReference(cleanedExprId, input, allowFailures = true)
-      case other => BindReferences.bindReference(other, input, allowFailures = true)
-    }
-
-    productIterator.map {
-      // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanExpression(e)
-      case s: Option[_] => s.map {
-        case e: Expression => cleanExpression(e)
-        case other => other
-      }
-      case s: Seq[_] => s.map {
-        case e: Expression => cleanExpression(e)
-        case other => other
-      }
-      case other => other
-    }.toSeq
-  }
+  override lazy val canonicalized: LogicalPlan = EliminateSubqueryAliases(this)
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] using the input from all child
@@ -222,7 +178,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       nameParts: Seq[String],
       resolver: Resolver,
       attribute: Attribute): Option[(Attribute, List[String])] = {
-    if (resolver(attribute.name, nameParts.head)) {
+    if (!attribute.isGenerated && resolver(attribute.name, nameParts.head)) {
       Option((attribute.withName(nameParts.head), nameParts.tail.toList))
     } else {
       None
@@ -306,7 +262,38 @@ abstract class UnaryNode extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
 
+  /**
+   * Generates an additional set of aliased constraints by replacing the original constraint
+   * expressions with the corresponding alias
+   */
+  protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
+    projectList.flatMap {
+      case a @ Alias(e, _) =>
+        child.constraints.map(_ transform {
+          case expr: Expression if expr.semanticEquals(e) =>
+            a.toAttribute
+        }).union(Set(EqualNullSafe(e, a.toAttribute)))
+      case _ =>
+        Set.empty[Expression]
+    }.toSet
+  }
+
   override protected def validConstraints: Set[Expression] = child.constraints
+
+  override def statistics: Statistics = {
+    // There should be some overhead in Row object, the size should not be zero when there is
+    // no columns, this help to prevent divide-by-zero error.
+    val childRowSize = child.output.map(_.dataType.defaultSize).sum + 8
+    val outputRowSize = output.map(_.dataType.defaultSize).sum + 8
+    // Assume there will be the same number of rows as child has.
+    var sizeInBytes = (child.statistics.sizeInBytes * outputRowSize) / childRowSize
+    if (sizeInBytes == 0) {
+      // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
+      // (product of children).
+      sizeInBytes = 1
+    }
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 /**

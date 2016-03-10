@@ -52,7 +52,7 @@ class StringIndexerSuite
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("a", "c", "b"))
-    val output = transformed.select("id", "labelIndex").map { r =>
+    val output = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 0, b -> 2, c -> 1
@@ -83,7 +83,7 @@ class StringIndexerSuite
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("b", "a"))
-    val output = transformed.select("id", "labelIndex").map { r =>
+    val output = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 1, b -> 0
@@ -102,7 +102,7 @@ class StringIndexerSuite
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("100", "300", "200"))
-    val output = transformed.select("id", "labelIndex").map { r =>
+    val output = transformed.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // 100 -> 0, 200 -> 2, 300 -> 1
@@ -116,6 +116,17 @@ class StringIndexerSuite
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L)
     assert(indexerModel.transform(df).eq(df))
+  }
+
+  test("StringIndexerModel can't overwrite output column") {
+    val df = sqlContext.createDataFrame(Seq((1, 2), (3, 4))).toDF("input", "output")
+    val indexer = new StringIndexer()
+      .setInputCol("input")
+      .setOutputCol("output")
+      .fit(df)
+    intercept[IllegalArgumentException] {
+      indexer.transform(df)
+    }
   }
 
   test("StringIndexer read/write") {

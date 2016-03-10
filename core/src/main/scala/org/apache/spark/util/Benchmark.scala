@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 import org.apache.commons.lang3.SystemUtils
 
@@ -35,7 +36,8 @@ import org.apache.commons.lang3.SystemUtils
  * If outputPerIteration is true, the timing for each run will be printed to stdout.
  */
 private[spark] class Benchmark(
-    name: String, valuesPerIteration: Long,
+    name: String,
+    valuesPerIteration: Long,
     iters: Int = 5,
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
@@ -61,7 +63,6 @@ private[spark] class Benchmark(
     println
 
     val firstBest = results.head.bestMs
-    val firstAvg = results.head.avgMs
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getProcessorName())
     printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
@@ -93,7 +94,10 @@ private[spark] object Benchmark {
     if (SystemUtils.IS_OS_MAC_OSX) {
       Utils.executeAndGetOutput(Seq("/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"))
     } else if (SystemUtils.IS_OS_LINUX) {
-      Utils.executeAndGetOutput(Seq("/usr/bin/grep", "-m", "1", "\"model name\"", "/proc/cpuinfo"))
+      Try {
+        val grepPath = Utils.executeAndGetOutput(Seq("which", "grep"))
+        Utils.executeAndGetOutput(Seq(grepPath, "-m", "1", "model name", "/proc/cpuinfo"))
+      }.getOrElse("Unknown processor")
     } else {
       System.getenv("PROCESSOR_IDENTIFIER")
     }

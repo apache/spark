@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import scala.collection.mutable.ArrayBuffer
-
+import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
@@ -26,9 +25,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, BuildLeft, BuildRight}
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
+import org.apache.spark.sql.execution.metric.LongSQLMetricValue
 
 /**
   * An interface for those physical operators that support codegen.
@@ -39,7 +39,22 @@ trait CodegenSupport extends SparkPlan {
   private def variablePrefix: String = this match {
     case _: TungstenAggregate => "agg"
     case _: BroadcastHashJoin => "bhj"
+    case _: SortMergeJoin => "smj"
+    case _: PhysicalRDD => "rdd"
     case _ => nodeName.toLowerCase
+  }
+
+  /**
+    * Creates a metric using the specified name.
+    *
+    * @return name of the variable representing the metric
+    */
+  def metricTerm(ctx: CodegenContext, name: String): String = {
+    val metric = ctx.addReferenceObj(name, longMetric(name))
+    val value = ctx.freshName("metricValue")
+    val cls = classOf[LongSQLMetricValue].getName
+    ctx.addMutableState(cls, value, s"$value = ($cls) $metric.localValue();")
+    value
   }
 
   /**
@@ -50,24 +65,35 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Which SparkPlan is calling produce() of this one. It's itself for the first SparkPlan.
     */
-  private var parent: CodegenSupport = null
+  protected var parent: CodegenSupport = null
 
   /**
-    * Returns the RDD of InternalRow which generates the input rows.
+    * Whether this SparkPlan prefers to accept UnsafeRow as input in doConsume.
     */
-  def upstream(): RDD[InternalRow]
+  def preferUnsafeRow: Boolean = false
+
+  /**
+    * Returns all the RDDs of InternalRow which generates the input rows.
+    *
+    * Note: right now we support up to two RDDs.
+    */
+  def upstreams(): Seq[RDD[InternalRow]]
 
   /**
     * Returns Java source code to process the rows from upstream.
     */
-  def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
+  final def produce(ctx: CodegenContext, parent: CodegenSupport): String = {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
-    doProduce(ctx)
+    waitForSubqueries()
+    s"""
+       |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
+       |${doProduce(ctx)}
+     """.stripMargin
   }
 
   /**
-    * Generate the Java source code to process, should be overrided by subclass to support codegen.
+    * Generate the Java source code to process, should be overridden by subclass to support codegen.
     *
     * doProduce() usually generate the framework, for example, aggregation could generate this:
     *
@@ -76,11 +102,11 @@ trait CodegenSupport extends SparkPlan {
     *     # call child.produce()
     *     initialized = true;
     *   }
-    *   while (hashmap.hasNext()) {
+    *   while (!shouldStop() && hashmap.hasNext()) {
     *     row = hashmap.next();
     *     # build the aggregation results
-    *     # create varialbles for results
-    *     # call consume(), wich will call parent.doConsume()
+    *     # create variables for results
+    *     # call consume(), which will call parent.doConsume()
     *   }
     */
   protected def doProduce(ctx: CodegenContext): String
@@ -88,7 +114,7 @@ trait CodegenSupport extends SparkPlan {
   /**
     * Consume the columns generated from current SparkPlan, call it's parent.
     */
-  def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
+  final def consume(ctx: CodegenContext, input: Seq[ExprCode], row: String = null): String = {
     if (input != null) {
       assert(input.length == output.length)
     }
@@ -96,27 +122,80 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-    * Consume the columns generated from it's child, call doConsume() or emit the rows.
+    * Returns source code to evaluate all the variables, and clear the code of them, to prevent
+    * them to be evaluated twice.
     */
+  protected def evaluateVariables(variables: Seq[ExprCode]): String = {
+    val evaluate = variables.filter(_.code != "").map(_.code.trim).mkString("\n")
+    variables.foreach(_.code = "")
+    evaluate
+  }
+
+  /**
+    * Returns source code to evaluate the variables for required attributes, and clear the code
+    * of evaluated variables, to prevent them to be evaluated twice..
+    */
+  protected def evaluateRequiredVariables(
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      required: AttributeSet): String = {
+    var evaluateVars = ""
+    variables.zipWithIndex.foreach { case (ev, i) =>
+      if (ev.code != "" && required.contains(attributes(i))) {
+        evaluateVars += ev.code.trim + "\n"
+        ev.code = ""
+      }
+    }
+    evaluateVars
+  }
+
+  /**
+   * The subset of inputSet those should be evaluated before this plan.
+   *
+   * We will use this to insert some code to access those columns that are actually used by current
+   * plan before calling doConsume().
+   */
+  def usedInputs: AttributeSet = references
+
+  /**
+   * Consume the columns generated from its child, call doConsume() or emit the rows.
+   *
+   * An operator could generate variables for the output, or a row, either one could be null.
+   *
+   * If the row is not null, we create variables to access the columns that are actually used by
+   * current plan before calling doConsume().
+   */
   def consumeChild(
       ctx: CodegenContext,
       child: SparkPlan,
       input: Seq[ExprCode],
       row: String = null): String = {
     ctx.freshNamePrefix = variablePrefix
-    if (row != null) {
-      ctx.currentVars = null
-      ctx.INPUT_ROW = row
-      val evals = child.output.zipWithIndex.map { case (attr, i) =>
-        BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+    val inputVars =
+      if (row != null) {
+        ctx.currentVars = null
+        ctx.INPUT_ROW = row
+        child.output.zipWithIndex.map { case (attr, i) =>
+          BoundReference(i, attr.dataType, attr.nullable).gen(ctx)
+        }
+      } else {
+        input
       }
-      s"""
-         | ${evals.map(_.code).mkString("\n")}
-         | ${doConsume(ctx, evals)}
-       """.stripMargin
-    } else {
-      doConsume(ctx, input)
-    }
+
+    val evaluated =
+      if (row != null && preferUnsafeRow) {
+        // Current plan can consume UnsafeRows directly.
+        ""
+      } else {
+        evaluateRequiredVariables(child.output, inputVars, usedInputs)
+      }
+
+    s"""
+       |
+       |/*** CONSUME: ${toCommentSafeString(this.simpleString)} */
+       |${evaluated}
+       |${doConsume(ctx, inputVars, row)}
+     """.stripMargin
   }
 
   /**
@@ -127,11 +206,10 @@ trait CodegenSupport extends SparkPlan {
     * For example, Filter will generate the code like this:
     *
     *   # code to evaluate the predicate expression, result is isNull1 and value2
-    *   if (isNull1 || value2) {
-    *     # call consume(), which will call parent.doConsume()
-    *   }
+    *   if (isNull1 || !value2) continue;
+    *   # call consume(), which will call parent.doConsume()
     */
-  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  protected def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     throw new UnsupportedOperationException
   }
 }
@@ -143,45 +221,45 @@ trait CodegenSupport extends SparkPlan {
   * This is the leaf node of a tree with WholeStageCodegen, is used to generate code that consumes
   * an RDD iterator of InternalRow.
   */
-case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
+case class InputAdapter(child: SparkPlan) extends UnaryNode with CodegenSupport {
 
   override def output: Seq[Attribute] = child.output
   override def outputPartitioning: Partitioning = child.outputPartitioning
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def doPrepare(): Unit = {
-    child.prepare()
-  }
-
   override def doExecute(): RDD[InternalRow] = {
     child.execute()
   }
 
-  override def supportCodegen: Boolean = false
+  override def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    child.doExecuteBroadcast()
+  }
 
-  override def upstream(): RDD[InternalRow] = {
-    child.execute()
+  override def upstreams(): Seq[RDD[InternalRow]] = {
+    child.execute() :: Nil
   }
 
   override def doProduce(ctx: CodegenContext): String = {
+    val input = ctx.freshName("input")
+    // Right now, InputAdapter is only used when there is one upstream.
+    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
     val row = ctx.freshName("row")
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns = exprs.map(_.gen(ctx))
     s"""
-       | while (input.hasNext()) {
-       |   InternalRow $row = (InternalRow) input.next();
-       |   ${columns.map(_.code).mkString("\n").trim}
-       |   ${consume(ctx, columns).trim}
-       |   if (shouldStop()) {
-       |     return;
-       |   }
+       | while (!shouldStop() && $input.hasNext()) {
+       |   InternalRow $row = (InternalRow) $input.next();
+       |   ${consume(ctx, columns, row).trim}
        | }
      """.stripMargin
   }
 
   override def simpleString: String = "INPUT"
+
+  override def treeChildren: Seq[SparkPlan] = Nil
 }
 
 /**
@@ -195,7 +273,7 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
   *
   * -> execute()
   *     |
-  *  doExecute() --------->   upstream() -------> upstream() ------> execute()
+  *  doExecute() --------->   upstreams() -------> upstreams() ------> execute()
   *     |
   *      ----------------->   produce()
   *                             |
@@ -215,28 +293,24 @@ case class InputAdapter(child: SparkPlan) extends LeafNode with CodegenSupport {
   * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
   * used to generated code for BoundReference.
   */
-case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
-  extends SparkPlan with CodegenSupport {
+case class WholeStageCodegen(child: SparkPlan) extends UnaryNode with CodegenSupport {
 
-  override def supportCodegen: Boolean = false
-
-  override def output: Seq[Attribute] = plan.output
-  override def outputPartitioning: Partitioning = plan.outputPartitioning
-  override def outputOrdering: Seq[SortOrder] = plan.outputOrdering
-
-  override def doPrepare(): Unit = {
-    plan.prepare()
-  }
+  override def output: Seq[Attribute] = child.output
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   override def doExecute(): RDD[InternalRow] = {
     val ctx = new CodegenContext
-    val code = plan.produce(ctx, this)
+    val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val references = ctx.references.toArray
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
       }
 
+      /** Codegened pipeline for:
+        * ${toCommentSafeString(child.treeString.trim)}
+        */
       class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
@@ -244,6 +318,9 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
 
         public GeneratedIterator(Object[] references) {
           this.references = references;
+        }
+
+        public void init(scala.collection.Iterator inputs[]) {
           ${ctx.initMutableStates()}
         }
 
@@ -253,25 +330,40 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
           ${code.trim}
         }
       }
-      """
+      """.trim
 
     // try to compile, helpful for debug
-    // println(s"${CodeFormatter.format(source)}")
-    CodeGenerator.compile(source)
+    val cleanedSource = CodeFormatter.stripExtraNewLines(source)
+    // println(s"${CodeFormatter.format(cleanedSource)}")
+    CodeGenerator.compile(cleanedSource)
 
-    plan.upstream().mapPartitions { iter =>
-
-      val clazz = CodeGenerator.compile(source)
-      val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
-      buffer.setInput(iter)
-      new Iterator[InternalRow] {
-        override def hasNext: Boolean = buffer.hasNext
-        override def next: InternalRow = buffer.next()
+    val rdds = child.asInstanceOf[CodegenSupport].upstreams()
+    assert(rdds.size <= 2, "Up to two upstream RDDs can be supported")
+    if (rdds.length == 1) {
+      rdds.head.mapPartitions { iter =>
+        val clazz = CodeGenerator.compile(cleanedSource)
+        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+        buffer.init(Array(iter))
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = buffer.hasNext
+          override def next: InternalRow = buffer.next()
+        }
+      }
+    } else {
+      // Right now, we support up to two upstreams.
+      rdds.head.zipPartitions(rdds(1)) { (leftIter, rightIter) =>
+        val clazz = CodeGenerator.compile(cleanedSource)
+        val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
+        buffer.init(Array(leftIter, rightIter))
+        new Iterator[InternalRow] {
+          override def hasNext: Boolean = buffer.hasNext
+          override def next: InternalRow = buffer.next()
+        }
       }
     }
   }
 
-  override def upstream(): RDD[InternalRow] = {
+  override def upstreams(): Seq[RDD[InternalRow]] = {
     throw new UnsupportedOperationException
   }
 
@@ -288,54 +380,43 @@ case class WholeStageCodegen(plan: CodegenSupport, children: Seq[SparkPlan])
     if (row != null) {
       // There is an UnsafeRow already
       s"""
-         | currentRows.add($row.copy());
-       """.stripMargin
+         |append($row.copy());
+       """.stripMargin.trim
     } else {
       assert(input != null)
       if (input.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable)
         }
+        val evaluateInputs = evaluateVariables(input)
         // generate the code to create a UnsafeRow
         ctx.currentVars = input
         val code = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         s"""
-           | ${code.code.trim}
-           | currentRows.add(${code.value}.copy());
-         """.stripMargin
+           |$evaluateInputs
+           |${code.code.trim}
+           |append(${code.value}.copy());
+         """.stripMargin.trim
       } else {
         // There is no columns
         s"""
-           | currentRows.add(unsafeRow);
-         """.stripMargin
+           |append(unsafeRow);
+         """.stripMargin.trim
       }
     }
   }
 
-  override def generateTreeString(
-      depth: Int,
-      lastChildren: Seq[Boolean],
-      builder: StringBuilder): StringBuilder = {
-    if (depth > 0) {
-      lastChildren.init.foreach { isLast =>
-        val prefixFragment = if (isLast) "   " else ":  "
-        builder.append(prefixFragment)
-      }
+  override def innerChildren: Seq[SparkPlan] = {
+    child :: Nil
+  }
 
-      val branch = if (lastChildren.last) "+- " else ":- "
-      builder.append(branch)
-    }
+  private def collectInputs(plan: SparkPlan): Seq[SparkPlan] = plan match {
+    case InputAdapter(c) => c :: Nil
+    case other => other.children.flatMap(collectInputs)
+  }
 
-    builder.append(simpleString)
-    builder.append("\n")
-
-    plan.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
-    if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
-      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
-    }
-
-    builder
+  override def treeChildren: Seq[SparkPlan] = {
+    collectInputs(child)
   }
 
   override def simpleString: String = "WholeStageCodegen"
@@ -349,6 +430,7 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
 
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
+    case e: CaseWhen => e.shouldCodegen
     // CodegenFallback requires the input to be an InternalRow
     case e: CodegenFallback => false
     case _ => true
@@ -363,28 +445,34 @@ private[sql] case class CollapseCodegenStages(sqlContext: SQLContext) extends Ru
     case _ => false
   }
 
+  /**
+   * Inserts a InputAdapter on top of those that do not support codegen.
+   */
+  private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
+    case j @ SortMergeJoin(_, _, _, left, right) =>
+      // The children of SortMergeJoin should do codegen separately.
+      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
+        right = InputAdapter(insertWholeStageCodegen(right)))
+    case p if !supportCodegen(p) =>
+      // collapse them recursively
+      InputAdapter(insertWholeStageCodegen(p))
+    case p =>
+      p.withNewChildren(p.children.map(insertInputAdapter))
+  }
+
+  /**
+   * Inserts a WholeStageCodegen on top of those that support codegen.
+   */
+  private def insertWholeStageCodegen(plan: SparkPlan): SparkPlan = plan match {
+    case plan: CodegenSupport if supportCodegen(plan) =>
+      WholeStageCodegen(insertInputAdapter(plan))
+    case other =>
+      other.withNewChildren(other.children.map(insertWholeStageCodegen))
+  }
+
   def apply(plan: SparkPlan): SparkPlan = {
     if (sqlContext.conf.wholeStageEnabled) {
-      plan.transform {
-        case plan: CodegenSupport if supportCodegen(plan) &&
-          // Whole stage codegen is only useful when there are at least two levels of operators that
-          // support it (save at least one projection/iterator).
-          (Utils.isTesting || plan.children.exists(supportCodegen)) =>
-
-          var inputs = ArrayBuffer[SparkPlan]()
-          val combined = plan.transform {
-            // The build side can't be compiled together
-            case b @ BroadcastHashJoin(_, _, BuildLeft, _, left, right) =>
-              b.copy(left = apply(left))
-            case b @ BroadcastHashJoin(_, _, BuildRight, _, left, right) =>
-              b.copy(right = apply(right))
-            case p if !supportCodegen(p) =>
-              val input = apply(p)  // collapse them recursively
-              inputs += input
-              InputAdapter(input)
-          }.asInstanceOf[CodegenSupport]
-          WholeStageCodegen(combined, inputs)
-      }
+      insertWholeStageCodegen(plan)
     } else {
       plan
     }

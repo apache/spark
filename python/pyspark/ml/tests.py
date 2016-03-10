@@ -39,12 +39,13 @@ import tempfile
 
 from pyspark.ml import Estimator, Model, Pipeline, Transformer
 from pyspark.ml.classification import LogisticRegression
+from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.regression import LinearRegression
-from pyspark.ml.tuning import ParamGridBuilder, CrossValidator, CrossValidatorModel
+from pyspark.ml.tuning import *
 from pyspark.ml.util import keyword_only
 from pyspark.mllib.linalg import DenseVector
 from pyspark.sql import DataFrame, SQLContext, Row
@@ -208,6 +209,11 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
         self.assertTrue(maxIter.parent == testParams.uid)
 
+    def test_hasparam(self):
+        testParams = TestParams()
+        self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
+        self.assertFalse(testParams.hasParam("notAParameter"))
+
     def test_params(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
@@ -217,7 +223,7 @@ class ParamTests(PySparkTestCase):
         params = testParams.params
         self.assertEqual(params, [inputCol, maxIter, seed])
 
-        self.assertTrue(testParams.hasParam(maxIter))
+        self.assertTrue(testParams.hasParam(maxIter.name))
         self.assertTrue(testParams.hasDefault(maxIter))
         self.assertFalse(testParams.isSet(maxIter))
         self.assertTrue(testParams.isDefined(maxIter))
@@ -226,7 +232,7 @@ class ParamTests(PySparkTestCase):
         self.assertTrue(testParams.isSet(maxIter))
         self.assertEqual(testParams.getMaxIter(), 100)
 
-        self.assertTrue(testParams.hasParam(inputCol))
+        self.assertTrue(testParams.hasParam(inputCol.name))
         self.assertFalse(testParams.hasDefault(inputCol))
         self.assertFalse(testParams.isSet(inputCol))
         self.assertFalse(testParams.isDefined(inputCol))
@@ -243,6 +249,14 @@ class ParamTests(PySparkTestCase):
                        "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
                        "seed: random seed. (default: 41, current: 43)"]))
 
+    def test_kmeans_param(self):
+        algo = KMeans()
+        self.assertEqual(algo.getInitMode(), "k-means||")
+        algo.setK(10)
+        self.assertEqual(algo.getK(), 10)
+        algo.setInitSteps(10)
+        self.assertEqual(algo.getInitSteps(), 10)
+
     def test_hasseed(self):
         noSeedSpecd = TestParams()
         withSeedSpecd = TestParams(seed=42)
@@ -256,6 +270,12 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(withSeedSpecd.getSeed(), 42)
         # Check that a different class has a different seed
         self.assertNotEqual(other.getSeed(), noSeedSpecd.getSeed())
+
+    def test_param_property_error(self):
+        param_store = HasThrowableProperty()
+        self.assertRaises(RuntimeError, lambda: param_store.test_property)
+        params = param_store.params  # should not invoke the property 'test_property'
+        self.assertEqual(len(params), 1)
 
 
 class FeatureTests(PySparkTestCase):
@@ -409,6 +429,57 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
 
+class TrainValidationSplitTests(PySparkTestCase):
+
+    def test_fit_minimize_metric(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="rmse")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+        bestModel = tvsModel.bestModel
+        bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
+
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
+                         "Best model should have zero induced error")
+        self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
+
+    def test_fit_maximize_metric(self):
+        sqlContext = SQLContext(self.sc)
+        dataset = sqlContext.createDataFrame([
+            (10, 10.0),
+            (50, 50.0),
+            (100, 100.0),
+            (500, 500.0)] * 10,
+            ["feature", "label"])
+
+        iee = InducedErrorEstimator()
+        evaluator = RegressionEvaluator(metricName="r2")
+
+        grid = (ParamGridBuilder()
+                .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])
+                .build())
+        tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+        bestModel = tvsModel.bestModel
+        bestModelMetric = evaluator.evaluate(bestModel.transform(dataset))
+
+        self.assertEqual(0.0, bestModel.getOrDefault('inducedError'),
+                         "Best model should have zero induced error")
+        self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
+
+
 class PersistenceTest(PySparkTestCase):
 
     def test_linear_regression(self):
@@ -427,6 +498,17 @@ class PersistenceTest(PySparkTestCase):
             rmtree(path)
         except OSError:
             pass
+
+
+class HasThrowableProperty(Params):
+
+    def __init__(self):
+        super(HasThrowableProperty, self).__init__()
+        self.p = Param(self, "none", "empty param")
+
+    @property
+    def test_property(self):
+        raise RuntimeError("Test property to raise error when invoked")
 
 
 if __name__ == "__main__":
