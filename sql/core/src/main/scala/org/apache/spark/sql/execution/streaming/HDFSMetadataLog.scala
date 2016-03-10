@@ -139,7 +139,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String) extends
       .filter { batchId =>
       batchId <= endId && (startId.isEmpty || batchId >= startId.get)
     }
-    batchIds.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
+    batchIds.sorted.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
       case (batchId, metadataOption) =>
         (batchId, metadataOption.get)
     }
