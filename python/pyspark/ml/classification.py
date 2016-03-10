@@ -285,6 +285,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     3
     >>> model.depth
     1
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> result = model.transform(test0).head()
     >>> result.prediction
@@ -396,6 +398,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> td = si_model.transform(df)
     >>> rf = RandomForestClassifier(numTrees=3, maxDepth=2, labelCol="indexed", seed=42)
     >>> model = rf.fit(td)
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
     True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])

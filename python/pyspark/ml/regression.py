@@ -401,6 +401,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     1
     >>> model.numNodes
     3
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
@@ -536,6 +538,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
     >>> model = rf.fit(df)
+    >>> model.featureImportances
+    SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
