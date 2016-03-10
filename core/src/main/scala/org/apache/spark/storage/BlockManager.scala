@@ -718,49 +718,25 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       keepReadLock: Boolean = false): Boolean = {
-
-    require(blockId != null, "BlockId is null")
-    require(level != null && level.isValid, "StorageLevel is null or invalid")
-
-    /* Remember the block's storage level so that we can correctly drop it to disk if it needs
-     * to be dropped right after it got put into memory. Note, however, that other threads will
-     * not be able to get() this block until we call markReady on its BlockInfo. */
-    val putBlockInfo = {
-      val newInfo = new BlockInfo(level, tellMaster)
-      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
-        newInfo
+    doPut(blockId, level, tellMaster = tellMaster, keepReadLock = keepReadLock) { putBlockInfo =>
+      val startTimeMs = System.currentTimeMillis
+      // Since we're storing bytes, initiate the replication before storing them locally.
+      // This is faster as data is already serialized and ready to send.
+      val replicationFuture = if (level.replication > 1) {
+        // Duplicate doesn't copy the bytes, but just creates a wrapper
+        val bufferView = bytes.duplicate()
+        Future {
+          // This is a blocking action and should run in futureExecutionContext which is a cached
+          // thread pool
+          replicate(blockId, bufferView, level)
+        }(futureExecutionContext)
       } else {
-        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-        if (!keepReadLock) {
-          // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
-          releaseLock(blockId)
-        }
-        return true
+        null
       }
-    }
 
-    val startTimeMs = System.currentTimeMillis
+      bytes.rewind()
+      val size = bytes.limit()
 
-    // Since we're storing bytes, initiate the replication before storing them locally.
-    // This is faster as data is already serialized and ready to send.
-    val replicationFuture = if (level.replication > 1) {
-      // Duplicate doesn't copy the bytes, but just creates a wrapper
-      val bufferView = bytes.duplicate()
-      Future {
-        // This is a blocking action and should run in futureExecutionContext which is a cached
-        // thread pool
-        replicate(blockId, bufferView, level)
-      }(futureExecutionContext)
-    } else {
-      null
-    }
-
-    var blockWasSuccessfullyStored = false
-
-    bytes.rewind()
-    val size = bytes.limit()
-
-    try {
       if (level.useMemory) {
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
@@ -779,7 +755,7 @@ private[spark] class BlockManager(
       }
 
       val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-      blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
+      val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
         // Now that the block is in either the memory, externalBlockStore, or disk store,
         // tell the master about it.
@@ -796,6 +772,49 @@ private[spark] class BlockManager(
         // Wait for asynchronous replication to finish
         Await.ready(replicationFuture, Duration.Inf)
       }
+      if (blockWasSuccessfullyStored) {
+        None
+      } else {
+        Some(bytes)
+      }
+    }.isEmpty
+  }
+
+  /**
+   * Helper method used to abstract common code from [[doPutBytes()]] and [[doPutIterator()]].
+   *
+   * @param putBody a function which attempts the actual put() and returns None on success
+   *                or Some on failure.
+   */
+  private def doPut[T](
+      blockId: BlockId,
+      level: StorageLevel,
+      tellMaster: Boolean,
+      keepReadLock: Boolean)(putBody: BlockInfo => Option[T]): Option[T] = {
+
+    require(blockId != null, "BlockId is null")
+    require(level != null && level.isValid, "StorageLevel is null or invalid")
+
+    val putBlockInfo = {
+      val newInfo = new BlockInfo(level, tellMaster)
+      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
+        newInfo
+      } else {
+        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
+        if (!keepReadLock) {
+          // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
+          releaseLock(blockId)
+        }
+        return None
+      }
+    }
+
+    val startTimeMs = System.currentTimeMillis
+    var blockWasSuccessfullyStored: Boolean = false
+    var result: Option[T] = None
+    try {
+      result = putBody(putBlockInfo)
+      blockWasSuccessfullyStored = result.isEmpty
     } finally {
       if (blockWasSuccessfullyStored) {
         if (keepReadLock) {
@@ -808,7 +827,6 @@ private[spark] class BlockManager(
         logWarning(s"Putting block $blockId failed")
       }
     }
-
     if (level.replication > 1) {
       logDebug("Putting block %s with replication took %s"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
@@ -816,8 +834,7 @@ private[spark] class BlockManager(
       logDebug("Putting block %s without replication took %s"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
     }
-
-    blockWasSuccessfullyStored
+    result
   }
 
   /**
@@ -838,36 +855,11 @@ private[spark] class BlockManager(
       level: StorageLevel,
       tellMaster: Boolean = true,
       keepReadLock: Boolean = false): Option[Iterator[Any]] = {
-
-    require(blockId != null, "BlockId is null")
-    require(level != null && level.isValid, "StorageLevel is null or invalid")
-
-    /* Remember the block's storage level so that we can correctly drop it to disk if it needs
-     * to be dropped right after it got put into memory. Note, however, that other threads will
-     * not be able to get() this block until we call markReady on its BlockInfo. */
-    val putBlockInfo = {
-      val newInfo = new BlockInfo(level, tellMaster)
-      if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
-        newInfo
-      } else {
-        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
-        if (!keepReadLock) {
-          // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
-          releaseLock(blockId)
-        }
-        return None
-      }
-    }
-
-    val startTimeMs = System.currentTimeMillis
-
-    // Size of the block in bytes
-    var size = 0L
-
-    var blockWasSuccessfullyStored = false
-    var iteratorFromFailedMemoryStorePut: Option[Iterator[Any]] = None
-
-    try {
+    doPut(blockId, level, tellMaster = tellMaster, keepReadLock = keepReadLock) { putBlockInfo =>
+      val startTimeMs = System.currentTimeMillis
+      var iteratorFromFailedMemoryStorePut: Option[Iterator[Any]] = None
+      // Size of the block in bytes
+      var size = 0L
       if (level.useMemory) {
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
@@ -894,7 +886,7 @@ private[spark] class BlockManager(
       }
 
       val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-      blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
+      val blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid
       if (blockWasSuccessfullyStored) {
         // Now that the block is in either the memory, externalBlockStore, or disk store,
         // tell the master about it.
@@ -918,29 +910,9 @@ private[spark] class BlockManager(
             .format(blockId, Utils.getUsedTimeMs(remoteStartTime)))
         }
       }
-    } finally {
-      if (blockWasSuccessfullyStored) {
-        if (keepReadLock) {
-          blockInfoManager.downgradeLock(blockId)
-        } else {
-          blockInfoManager.unlock(blockId)
-        }
-      } else {
-        blockInfoManager.removeBlock(blockId)
-        logWarning(s"Putting block $blockId failed")
-      }
+      assert(blockWasSuccessfullyStored == iteratorFromFailedMemoryStorePut.isEmpty)
+      iteratorFromFailedMemoryStorePut
     }
-
-    if (level.replication > 1) {
-      logDebug("Putting block %s with replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-    } else {
-      logDebug("Putting block %s without replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-    }
-
-    assert(blockWasSuccessfullyStored == iteratorFromFailedMemoryStorePut.isEmpty)
-    iteratorFromFailedMemoryStorePut
   }
 
   /**
