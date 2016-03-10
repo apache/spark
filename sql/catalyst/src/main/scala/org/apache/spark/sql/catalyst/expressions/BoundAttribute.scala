@@ -23,6 +23,15 @@ import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
 
+object BoundReference {
+  def apply(
+    ordinal: Int,
+    dataType: DataType,
+    nullable: Boolean,
+    name: String): BoundReference =
+      BoundReference(ordinal, dataType, nullable).setName(name)
+}
+
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value
  * to be retrieved more efficiently.  However, since operations like column pruning can change
@@ -56,6 +65,15 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
         case _ => input.get(ordinal, dataType)
       }
     }
+  }
+
+  def name: String = _name.getOrElse(s"i[$ordinal]")
+
+  private var _name: Option[String] = None
+
+  def setName(name: String): BoundReference = {
+    _name = Some(name)
+    this
   }
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
@@ -96,7 +114,8 @@ object BindReferences extends Logging {
             sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
           }
         } else {
-          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
+          BoundReference(ordinal, a.dataType, a.nullable, a.name)
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable, a.name)
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
