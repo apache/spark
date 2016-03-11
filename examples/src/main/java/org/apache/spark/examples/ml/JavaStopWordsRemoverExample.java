@@ -26,7 +26,7 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StopWordsRemover;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -57,7 +57,7 @@ public class JavaStopWordsRemoverExample {
         "raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
 
-    DataFrame dataset = jsql.createDataFrame(rdd, schema);
+    Dataset<Row> dataset = jsql.createDataFrame(rdd, schema);
     remover.transform(dataset).show();
     // $example off$
     jsc.stop();

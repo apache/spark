@@ -19,6 +19,8 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -93,10 +95,10 @@ public class JavaALSExample {
           return Rating.parseRating(str);
         }
       });
-    DataFrame ratings = sqlContext.createDataFrame(ratingsRDD, Rating.class);
-    DataFrame[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
-    DataFrame training = splits[0];
-    DataFrame test = splits[1];
+    Dataset<Row> ratings = sqlContext.createDataFrame(ratingsRDD, Rating.class);
+    Dataset<Row>[] splits = ratings.randomSplit(new double[]{0.8, 0.2});
+    Dataset<Row> training = splits[0];
+    Dataset<Row> test = splits[1];
 
     // Build the recommendation model using ALS on the training data
     ALS als = new ALS()
@@ -108,8 +110,8 @@ public class JavaALSExample {
     ALSModel model = als.fit(training);
 
     // Evaluate the model by computing the RMSE on the test data
-    DataFrame rawPredictions = model.transform(test);
-    DataFrame predictions = rawPredictions
+    Dataset<Row> rawPredictions = model.transform(test);
+    Dataset<Row> predictions = rawPredictions
       .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType))
       .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType));
 
