@@ -465,7 +465,7 @@ private[spark] class Client(
 
         case None =>
           // No configuration, so fall back to uploading local jar files.
-          logWarning(s"Neither ${SPARK_JARS.key} nor ${SPARK_ARCHIVE}.key is set, falling back " +
+          logWarning(s"Neither ${SPARK_JARS.key} nor ${SPARK_ARCHIVE.key} is set, falling back " +
             "to uploading libraries under SPARK_HOME.")
           val jarsDir = new File(sparkConf.getenv("SPARK_HOME"), "lib")
           if (jarsDir.isDirectory()) {
