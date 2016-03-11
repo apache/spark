@@ -2087,7 +2087,6 @@
           <artifactId>maven-dependency-plugin</artifactId>
           <executions>
             <execution>
-              <id>default-cli</id>
               <goals>
                  <goal>build-classpath</goal>
               </goals>
