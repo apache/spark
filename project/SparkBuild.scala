@@ -384,18 +384,19 @@ object OldDeps {
 
   lazy val project = Project("oldDeps", file("dev"), settings = oldDepsSettings)
 
-  def versionArtifact(id: String): Option[sbt.ModuleID] = {
-    val fullId = id + "_2.11"
-    Some("org.apache.spark" % fullId % "1.2.0")
-  }
-
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.5",
-    libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
-      "spark-streaming-flume", "spark-streaming-twitter",
-      "spark-streaming", "spark-mllib", "spark-graphx",
-      "spark-core").map(versionArtifact(_).get intransitive())
+    libraryDependencies := Seq(
+      "spark-streaming-mqtt",
+      "spark-streaming-zeromq",
+      "spark-streaming-flume",
+      "spark-streaming-twitter",
+      "spark-streaming",
+      "spark-mllib",
+      "spark-graphx",
+      "spark-core"
+    ).map(id => "org.apache.spark" % (id + "_2.11") % "1.2.0")
   )
 }
 

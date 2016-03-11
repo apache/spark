@@ -336,7 +336,6 @@ def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["package",
-                 "assembly/assembly",
                  "streaming-kafka-assembly/assembly",
                  "streaming-flume-assembly/assembly",
                  "streaming-mqtt-assembly/assembly",
@@ -347,6 +346,16 @@ def build_spark_sbt(hadoop_version):
     print("[info] Building Spark (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
 
+    exec_sbt(profiles_and_goals)
+
+
+def build_spark_assembly_sbt(hadoop_version):
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["assembly/assembly"]
+    profiles_and_goals = build_profiles + sbt_goals
+    print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
 
 
@@ -561,11 +570,14 @@ def main():
     # spark build
     build_apache_spark(build_tool, hadoop_version)
 
-    # TODO Temporarily disable MiMA check for DF-to-DS migration prototyping
-    # # backwards compatibility checks
-    # if build_tool == "sbt":
-    #     # Note: compatiblity tests only supported in sbt for now
-    #     detect_binary_inop_with_mima()
+    # backwards compatibility checks
+    if build_tool == "sbt":
+        # Note: compatibility tests only supported in sbt for now
+        # TODO Temporarily disable MiMA check for DF-to-DS migration prototyping
+        # detect_binary_inop_with_mima()
+        # Since we did not build assembly/assembly before running dev/mima, we need to
+        # do it here because the tests still rely on it; see SPARK-13294 for details.
+        build_spark_assembly_sbt(hadoop_version)
 
     # run the test suites
     run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
