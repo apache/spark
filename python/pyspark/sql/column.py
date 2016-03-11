@@ -324,6 +324,8 @@ class Column(object):
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
+
+        :func:`cast` is an alias for :func:`astype`.
         """
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
@@ -337,7 +339,12 @@ class Column(object):
             raise TypeError("unexpected type: %s" % type(dataType))
         return Column(jc)
 
-    astype = cast
+    @ignore_unicode_prefix
+    @since(1.3)
+    def astype(self, dataType):
+        """
+        :func:`astype` is an alias for :func:`cast`.
+        """
 
     @since(1.3)
     def between(self, lowerBound, upperBound):
