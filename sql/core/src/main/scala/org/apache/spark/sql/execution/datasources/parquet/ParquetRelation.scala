@@ -379,6 +379,9 @@ private[sql] class ParquetOutputWriter(
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
           val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
+          // It has the `.parquet` extension at the end because (de)compression tools
+          // such as gunzip would not be able to decompress this as the compression
+          // is not applied on this whole file but on each "page" in Parquet format.
           new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString$extension")
         }
       }

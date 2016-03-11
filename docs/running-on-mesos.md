@@ -390,6 +390,22 @@ See the [configuration page](configuration.html) for information on Spark config
     </ul>
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.driver.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos driver webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.webui.url</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the Spark Mesos dispatcher webui_url for interacting with the framework.
+    If unset it will point to Spark's internal web UI.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging

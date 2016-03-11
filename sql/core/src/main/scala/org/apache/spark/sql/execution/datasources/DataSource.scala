@@ -154,7 +154,7 @@ case class DataSource(
         }
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
-          new DataFrame(
+          DataFrame(
             sqlContext,
             LogicalRelation(
               DataSource(

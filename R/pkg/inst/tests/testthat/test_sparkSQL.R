@@ -691,6 +691,17 @@ test_that("names() colnames() set the column names", {
   colnames(df) <- c("col3", "col4")
   expect_equal(names(df)[1], "col3")
 
+  expect_error(colnames(df) <- c("sepal.length", "sepal_width"),
+               "Colum names cannot contain the '.' symbol.")
+  expect_error(colnames(df) <- c(1, 2), "Invalid column names.")
+  expect_error(colnames(df) <- c("a"),
+               "Column names must have the same length as the number of columns in the dataset.")
+  expect_error(colnames(df) <- c("1", NA), "Column names cannot be NA.")
+
+  # Note: if this test is broken, remove check for "." character on colnames<- method
+  irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
+  expect_equal(names(irisDF)[1], "Sepal_Length")
+
   # Test base::colnames base::names
   m2 <- cbind(1, 1:4)
   expect_equal(colnames(m2, do.NULL = FALSE), c("col1", "col2"))
@@ -1065,6 +1076,17 @@ test_that("column functions", {
   result <- collect(select(df, encode(df$a, "utf-8"), decode(df$c, "utf-8")))
   expect_equal(result[[1]][[1]], bytes)
   expect_equal(result[[2]], markUtf8("大千世界"))
+
+  # Test first(), last()
+  df <- read.json(sqlContext, jsonPath)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
+  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
+  expect_equal(collect(select(df, last(df$age)))[[1]], 19)
+  expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
+  expect_equal(collect(select(df, last("age")))[[1]], 19)
+  expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
 })
 
 test_that("column binary mathfunctions", {

@@ -29,7 +29,7 @@ public enum TaskSorting {
 
   private final Set<String> alternateNames;
   private TaskSorting(String... names) {
-    alternateNames = new HashSet<String>();
+    alternateNames = new HashSet<>();
     for (String n: names) {
       alternateNames.add(n);
     }
