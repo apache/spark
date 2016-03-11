@@ -126,6 +126,7 @@ abstract class SQLImplicits {
 
   /**
    * Creates a [[Dataset]] from an RDD.
+   *
    * @since 1.6.0
    */
   implicit def rddToDatasetHolder[T : Encoder](rdd: RDD[T]): DatasetHolder[T] = {

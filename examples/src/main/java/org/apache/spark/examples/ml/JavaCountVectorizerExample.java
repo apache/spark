@@ -25,7 +25,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.CountVectorizer;
 import org.apache.spark.ml.feature.CountVectorizerModel;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -48,7 +48,7 @@ public class JavaCountVectorizerExample {
     StructType schema = new StructType(new StructField [] {
       new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
     // fit a CountVectorizerModel from the corpus
     CountVectorizerModel cvModel = new CountVectorizer()

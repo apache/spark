@@ -34,6 +34,7 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
@@ -61,7 +62,8 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
+    Dataset<Row> training = jsql.createDataFrame(
+        jsc.parallelize(localTraining), LabeledPoint.class);
 
     // Create a LogisticRegression instance.  This instance is an Estimator.
     MyJavaLogisticRegression lr = new MyJavaLogisticRegression();
@@ -79,12 +81,12 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
         new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
+    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    DataFrame results = model.transform(test);
+    Dataset<Row> results = model.transform(test);
     double sumPredictions = 0;
-    for (Row r : results.select("features", "label", "prediction").collect()) {
+    for (Row r : results.select("features", "label", "prediction").collectRows()) {
       sumPredictions += r.getDouble(2);
     }
     if (sumPredictions != 0.0) {
@@ -145,7 +147,7 @@ class MyJavaLogisticRegression
 
   // This method is used by fit().
   // In Java, we have to make it public since Java does not understand Scala's protected modifier.
-  public MyJavaLogisticRegressionModel train(DataFrame dataset) {
+  public MyJavaLogisticRegressionModel train(Dataset<Row> dataset) {
     // Extract columns from data using helper method.
     JavaRDD<LabeledPoint> oldDataset = extractLabeledPoints(dataset).toJavaRDD();
 

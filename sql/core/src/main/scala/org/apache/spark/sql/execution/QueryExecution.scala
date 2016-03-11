@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 
@@ -31,7 +31,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
  */
 class QueryExecution(val sqlContext: SQLContext, val logical: LogicalPlan) {
 
-  def assertAnalyzed(): Unit = sqlContext.analyzer.checkAnalysis(analyzed)
+  def assertAnalyzed(): Unit = try sqlContext.analyzer.checkAnalysis(analyzed) catch {
+    case e: AnalysisException =>
+      throw new AnalysisException(e.message, e.line, e.startPosition, Some(analyzed))
+  }
 
   lazy val analyzed: LogicalPlan = sqlContext.analyzer.execute(logical)
 

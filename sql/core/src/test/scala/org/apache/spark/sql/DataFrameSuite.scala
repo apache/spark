@@ -38,23 +38,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("analysis error should be eagerly reported") {
-    // Eager analysis.
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "true") {
-      intercept[Exception] { testData.select('nonExistentName) }
-      intercept[Exception] {
-        testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
-      }
-      intercept[Exception] {
-        testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
-      }
-      intercept[Exception] {
-        testData.groupBy($"abcd").agg(Map("key" -> "sum"))
-      }
+    intercept[Exception] { testData.select('nonExistentName) }
+    intercept[Exception] {
+      testData.groupBy('key).agg(Map("nonExistentName" -> "sum"))
     }
-
-    // No more eager analysis once the flag is turned off
-    withSQLConf(SQLConf.DATAFRAME_EAGER_ANALYSIS.key -> "false") {
-      testData.select('nonExistentName)
+    intercept[Exception] {
+      testData.groupBy("nonExistentName").agg(Map("key" -> "sum"))
+    }
+    intercept[Exception] {
+      testData.groupBy($"abcd").agg(Map("key" -> "sum"))
     }
   }
 
@@ -72,7 +64,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(1, 1) :: Nil)
   }
 
-  test("invalid plan toString, debug mode") {
+  ignore("invalid plan toString, debug mode") {
     // Turn on debug mode so we can see invalid query plans.
     import org.apache.spark.sql.execution.debug._
 
@@ -941,7 +933,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      new DataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
+      DataFrame(sqlContext, OneRowRelation).registerTempTable("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }

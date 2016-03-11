@@ -34,6 +34,7 @@ import org.apache.spark.ml.tuning.CrossValidator;
 import org.apache.spark.ml.tuning.CrossValidatorModel;
 import org.apache.spark.ml.tuning.ParamGridBuilder;
 import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
@@ -71,7 +72,8 @@ public class JavaCrossValidatorExample {
       new LabeledDocument(9L, "a e c l", 0.0),
       new LabeledDocument(10L, "spark compile", 1.0),
       new LabeledDocument(11L, "hadoop software", 0.0));
-    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
+    Dataset<Row> training = jsql.createDataFrame(
+        jsc.parallelize(localTraining), LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -112,11 +114,11 @@ public class JavaCrossValidatorExample {
       new Document(5L, "l m n"),
       new Document(6L, "mapreduce spark"),
       new Document(7L, "apache hadoop"));
-    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
+    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    DataFrame predictions = cvModel.transform(test);
-    for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
+    Dataset<Row> predictions = cvModel.transform(test);
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collectRows()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }

@@ -169,7 +169,7 @@ public class JavaDatasetSuite implements Serializable {
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
-    GroupedDataset<Integer, String> grouped = ds.groupBy(new MapFunction<String, Integer>() {
+    GroupedDataset<Integer, String> grouped = ds.groupByKey(new MapFunction<String, Integer>() {
       @Override
       public Integer call(String v) throws Exception {
         return v.length();
@@ -217,7 +217,7 @@ public class JavaDatasetSuite implements Serializable {
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
     Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
-    GroupedDataset<Integer, Integer> grouped2 = ds2.groupBy(new MapFunction<Integer, Integer>() {
+    GroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(new MapFunction<Integer, Integer>() {
       @Override
       public Integer call(Integer v) throws Exception {
         return v / 2;
@@ -250,7 +250,7 @@ public class JavaDatasetSuite implements Serializable {
     List<String> data = Arrays.asList("a", "foo", "bar");
     Dataset<String> ds = context.createDataset(data, Encoders.STRING());
     GroupedDataset<Integer, String> grouped =
-      ds.groupBy(length(col("value"))).keyAs(Encoders.INT());
+      ds.groupByKey(length(col("value"))).keyAs(Encoders.INT());
 
     Dataset<String> mapped = grouped.mapGroups(
       new MapGroupsFunction<Integer, String, String>() {
@@ -410,7 +410,7 @@ public class JavaDatasetSuite implements Serializable {
       Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
     Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
 
-    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupBy(
+    GroupedDataset<String, Tuple2<String, Integer>> grouped = ds.groupByKey(
       new MapFunction<Tuple2<String, Integer>, String>() {
         @Override
         public String call(Tuple2<String, Integer> value) throws Exception {
@@ -828,7 +828,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       SmallBean smallBean = new SmallBean();
@@ -845,7 +845,7 @@ public class JavaDatasetSuite implements Serializable {
     {
       Row row = new GenericRow(new Object[] { null });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
@@ -862,7 +862,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      DataFrame df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       ds.collect();

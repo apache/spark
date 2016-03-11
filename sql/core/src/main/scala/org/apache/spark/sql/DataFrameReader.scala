@@ -345,7 +345,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
     }
 
-    new DataFrame(
+    DataFrame(
       sqlContext,
       LogicalRDD(
         schema.toAttributes,

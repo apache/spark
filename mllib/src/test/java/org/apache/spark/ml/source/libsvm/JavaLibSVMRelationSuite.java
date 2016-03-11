@@ -31,7 +31,7 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.util.Utils;
@@ -68,7 +68,7 @@ public class JavaLibSVMRelationSuite {
 
   @Test
   public void verifyLibSVMDF() {
-    DataFrame dataset = sqlContext.read().format("libsvm").option("vectorType", "dense")
+    Dataset<Row> dataset = sqlContext.read().format("libsvm").option("vectorType", "dense")
       .load(path);
     Assert.assertEquals("label", dataset.columns()[0]);
     Assert.assertEquals("features", dataset.columns()[1]);

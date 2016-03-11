@@ -454,6 +454,6 @@ private[sql] object StatFunctions extends Logging {
     }
     val schema = StructType(StructField(tableName, StringType) +: headerNames)
 
-    new DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
+    DataFrame(df.sqlContext, LocalRelation(schema.toAttributes, table)).na.fill(0.0)
   }
 }

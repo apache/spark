@@ -25,7 +25,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -65,7 +65,7 @@ public class JavaStopWordsRemoverSuite {
     StructType schema = new StructType(new StructField[] {
       new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
-    DataFrame dataset = jsql.createDataFrame(data, schema);
+    Dataset<Row> dataset = jsql.createDataFrame(data, schema);
 
     remover.transform(dataset).collect();
   }

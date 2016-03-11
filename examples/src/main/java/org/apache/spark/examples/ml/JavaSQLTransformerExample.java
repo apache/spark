@@ -25,6 +25,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.SQLTransformer;
 import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -48,7 +49,7 @@ public class JavaSQLTransformerExample {
       new StructField("v1", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("v2", DataTypes.DoubleType, false, Metadata.empty())
     });
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
 
     SQLTransformer sqlTrans = new SQLTransformer().setStatement(
       "SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__");

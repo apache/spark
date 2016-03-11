@@ -55,11 +55,11 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   def schema: StructType = encoder.schema
 
   def toDS()(implicit sqlContext: SQLContext): Dataset[A] = {
-    new Dataset(sqlContext, logicalPlan)
+    Dataset(sqlContext, logicalPlan)
   }
 
   def toDF()(implicit sqlContext: SQLContext): DataFrame = {
-    new DataFrame(sqlContext, logicalPlan)
+    DataFrame(sqlContext, logicalPlan)
   }
 
   def addData(data: A*): Offset = {

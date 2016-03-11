@@ -128,6 +128,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   import testImplicits._
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     val data1 = Seq[(Integer, Integer)](
       (1, 10),
       (null, -60),

@@ -27,7 +27,7 @@ import java.util.Arrays;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.RegexTokenizer;
 import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -54,12 +54,12 @@ public class JavaTokenizerExample {
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 
-    DataFrame sentenceDataFrame = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> sentenceDataFrame = sqlContext.createDataFrame(jrdd, schema);
 
     Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
 
-    DataFrame wordsDataFrame = tokenizer.transform(sentenceDataFrame);
-    for (Row r : wordsDataFrame.select("words", "label"). take(3)) {
+    Dataset<Row> wordsDataFrame = tokenizer.transform(sentenceDataFrame);
+    for (Row r : wordsDataFrame.select("words", "label").takeRows(3)) {
       java.util.List<String> words = r.getList(0);
       for (String word : words) System.out.print(word + " ");
       System.out.println();

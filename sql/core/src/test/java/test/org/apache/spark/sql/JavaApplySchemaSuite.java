@@ -32,7 +32,7 @@ import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -107,9 +107,9 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    DataFrame df = sqlContext.createDataFrame(rowRDD, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
-    Row[] actual = sqlContext.sql("SELECT * FROM people").collect();
+    Row[] actual = sqlContext.sql("SELECT * FROM people").collectRows();
 
     List<Row> expected = new ArrayList<>(2);
     expected.add(RowFactory.create("Michael", 29));
@@ -143,7 +143,7 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    DataFrame df = sqlContext.createDataFrame(rowRDD, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(rowRDD, schema);
     df.registerTempTable("people");
     List<String> actual = sqlContext.sql("SELECT * FROM people").toJavaRDD().map(new Function<Row, String>() {
       @Override
@@ -198,14 +198,14 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is another simple string."));
 
-    DataFrame df1 = sqlContext.read().json(jsonRDD);
+    Dataset<Row> df1 = sqlContext.read().json(jsonRDD);
     StructType actualSchema1 = df1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
     df1.registerTempTable("jsonTable1");
     List<Row> actual1 = sqlContext.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
-    DataFrame df2 = sqlContext.read().schema(expectedSchema).json(jsonRDD);
+    Dataset<Row> df2 = sqlContext.read().schema(expectedSchema).json(jsonRDD);
     StructType actualSchema2 = df2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
     df2.registerTempTable("jsonTable2");

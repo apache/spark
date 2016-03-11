@@ -30,7 +30,8 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 
 
 public class JavaDecisionTreeRegressorSuite implements Serializable {
@@ -57,7 +58,7 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     JavaRDD<LabeledPoint> data = sc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
-    DataFrame dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
+    Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
     // This tests setters. Training with various options is tested in Scala.
     DecisionTreeRegressor dt = new DecisionTreeRegressor()

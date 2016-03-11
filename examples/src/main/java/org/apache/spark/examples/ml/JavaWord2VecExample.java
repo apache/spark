@@ -25,7 +25,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.Word2Vec;
 import org.apache.spark.ml.feature.Word2VecModel;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -49,7 +49,7 @@ public class JavaWord2VecExample {
     StructType schema = new StructType(new StructField[]{
       new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
-    DataFrame documentDF = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> documentDF = sqlContext.createDataFrame(jrdd, schema);
 
     // Learn a mapping from words to Vectors.
     Word2Vec word2Vec = new Word2Vec()
@@ -58,8 +58,8 @@ public class JavaWord2VecExample {
       .setVectorSize(3)
       .setMinCount(0);
     Word2VecModel model = word2Vec.fit(documentDF);
-    DataFrame result = model.transform(documentDF);
-    for (Row r : result.select("result").take(3)) {
+    Dataset<Row> result = model.transform(documentDF);
+    for (Row r : result.select("result").takeRows(3)) {
       System.out.println(r);
     }
     // $example off$

@@ -26,7 +26,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -53,7 +53,7 @@ public class JavaWord2VecSuite {
     StructType schema = new StructType(new StructField[]{
       new StructField("text", new ArrayType(DataTypes.StringType, true), false, Metadata.empty())
     });
-    DataFrame documentDF = sqlContext.createDataFrame(
+    Dataset<Row> documentDF = sqlContext.createDataFrame(
       Arrays.asList(
         RowFactory.create(Arrays.asList("Hi I heard about Spark".split(" "))),
         RowFactory.create(Arrays.asList("I wish Java could use case classes".split(" "))),
@@ -66,9 +66,9 @@ public class JavaWord2VecSuite {
       .setVectorSize(3)
       .setMinCount(0);
     Word2VecModel model = word2Vec.fit(documentDF);
-    DataFrame result = model.transform(documentDF);
+    Dataset<Row> result = model.transform(documentDF);
 
-    for (Row r: result.select("result").collect()) {
+    for (Row r: result.select("result").collectAsList()) {
       double[] polyFeatures = ((Vector)r.get(0)).toArray();
       Assert.assertEquals(polyFeatures.length, 3);
     }
