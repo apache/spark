@@ -324,7 +324,6 @@ class Column(object):
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
-
         :func:`cast` is an alias for :func:`astype`.
         """
         if isinstance(dataType, basestring):
