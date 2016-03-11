@@ -217,4 +217,19 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         IsNotNull(resolveColumn(tr, "a")),
         IsNotNull(resolveColumn(tr, "b")))))
   }
+
+  test("IsNotNull constraints of compound expressions in filters") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+    verifyConstraints(tr
+      .where('a.attr + 'c.attr > 10).analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(tr, "a") + resolveColumn(tr, "c") > 10)))
+  }
+
+  test("IsNotNull constraints of BinaryComparison in Not in filters") {
+    val tr = LocalRelation('a.int, 'b.string, 'c.int)
+    verifyConstraints(tr
+      .where(!('a.attr < 10)).analyze.constraints,
+      ExpressionSet(Seq(IsNotNull(resolveColumn(tr, "a")),
+        Not(resolveColumn(tr, "a") < 10))))
+  }
 }

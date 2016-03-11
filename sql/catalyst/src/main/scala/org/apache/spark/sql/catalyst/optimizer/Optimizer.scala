@@ -608,12 +608,12 @@ object NullPropagation extends Rule[LogicalPlan] {
 object NullFiltering extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter @ Filter(condition, child) =>
-      // We generate a list of additional isNotNull filters from the operator's existing
-      // non-compound constraints but remove those that are either already part of the filter
-      // condition or are part of the operator's child constraints.
-      val newIsNotNullConstraints =
-        filter.constraints.filter(isNullFilteringForNonCompoundExpr) --
-          (child.constraints ++ splitConjunctivePredicates(condition))
+      // We generate a list of additional isNotNull filters from the operator's existing constraints
+      // but remove those that are either already part of the filter condition or are part of the
+      // operator's child constraints.
+      val newIsNotNullConstraints = filter.constraints.filter(_.isInstanceOf[IsNotNull]) --
+        (child.constraints ++ splitConjunctivePredicates(condition))
+
       if (newIsNotNullConstraints.nonEmpty) {
         Filter(And(newIsNotNullConstraints.reduce(And), condition), child)
       } else {
@@ -622,11 +622,11 @@ object NullFiltering extends Rule[LogicalPlan] with PredicateHelper {
 
     case join @ Join(left, right, joinType, condition) =>
       val leftIsNotNullConstraints = join.constraints
-        .filter(isNullFilteringForNonCompoundExpr)
+        .filter(_.isInstanceOf[IsNotNull])
         .filter(_.references.subsetOf(left.outputSet)) -- left.constraints
       val rightIsNotNullConstraints =
         join.constraints
-          .filter(isNullFilteringForNonCompoundExpr)
+          .filter(_.isInstanceOf[IsNotNull])
           .filter(_.references.subsetOf(right.outputSet)) -- right.constraints
       val newLeftChild = if (leftIsNotNullConstraints.nonEmpty) {
         Filter(leftIsNotNullConstraints.reduce(And), left)
@@ -643,12 +643,6 @@ object NullFiltering extends Rule[LogicalPlan] with PredicateHelper {
       } else {
         join
       }
-  }
-  private def isNullFilteringForNonCompoundExpr(exp: Expression): Boolean = {
-    exp match {
-      case c: IsNotNull if c.child.isInstanceOf[AttributeReference] => true
-      case _ => false
-    }
   }
 }
 
