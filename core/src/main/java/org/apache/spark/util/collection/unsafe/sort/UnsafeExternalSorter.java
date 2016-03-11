@@ -54,7 +54,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private final TaskContext taskContext;
   private ShuffleWriteMetrics writeMetrics;
 
-  /** The buffer size to use when writing spills using DiskBlockObjectWriter */
+  /** The buffer size to use when writing spills using DiskBlockWriter */
   private final int fileBufferSizeBytes;
 
   /**

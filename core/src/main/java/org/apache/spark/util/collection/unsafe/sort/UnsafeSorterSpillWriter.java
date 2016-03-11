@@ -38,7 +38,7 @@ public final class UnsafeSorterSpillWriter {
 
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
 
-  // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
+  // Small writes to DiskBlockWriter will be fairly inefficient. Since there doesn't seem to
   // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
   // data through a byte array.
   private byte[] writeBuffer = new byte[DISK_WRITE_BUFFER_SIZE];

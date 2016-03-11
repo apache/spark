@@ -105,23 +105,17 @@ public abstract class AbstractBytesToBytesMapSuite {
     when(blockManager.getDiskWriter(
       any(BlockId.class),
       any(File.class),
-      any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
+      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockWriter>() {
       @Override
-      public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
+      public DiskBlockWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
         Object[] args = invocationOnMock.getArguments();
-
-        return new DiskBlockObjectWriter(
-          new DiskBlockWriter(
-            (File) args[1],
-            (Integer) args[3],
-            new CompressStream(),
-            false,
-            (ShuffleWriteMetrics) args[4]),
-          (SerializerInstance) args[2],
-          (BlockId) args[0]
-        );
+        return new DiskBlockWriter(
+          (File) args[1],
+          (Integer) args[2],
+          new CompressStream(),
+          false,
+          (ShuffleWriteMetrics) args[3]);
       }
     });
     when(blockManager.wrapForCompression(any(BlockId.class), any(InputStream.class)))
