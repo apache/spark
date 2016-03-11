@@ -34,7 +34,7 @@ class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     )).toDF("label", "inputWords")
 
     var t = new Word2Phrase().setInputCol("inputWords").setOutputCol("out")
-    t.setMinCount(0)
+    t.setDelta(0)
     t.setThreshold(-100)
     t.setMinWords(0)
 
@@ -66,7 +66,7 @@ class Word2PhraseSuite extends SparkFunSuite with MLlibTestSparkContext with Def
     var model = t.fit(wordDataFrame)
     
     val newInstance = testDefaultReadWrite(model)
-    assert(newInstance.bigram_list === model.bigram_list)
+    assert(newInstance.bigramList === model.bigramList)
   }
 
 
