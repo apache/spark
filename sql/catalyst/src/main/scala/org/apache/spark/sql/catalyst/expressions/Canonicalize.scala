@@ -36,15 +36,16 @@ import org.apache.spark.sql.catalyst.rules._
 object Canonicalize extends RuleExecutor[Expression] {
   override protected def batches: Seq[Batch] =
     Batch(
-      "Expression Canonicalization", FixedPoint(100),
+      "Expression Canonicalization", Once,
       IgnoreNamesTypes,
       Reorder) :: Nil
 
   /** Remove names and nullability from types. */
   protected object IgnoreNamesTypes extends Rule[Expression] {
-    override def apply(e: Expression): Expression = e transformUp {
+    override def apply(e: Expression): Expression = e match {
       case a: AttributeReference =>
         AttributeReference("none", a.dataType.asNullable)(exprId = a.exprId)
+      case _ => e
     }
   }
 
@@ -64,7 +65,7 @@ object Canonicalize extends RuleExecutor[Expression] {
 
   /** Rearrange expressions that are commutative or associative. */
   protected object Reorder extends Rule[Expression] {
-    override def apply(e: Expression): Expression = e transformUp {
+    override def apply(e: Expression): Expression = e match {
       case a: Add => orderCommutative(a, { case Add(l, r) => Seq(l, r) }).reduce(Add)
       case m: Multiply => orderCommutative(m, { case Multiply(l, r) => Seq(l, r) }).reduce(Multiply)
 
@@ -76,6 +77,8 @@ object Canonicalize extends RuleExecutor[Expression] {
 
       case GreaterThanOrEqual(l, r) if l.hashCode() > r.hashCode() => LessThanOrEqual(r, l)
       case LessThanOrEqual(l, r) if l.hashCode() > r.hashCode() => GreaterThanOrEqual(r, l)
+
+      case _ => e
     }
   }
 }
