@@ -404,7 +404,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(csvDir)
 
       val compressedFiles = new File(csvDir).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      assert(compressedFiles.exists(_.getName.endsWith(".csv.gz")))
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -439,7 +439,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .save(csvDir)
 
         val compressedFiles = new File(csvDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+        assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
 
         val carsCopy = sqlContext.read
           .format("csv")

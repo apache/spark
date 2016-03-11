@@ -206,7 +206,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Specifies the name of the [[ContinuousQuery]] that can be started with `stream()`.
+   * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
@@ -223,8 +223,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(path: String): ContinuousQuery = {
-    option("path", path).stream()
+  def startStream(path: String): ContinuousQuery = {
+    option("path", path).startStream()
   }
 
   /**
@@ -234,7 +234,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def stream(): ContinuousQuery = {
+  def startStream(): ContinuousQuery = {
     val dataSource =
       DataSource(
         df.sqlContext,
