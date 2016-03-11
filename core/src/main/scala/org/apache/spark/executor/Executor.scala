@@ -99,7 +99,9 @@ private[spark] class Executor(
 
   // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val maxDirectResultSize = Math.min(1L << 20, RpcUtils.maxMessageSizeBytes(conf))
+  private val maxDirectResultSize = Math.min(
+    conf.getSizeAsBytes("spark.task.maxDirectResultSize", 1L << 20),
+    RpcUtils.maxMessageSizeBytes(conf))
 
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
