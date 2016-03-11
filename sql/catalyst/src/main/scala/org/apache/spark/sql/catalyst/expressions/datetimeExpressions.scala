@@ -129,12 +129,13 @@ case class DateSub(startDate: Expression, days: Expression)
 
   override def prettyName: String = "date_sub"
 }
-/*
- * Returns the hour componemnt of the string/timestamp/interval
+
+/**
+ * Returns the hour component of the string/timestamp/interval
  */
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp_param) - Returns the hour componemnt of the timestamp value.",
-  extended = "> SELECT _FUNC_('2001-01-02 11:35:55');\n '11'\n" +
+  usage = "_FUNC_(timestamp_param) - Returns the hour component of the timestamp value.",
+  extended = "> SELECT _FUNC_('2001-01-02 11:35:55');\n 11\n" +
     "> SELECT _FUNC_('11:35:55');\n '11'")
 case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -152,12 +153,12 @@ case class Hour(child: Expression) extends UnaryExpression with ImplicitCastInpu
   }
 }
 
-/*
- * Returns the minute componemnt of the string/timestamp/interval
+/**
+ * Returns the minute component of the string/timestamp/interval
  */
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp_param) - Returns the minute  componemnt of the timestamp value.",
-  extended = "> SELECT _FUNC_('2001-01-02 11:35:55');\n '35'\n" +
+  usage = "_FUNC_(timestamp_param) - Returns the minute  component of the timestamp value.",
+  extended = "> SELECT _FUNC_('2001-01-02 11:35:55');\n 35\n" +
     "> SELECT _FUNC_('11:35:55');\n '35'")
 case class Minute(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -175,12 +176,12 @@ case class Minute(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 }
 
-/*
- * Returns the second componemnt of the string/timestamp
+/**
+ * Returns the second component of the string/timestamp
  */
 @ExpressionDescription(
-  usage = "_FUNC_(timestamp_param) - Returns the second componemnt of the string/timestamp value.",
-  extended = "> SELECT _FUNC_('2001-01-02 11:35:55');\n '55'\n" +
+  usage = "_FUNC_(timestamp_param) - Returns the second component of the string/timestamp value.",
+  extended = "> SELECT _FUNC_('2001-01-02 11:35:55');\n 55\n" +
     "> SELECT _FUNC_('11:35:55');\n '55'")
 case class Second(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -198,12 +199,12 @@ case class Second(child: Expression) extends UnaryExpression with ImplicitCastIn
   }
 }
 
-/*
+/**
  * Returns the day of the year of date/timestamp
  */
 @ExpressionDescription(
   usage = "_FUNC_(param) - Returns the day of the year for the given date/timestamp.",
-  extended = "> SELECT _FUNC_('2001-01-02');\n '02'")
+  extended = "> SELECT _FUNC_('2001-01-02');\n 02")
 case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -220,12 +221,12 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
   }
 }
 
-/*
+/**
  * Returns the year component of the given date
  */
 @ExpressionDescription(
   usage = "_FUNC_(date_param) - Returns the year component of the date.",
-  extended = "> SELECT _FUNC_('2001-01-02');\n '2001'")
+  extended = "> SELECT _FUNC_('2001-01-02');\n 2001")
 case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -248,7 +249,7 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
  */
 @ExpressionDescription(
   usage = "_FUNC_(date_param) - Returns the quarter for the given date",
-  extended = "> SELECT _FUNC_('2001-01-02');\n '1'")
+  extended = "> SELECT _FUNC_('2001-01-02');\n 1")
 case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -265,12 +266,12 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
   }
 }
 
-/*
+/**
  * Returns the month component of the given date
  */
 @ExpressionDescription(
   usage = "_FUNC_(date_param) - Returns the month component of the given date",
-  extended = "> SELECT _FUNC_('2001-05-02');\n '5'")
+  extended = "> SELECT _FUNC_('2001-05-02');\n 5")
 case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -287,13 +288,13 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
   }
 }
 
-/*
+/**
  * Returns the month component of the given date
  */
 @ExpressionDescription(
   usage = "_FUNC_(date_param) - Returns an integer representing the day" +
     " (day of the month) of the specified date.",
-  extended = "> SELECT _FUNC_('2001-05-02');\n '2'")
+  extended = "> SELECT _FUNC_('2001-05-02');\n 2")
 case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -310,13 +311,13 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
-/*
+/**
  * Returns the month component of the given date
  */
 @ExpressionDescription(
   usage = "_FUNC_(date_param) - Returns the week of the year of the given date. " +
     "A week is considered to start on a Monday and week 1 is the first week with >3 days.",
-  extended = "> SELECT _FUNC_('2001-05-02');\n '18'")
+  extended = "> SELECT _FUNC_('2001-05-02');\n 18")
 case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -353,7 +354,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   }
 }
 
-/*
+/**
  * converts a timestamp to a value of string in the format
  */
 @ExpressionDescription(
@@ -418,7 +419,7 @@ case class ToUnixTimestamp(timeExp: Expression, format: Expression) extends Unix
   extended = "If the second parameter is missing, a pattern of 'yyyy-MM-dd HH:mm:ss' is used.\n" +
     "If no parameters provided, the first parameter will be current_timestamp.\n" +
     "If first parameter is Date or Timestamp then second parameter is ignored.\n " +
-    "> SELECT _FUNC_('10-11-12', 'HH:mm:ss');\n '65472'")
+    "> SELECT _FUNC_('10-11-12', 'HH:mm:ss');\n 65472")
 case class UnixTimestamp(timeExp: Expression, format: Expression) extends UnixTime {
   override def left: Expression = timeExp
   override def right: Expression = format
@@ -869,7 +870,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
   extended = "If time1 and time2 having the same day of month, or both are the last day " +
     "of month then an integer is returned (time under a day will be ignored). Otherwise, " +
     "the difference is calculated based on 31 days per month, and rounding to 8 digits.\n" +
-    "> SELECT _FUNC_('2001-10-30 10:30:00', '1996-10-30');\n '60.0'")
+    "> SELECT _FUNC_('2001-10-30 10:30:00', '1996-10-30');\n 60.0")
 case class MonthsBetween(date1: Expression, date2: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -1049,7 +1050,7 @@ case class TruncDate(date: Expression, format: Expression)
   usage = "_FUNC_(end_date, start_date) - Returns the number of days between " +
     "start date and end date.",
   extended = "The return value is negative if end date is earlier than start date.\n" +
-    "> SELECT _FUNC_('2001-01-02', '2001-01-01');\n '1'")
+    "> SELECT _FUNC_('2001-01-02', '2001-01-01');\n 1")
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
