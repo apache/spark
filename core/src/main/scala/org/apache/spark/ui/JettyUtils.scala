@@ -288,7 +288,6 @@ private[spark] object JettyUtils extends Logging {
         pool.setName(serverName)
       }
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      pool.setMinThreads(math.min(pool.getMinThreads, pool.getMaxThreads))
       pool.setDaemon(true)
       server.setThreadPool(pool)
       val errorHandler = new ErrorHandler()
