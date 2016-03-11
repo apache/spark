@@ -158,6 +158,7 @@ class ConstraintPropagationSuite extends SparkFunSuite {
         tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100,
         tr1.resolveQuoted("a", caseInsensitiveResolution).get ===
           tr2.resolveQuoted("a", caseInsensitiveResolution).get,
+        tr2.resolveQuoted("a", caseInsensitiveResolution).get > 10,
         IsNotNull(tr2.resolveQuoted("a", caseInsensitiveResolution).get),
         IsNotNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get),
         IsNotNull(tr2.resolveQuoted("d", caseInsensitiveResolution).get))))
@@ -202,5 +203,18 @@ class ConstraintPropagationSuite extends SparkFunSuite {
     assert(tr1.where('a.attr > 10)
       .join(tr2.where('d.attr < 100), FullOuter, Some("tr1.a".attr === "tr2.a".attr))
       .analyze.constraints.isEmpty)
+  }
+
+  test("infer additional constraints in filters") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+
+    verifyConstraints(tr
+      .where('a.attr > 10 && 'a.attr === 'b.attr)
+      .analyze.constraints,
+      ExpressionSet(Seq(resolveColumn(tr, "a") > 10,
+        resolveColumn(tr, "b") > 10,
+        resolveColumn(tr, "a") === resolveColumn(tr, "b"),
+        IsNotNull(resolveColumn(tr, "a")),
+        IsNotNull(resolveColumn(tr, "b")))))
   }
 }

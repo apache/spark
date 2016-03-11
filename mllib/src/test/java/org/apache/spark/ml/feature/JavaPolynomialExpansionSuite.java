@@ -29,7 +29,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -77,11 +77,11 @@ public class JavaPolynomialExpansionSuite {
       new StructField("expected", new VectorUDT(), false, Metadata.empty())
     });
 
-    DataFrame dataset = jsql.createDataFrame(data, schema);
+    Dataset<Row> dataset = jsql.createDataFrame(data, schema);
 
-    Row[] pairs = polyExpansion.transform(dataset)
+    List<Row> pairs = polyExpansion.transform(dataset)
       .select("polyFeatures", "expected")
-      .collect();
+      .collectAsList();
 
     for (Row r : pairs) {
       double[] polyFeatures = ((Vector)r.get(0)).toArray();

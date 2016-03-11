@@ -26,7 +26,7 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.StringIndexer;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.StructField;
@@ -54,11 +54,11 @@ public class JavaStringIndexerExample {
       createStructField("id", IntegerType, false),
       createStructField("category", StringType, false)
     });
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
     StringIndexer indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex");
-    DataFrame indexed = indexer.fit(df).transform(df);
+    Dataset<Row> indexed = indexer.fit(df).transform(df);
     indexed.show();
     // $example off$
     jsc.stop();

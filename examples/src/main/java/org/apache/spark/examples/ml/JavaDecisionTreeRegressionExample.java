@@ -27,7 +27,8 @@ import org.apache.spark.ml.feature.VectorIndexer;
 import org.apache.spark.ml.feature.VectorIndexerModel;
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel;
 import org.apache.spark.ml.regression.DecisionTreeRegressor;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -38,7 +39,7 @@ public class JavaDecisionTreeRegressionExample {
     SQLContext sqlContext = new SQLContext(jsc);
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
-    DataFrame data = sqlContext.read().format("libsvm")
+    Dataset<Row> data = sqlContext.read().format("libsvm")
       .load("data/mllib/sample_libsvm_data.txt");
 
     // Automatically identify categorical features, and index them.
@@ -50,9 +51,9 @@ public class JavaDecisionTreeRegressionExample {
       .fit(data);
 
     // Split the data into training and test sets (30% held out for testing)
-    DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
-    DataFrame trainingData = splits[0];
-    DataFrame testData = splits[1];
+    Dataset<Row>[] splits = data.randomSplit(new double[]{0.7, 0.3});
+    Dataset<Row> trainingData = splits[0];
+    Dataset<Row> testData = splits[1];
 
     // Train a DecisionTree model.
     DecisionTreeRegressor dt = new DecisionTreeRegressor()
@@ -66,7 +67,7 @@ public class JavaDecisionTreeRegressionExample {
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
-    DataFrame predictions = model.transform(testData);
+    Dataset<Row> predictions = model.transform(testData);
 
     // Select example rows to display.
     predictions.select("label", "features").show(5);
