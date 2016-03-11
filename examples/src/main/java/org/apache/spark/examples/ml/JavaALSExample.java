@@ -31,7 +31,6 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.types.DataTypes;
 // $example off$
 

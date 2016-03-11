@@ -26,7 +26,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.regression.AFTSurvivalRegression;
 import org.apache.spark.ml.regression.AFTSurvivalRegressionModel;
 import org.apache.spark.mllib.linalg.*;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
