@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources
 
-import org.apache.spark
-
 import scala.collection.mutable
 import scala.util.Try
 
@@ -27,7 +25,7 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{TaskContext, Logging, SparkContext}
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -36,7 +34,7 @@ import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, Inter
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 import org.apache.spark.util.collection.BitSet
@@ -479,12 +477,17 @@ trait FileFormat {
       dataSchema: StructType,
       filters: Seq[Filter],
       options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    (file: PartitionedFile) => {
-      println(s"SCANNING $file $partitionSchema $dataSchema $filters")
-      ???
-    }
+    // TODO: Remove this default implementation when the other formats have been ported
+    // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
+    throw new UnsupportedOperationException(s"buildReader is not supported for $this")
   }
 }
+
+/**
+ * A collection of data files from a partitioned relation, along with the partition values in the
+ * form of an [[InternalRow]].
+ */
+case class Partition(values: InternalRow, files: Seq[FileStatus])
 
 /**
  * An interface for objects capable of enumerating the files that comprise a relation as well
@@ -504,11 +507,14 @@ trait FileCatalog {
   def refresh(): Unit
 }
 
-case class Partition(values: InternalRow, files: Seq[FileStatus])
-
 /**
  * A file catalog that caches metadata gathered by scanning all the files present in `paths`
  * recursively.
+ *
+ * @param parameters as set of options to control discovery
+ * @param paths a list of paths to scan
+ * @param partitionSchema an optional partition schema that will be use to provide types for the
+ *                        discovered partitions
  */
 class HDFSFileCatalog(
     val sqlContext: SQLContext,
@@ -564,7 +570,9 @@ class HDFSFileCatalog(
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
       })
 
-      val selected = partitions.filter { case PartitionDirectory(values, _) => boundPredicate(values) }
+      val selected = partitions.filter {
+        case PartitionDirectory(values, _) => boundPredicate(values)
+      }
       logInfo {
         val total = partitions.length
         val selectedSize = selected.length

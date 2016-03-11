@@ -33,8 +33,8 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVectorUtils}
 import org.apache.spark.sql.sources._
@@ -180,7 +180,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         t.sqlContext.sparkContext.broadcast(new SerializableConfiguration(sharedHadoopConf))
 
       t.bucketSpec match {
-        case Some(spec) if t.sqlContext.conf.bucketingEnabled() =>
+        case Some(spec) if t.sqlContext.conf.bucketingEnabled =>
           val scanBuilder: (Seq[Attribute], Array[Filter]) => RDD[InternalRow] = {
             (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
               val bucketed =
@@ -272,7 +272,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       (requiredColumns: Seq[Attribute], filters: Array[Filter]) => {
 
         relation.bucketSpec match {
-          case Some(spec) if relation.sqlContext.conf.bucketingEnabled() =>
+          case Some(spec) if relation.sqlContext.conf.bucketingEnabled =>
             val requiredDataColumns =
               requiredColumns.filterNot(c => partitionColumnNames.contains(c.name))
 

@@ -24,19 +24,18 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{PredicateHelper, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.sql.{DataFrame, SQLContext, QueryTest}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{Utils, SerializableConfiguration}
+import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.collection.BitSet
 
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
@@ -313,7 +312,9 @@ class TestFileFormat extends FileFormat {
       sqlContext: SQLContext,
       job: Job,
       options: Map[String, String],
-      dataSchema: StructType): OutputWriterFactory = ???
+      dataSchema: StructType): OutputWriterFactory = {
+    throw new NotImplementedError("JUST FOR TESTING")
+  }
 
   override def buildInternalScan(
       sqlContext: SQLContext,
@@ -323,7 +324,9 @@ class TestFileFormat extends FileFormat {
       bucketSet: Option[BitSet],
       inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = ???
+      options: Map[String, String]): RDD[InternalRow] = {
+    throw new NotImplementedError("JUST FOR TESTING")
+  }
 
   override def buildReader(
       sqlContext: SQLContext,

@@ -241,7 +241,7 @@ private[sql] object PhysicalRDD {
 
     val bucketSpec = relation match {
       // TODO: this should be closer to bucket planning.
-      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled() => r.bucketSpec
+      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled => r.bucketSpec
       case _ => None
     }
 
