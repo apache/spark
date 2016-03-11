@@ -128,7 +128,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    DataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+    Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -175,7 +175,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    DataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
+    Dataset.newDataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
   }
 
   /**
@@ -345,7 +345,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
       InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
     }
 
-    DataFrame(
+    Dataset.newDataFrame(
       sqlContext,
       LogicalRDD(
         schema.toAttributes,
@@ -393,7 +393,7 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    DataFrame(sqlContext,
+    Dataset.newDataFrame(sqlContext,
       sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
   }
 
