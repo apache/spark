@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Properties
 
-import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -39,7 +38,7 @@ import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveMetastoreTypes, HiveShim}
+import org.apache.spark.sql.hive.{HiveInspectors, HiveMetastoreTypes, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -162,7 +161,14 @@ private[orc] class OrcOutputWriter(
     val taskAttemptId = context.getTaskAttemptID
     val partition = taskAttemptId.getTaskID.getId
     val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString.orc"
+    val compressionExtension = {
+      val name = conf.get(OrcTableProperties.COMPRESSION.getPropName)
+      OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
+    }
+    // It has the `.orc` extension at the end because (de)compression tools
+    // such as gunzip would not be able to decompress this as the compression
+    // is not applied on this whole file but on each "stream" in ORC format.
+    val filename = f"part-r-$partition%05d-$uniqueWriteJobId$bucketString$compressionExtension.orc"
 
     new OrcOutputFormat().getRecordWriter(
       new Path(path, filename).getFileSystem(conf),
@@ -173,7 +179,7 @@ private[orc] class OrcOutputWriter(
   }
 
   override def write(row: Row): Unit =
-    throw new UnsupportedOperationException("call  writeInternal")
+    throw new UnsupportedOperationException("call writeInternal")
 
   private def wrapOrcStruct(
       struct: OrcStruct,
@@ -329,5 +335,13 @@ private[orc] object OrcRelation {
     "snappy" -> CompressionKind.SNAPPY,
     "zlib" -> CompressionKind.ZLIB,
     "lzo" -> CompressionKind.LZO)
+
+  // The extensions for ORC compression codecs
+  val extensionsForCompressionCodecNames = Map(
+    CompressionKind.NONE.name -> "",
+    CompressionKind.SNAPPY.name -> ".snappy",
+    CompressionKind.ZLIB.name -> ".zlib",
+    CompressionKind.LZO.name -> ".lzo"
+  )
 }
 

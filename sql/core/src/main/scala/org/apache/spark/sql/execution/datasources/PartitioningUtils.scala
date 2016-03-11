@@ -335,14 +335,34 @@ private[sql] object PartitioningUtils {
 
   def validatePartitionColumnDataTypes(
       schema: StructType,
-      partitionColumns: Array[String],
+      partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
 
-    ResolvedDataSource.partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
+    partitionColumnsSchema(schema, partitionColumns, caseSensitive).foreach {
       field => field.dataType match {
         case _: AtomicType => // OK
         case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
       }
+    }
+  }
+
+  def partitionColumnsSchema(
+      schema: StructType,
+      partitionColumns: Seq[String],
+      caseSensitive: Boolean): StructType = {
+    val equality = columnNameEquality(caseSensitive)
+    StructType(partitionColumns.map { col =>
+      schema.find(f => equality(f.name, col)).getOrElse {
+        throw new RuntimeException(s"Partition column $col not found in schema $schema")
+      }
+    }).asNullable
+  }
+
+  private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
+    if (caseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
     }
   }
 

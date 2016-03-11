@@ -46,6 +46,10 @@ case class TungstenAggregate(
 
   require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
 
+  override lazy val allAttributes: Seq[Attribute] =
+    child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
+      aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
+
   override private[sql] lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"),
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -135,7 +139,7 @@ case class TungstenAggregate(
     }
   }
 
-  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: String): String = {
     if (groupingExpressions.isEmpty) {
       doConsumeWithoutKeys(ctx, input)
     } else {

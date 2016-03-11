@@ -79,7 +79,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * command line parsing works. This maps the class name to the resource to use when calling
    * spark-submit.
    */
-  private static final Map<String, String> specialClasses = new HashMap<String, String>();
+  private static final Map<String, String> specialClasses = new HashMap<>();
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
@@ -100,7 +100,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private boolean allowsMixedArguments;
 
   SparkSubmitCommandBuilder() {
-    this.sparkArgs = new ArrayList<String>();
+    this.sparkArgs = new ArrayList<>();
     this.printInfo = false;
     this.isExample = false;
   }
@@ -123,7 +123,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       submitArgs = args.subList(1, args.size());
     }
 
-    this.sparkArgs = new ArrayList<String>();
+    this.sparkArgs = new ArrayList<>();
     this.isExample = isExample;
 
     OptionParser parser = new OptionParser();
@@ -143,7 +143,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   List<String> buildSparkSubmitArgs() {
-    List<String> args = new ArrayList<String>();
+    List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
     if (verbose) {
@@ -271,7 +271,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
     // followed by PYSPARK_DRIVER_PYTHON_OPTS.
-    List<String> pyargs = new ArrayList<String>();
+    List<String> pyargs = new ArrayList<>();
     pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
     if (!isEmpty(pyOpts)) {
@@ -297,7 +297,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     env.put("R_PROFILE_USER",
             join(File.separator, sparkHome, "R", "lib", "SparkR", "profile", "shell.R"));
 
-    List<String> args = new ArrayList<String>();
+    List<String> args = new ArrayList<>();
     args.add(firstNonEmpty(System.getenv("SPARKR_DRIVER_R"), "R"));
     return args;
   }
