@@ -54,16 +54,15 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   def this(df: DataFrame) = this(df.queryExecution.analyzed, df.sqlContext)
 
   def toSQL: String = {
-    println(logicalPlan.treeString)
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
-    println(canonicalizedPlan.treeString)
-
-    val output = canonicalizedPlan.output.zip(logicalPlan.output).map {
-      case (a1, a2) => Alias(a1, a2.name)()
+    // Canonicalizer will remove all naming information, we should add it back by adding an extra
+    // Project and alias the outputs.
+    val outputWithName = canonicalizedPlan.output.zip(logicalPlan.output).map {
+      case (a1, a2) => Alias(a1.withQualifiers(Nil), a2.name)()
     }
-    val finalPlan = Project(output, SubqueryAlias("result", canonicalizedPlan))
+    val finalPlan = Project(outputWithName, SubqueryAlias("result", canonicalizedPlan))
     try {
-      val replaced = canonicalizedPlan.transformAllExpressions {
+      val replaced = finalPlan.transformAllExpressions {
         case e: SubqueryExpression =>
           SubqueryHolder(new SQLBuilder(e.query, sqlContext).toSQL)
         case e: NonSQLExpression =>
@@ -139,9 +138,6 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         case _: Aggregate => "HAVING"
         case _ => "WHERE"
       }
-      println(condition.treeString)
-      println(condition.getClass)
-      println(condition.sql)
       build(toSQL(child), whereOrHaving, condition.sql)
 
     case p @ Distinct(u: Union) if u.children.length > 1 =>
@@ -275,17 +271,25 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     val groupingSetSQL = "GROUPING SETS(" +
       groupingSet.map(e => s"(${e.map(_.sql).mkString(", ")})").mkString(", ") + ")"
 
-    val aggExprs = agg.aggregateExpressions.map { case expr =>
-      expr.transformDown {
+    val aggExprs = agg.aggregateExpressions.map { case aggExpr =>
+      aggExpr.transformDown {
         // grouping_id() is converted to VirtualColumn.groupingIdName by Analyzer. Revert it back.
         case ar: AttributeReference if ar == gid => GroupingID(Nil)
-        case ar: AttributeReference if groupByAttrMap.contains(ar) => groupByAttrMap(ar)
+        case ar: AttributeReference if groupByAttrMap.contains(ar) =>
+          groupByAttrMap(ar)
         case a @ Cast(BitwiseAnd(
             ShiftRight(ar: AttributeReference, Literal(value: Any, IntegerType)),
             Literal(1, IntegerType)), ByteType) if ar == gid =>
           // for converting an expression to its original SQL format grouping(col)
           val idx = groupByExprs.length - 1 - value.asInstanceOf[Int]
           groupByExprs.lift(idx).map(Grouping).getOrElse(a)
+      } match {
+        // Ancestor operators may reference the output of this grouping set, and we use exprId to
+        // generate a unique name for each attribute, so we should make sure the transformed
+        // aggregate expression won't change the output, i.e. exprId and alias name should remain
+        // the same.
+        case ne: NamedExpression if ne.exprId == aggExpr.exprId => ne
+        case e => Alias(e, normalizedName(aggExpr))(exprId = aggExpr.exprId)
       }
     }
 
@@ -309,6 +313,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     )
   }
 
+  private def normalizedName(n: NamedExpression): String = "gen_attr_" + n.exprId.id
+
   object Canonicalizer extends RuleExecutor[LogicalPlan] {
     override protected def batches: Seq[Batch] = Seq(
       Batch("Collapse Project", FixedPoint(100),
@@ -317,43 +323,28 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         // `Aggregate`s.
         CollapseProject),
       Batch("Recover Scoping Info", Once,
+        // Remove all sub queries, as we will insert new ones when it's necessary.
         EliminateSubqueryAliases,
         // A logical plan is allowed to have same-name outputs with different qualifiers(e.g. the
-        // `Join` operator). However, this kind of plan can't be put under a subquery as we will
+        // `Join` operator). However, this kind of plan can't be put under a sub query as we will
         // erase and assign a new qualifier to all outputs and make it impossible to distinguish
-        // same-name outputs. This rule renames all attributes, to guarantee different attributes(
-        // with different exprId) always have different names.
-        ClearAttributeName,
+        // same-name outputs. This rule renames all attributes, to guarantee different
+        // attributes(with different exprId) always have different names. It also removes all
+        // qualifiers, as attributes have unique names now and we don't need qualifiers to resolve
+        // ambiguity.
+        NormalizedAttribute,
+        // Wraps table information with SQLTable, and combine `Sample` operator if there are any.
         ResolveSQLTable,
-        // Used to handle other auxiliary `Project`s added by analyzer (e.g.
-        // `ResolveAggregateFunctions` rule)
-        AddSubquery,
-        // Previous rule will add extra sub-queries, this rule is used to re-propagate and update
-        // the qualifiers bottom up, e.g.:
-        //
-        // Sort
-        //   ordering = t1.a
-        //   Project
-        //     projectList = [t1.a, t1.b]
-        //     Subquery gen_subquery
-        //       child ...
-        //
-        // will be transformed to:
-        //
-        // Sort
-        //   ordering = gen_subquery.a
-        //   Project
-        //     projectList = [gen_subquery.a, gen_subquery.b]
-        //     Subquery gen_subquery
-        //       child ...
-        UpdateQualifiers
+        // Insert sub queries on top of operators that need to appear after FROM clause.
+        AddSubquery
       )
     )
 
-    object ClearAttributeName extends Rule[LogicalPlan] {
+    object NormalizedAttribute extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-        case a: Attribute => a.withName(normalizedName(a))
-        case a: Alias => Alias(a.child, normalizedName(a))(exprId = a.exprId)
+        case a: AttributeReference => AttributeReference(normalizedName(a), a.dataType)(
+          exprId = a.exprId, isGenerated = false, qualifiers = Nil)
+        case a: Alias => Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifiers = Nil)
       }
     }
 
@@ -361,25 +352,29 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
         case s @ Sample(lowerBound, upperBound, _, _, l @ LogicalRelation(_, _,
             Some(TableIdentifier(table, Some(database))))) if s.isTableSample =>
-          restoreColumnNames(
-            SQLTable(database, table, l.output, Some(lowerBound -> upperBound)))
+          makeTable(database, table, l.output, Some(lowerBound -> upperBound))
 
         case s @ Sample(lowerBound, upperBound, _, _, m: MetastoreRelation) if s.isTableSample =>
-          restoreColumnNames(
-            SQLTable(m.databaseName, m.tableName, m.output, Some(lowerBound -> upperBound)))
+          makeTable(m.databaseName, m.tableName, m.output, Some(lowerBound -> upperBound))
 
         case l @ LogicalRelation(_, _, Some(TableIdentifier(table, Some(database)))) =>
-          restoreColumnNames(SQLTable(database, table, l.output, None))
+          makeTable(database, table, l.output, None)
 
         case m: MetastoreRelation =>
-          restoreColumnNames(SQLTable(m.databaseName, m.tableName, m.output, None))
+          makeTable(m.databaseName, m.tableName, m.output, None)
       }
 
-      private def restoreColumnNames(table: SQLTable): SubqueryAlias = {
-        val output = table.output.map { attr =>
-          Alias(attr.withQualifiers(Nil), normalizedName(attr))(exprId = attr.exprId)
+      private def makeTable(
+          database: String,
+          table: String,
+          output: Seq[Attribute],
+          sample: Option[(Double, Double)]): SubqueryAlias = {
+        val outputWithoutQualifier = output.map(_.withQualifiers(Nil))
+        val sqlTable = SQLTable(database, table, outputWithoutQualifier, sample)
+        val aliasedOutput = outputWithoutQualifier.map { attr =>
+          Alias(attr, normalizedName(attr))(exprId = attr.exprId)
         }
-        addSubquery(Project(output, table))
+        addSubquery(Project(aliasedOutput, sqlTable))
       }
     }
 
@@ -411,20 +406,6 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
           right = addSubqueryIfNeeded(j.right))
       }
     }
-
-    object UpdateQualifiers extends Rule[LogicalPlan] {
-      override def apply(tree: LogicalPlan): LogicalPlan = tree transformUp {
-        case plan =>
-          val inputAttributes = plan.children.flatMap(_.output)
-          plan transformExpressions {
-            case a: AttributeReference if !plan.producedAttributes.contains(a) =>
-              val qualifier = inputAttributes.find(_ semanticEquals a).map(_.qualifiers)
-              a.withQualifiers(qualifier.getOrElse(Nil))
-          }
-      }
-    }
-
-    private def normalizedName(n: NamedExpression): String = "gen_attr_" + n.exprId.id
 
     private def needSubquery(plan: LogicalPlan): Boolean = plan match {
       case _: SubqueryAlias => false
