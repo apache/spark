@@ -23,6 +23,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 // $example on$
@@ -81,7 +82,7 @@ public class JavaKMeansExample {
     JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParsePoint());
     StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
     StructType schema = new StructType(fields);
-    DataFrame dataset = sqlContext.createDataFrame(points, schema);
+    Dataset<Row> dataset = sqlContext.createDataFrame(points, schema);
 
     // Trains a k-means model
     KMeans kmeans = new KMeans()

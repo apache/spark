@@ -27,6 +27,7 @@ import org.apache.spark.ml.regression.AFTSurvivalRegression;
 import org.apache.spark.ml.regression.AFTSurvivalRegressionModel;
 import org.apache.spark.mllib.linalg.*;
 import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SQLContext;
@@ -52,7 +53,7 @@ public class JavaAFTSurvivalRegressionExample {
       new StructField("censor", DataTypes.DoubleType, false, Metadata.empty()),
       new StructField("features", new VectorUDT(), false, Metadata.empty())
     });
-    DataFrame training = jsql.createDataFrame(data, schema);
+    Dataset<Row> training = jsql.createDataFrame(data, schema);
     double[] quantileProbabilities = new double[]{0.3, 0.6};
     AFTSurvivalRegression aft = new AFTSurvivalRegression()
       .setQuantileProbabilities(quantileProbabilities)
