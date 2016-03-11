@@ -48,17 +48,15 @@ import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-private[sql] object DataFrame {
-  def apply(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
-    val qe = sqlContext.executePlan(logicalPlan)
-    qe.assertAnalyzed()
-    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
-  }
-}
-
 private[sql] object Dataset {
   def apply[T: Encoder](sqlContext: SQLContext, logicalPlan: LogicalPlan): Dataset[T] = {
     new Dataset(sqlContext, logicalPlan, implicitly[Encoder[T]])
+  }
+
+  def newDataFrame(sqlContext: SQLContext, logicalPlan: LogicalPlan): DataFrame = {
+    val qe = sqlContext.executePlan(logicalPlan)
+    qe.assertAnalyzed()
+    new Dataset[Row](sqlContext, logicalPlan, RowEncoder(qe.analyzed.schema))
   }
 }
 
@@ -2129,7 +2127,7 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: => LogicalPlan): DataFrame = {
-    DataFrame(sqlContext, logicalPlan)
+    Dataset.newDataFrame(sqlContext, logicalPlan)
   }
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */

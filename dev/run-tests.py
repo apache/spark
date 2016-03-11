@@ -573,8 +573,7 @@ def main():
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
-        # TODO Temporarily disable MiMA check for DF-to-DS migration prototyping
-        # detect_binary_inop_with_mima()
+        detect_binary_inop_with_mima()
         # Since we did not build assembly/assembly before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
         build_spark_assembly_sbt(hadoop_version)
