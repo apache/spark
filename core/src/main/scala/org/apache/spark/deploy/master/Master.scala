@@ -622,11 +622,13 @@ private[deploy] class Master(
     val assignedCores = new Array[Int](numUsable) // Number of cores to give to each worker
     val assignedExecutors = new Array[Int](numUsable) // Number of new executors on each worker
     var coresToAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
+    val coresPerTask = app.desc.coresPerTask
 
     /** Return whether the specified worker can launch an executor for this app. */
     def canLaunchExecutor(pos: Int): Boolean = {
-      val keepScheduling = coresToAssign >= minCoresPerExecutor
-      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >= minCoresPerExecutor
+      val keepScheduling = coresToAssign >= math.max(minCoresPerExecutor, coresPerTask)
+      val enoughCores = usableWorkers(pos).coresFree - assignedCores(pos) >=
+        math.max(minCoresPerExecutor, coresPerTask)
 
       // If we allow multiple executors per worker, then we can always launch new executors.
       // Otherwise, if there is already an executor on this worker, just give it more cores.
@@ -650,16 +652,20 @@ private[deploy] class Master(
       freeWorkers.foreach { pos =>
         var keepScheduling = true
         while (keepScheduling && canLaunchExecutor(pos)) {
-          coresToAssign -= minCoresPerExecutor
-          assignedCores(pos) += minCoresPerExecutor
-
+          var coresToAllocateInThisRnd = 0
           // If we are launching one executor per worker, then every iteration assigns 1 core
           // to the executor. Otherwise, every iteration assigns cores to a new executor.
           if (oneExecutorPerWorker) {
             assignedExecutors(pos) = 1
+            coresToAllocateInThisRnd = coresPerTask
           } else {
             assignedExecutors(pos) += 1
+            coresToAllocateInThisRnd = minCoresPerExecutor
           }
+
+          coresToAssign -= coresToAllocateInThisRnd
+          assignedCores(pos) += coresToAllocateInThisRnd
+
 
           // Spreading out an application means spreading out its executors across as
           // many workers as possible. If we are not spreading out, then we should keep
@@ -683,10 +689,13 @@ private[deploy] class Master(
     // in the queue, then the second app, etc.
     for (app <- waitingApps if app.coresLeft > 0) {
       val coresPerExecutor: Option[Int] = app.desc.coresPerExecutor
+      val coresPerTask = app.desc.coresPerTask
       // Filter out workers that don't have enough resources to launch an executor
+      // the user might set the requested number of cores per task via spark.task.cpus
+      // we need to respect this configuratio when allocating cores to the executor (SPARK-5337)
       val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
         .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
-          worker.coresFree >= coresPerExecutor.getOrElse(1))
+          worker.coresFree >= math.max(coresPerExecutor.getOrElse(1), coresPerTask))
         .sortBy(_.coresFree).reverse
       val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 

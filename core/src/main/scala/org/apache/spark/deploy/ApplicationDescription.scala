@@ -19,6 +19,8 @@ package org.apache.spark.deploy
 
 import java.net.URI
 
+import org.apache.spark.SparkException
+
 private[spark] case class ApplicationDescription(
     name: String,
     maxCores: Option[Int],
@@ -32,7 +34,17 @@ private[spark] case class ApplicationDescription(
     // number of executors this application wants to start with,
     // only used if dynamic allocation is enabled
     initialExecutorLimit: Option[Int] = None,
-    user: String = System.getProperty("user.name", "<unknown>")) {
+    user: String = System.getProperty("user.name", "<unknown>"),
+    val coresPerTask: Int = 1) {
+
+  // We only check whether coresPerExecutor is no less than coresPerTask when the user has the
+  // explicit configuration on this. We have the explicit mechanism to prevent to start executors
+  // which cannot execute any task in Master. (SPARK-5337)
+  if (coresPerExecutor.getOrElse(Int.MaxValue) < coresPerTask) {
+    throw new SparkException(s"illegal configuration for application $name, " +
+      s"coresPerExecutor (configured value: ${coresPerExecutor.getOrElse(1)}) cannot be less " +
+      s"than coresPerTask (configured value: $coresPerTask)")
+  }
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

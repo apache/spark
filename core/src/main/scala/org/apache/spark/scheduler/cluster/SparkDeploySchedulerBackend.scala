@@ -19,7 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import java.util.concurrent.Semaphore
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark._
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -97,8 +97,16 @@ private[spark] class SparkDeploySchedulerBackend(
       } else {
         None
       }
-    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
+    if (coresPerExecutor.isDefined && (coresPerExecutor.get < scheduler.CPUS_PER_TASK ||
+      (coresPerExecutor.get % scheduler.CPUS_PER_TASK) != 0)) {
+      throw new SparkException(s"invalid configuration of " +
+        s"spark.executor.cores(${coresPerExecutor.get}) and " +
+        s"spark.task.cpus(${scheduler.CPUS_PER_TASK}}), spark.executor.cores cannot be less " +
+        "than spark.task.cpus and has to be divisible by it")
+    }
+    val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
+      command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor,
+      initialExecutorLimit, coresPerTask = scheduler.CPUS_PER_TASK)
     client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)

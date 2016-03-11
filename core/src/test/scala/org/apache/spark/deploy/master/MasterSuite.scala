@@ -189,6 +189,38 @@ class MasterSuite extends SparkFunSuite
     schedulingWithCoresPerExecutor(spreadOut = false)
   }
 
+  test("scheduling with cores per task - spread out") {
+    schedulingWithCoresPerTask(true)
+  }
+
+  test("scheduling with cores per task - no spread out") {
+    schedulingWithCoresPerTask(false)
+  }
+
+  test("scheduling with cores per task AND max cores - spread out") {
+    schedulingWithCoresPerTaskAndMaxCores(true)
+  }
+
+  test("scheduling with cores per task AND max cores - no spread out") {
+    schedulingWithCoresPerTaskAndMaxCores(false)
+  }
+
+  test("scheduling with cores per task AND cores per executor - spread out") {
+    schedulingWithCoresPerTaskAndCoresPerExecutor(true)
+  }
+
+  test("scheduling with cores per task AND cores per executor - no spread out") {
+    schedulingWithCoresPerTaskAndCoresPerExecutor(false)
+  }
+
+  test("scheduling with cores per task AND cores per executor AND max cores - spread out") {
+    schedulingWithCoresPerTaskAndCoresPerExecutorAndMaxCores(true)
+  }
+
+  test("scheduling with cores per task AND cores per executor AND max cores - no spread out") {
+    schedulingWithCoresPerTaskAndCoresPerExecutorAndMaxCores(false)
+  }
+
   test("scheduling with cores per executor AND max cores - spread out") {
     schedulingWithCoresPerExecutorAndMaxCores(spreadOut = true)
   }
@@ -362,6 +394,71 @@ class MasterSuite extends SparkFunSuite
     }
   }
 
+  private def schedulingWithCoresPerTask(spreadOut: Boolean): Unit = {
+    val master = makeMaster()
+    val appInfo1 = makeAppInfo(1024, coresPerTask = Some(1))
+    val appInfo2 = makeAppInfo(256, coresPerTask = Some(2))
+    val appInfo3 = makeAppInfo(256, coresPerTask = Some(3))
+    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo3, workerInfos, spreadOut)
+    assert(scheduledCores1 === Array(10, 10, 10))
+    assert(scheduledCores2 === Array(10, 10, 10))
+    assert(scheduledCores3 === Array(9, 9, 9))
+  }
+
+  private def schedulingWithCoresPerTaskAndMaxCores(spreadOut: Boolean): Unit = {
+    val master = makeMaster()
+    val appInfo1 = makeAppInfo(256, coresPerTask = Some(2), maxCores = Some(4))
+    val appInfo2 = makeAppInfo(256, coresPerTask = Some(2), maxCores = Some(20))
+    val appInfo3 = makeAppInfo(256, coresPerTask = Some(3), maxCores = Some(20))
+    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
+    val scheduledCores3 = scheduleExecutorsOnWorkers(master, appInfo3, workerInfos, spreadOut)
+    if (spreadOut) {
+      assert(scheduledCores1 === Array(2, 2, 0))
+      assert(scheduledCores2 === Array(8, 6, 6))
+      assert(scheduledCores3 === Array(6, 6, 6))
+    } else {
+      assert(scheduledCores1 === Array(4, 0, 0))
+      assert(scheduledCores2 === Array(10, 10, 0))
+      assert(scheduledCores3 === Array(9, 9, 0))
+    }
+  }
+
+  private def schedulingWithCoresPerTaskAndCoresPerExecutor(spreadOut: Boolean): Unit = {
+    val master = makeMaster()
+    // we don't test the case where coresPerExecutor is larger than coresPerTask or coresPerExecutor
+    // is not multiple folds of coresPerTask; because we prohibit this configuration in
+    // SparkDeployScheduleBackend
+    val appInfo1 = makeAppInfo(256, coresPerTask = Some(2), coresPerExecutor = Some(2))
+    val appInfo2 = makeAppInfo(256, coresPerTask = Some(2), coresPerExecutor = Some(4))
+    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
+    assert(scheduledCores1 === Array(10, 10, 10))
+    assert(scheduledCores2 === Array(8, 8, 8))
+  }
+
+  private def schedulingWithCoresPerTaskAndCoresPerExecutorAndMaxCores(spreadOut: Boolean): Unit = {
+    val master = makeMaster()
+    // we don't test the case where coresPerExecutor is larger than coresPerTask or coresPerExecutor
+    // is not multiple folds of coresPerTask; because we prohibit this configuration in
+    // SparkDeployScheduleBackend
+    val appInfo1 = makeAppInfo(256, coresPerTask = Some(2), coresPerExecutor = Some(2),
+      maxCores = Some(4))
+    val appInfo2 = makeAppInfo(256, coresPerTask = Some(2), coresPerExecutor = Some(4),
+      maxCores = Some(18))
+    val scheduledCores1 = scheduleExecutorsOnWorkers(master, appInfo1, workerInfos, spreadOut)
+    val scheduledCores2 = scheduleExecutorsOnWorkers(master, appInfo2, workerInfos, spreadOut)
+    if (spreadOut) {
+      assert(scheduledCores1 === Array(2, 2, 0))
+      assert(scheduledCores2 === Array(8, 4, 4))
+    } else {
+      assert(scheduledCores1 === Array(4, 0, 0))
+      assert(scheduledCores2 === Array(8, 8, 0))
+    }
+  }
+
   // ==========================================
   // | Utility methods and fields for testing |
   // ==========================================
@@ -381,9 +478,11 @@ class MasterSuite extends SparkFunSuite
   private def makeAppInfo(
       memoryPerExecutorMb: Int,
       coresPerExecutor: Option[Int] = None,
-      maxCores: Option[Int] = None): ApplicationInfo = {
+      maxCores: Option[Int] = None,
+      coresPerTask: Option[Int] = None): ApplicationInfo = {
     val desc = new ApplicationDescription(
-      "test", maxCores, memoryPerExecutorMb, null, "", None, None, coresPerExecutor)
+      "test", maxCores, memoryPerExecutorMb, null, "", None, None, coresPerExecutor,
+      coresPerTask = coresPerTask.getOrElse(1))
     val appId = System.currentTimeMillis.toString
     new ApplicationInfo(0, appId, desc, new Date, null, Int.MaxValue)
   }
