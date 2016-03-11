@@ -111,13 +111,15 @@ if __name__ == "__main__":
     print("from pyspark.ml.param import *\n\n")
     shared = [
         ("maxIter", "max number of iterations (>= 0).", None, int, "TypeConverters.convertToInt"),
-        ("regParam", "regularization parameter (>= 0).", None, float, "TypeConverters.convertToFloat"),
+        ("regParam", "regularization parameter (>= 0).", None, float,
+         "TypeConverters.convertToFloat"),
         ("featuresCol", "features column name.", "'features'", str, None),
         ("labelCol", "label column name.", "'label'", str, None),
         ("predictionCol", "prediction column name.", "'prediction'", str, None),
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
          "Note: Not all models output well-calibrated probability estimates! These probabilities " +
-         "should be treated as confidences, not precise probabilities.", "'probability'", str, None),
+         "should be treated as confidences, not precise probabilities.", "'probability'", str,
+         None),
         ("rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", "'rawPrediction'",
          str, None),
         ("inputCol", "input column name.", None, str, None),
@@ -125,22 +127,27 @@ if __name__ == "__main__":
         ("outputCol", "output column name.", "self.uid + '__output'", str, None),
         ("numFeatures", "number of features.", None, int, "TypeConverters.convertToInt"),
         ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
-         "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None, int, "TypeConverters.convertToInt"),
+         "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None, int,
+         "TypeConverters.convertToInt"),
         ("seed", "random seed.", "hash(type(self).__name__)", int, "TypeConverters.convertToInt"),
-        ("tol", "the convergence tolerance for iterative algorithms.", None, float, "TypeConverters.convertToFloat"),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None, float, "TypeConverters.convertToFloat"),
+        ("tol", "the convergence tolerance for iterative algorithms.", None, float,
+         "TypeConverters.convertToFloat"),
+        ("stepSize", "Step size to be used for each iteration of optimization.", None, float,
+         "TypeConverters.convertToFloat"),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
          "out rows with bad values), or error (which will throw an errror). More options may be " +
          "added later.", None, str, None),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
-         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0", float, "TypeConverters.convertToFloat"),
+         "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0", float,
+         "TypeConverters.convertToFloat"),
         ("fitIntercept", "whether to fit an intercept term.", "True", bool, None),
         ("standardization", "whether to standardize the training features before fitting the " +
          "model.", "True", bool, None),
         ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
          "predicting each class. Array must have length equal to the number of classes, with " +
          "values >= 0. The class with largest value p/t is predicted, where p is the original " +
-         "probability of that class and t is the class' threshold.", None, None, "TypeConverters.convertToListFloat"),
+         "probability of that class and t is the class' threshold.", None, None,
+         "TypeConverters.convertToListFloat"),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, str, None),
         ("solver", "the solver algorithm for optimization. If this is not set or empty, " +
@@ -184,7 +191,8 @@ if __name__ == "__main__":
     for name, doc, typeConverterStr in decisionTreeParams:
         if typeConverterStr is None:
             typeConverterStr = str(None)
-        variable = paramTemplate.replace("$name", name).replace("$doc", doc).replace("$typeConverterStr", typeConverterStr)
+        variable = paramTemplate.replace("$name", name).replace("$doc", doc) \
+            .replace("$typeConverterStr", typeConverterStr)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
         dtParamMethods += _gen_param_code(name, doc, None) + "\n"
     code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" +

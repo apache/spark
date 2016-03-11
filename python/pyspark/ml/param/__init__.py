@@ -18,6 +18,7 @@
 from abc import ABCMeta
 import copy
 import numpy as np
+import warnings
 
 from pyspark import since
 from pyspark.ml.util import Identifiable
@@ -41,7 +42,9 @@ class Param(object):
         self.name = str(name)
         self.doc = str(doc)
         self.expectedType = expectedType
-        self.typeConverter = typeConverter
+        if expectedType is not None:
+            warnings.warn("expectedType will be deprecated in 2.1.0, use typeConverter instead.")
+        self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
         """Copy the current param to a new parent, must be a dummy param."""
@@ -51,15 +54,6 @@ class Param(object):
             return param
         else:
             raise ValueError("Cannot copy from non-dummy parent %s." % parent)
-
-    def _convert(self, value):
-        if self.typeConverter is not None:
-            try:
-                return self.typeConverter(value)
-            except:
-                raise TypeError("Could not convert type")
-        else:
-            return value
 
     def __str__(self):
         return str(self.parent) + "__" + self.name
@@ -76,12 +70,19 @@ class Param(object):
         else:
             return False
 
+
 class TypeConverters(object):
     """
     .. note:: DeveloperApi
-    Factory methods for common validation functions for `Param.isValid`.
+
+    Factory methods for common type conversion functions for `Param.typeConverter`.
+
     .. versionadded:: 2.0.0
     """
+
+    @staticmethod
+    def identity(value):
+        return value
 
     @staticmethod
     def convertToList(value):
@@ -101,7 +102,11 @@ class TypeConverters(object):
     def convertToListFloat(value):
         if type(value) != list:
             value = TypeConverters.convertToList(value)
-        return list(map(lambda v: float(v), value))
+        try:
+            value = list(map(lambda v: float(v), value))
+        except ValueError:
+            raise TypeError("Could not convert %s to a list of floats" % value)
+        return value
 
     @staticmethod
     def convertToVector(value):
@@ -109,7 +114,10 @@ class TypeConverters(object):
         Convert a value to a Mllib Vector.
         """
         if not isinstance(value, Vector):
-            value = DenseVector(value)
+            try:
+                value = DenseVector(value)
+            except ValueError:
+                raise TypeError("Could not convert %s to a vector" % value)
         return value
 
     @staticmethod
@@ -119,9 +127,10 @@ class TypeConverters(object):
         """
         if type(value) != list:
             value = TypeConverters.convertToList(value)
-
-        if not all(map(lambda v: type(v) == int, value)):
+        try:
             value = list(map(lambda v: int(v), value))
+        except ValueError:
+            raise TypeError("Could not convert %s to a list of ints" % value)
         return value
 
     @staticmethod
@@ -129,14 +138,21 @@ class TypeConverters(object):
         """
         Convert a value to a float.
         """
-        return float(value)
+        try:
+            return float(value)
+        except ValueError:
+            raise TypeError("Could not convert %s to float" % value)
+
 
     @staticmethod
     def convertToInt(value):
         """
         Convert a value to an int.
         """
-        return int(value)
+        try:
+            return int(value)
+        except ValueError:
+            raise TypeError("Could not convert %s to float" % int)
 
 
 class Params(Identifiable):
@@ -349,7 +365,7 @@ class Params(Identifiable):
         """
         for param, value in kwargs.items():
             p = getattr(self, param)
-            value = p._convert(value)
+            value = p.typeConverter(value)
             self._paramMap[getattr(self, param)] = value
         return self
 

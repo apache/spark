@@ -105,21 +105,6 @@ class ParamTypeConversionTests(PySparkTestCase):
     Test that param type conversion happens.
     """
 
-    def test_int_to_float(self):
-        from pyspark.mllib.linalg import Vectors
-        df = self.sc.parallelize([
-            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
-        lr = LogisticRegression(elasticNetParam=0)
-        lr.fit(df)
-        lr.setElasticNetParam(0)
-        lr.fit(df)
-
-    def test_invalid_to_float(self):
-        from pyspark.mllib.linalg import Vectors
-        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
-        lr = LogisticRegression(elasticNetParam=0)
-        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
-
     def test_int(self):
         lr = LogisticRegression(maxIter=5.0)
         self.assertEqual(lr.getMaxIter(), 5)
