@@ -193,7 +193,7 @@ private[execution] object HashedRelation {
           keyIsUnique = false
           existingMatchList
         }
-        matchList += currentRow.copy()
+        matchList += currentRow
       }
     }
 
@@ -443,7 +443,7 @@ private[joins] object UnsafeHashedRelation {
         } else {
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow
       }
     }
 
@@ -627,7 +627,7 @@ private[joins] object LongHashedRelation {
           keyIsUnique = false
           existingMatchList
         }
-        matchList += unsafeRow.copy()
+        matchList += unsafeRow
       }
     }
 
