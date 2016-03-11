@@ -724,7 +724,6 @@ class DAGScheduler(
       reason = "as part of cancellation of all jobs"))
     activeJobs.clear() // These should already be empty by this point,
     jobIdToActiveJob.clear() // but just in case we lost track of some jobs...
-    submitWaitingStages()
   }
 
   /**
@@ -750,7 +749,6 @@ class DAGScheduler(
         submitStage(stage)
       }
     }
-    submitWaitingStages()
   }
 
   /**
@@ -791,7 +789,6 @@ class DAGScheduler(
     }
     val jobIds = activeInGroup.map(_.jobId)
     jobIds.foreach(handleJobCancellation(_, "part of cancelled job group %s".format(groupId)))
-    submitWaitingStages()
   }
 
   private[scheduler] def handleBeginEvent(task: Task[_], taskInfo: TaskInfo) {
@@ -799,7 +796,6 @@ class DAGScheduler(
     // In that case, we wouldn't have the stage anymore in stageIdToStage.
     val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
-    submitWaitingStages()
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -807,7 +803,6 @@ class DAGScheduler(
       reason: String,
       exception: Option[Throwable]): Unit = {
     stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason, exception) }
-    submitWaitingStages()
   }
 
   private[scheduler] def cleanUpAfterSchedulerStop() {
@@ -830,7 +825,6 @@ class DAGScheduler(
 
   private[scheduler] def handleGetTaskResult(taskInfo: TaskInfo) {
     listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
-    submitWaitingStages()
   }
 
   private[scheduler] def handleJobSubmitted(jobId: Int,
@@ -869,8 +863,6 @@ class DAGScheduler(
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
     submitStage(finalStage)
-
-    submitWaitingStages()
   }
 
   private[scheduler] def handleMapStageSubmitted(jobId: Int,
@@ -914,8 +906,6 @@ class DAGScheduler(
     if (finalStage.isAvailable) {
       markMapStageJobAsFinished(job, mapOutputTracker.getStatistics(dependency))
     }
-
-    submitWaitingStages()
   }
 
   /** Submits stage, but first recursively submits any missing parents. */
@@ -1247,7 +1237,7 @@ class DAGScheduler(
                 }
               }
 
-              // Note: newly runnable stages will be submitted below when we submit waiting stages
+              submitWaitingStages()
             }
         }
 
@@ -1322,7 +1312,6 @@ class DAGScheduler(
         // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
         // will abort the job.
     }
-    submitWaitingStages()
   }
 
   /**
@@ -1364,7 +1353,6 @@ class DAGScheduler(
       logDebug("Additional executor lost message for " + execId +
                "(epoch " + currentEpoch + ")")
     }
-    submitWaitingStages()
   }
 
   private[scheduler] def handleExecutorAdded(execId: String, host: String) {
@@ -1373,7 +1361,6 @@ class DAGScheduler(
       logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
-    submitWaitingStages()
   }
 
   private[scheduler] def handleStageCancellation(stageId: Int) {
@@ -1386,7 +1373,6 @@ class DAGScheduler(
       case None =>
         logInfo("No active jobs to kill for Stage " + stageId)
     }
-    submitWaitingStages()
   }
 
   private[scheduler] def handleJobCancellation(jobId: Int, reason: String = "") {
@@ -1396,7 +1382,6 @@ class DAGScheduler(
       failJobAndIndependentStages(
         jobIdToActiveJob(jobId), "Job %d cancelled %s".format(jobId, reason))
     }
-    submitWaitingStages()
   }
 
   /**
