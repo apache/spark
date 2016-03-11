@@ -117,22 +117,28 @@ private[state] object StateStore extends Logging {
 private[sql] class StateStore(
     val id: StateStoreId,
     val directory: String,
-    numBatchesToRetain: Int = 2
+    numBatchesToRetain: Int = 2,
+    maxDeltaChainForSnapshots: Int = 10
   ) extends Logging {
   type MapType = mutable.HashMap[InternalRow, InternalRow]
 
   import StateStore._
 
-  private val storeMaps = new mutable.HashMap[Long, MapType]
+  private val loadedMaps = new mutable.HashMap[Long, MapType]
   private val baseDir = new Path(directory, s"${id.operatorId}/${id.partitionId.toString}")
   private val fs = baseDir.getFileSystem(new Configuration())
   private val serializer = new KryoSerializer(new SparkConf)
 
-  @volatile private var uncommittedDelta: UncommittedDelta = null
+  @volatile private var uncommittedDelta: UncommittedUpdates = null
 
   initialize()
 
-  private[state] def startUpdates(version: Long): Unit = synchronized {
+  /**
+   * Prepare for updates to create a new `version` of the map. The store ensure that updates
+   * are made on the `version - 1` of the store data. If `version` already exists, it will
+   * be overwritten when the updates are committed.
+   */
+  private[state] def prepareForUpdates(version: Long): Unit = synchronized {
     require(version >= 0)
     if (uncommittedDelta != null) {
       cancelUpdates()
@@ -142,54 +148,65 @@ private[sql] class StateStore(
       val oldMap = loadMap(version - 1)
       newMap ++= oldMap
     }
-    uncommittedDelta = new UncommittedDelta(version, newMap)
+    uncommittedDelta = new UncommittedUpdates(version, newMap)
   }
 
+  /** Update the value of a key using the `updateFunc` */
   def update(key: InternalRow, updateFunc: Option[InternalRow] => InternalRow): Unit = {
     verify(uncommittedDelta != null, "Cannot update data before calling newVersion()")
     uncommittedDelta.update(key, updateFunc)
   }
 
+  /** Remove keys that satisfy the following condition */
   def remove(condition: InternalRow => Boolean): Unit = {
     verify(uncommittedDelta != null, "Cannot remove data before calling newVersion()")
     uncommittedDelta.remove(condition)
   }
 
+  /** Commit all the updates that have been made to the store. */
   def commitUpdates(): Unit = {
     verify(uncommittedDelta != null, "Cannot commit data before calling newVersion()")
-    uncommittedDelta.commit()
+    uncommittedDelta.commitAndWriteDeltaFile()
     uncommittedDelta = null
   }
 
+  /** Cancel all the updates that have been made to the store. */
   def cancelUpdates(): Unit = {
     verify(uncommittedDelta != null, "Cannot commit data before calling newVersion()")
     uncommittedDelta.cancel()
     uncommittedDelta = null
   }
 
-  def hasCommitted: Boolean = {
-    uncommittedDelta == null
-  }
+  /**
+   * Get all the data of the latest version of the store.
+   * Note that this will look up the files to determined the latest known version.
+   */
 
   def getAll(): Iterator[InternalRow] = synchronized {
-    verify(uncommittedDelta == null, "Cannot getAll() before committing")
-    val lastVersion = fetchFiles().lastOption.map(_.version)
-    lastVersion.map(loadMap) match {
-      case Some(map) =>
-        map.iterator.map { case (key, value) => new JoinedRow(key, value) }
-      case None =>
-        Iterator.empty
-    }
+    verify(uncommittedDelta == null, "Cannot getAll() while there are uncommitted updates")
+    val versionsInFiles = fetchFiles().map(_.version).toSet
+    val versionsLoaded = loadedMaps.keySet
+    val allKnownVersions = versionsInFiles ++ versionsLoaded
+    if (allKnownVersions.nonEmpty) {
+      loadMap(allKnownVersions.max)
+        .iterator
+        .map { case (key, value) => new JoinedRow(key, value) }
+    } else Iterator.empty
+  }
+
+  private[state] def hasUncommittedUpdates: Boolean = {
+    uncommittedDelta != null
   }
 
   override def toString(): String = {
     s"StateStore[id = (op=${id.operatorId},part=${id.partitionId}), dir = $baseDir]"
   }
 
-  // Private methods
+  // Internal classes and methods
+
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
-  private class UncommittedDelta(val version: Long, val map: MapType) {
+  private class UncommittedUpdates(val version: Long, val map: MapType) {
     private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
     private val tempDeltaFileStream =
       serializer.newInstance().serializeStream(fs.create(tempDeltaFile, true))
@@ -213,14 +230,13 @@ private[sql] class StateStore(
       }
     }
 
-    def commit(): Unit = {
+    def commitAndWriteDeltaFile(): Unit = {
       try {
         tempDeltaFileStream.close()
         val deltaFile = new Path(baseDir, s"${uncommittedDelta.version}.delta")
         StateStore.this.synchronized {
           fs.rename(tempDeltaFile, deltaFile)
-          println("Written " + deltaFile)
-          storeMaps.put(version, map)
+          loadedMaps.put(version, map)
         }
       } catch {
         case NonFatal(e) =>
@@ -235,30 +251,31 @@ private[sql] class StateStore(
     }
   }
 
-
-  private[state] def getInternalMap(version: Long): Option[MapType] = synchronized {
-    storeMaps.get(version)
-  }
-
   private def initialize(): Unit = {
     if (!fs.exists(baseDir)) {
       fs.mkdirs(baseDir)
     } else {
       if (!fs.isDirectory(baseDir)) {
-        throw new IllegalStateException(s"Cannot use $directory for storing state data as" +
-          s"$baseDir already exists and is not a directory")
+        throw new IllegalStateException(
+          s"Cannot use $directory for storing state data as" +
+            s"$baseDir already exists and is not a directory")
       }
     }
   }
 
+  private[state] def getAll(version: Long): Iterator[InternalRow] = synchronized {
+    loadMap(version)
+      .iterator
+      .map { case (key, value) => new JoinedRow(key, value) }
+  }
+
+
   private def loadMap(version: Long): MapType = {
     if (version < 0) return new MapType
-    println(s"Loading version $version")
-    synchronized { storeMaps.get(version) }.getOrElse {
+    synchronized { loadedMaps.get(version) }.getOrElse {
       val mapFromFile = readSnapshotFile(version).getOrElse {
         val prevMap = loadMap(version - 1)
         val deltaUpdates = readDeltaFile(version)
-        println(s"Reading delta for $version")
         val newMap = new MapType()
         newMap ++= prevMap
         newMap.sizeHint(prevMap.size)
@@ -268,10 +285,9 @@ private[sql] class StateStore(
             case KeyRemoved(key) => newMap.remove(key)
           }
         }
-        println("Map = " + newMap.toSeq.mkString(", "))
         newMap
       }
-      storeMaps.put(version, mapFromFile)
+      loadedMaps.put(version, mapFromFile)
       mapFromFile
     }
   }
@@ -334,10 +350,10 @@ private[sql] class StateStore(
         val deltaFilesForLastVersion =
           filesForVersion(files, lastVersion).filter(_.isSnapshot == false)
         synchronized {
-          storeMaps.get(lastVersion)
+          loadedMaps.get(lastVersion)
         } match {
           case Some(map) =>
-            if (deltaFilesForLastVersion.size > 10) {
+            if (deltaFilesForLastVersion.size > maxDeltaChainForSnapshots) {
               writeSnapshotFile(lastVersion, map)
             }
           case None =>
@@ -359,7 +375,7 @@ private[sql] class StateStore(
         if (earliestVersionToRetain >= 0) {
           val earliestFileToRetain = filesForVersion(files, earliestVersionToRetain).head
           synchronized {
-            storeMaps.keys.filter(_ < earliestVersionToRetain).foreach(storeMaps.remove)
+            loadedMaps.keys.filter(_ < earliestVersionToRetain).foreach(loadedMaps.remove)
           }
           files.filter(_.version < earliestFileToRetain.version).foreach { f =>
             fs.delete(f.path, true)
@@ -408,19 +424,15 @@ private[sql] class StateStore(
         Seq.empty
     }
     val versionToFiles = new mutable.HashMap[Long, StoreFile]
-    println(s"Fetching files in $baseDir")
     files.foreach { status =>
       val path = status.getPath
-      //println(s"\tTesting file $path")
       val nameParts = path.getName.split("\\.")
-      println(s"\t${path.getName}, ${nameParts.mkString(",")}")
       if (nameParts.size == 2) {
         val version = nameParts(0).toLong
         nameParts(1).toLowerCase match {
           case "delta" =>
             // ignore the file otherwise, snapshot file already exists for that batch id
             if (!versionToFiles.contains(version)) {
-              //println(s"\tFound file $path")
               versionToFiles.put(version, StoreFile(version, path, isSnapshot = false))
             }
           case "snapshot" =>

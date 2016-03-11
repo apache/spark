@@ -51,9 +51,9 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
         storeDirectory
       )
       val inputIter = dataRDD.compute(partition, ctxt)
-      store.startUpdates(newStoreVersion)
+      store.prepareForUpdates(newStoreVersion)
       val outputIter = storeUpdateFunction(store, inputIter)
-      assert(store.hasCommitted)
+      assert(!store.hasUncommittedUpdates)
       outputIter
     } {
       if (store != null) store.cancelUpdates()

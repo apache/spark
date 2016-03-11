@@ -45,7 +45,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
     // Verify state before starting a new set of updates
     assert(store.getAll().isEmpty)
-    assert(store.getInternalMap(0).isEmpty)
+    assert(!store.hasUncommittedUpdates)
     intercept[IllegalStateException] {
       store.update(null, null)
     }
@@ -60,10 +60,11 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     }
 
     // Verify states after starting updates
-    store.startUpdates(0)
+    store.prepareForUpdates(0)
     intercept[IllegalStateException] {
       store.getAll()
     }
+    assert(store.hasUncommittedUpdates)
     update(store, "a", 1)
     intercept[IllegalStateException] {
       store.getAll()
@@ -75,43 +76,51 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     remove(store, _.startsWith("a"))
     store.commitUpdates()
 
-    // Very state after committing
+    // Verify state after committing
+    assert(!store.hasUncommittedUpdates)
     assert(getData(store) === Set("b" -> 2))
-    assertMap(store.getInternalMap(0), Map("b" -> 2))
     assert(fileExists(store, 0, isSnapshot = false))
-    assert(store.getInternalMap(1).isEmpty)
+
+    // Trying to get newer versions should fail
+    intercept[Exception] {
+      getData(store, 1)
+    }
+
+    intercept[Exception] {
+      getDataFromFiles(store, 1)
+    }
 
     // Reload store from the directory
     val reloadedStore = new StateStore(store.id, store.directory)
     assert(getData(reloadedStore) === Set("b" -> 2))
 
     // New updates to the reload store with new version, and does not change old version
-    reloadedStore.startUpdates(1)
+    reloadedStore.prepareForUpdates(1)
     update(reloadedStore, "c", 4)
     reloadedStore.commitUpdates()
     assert(getData(reloadedStore) === Set("b" -> 2, "c" -> 4))
-    assertMap(reloadedStore.getInternalMap(0), Map("b" -> 2))
-    assertMap(reloadedStore.getInternalMap(1), Map("b" -> 2, "c" -> 4))
+    assert(getData(reloadedStore, version = 0) === Set("b" -> 2))
+    assert(getData(reloadedStore, version = 1) === Set("b" -> 2, "c" -> 4))
     assert(fileExists(reloadedStore, 1, isSnapshot = false))
   }
 
   test("cancelUpdates") {
     val store = newStore()
-    store.startUpdates(0)
+    store.prepareForUpdates(0)
     update(store, "a", 1)
     store.commitUpdates()
     assert(getData(store) === Set("a" -> 1))
 
     // cancelUpdates should not change the data
-    store.startUpdates(1)
+    store.prepareForUpdates(1)
     update(store, "b", 1)
     store.cancelUpdates()
     assert(getData(store) === Set("a" -> 1))
 
     // Calling startUpdates again should cancel previous updates
-    store.startUpdates(1)
+    store.prepareForUpdates(1)
     update(store, "b", 1)
-    store.startUpdates(1)
+    store.prepareForUpdates(1)
     update(store, "c", 1)
     store.commitUpdates()
     assert(getData(store) === Set("a" -> 1, "c" -> 1))
@@ -121,40 +130,108 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     val store = newStore()
 
     intercept[IllegalArgumentException] {
-      store.startUpdates(-1)
+      store.prepareForUpdates(-1)
     }
 
     // Prepare some data in the stoer
-    store.startUpdates(0)
+    store.prepareForUpdates(0)
     update(store, "a", 1)
     store.commitUpdates()
     assert(getData(store) === Set("a" -> 1))
 
     intercept[IllegalStateException] {
-      store.startUpdates(2)
+      store.prepareForUpdates(2)
     }
 
     // Update store version with some data
-    println("here")
-    store.startUpdates(1)
+    store.prepareForUpdates(1)
     update(store, "b", 1)
     store.commitUpdates()
-    println("xyz")
     assert(getData(store) === Set("a" -> 1, "b" -> 1))
-    println("bla")
 
-    assert(getData(new StateStore(store.id, store.directory)) === Set("a" -> 1, "b" -> 1))
+    assert(getDataFromFiles(store) === Set("a" -> 1, "b" -> 1))
 
     // Overwrite the version with other data
-    store.startUpdates(1)
+    store.prepareForUpdates(1)
     update(store, "c", 1)
     store.commitUpdates()
     assert(getData(store) === Set("a" -> 1, "c" -> 1))
-    assert(getData(new StateStore(store.id, store.directory)) === Set("a" -> 1, "c" -> 1))
+    assert(getDataFromFiles(store) === Set("a" -> 1, "c" -> 1))
   }
 
-  def getData(store: StateStore): Set[(String, Int)] = {
-    store.getAll.map(unwrapKeyValue).toSet
+  test("snapshotting") {
+    val store = newStore(maxDeltaChainForSnapshots = 5)
+
+    var currentVersion = -1
+    def updateVersionTo(targetVersion: Int): Unit = {
+      for (i <- currentVersion + 1 to targetVersion) {
+        store.prepareForUpdates(i)
+        update(store, "a", i)
+        store.commitUpdates()
+      }
+    }
+
+    updateVersionTo(2)
+    require(getData(store) === Set("a" -> 2))
+    store.manageFiles()
+    assert(getDataFromFiles(store) === Set("a" -> 2))
+    for (i <- 0 to 2) {
+      assert(fileExists(store, i, isSnapshot = false))  // all delta files present
+      assert(!fileExists(store, i, isSnapshot = true))  // no snapshot files present
+    }
+
+    // After version 6, snapshotting should generate one snapshot file
+    updateVersionTo(6)
+    require(getData(store) === Set("a" -> 6), "Store not updated correctly")
+    store.manageFiles()       // do snapshot
+    assert(getData(store) === Set("a" -> 6), "manageFiles() messed up the data")
+    assert(getDataFromFiles(store) === Set("a" -> 6))
+
+    val snapshotVersion = (0 to 6).find(version => fileExists(store, version, isSnapshot = true))
+    assert(snapshotVersion.nonEmpty, "Snapshot file not generated")
+
+
+    // After version 20, snapshotting should generate newer snapshot files
+    updateVersionTo(20)
+    require(getData(store) === Set("a" -> 20), "Store not updated correctly")
+    store.manageFiles()       // do snapshot
+    assert(getData(store) === Set("a" -> 20), "manageFiles() messed up the data")
+    assert(getDataFromFiles(store) === Set("a" -> 20))
+
+    val latestSnapshotVersion = (0 to 20).filter(version =>
+      fileExists(store, version, isSnapshot = true)).lastOption
+    assert(latestSnapshotVersion.nonEmpty, "No snapshot file found")
+    assert(latestSnapshotVersion.get > snapshotVersion.get, "Newer snapshot not generated")
+
+  }
+
+  test("cleaning") {
+    val store = newStore(maxDeltaChainForSnapshots = 5)
+
+    for (i <- 0 to 20) {
+      store.prepareForUpdates(i)
+      update(store, "a", i)
+      store.commitUpdates()
+    }
+    require(getData(store) === Set("a" -> 20), "Store not updated correctly")
+    store.manageFiles()     // do cleanup
+    assert(fileExists(store, 0, isSnapshot = false))
+
+    assert(getDataFromFiles(store, 20) === Set("a" -> 20))
+    assert(getDataFromFiles(store, 19) === Set("a" -> 19))
+  }
+
+  def getData(store: StateStore, version: Int = -1): Set[(String, Int)] = {
+    if (version < 0) {
+      store.getAll.map(unwrapKeyValue).toSet
+    } else {
+      store.getAll(version).map(unwrapKeyValue).toSet
+    }
+
+  }
+
+  def getDataFromFiles(store: StateStore, version: Int = -1): Set[(String, Int)] = {
+    getData(new StateStore(store.id, store.directory), version)
   }
 
   def assertMap(
@@ -184,10 +261,15 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     StateStore invokePrivate method(storeId)
   }
 
-  def newStore(opId: Long = Random.nextLong, partition: Int = 0): StateStore = {
+  def newStore(
+      opId: Long = Random.nextLong,
+      partition: Int = 0,
+      maxDeltaChainForSnapshots: Int = 10
+    ): StateStore = {
     new StateStore(
       StateStoreId(opId, partition),
-      Utils.createDirectory(tempDir, Random.nextString(5)).toString)
+      Utils.createDirectory(tempDir, Random.nextString(5)).toString,
+      maxDeltaChainForSnapshots = maxDeltaChainForSnapshots)
   }
 
   def remove(store: StateStore, condition: String => Boolean): Unit = {
