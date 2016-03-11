@@ -100,6 +100,9 @@ class TypeConverters(object):
 
     @staticmethod
     def convertToListFloat(value):
+        """
+        Convert a value to list of floats, if possible..
+        """
         if type(value) != list:
             value = TypeConverters.convertToList(value)
         try:
@@ -109,21 +112,9 @@ class TypeConverters(object):
         return value
 
     @staticmethod
-    def convertToVector(value):
-        """
-        Convert a value to a Mllib Vector.
-        """
-        if not isinstance(value, Vector):
-            try:
-                value = DenseVector(value)
-            except ValueError:
-                raise TypeError("Could not convert %s to a vector" % value)
-        return value
-
-    @staticmethod
     def convertToListInt(value):
         """
-        Convert a value to list of ints.
+        Convert a value to list of ints, if possible..
         """
         if type(value) != list:
             value = TypeConverters.convertToList(value)
@@ -134,9 +125,21 @@ class TypeConverters(object):
         return value
 
     @staticmethod
+    def convertToVector(value):
+        """
+        Convert a value to a MLlib Vector, if possible..
+        """
+        if not isinstance(value, Vector):
+            try:
+                value = DenseVector(value)
+            except ValueError:
+                raise TypeError("Could not convert %s to a vector" % value)
+        return value
+
+    @staticmethod
     def convertToFloat(value):
         """
-        Convert a value to a float.
+        Convert a value to a float, if possible.
         """
         try:
             return float(value)
@@ -147,12 +150,12 @@ class TypeConverters(object):
     @staticmethod
     def convertToInt(value):
         """
-        Convert a value to an int.
+        Convert a value to an int, if possible..
         """
         try:
             return int(value)
         except ValueError:
-            raise TypeError("Could not convert %s to float" % int)
+            raise TypeError("Could not convert %s to int" % value)
 
 
 class Params(Identifiable):
