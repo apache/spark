@@ -42,11 +42,11 @@ import org.apache.spark.sql.types._
  *    well.
  *  - Construct a reader function by passing filters and the schema into the FileFormat.
  *  - Using an partition pruning predicates, enumerate the list of files that should be read.
- *  - Split the files into tasks and construct a FileScanRDD
+ *  - Split the files into tasks and construct a FileScanRDD.
  *  - Add any projection or filters that must be evaluated after the scan.
  *
  * Files are assigned into tasks using the following algorithm:
- *  - If the table is bucketed: group files by bucket id into the correct number of partitions.
+ *  - If the table is bucketed, group files by bucket id into the correct number of partitions.
  *  - If the table is not bucketed or bucketing is turned off:
  *   - If any file is larger than the threshold, split it into pieces based on that threshold
  *   - Sort the files by decreasing file size.

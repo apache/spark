@@ -498,6 +498,15 @@ trait FileCatalog {
 
   def partitionSpec(): PartitionSpec
 
+  /**
+   * Returns all valid files grouped into partitions when the data is partitioned. If the data is
+   * unpartitioned, this will return a single partition with not partition values.
+   *
+   * @param filters the filters used to prune which partitions are returned.  These filters must
+   *                only refer to partition columns and this method will only return files
+   *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
+   *                filters will not need to be evaluated again on the returned data.
+   */
   def listFiles(filters: Seq[Expression]): Seq[Partition]
 
   def allFiles(): Seq[FileStatus]

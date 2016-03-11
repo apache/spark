@@ -38,6 +38,7 @@ case class PartitionedFile(
  * directories.
  *
  * IMPLEMENT ME: This is just a placeholder for a future implementation.
+ * TODO: This currently does not take locality information about the files into account.
  */
 case class FilePartition(val index: Int, files: Seq[PartitionedFile]) extends Partition
 
