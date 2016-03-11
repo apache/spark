@@ -139,9 +139,9 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
         }
         // Extract other keywords, if they exist
         val Seq(rList, temp) = getClauses(Seq("TOK_RESOURCE_LIST", "TOK_TEMPORARY"), otherArgs)
-        val resourcesMap = rList.toSeq.flatMap {
-          case Token("TOK_RESOURCE_LIST", resources) =>
-            resources.map {
+        val resources: Seq[(String, String)] = rList.toSeq.flatMap {
+          case Token("TOK_RESOURCE_LIST", resList) =>
+            resList.map {
               case Token("TOK_RESOURCE_URI", rType :: Token(rPath, Nil) :: Nil) =>
                 val resourceType = rType match {
                   case Token("TOK_JAR", Nil) => "jar"
@@ -153,8 +153,8 @@ private[sql] class SparkQl(conf: ParserConf = SimpleParserConf()) extends Cataly
               case _ => parseFailed("Invalid CREATE FUNCTION command", node)
             }
           case _ => parseFailed("Invalid CREATE FUNCTION command", node)
-        }.toMap
-        CreateFunction(funcName, alias, resourcesMap, temp.isDefined)(node.source)
+        }
+        CreateFunction(funcName, alias, resources, temp.isDefined)(node.source)
 
       case Token("TOK_ALTERTABLE", alterTableArgs) =>
         AlterTableCommandParser.parse(node)
