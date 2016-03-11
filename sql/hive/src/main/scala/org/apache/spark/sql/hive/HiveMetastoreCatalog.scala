@@ -245,7 +245,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
-      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _) = bucketSpec.get
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
       tableProperties.put("spark.sql.sources.schema.numBucketCols",

@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.expressions.SortDirection
-
-
 /**
  * A container for bucketing information.
  * Bucketing is a technology for decomposing data sets into more manageable parts, and the number
@@ -32,8 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.SortDirection
 private[sql] case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String],
-    sortDirections: Seq[SortDirection] = Nil)
+    sortColumnNames: Seq[String])
 
 private[sql] object BucketingUtils {
   // The file name of bucketed data should have 3 parts:

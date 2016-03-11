@@ -174,6 +174,7 @@ object AlterTableCommandParser {
         }
         // If sort columns are specified, num buckets should be the third arg.
         // If sort columns are not specified, num buckets should be the second arg.
+        // TODO: actually use `sortDirections` once we actually store that in the metastore
         val (sortCols: Seq[String], sortDirections: Seq[SortDirection], numBuckets: Int) = {
           b.tail match {
             case Token("TOK_TABCOLNAME", children) :: numBucketsNode :: Nil =>
@@ -190,7 +191,7 @@ object AlterTableCommandParser {
         }
         AlterTableStorageProperties(
           tableIdent,
-          BucketSpec(numBuckets, clusterCols, sortCols, sortDirections))(node.source)
+          BucketSpec(numBuckets, clusterCols, sortCols))(node.source)
 
       // ALTER TABLE table_name NOT CLUSTERED
       case Token("TOK_ALTERTABLE_CLUSTER_SORT", Token("TOK_NOT_CLUSTERED", Nil) :: Nil) :: _ =>
