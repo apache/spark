@@ -50,7 +50,7 @@ public final class JavaQueueStream {
 
     // Create the queue through which RDDs can be pushed to
     // a QueueInputDStream
-    Queue<JavaRDD<Integer>> rddQueue = new LinkedList<JavaRDD<Integer>>();
+    Queue<JavaRDD<Integer>> rddQueue = new LinkedList<>();
 
     // Create and push some RDDs into the queue
     List<Integer> list = Lists.newArrayList();
@@ -68,7 +68,7 @@ public final class JavaQueueStream {
         new PairFunction<Integer, Integer, Integer>() {
           @Override
           public Tuple2<Integer, Integer> call(Integer i) {
-            return new Tuple2<Integer, Integer>(i % 10, 1);
+            return new Tuple2<>(i % 10, 1);
           }
         });
     JavaPairDStream<Integer, Integer> reducedStream = mappedStream.reduceByKey(

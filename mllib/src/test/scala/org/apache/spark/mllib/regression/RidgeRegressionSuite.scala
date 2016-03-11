@@ -19,8 +19,6 @@ package org.apache.spark.mllib.regression
 
 import scala.util.Random
 
-import org.jblas.DoubleMatrix
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalClusterSparkContext,
@@ -49,12 +47,12 @@ class RidgeRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
     val numExamples = 50
     val numFeatures = 20
 
-    org.jblas.util.Random.seed(42)
     // Pick weights as random values distributed uniformly in [-0.5, 0.5]
-    val w = DoubleMatrix.rand(numFeatures, 1).subi(0.5)
+    val random = new Random(42)
+    val w = Array.fill(numFeatures)(random.nextDouble() - 0.5)
 
     // Use half of data for training and other half for validation
-    val data = LinearDataGenerator.generateLinearInput(3.0, w.toArray, 2 * numExamples, 42, 10.0)
+    val data = LinearDataGenerator.generateLinearInput(3.0, w, 2 * numExamples, 42, 10.0)
     val testData = data.take(numExamples)
     val validationData = data.takeRight(numExamples)
 

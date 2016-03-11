@@ -19,6 +19,7 @@ package org.apache.spark.examples.ml;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SQLContext;
 
 // $example on$
@@ -26,7 +27,6 @@ import java.util.Arrays;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.NGram;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -54,13 +54,13 @@ public class JavaNGramExample {
         "words", DataTypes.createArrayType(DataTypes.StringType), false, Metadata.empty())
     });
 
-    DataFrame wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> wordDataFrame = sqlContext.createDataFrame(jrdd, schema);
 
     NGram ngramTransformer = new NGram().setInputCol("words").setOutputCol("ngrams");
 
-    DataFrame ngramDataFrame = ngramTransformer.transform(wordDataFrame);
+    Dataset<Row> ngramDataFrame = ngramTransformer.transform(wordDataFrame);
 
-    for (Row r : ngramDataFrame.select("ngrams", "label").take(3)) {
+    for (Row r : ngramDataFrame.select("ngrams", "label").takeRows(3)) {
       java.util.List<String> ngrams = r.getList(0);
       for (String ngram : ngrams) System.out.print(ngram + " --- ");
       System.out.println();

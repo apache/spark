@@ -64,7 +64,7 @@ class GroupedDataset[K, V] private[sql](
 
   private def groupedData =
     new GroupedData(
-      new DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
+      DataFrame(sqlContext, logicalPlan), groupingAttributes, GroupedData.GroupByType)
 
   /**
    * Returns a new [[GroupedDataset]] where the type of the key has been mapped to the specified
@@ -86,7 +86,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def keys: Dataset[K] = {
-    new Dataset[K](
+    Dataset[K](
       sqlContext,
       Distinct(
         Project(groupingAttributes, logicalPlan)))
@@ -111,7 +111,7 @@ class GroupedDataset[K, V] private[sql](
    * @since 1.6.0
    */
   def flatMapGroups[U : Encoder](f: (K, Iterator[V]) => TraversableOnce[U]): Dataset[U] = {
-    new Dataset[U](
+    Dataset[U](
       sqlContext,
       MapGroups(
         f,
@@ -308,7 +308,7 @@ class GroupedDataset[K, V] private[sql](
       other: GroupedDataset[K, U])(
       f: (K, Iterator[V], Iterator[U]) => TraversableOnce[R]): Dataset[R] = {
     implicit val uEncoder = other.unresolvedVEncoder
-    new Dataset[R](
+    Dataset[R](
       sqlContext,
       CoGroup(
         f,
