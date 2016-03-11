@@ -34,10 +34,12 @@ class JavaWrapper(Params):
 
     __metaclass__ = ABCMeta
 
-    #: The wrapped Java companion object. Subclasses should initialize
-    #: it properly. The param values in the Java object should be
-    #: synced with the Python wrapper in fit/transform/evaluate/copy.
-    _java_obj = None
+    def __init__(self):
+        super(JavaWrapper, self).__init__()
+        #: The wrapped Java companion object. Subclasses should initialize
+        #: it properly. The param values in the Java object should be
+        #: synced with the Python wrapper in fit/transform/evaluate/copy.
+        self._java_obj = None
 
     @staticmethod
     def _new_java_obj(java_class, *args):
@@ -191,3 +193,20 @@ class JavaModel(Model, JavaTransformer):
         sc = SparkContext._active_spark_context
         java_args = [_py2java(sc, arg) for arg in args]
         return _java2py(sc, m(*java_args))
+
+
+class JavaCallable(object):
+    """
+    Wrapper for a plain object in JVM to make Java calls
+    """
+    def __init__(self, java_obj, sc=None):
+        self._sc = sc if sc is not None else SparkContext._active_spark_context
+        self._java_obj = java_obj
+
+    def __del__(self):
+        self._sc._gateway.detach(self._java_obj)
+
+    def _call_java(self, name, *args):
+        m = getattr(self._java_obj, name)
+        java_args = [_py2java(self._sc, arg) for arg in args]
+        return _java2py(self._sc, m(*java_args))

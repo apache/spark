@@ -19,11 +19,11 @@ import warnings
 
 from pyspark import since
 from pyspark.ml.util import keyword_only
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaCallable
 from pyspark.ml.param.shared import *
 from pyspark.ml.regression import (
     RandomForestParams, TreeEnsembleParams, DecisionTreeModel, TreeEnsembleModels)
-from pyspark.mllib.common import inherit_doc, JavaCallable
+from pyspark.mllib.common import inherit_doc
 
 
 __all__ = ['LogisticRegression', 'LogisticRegressionModel',
@@ -229,7 +229,7 @@ class LogisticRegressionModel(JavaModel):
         `trainingSummary == None`.
         """
         java_blrt_summary = self._call_java("summary")
-        return BinaryLogisticRegressionTrainingSummary.fromActiveSparkContext(java_blrt_summary)
+        return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
 
     @property
     @since("2.0.0")
@@ -248,7 +248,7 @@ class LogisticRegressionModel(JavaModel):
         @param dataset Test dataset to evaluate model on.
         ""
         java_blr_summary = self._call_java("evaluate", df)
-        return BinaryLogisticRegressionSummary._fromActiveSparkContext(java_blr_summary)
+        return BinaryLogisticRegressionSummary(java_blr_summary)
     """
 
 
@@ -265,7 +265,7 @@ class LogisticRegressionSummary(JavaCallable):
         """
         Dataframe outputted by the model's `transform` method.
         """
-        return self.call("predictions")
+        return self._call_java("predictions")
 
     @property
     @since("2.0.0")
@@ -274,7 +274,7 @@ class LogisticRegressionSummary(JavaCallable):
         Field in "predictions" which gives the calibrated probability
         of each instance as a vector.
         """
-        return self.call("probabilityCol")
+        return self._call_java("probabilityCol")
 
     @property
     @since("2.0.0")
@@ -283,7 +283,7 @@ class LogisticRegressionSummary(JavaCallable):
         Field in "predictions" which gives the true label of each
         instance.
         """
-        return self.call("labelCol")
+        return self._call_java("labelCol")
 
     @property
     @since("2.0.0")
@@ -292,7 +292,7 @@ class LogisticRegressionSummary(JavaCallable):
         Field in "predictions" which gives the features of each instance
         as a vector.
         """
-        return self.call("featuresCol")
+        return self._call_java("featuresCol")
 
 
 class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
@@ -310,7 +310,7 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
         """
         Objective function (scaled loss + regularization) at each iteration.
         """
-        return self.call("objectiveHistory")
+        return self._call_java("objectiveHistory")
 
     @property
     @since("2.0.0")
@@ -318,7 +318,7 @@ class LogisticRegressionTrainingSummary(LogisticRegressionSummary):
         """
         Number of training iterations until termination.
         """
-        return self.call("totalIterations")
+        return self._call_java("totalIterations")
 
 
 class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
@@ -343,7 +343,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self.call("roc")
+        return self._call_java("roc")
 
     @property
     @since("2.0.0")
@@ -356,7 +356,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self.call("areaUnderROC")
+        return self._call_java("areaUnderROC")
 
     @property
     @since("2.0.0")
@@ -369,7 +369,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self.call("pr")
+        return self._call_java("pr")
 
     @property
     @since("2.0.0")
@@ -382,7 +382,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self.call("fMeasureByThreshold")
+        return self._call_java("fMeasureByThreshold")
 
     @property
     @since("2.0.0")
@@ -396,7 +396,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self.call("precisionByThreshold")
+        return self._call_java("precisionByThreshold")
 
     @property
     @since("2.0.0")
@@ -410,7 +410,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         `LogisticRegression.weightCol`. This will change in later Spark
         versions.
         """
-        return self.call("recallByThreshold")
+        return self._call_java("recallByThreshold")
 
 
 class BinaryLogisticRegressionTrainingSummary(BinaryLogisticRegressionSummary,

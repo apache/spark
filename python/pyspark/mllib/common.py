@@ -130,39 +130,20 @@ def callMLlibFunc(name, *args):
     return callJavaFunc(sc, api, *args)
 
 
-class JavaCallable(object):
-    """
-    Wrapper for an object in JVM to make Java calls
-    """
-    def __init__(self, sc, java_obj):
-        self._sc = sc
-        self._java_obj = java_obj
-
-    def __del__(self):
-        self._sc._gateway.detach(self._java_obj)
-
-    @classmethod
-    def fromActiveSparkContext(cls, java_obj):
-        """Create from a currently active context"""
-        sc = SparkContext._active_spark_context
-        return cls(sc, java_obj)
-
-    def call(self, name, *a):
-        """Call method of java_obj"""
-        return callJavaFunc(self._sc, getattr(self._java_obj, name), *a)
-
-
-class JavaModelWrapper(JavaCallable):
+class JavaModelWrapper(object):
     """
     Wrapper for the model in JVM
     """
     def __init__(self, java_model):
-        sc = SparkContext.getOrCreate()
-        super(JavaModelWrapper, self).__init__(sc, java_model)
+        self._sc = SparkContext.getOrCreate()
+        self._java_model = java_model
 
-    @property
-    def _java_model(self):
-        return self._java_obj
+    def __del__(self):
+        self._sc._gateway.detach(self._java_model)
+
+    def call(self, name, *a):
+        """Call method of java_model"""
+        return callJavaFunc(self._sc, getattr(self._java_model, name), *a)
 
 
 def inherit_doc(cls):
