@@ -736,6 +736,20 @@ object GeneralizedLinearRegressionModel extends MLReadable[GeneralizedLinearRegr
   }
 }
 
+/**
+ * :: Experimental ::
+ * Summarizing Generalized Linear regression Fits.
+ *
+ * @param predictions predictions outputted by the model's `transform` method
+ * @param predictionCol field in "predictions" which gives the prediction value of each instance
+ * @param family the family object of the model
+ * @param link the link object of the model
+ * @param model the model that should be summarized
+ * @param diagInvAtWA diagonal of matrix (A^T * W * A)^-1 in the last iteration
+ * @param numIterations number of iterations
+ */
+@Since("2.0.0")
+@Experimental
 class GeneralizedLinearRegressionSummary private[regression] (
     @transient val predictions: DataFrame,
     val predictionCol: String,
@@ -750,6 +764,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /** Number of instances in DataFrame predictions */
   lazy val numInstances: Long = predictions.count()
 
+  /** The numeric rank of the fitted linear model */
   lazy val rank: Long = if (model.getFitIntercept) {
     model.coefficients.size + 1
   } else {
@@ -761,18 +776,14 @@ class GeneralizedLinearRegressionSummary private[regression] (
     numInstances - rank
   }
 
-  // df.residual
+  /** The residual degrees of freedom */
   lazy val residualDegreeOfFreedom: Long = degreesOfFreedom
 
-  // df.null
+  /** The residual degrees of freedom for the null model */
   lazy val residualDegreeOfFreedomNull: Long = if (model.getFitIntercept) {
     numInstances - 1
   } else {
     numInstances
-  }
-
-  lazy val devianceResidualsMax: Double = {
-    devianceResiduals.select(max(col("devianceResiduals"))).first().getDouble(0)
   }
 
   private lazy val devianceResiduals: DataFrame = {
@@ -785,27 +796,32 @@ class GeneralizedLinearRegressionSummary private[regression] (
       }
     }
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
-    predictions.withColumn("devianceResiduals", drUDF(col(model.getLabelCol), col(predictionCol), w))
+    predictions.select(drUDF(col(model.getLabelCol), col(predictionCol), w).as("devianceResiduals"))
   }
 
   private lazy val pearsonResiduals: DataFrame = {
     val prUDF = udf { mu: Double => family.variance(mu) }
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))
-      .multiply(sqrt(w)).divide(sqrt(prUDF(col(model.getPredictionCol))))).as("pearsonResiduals")
+      .multiply(sqrt(w)).divide(sqrt(prUDF(col(model.getPredictionCol)))).as("pearsonResiduals"))
   }
 
   private lazy val workingResiduals: DataFrame = {
     val wrUDF = udf { (y: Double, mu: Double) =>
       (y - mu) * link.deriv(mu)
     }
-    predictions.withColumn("workingResiduals", wrUDF(col(model.getLabelCol), col(predictionCol)))
+    predictions.select(wrUDF(col(model.getLabelCol), col(predictionCol)).as("workingResiduals"))
   }
 
   private lazy val responseResiduals: DataFrame = {
-    predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol))).as("responseResiduals")
+    predictions.select(col(model.getLabelCol).minus(col(model.getPredictionCol)).as("responseResiduals"))
   }
 
+  /**
+   * Get the residuals of the fitted model by type.
+   * @param residualsType The type of residuals which should be returned.
+   *                      Supported options: deviance(default), pearson, working and response.
+   */
   def residuals(residualsType: String = "deviance"): DataFrame = {
     residualsType match {
       case "deviance" => devianceResiduals
@@ -817,6 +833,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
     }
   }
 
+  /**
+   * The deviance for the null model.
+   */
   lazy val nullDeviance: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
 
@@ -834,6 +853,9 @@ class GeneralizedLinearRegressionSummary private[regression] (
     }.sum()
   }
 
+  /**
+   * The deviance for the fitted model.
+   */
   lazy val deviance: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     predictions.select(col(model.getLabelCol), col(predictionCol), w).rdd.map {
@@ -842,6 +864,12 @@ class GeneralizedLinearRegressionSummary private[regression] (
     }.sum()
   }
 
+  /**
+   * The dispersion of the fitted model.
+   * It is taken as 1.0 for the "binomial" and "poisson" families, and otherwise
+   * estimated by the residual Pearson's Chi-Squared statistic(which is defined as
+   * sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
+   */
   lazy val dispersion: Double = if (
     model.getFamily == Binomial.name || model.getFamily == Poisson.name) {
     1.0
@@ -855,6 +883,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
     rss / degreesOfFreedom
   }
 
+  /** Akaike's "An Information Criterion" for the fitted model */
   lazy val aic: Double = {
     val w = if (model.getWeightCol.isEmpty) lit(1.0) else col(model.getWeightCol)
     val weightSum = predictions.select(w).agg(sum(w)).first().getAs[Double](0)

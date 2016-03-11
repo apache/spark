@@ -506,6 +506,18 @@ class GeneralizedLinearRegressionSuite
        AIC: 18.783
 
        Number of Fisher Scoring iterations: 2
+
+       residuals(model, type="pearson")
+              1         2         3         4
+       1.920000 -1.357645 -1.108513  0.960000
+
+       residuals(model, type="working")
+          1     2     3     4
+       1.92 -0.96 -0.64  0.48
+
+       residuals(model, type="response")
+          1     2     3     4
+       1.92 -0.96 -0.64  0.48
      */
     val trainer = new GeneralizedLinearRegression()
       .setWeightCol("weight")
@@ -515,6 +527,9 @@ class GeneralizedLinearRegressionSuite
     val coefficientsR = Vectors.dense(Array(6.080, -0.600))
     val interceptR = 18.080
     val devianceResidualsR = Array(1.920, -1.358, -1.109, 0.960)
+    val pearsonResidualsR = Array(1.920000, -1.357645, -1.108513, 0.960000)
+    val workingResidualsR = Array(1.92, -0.96, -0.64, 0.48)
+    val responseResidualsR = Array(1.92, -0.96, -0.64, 0.48)
     val seCoefR = Array(5.556, 1.960, 9.608)
     val tValsR = Array(1.094, -0.306, 1.882)
     val pValsR = Array(0.471, 0.811, 0.311)
@@ -526,14 +541,33 @@ class GeneralizedLinearRegressionSuite
     val aicR = 18.783
 
     val summary = model.summary
+
     val devianceResiduals = summary.residuals()
       .select(col("devianceResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
       .collect()
       .map(_.getAs[Double](0))
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
     devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
     summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
@@ -584,6 +618,18 @@ class GeneralizedLinearRegressionSuite
        AIC: 16.524
 
        Number of Fisher Scoring iterations: 5
+
+       residuals(model, type="pearson")
+              1         2         3         4
+       1.117731 -1.162962  2.395838 -1.189005
+
+       residuals(model, type="working")
+              1         2         3         4
+       2.249324 -1.676240  2.913346 -1.353433
+
+       residuals(model, type="response")
+               1          2          3          4
+       0.5554219 -0.4034267  0.6567520 -0.2611382
      */
     val trainer = new GeneralizedLinearRegression()
       .setFamily("binomial")
@@ -595,6 +641,9 @@ class GeneralizedLinearRegressionSuite
     val coefficientsR = Vectors.dense(Array(-0.30217, -0.04452))
     val interceptR = 0.0
     val devianceResidualsR = Array(1.273, -1.437, 2.533, -1.556)
+    val pearsonResidualsR = Array(1.117731, -1.162962, 2.395838, -1.189005)
+    val workingResidualsR = Array(2.249324, -1.676240, 2.913346, -1.353433)
+    val responseResidualsR = Array(0.5554219, -0.4034267, 0.6567520, -0.2611382)
     val seCoefR = Array(0.46242, 0.37124)
     val tValsR = Array(-0.653, -0.120)
     val pValsR = Array(0.513, 0.905)
@@ -610,10 +659,28 @@ class GeneralizedLinearRegressionSuite
       .select(col("devianceResiduals"))
       .collect()
       .map(_.getAs[Double](0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
     devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
     summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
@@ -667,6 +734,18 @@ class GeneralizedLinearRegressionSuite
        AIC: 41.803
 
        Number of Fisher Scoring iterations: 3
+
+       residuals(model, type="pearson")
+                 1           2           3           4
+       -0.28043145  0.11099310  0.14963714 -0.07253611
+
+       residuals(model, type="working")
+                 1           2           3           4
+       -0.17960679  0.02813593  0.05113852 -0.01201650
+
+       residuals(model, type="response")
+                1          2          3          4
+       -0.4378554  0.2189277  0.1459518 -0.1094638
      */
     val trainer = new GeneralizedLinearRegression()
       .setFamily("poisson")
@@ -678,6 +757,9 @@ class GeneralizedLinearRegressionSuite
     val coefficientsR = Vectors.dense(Array(3.3241, -1.0818))
     val interceptR = 6.2999
     val devianceResidualsR = Array(-0.28952, 0.11048, 0.14839, -0.07268)
+    val pearsonResidualsR = Array(-0.28043145, 0.11099310, 0.14963714, -0.07253611)
+    val workingResidualsR = Array(-0.17960679, 0.02813593, 0.05113852, -0.01201650)
+    val responseResidualsR = Array(-0.4378554, 0.2189277, 0.1459518, -0.1094638)
     val seCoefR = Array(1.0184, 0.3522, 1.6086)
     val tValsR = Array(3.264, -3.071, 3.916)
     val pValsR = Array(0.00110, 0.00213, 0.00009)
@@ -693,10 +775,28 @@ class GeneralizedLinearRegressionSuite
       .select(col("devianceResiduals"))
       .collect()
       .map(_.getAs[Double](0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
     devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
     summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
@@ -748,6 +848,18 @@ class GeneralizedLinearRegressionSuite
        AIC: 23.202
 
        Number of Fisher Scoring iterations: 4
+
+       residuals(model, type="pearson")
+                 1           2           3           4
+       -0.24082508  0.05839241  0.13135766 -0.03463621
+
+       residuals(model, type="working")
+                 1            2            3            4
+       0.091414181 -0.005374314 -0.027196998  0.001890910
+
+       residuals(model, type="response")
+                1          2          3          4
+       -0.6344390  0.3172195  0.2114797 -0.1586097
      */
     val trainer = new GeneralizedLinearRegression()
       .setFamily("gamma")
@@ -755,12 +867,12 @@ class GeneralizedLinearRegressionSuite
 
     val model = trainer.fit(datasetWithWeight)
 
-    println(model.coefficients)
-    println(model.intercept)
-
     val coefficientsR = Vectors.dense(Array(-0.72730, 0.23894))
     val interceptR = -0.81511
     val devianceResidualsR = Array(-0.26343, 0.05761, 0.12818, -0.03484)
+    val pearsonResidualsR = Array(-0.24082508, 0.05839241, 0.13135766, -0.03463621)
+    val workingResidualsR = Array(0.091414181, -0.005374314, -0.027196998, 0.001890910)
+    val responseResidualsR = Array(-0.6344390, 0.3172195, 0.2114797, -0.1586097)
     val seCoefR = Array(0.16137, 0.05481, 0.23449)
     val tValsR = Array(-4.507, 4.359, -3.476)
     val pValsR = Array(0.139, 0.144, 0.178)
@@ -776,10 +888,28 @@ class GeneralizedLinearRegressionSuite
       .select(col("devianceResiduals"))
       .collect()
       .map(_.getAs[Double](0))
+    val pearsonResiduals = summary.residuals("pearson")
+      .select(col("pearsonResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val workingResiduals = summary.residuals("working")
+      .select(col("workingResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
+    val responseResiduals = summary.residuals("response")
+      .select(col("responseResiduals"))
+      .collect()
+      .map(_.getAs[Double](0))
 
     assert(model.coefficients ~== coefficientsR absTol 1E-3)
     assert(model.intercept ~== interceptR absTol 1E-3)
     devianceResiduals.zip(devianceResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    pearsonResiduals.zip(pearsonResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    workingResiduals.zip(workingResidualsR).foreach { x =>
+      assert(x._1 ~== x._2 absTol 1E-3) }
+    responseResiduals.zip(responseResidualsR).foreach { x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
     summary.coefficientStandardErrors.zip(seCoefR).foreach{ x =>
       assert(x._1 ~== x._2 absTol 1E-3) }
