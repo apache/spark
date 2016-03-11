@@ -56,6 +56,11 @@ object SVDPlusPlus {
   def run(edges: RDD[Edge[Double]], conf: Conf)
     : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
   {
+    require(conf.maxIters > 0, s"Maximum of iterations must be greater than 0," +
+      s" but got ${conf.maxIters}")
+    require(conf.maxVal > conf.minVal, s"MaxVal must be greater than MinVal," +
+      s" but got {maxVal: ${conf.maxVal}, minVal: ${conf.minVal}}")
+
     // Generate default vertex attribute
     def defaultF(rank: Int): (Array[Double], Array[Double], Double, Double) = {
       // TODO: use a fixed random seed
@@ -197,7 +202,7 @@ object SVDPlusPlus {
   }
 
   /**
-   * Forces materialization of a Graph by count()ing its RDDs.
+   * Forces materialization of a Graph by counting its RDDs.
    */
   private def materialize(g: Graph[_, _]): Unit = {
     g.vertices.count()
