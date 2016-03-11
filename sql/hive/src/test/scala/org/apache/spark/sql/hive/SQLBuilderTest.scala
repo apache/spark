@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{Dataset, DataFrame, QueryTest}
+import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.test.TestHiveSingleton
