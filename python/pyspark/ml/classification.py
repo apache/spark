@@ -38,7 +38,7 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
-                         HasWeightCol):
+                         HasWeightCol, MLReadable, MLWritable):
     """
     Logistic regression.
     Currently, this class only supports binary classification.
@@ -69,8 +69,19 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
+    >>> lr_path = temp_path + "/lr"
+    >>> lr.save(lr_path)
+    >>> lr2 = LogisticRegression.load(lr_path)
+    >>> lr2.getMaxIter()
 
-    .. versionadded:: 1.3.0
+    >>> model_path = temp_path + "/lr_model"
+    >>> model.save(model_path)
+    >>> model2 = LogisticRegressionModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+
+    >>> model.intercept == model2.intercept
+
+    .. versionadded:: 1.6.0
     """
 
     threshold = Param(Params._dummy(), "threshold",
@@ -186,7 +197,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel):
+class LogisticRegressionModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -589,7 +600,7 @@ class GBTClassificationModel(TreeEnsembleModels):
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
-                 HasRawPredictionCol):
+                 HasRawPredictionCol, MLWritable, MLReadable):
     """
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. Multinomial NB
@@ -623,6 +634,16 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
+    >>> nb_path = temp_path + "/nb"
+    >>> nb.save(nb_path)
+    >>> nb2 = NaiveBayes.load(nb_path)
+    >>> nb2.getSmoothing()
+
+    >>> model_path = temp_path + "/nb_model"
+    >>> model.save(model_path)
+    >>> model2 = NaiveBayesModel.load(model_path)
+    >>> model.pi == model2.pi
+    >>> model.theta == model2.theta
 
     .. versionadded:: 1.5.0
     """
@@ -696,7 +717,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel):
+class NaiveBayesModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -722,7 +743,7 @@ class NaiveBayesModel(JavaModel):
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed):
+                                     HasMaxIter, HasTol, HasSeed, MLWritable, MLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -752,6 +773,16 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     |[0.0,0.0]|       0.0|
     +---------+----------+
     ...
+    >>> mlp_path = temp_path + "/mlp"
+    >>> mlp.save(aftsr_path)
+    >>> mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
+    >>> mlp2.getMaxIter()
+
+    >>> model_path = temp_path + "/mlp_model"
+    >>> model.save(model_path)
+    >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
+    >>> model.weights == model2.weights
+    >>> model.layers == model2.layers
 
     .. versionadded:: 1.6.0
     """
@@ -827,7 +858,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel):
+class MultilayerPerceptronClassificationModel(JavaModel, MLWritable, MLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
@@ -855,15 +886,25 @@ if __name__ == "__main__":
     import doctest
     from pyspark.context import SparkContext
     from pyspark.sql import SQLContext
-    globs = globals().copy()
+    globs = pyspark.ml.classification.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     sc = SparkContext("local[2]", "ml.classification tests")
     sqlContext = SQLContext(sc)
     globs['sc'] = sc
     globs['sqlContext'] = sqlContext
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    import tempfile
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        sc.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)
+

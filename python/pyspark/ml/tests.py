@@ -499,6 +499,57 @@ class PersistenceTest(PySparkTestCase):
         except OSError:
             pass
 
+    def test_logistic_regression(self):
+        lr = LogisticRegression(maxIter=1)
+        path = tempfile.mkdtemp()
+        lr_path = path + "/lr"
+        lr.save(lr_path)
+        lr2 = LogisticRegression.load(lr_path)
+        self.assertEqual(lr2.uid, lr2.maxIter.parent,
+                         "Loaded LogisticRegression instance uid (%s) did not match Param's uid (%s)"
+                         % (lr2.uid, lr2.maxIter.parent))
+        self.assertEqual(lr._defaultParamMap[lr.maxIter], lr2._defaultParamMap[lr2.maxIter],
+                         "Loaded LogisticRegression instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_naive_bayes(self):
+        nb = NaiveBayes(smoothing=1)
+        path = tempfile.mkdtemp()
+        nb_path = path + "/nb"
+        nb.save(nb_path)
+        nb2 = NaiveBayes.load(nb_path)
+        self.assertEqual(nb2.uid, nb2.maxIter.parent,
+                         "Loaded NaiveBayes instance uid (%s) did not match Param's uid (%s)"
+                         % (nb2.uid, nb2.smoothing.parent))
+        self.assertEqual(nb._defaultParamMap[nb.smoothing], nb2._defaultParamMap[nb2.smoothing],
+                         "Loaded NaiveBayes instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
+    def test_multi_layer_perceptron(self):
+        mlp = MultilayerPerceptronClassifier(maxIter=1)
+        path = tempfile.mkdtemp()
+        mlp_path = path + "/mlp"
+        mlp.save(mlp_path)
+        mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
+        self.assertEqual(mlp2.uid, mlp2.maxIter.parent,
+                         "Loaded MultilayerPerceptronClassifier instance uid (%s) did not match Param's uid (%s)"
+                         % (mlp2.uid, mlp2.smoothing.parent))
+        self.assertEqual(mlp._defaultParamMap[mlp.smoothing], mlp2._defaultParamMap[mlp2.smoothing],
+                         "Loaded MultilayerPerceptronClassifier instance default params did not match " +
+                         "original defaults")
+        try:
+            rmtree(path)
+        except OSError:
+            pass
+
 
 class HasThrowableProperty(Params):
 
