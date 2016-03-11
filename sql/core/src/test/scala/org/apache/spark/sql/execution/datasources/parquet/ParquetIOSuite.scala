@@ -145,7 +145,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       withTempPath { dir =>
         val data = makeDecimalRDD(DecimalType(precision, scale))
         data.write.parquet(dir.getCanonicalPath)
-        readParquetFile(dir.getCanonicalPath){ df => {
+        readParquetFile(dir.getCanonicalPath) { df => {
           checkAnswer(df, data.collect().toSeq)
         }}
       }

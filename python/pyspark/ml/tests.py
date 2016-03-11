@@ -271,6 +271,12 @@ class ParamTests(PySparkTestCase):
         # Check that a different class has a different seed
         self.assertNotEqual(other.getSeed(), noSeedSpecd.getSeed())
 
+    def test_param_property_error(self):
+        param_store = HasThrowableProperty()
+        self.assertRaises(RuntimeError, lambda: param_store.test_property)
+        params = param_store.params  # should not invoke the property 'test_property'
+        self.assertEqual(len(params), 1)
+
 
 class FeatureTests(PySparkTestCase):
 
@@ -492,6 +498,17 @@ class PersistenceTest(PySparkTestCase):
             rmtree(path)
         except OSError:
             pass
+
+
+class HasThrowableProperty(Params):
+
+    def __init__(self):
+        super(HasThrowableProperty, self).__init__()
+        self.p = Param(self, "none", "empty param")
+
+    @property
+    def test_property(self):
+        raise RuntimeError("Test property to raise error when invoked")
 
 
 if __name__ == "__main__":
