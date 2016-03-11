@@ -448,7 +448,7 @@ class TestServer(portToBind: Int = 0) extends Logging {
             try {
               clientSocket.setTcpNoDelay(true)
               val outputStream = new BufferedWriter(
-                new OutputStreamWriter(clientSocket.getOutputStream))
+                new OutputStreamWriter(clientSocket.getOutputStream, StandardCharsets.UTF_8))
 
               while (clientSocket.isConnected) {
                 val msg = queue.poll(100, TimeUnit.MILLISECONDS)

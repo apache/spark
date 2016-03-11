@@ -416,7 +416,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     if (isNewFormat) {
       EventLoggingListener.initEventLog(new FileOutputStream(file))
     }
-    val writer = new OutputStreamWriter(bstream, "UTF-8")
+    val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
     } {
