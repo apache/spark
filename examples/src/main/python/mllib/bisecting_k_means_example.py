@@ -19,7 +19,6 @@ from __future__ import print_function
 
 # $example on$
 from numpy import array
-from math import sqrt
 # $example off$
 
 from pyspark import SparkContext
@@ -36,15 +35,15 @@ if __name__ == "__main__":
     parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
     # Build the model (cluster the data)
-    clusters = BisectingKMeans.train(parsedData, 2, maxIterations=5)
+    model = BisectingKMeans.train(parsedData, 2, maxIterations=5)
 
     # Evaluate clustering
-    cost = clusters.computeCost(parsedData)
+    cost = model.computeCost(parsedData)
     print("Bisecting K-means Cost = " + str(cost))
 
     # Save and load model
     path = "target/org/apache/spark/PythonBisectingKMeansExample/BisectingKMeansModel"
-    clusters.save(sc, path)
+    model.save(sc, path)
     sameModel = BisectingKMeansModel.load(sc, path)
     # $example off$
 

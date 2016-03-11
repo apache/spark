@@ -21,6 +21,8 @@ from pyspark import SparkContext
 # $example on$
 from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
 from pyspark.mllib.linalg import VectorUDT, _convert_to_vector, Vectors
+from pyspark.mllib.linalg import Vectors
+from pyspark.sql.types import Row, StructField, StructType
 # $example off$
 from pyspark.sql import SQLContext
 
@@ -34,16 +36,12 @@ if __name__ == "__main__":
     sqlContext = SQLContext(sc)
 
     # $example on$
-    training = sqlContext.createDataFrame([
-        (0, Vectors.dense(0.1, 0.1, 0.1)),
-        (1, Vectors.dense(0.3, 0.3, 0.25)),
-        (2, Vectors.dense(0.1, 0.1, -0.1)),
-        (3, Vectors.dense(20.3, 20.1, 19.9)),
-        (4, Vectors.dense(20.2, 20.1, 19.7)),
-        (5, Vectors.dense(18.9, 20.0, 19.7))], ["id", "features"])
+    data = sc.textFile("data/mllib/kmeans_data.txt")
+    parsedData = data.map(lambda line: Row(features=Vectors.dense([float(x) for x in line.split(' ')])))
+    schema = StructType([StructField("features", VectorUDT(), False)])
+    training = sqlContext.createDataFrame(parsedData, schema)
 
-    k = 2
-    kmeans = BisectingKMeans().setK(k).setSeed(1).setFeaturesCol("features")
+    kmeans = BisectingKMeans().setK(2).setSeed(1).setFeaturesCol("features")
 
     model = kmeans.fit(training)
 
