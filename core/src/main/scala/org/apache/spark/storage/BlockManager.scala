@@ -913,6 +913,7 @@ private[spark] class BlockManager(
       // put values read from disk into the MemoryStore.
       blockInfo.synchronized {
         if (memoryStore.contains(blockId)) {
+          BlockManager.dispose(diskBytes)
           memoryStore.getBytes(blockId).get
         } else {
           val putSucceeded = memoryStore.putBytes(blockId, diskBytes.limit(), () => {
@@ -924,6 +925,7 @@ private[spark] class BlockManager(
             copyForMemory.put(diskBytes)
           })
           if (putSucceeded) {
+            BlockManager.dispose(diskBytes)
             memoryStore.getBytes(blockId).get
           } else {
             diskBytes.rewind()
