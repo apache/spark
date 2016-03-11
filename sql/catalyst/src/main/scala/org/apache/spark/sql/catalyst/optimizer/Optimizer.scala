@@ -315,21 +315,17 @@ object SetOperationPushDown extends Rule[LogicalPlan] with PredicateHelper {
  *   - LeftSemiJoin
  */
 object ColumnPruning extends Rule[LogicalPlan] {
-  def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
+  private def sameOutput(output1: Seq[Attribute], output2: Seq[Attribute]): Boolean =
     output1.size == output2.size &&
       output1.zip(output2).forall(pair => pair._1.semanticEquals(pair._2))
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    // Prunes the unused columns from project list of Project/Aggregate/Window/Expand
+    // Prunes the unused columns from project list of Project/Aggregate/Expand
     case p @ Project(_, p2: Project) if (p2.outputSet -- p.references).nonEmpty =>
       p.copy(child = p2.copy(projectList = p2.projectList.filter(p.references.contains)))
     case p @ Project(_, a: Aggregate) if (a.outputSet -- p.references).nonEmpty =>
       p.copy(
         child = a.copy(aggregateExpressions = a.aggregateExpressions.filter(p.references.contains)))
-    case p @ Project(_, w: Window) if (w.outputSet -- p.references).nonEmpty =>
-      p.copy(child = w.copy(
-        projectList = w.projectList.filter(p.references.contains),
-        windowExpressions = w.windowExpressions.filter(p.references.contains)))
     case a @ Project(_, e @ Expand(_, _, grandChild)) if (e.outputSet -- a.references).nonEmpty =>
       val newOutput = e.output.filter(a.references.contains(_))
       val newProjects = e.projections.map { proj =>
@@ -343,11 +339,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case mp @ MapPartitions(_, _, _, child) if (child.outputSet -- mp.references).nonEmpty =>
       mp.copy(child = prunedChild(child, mp.references))
 
-    // Prunes the unused columns from child of Aggregate/Window/Expand/Generate
+    // Prunes the unused columns from child of Aggregate/Expand/Generate
     case a @ Aggregate(_, _, child) if (child.outputSet -- a.references).nonEmpty =>
       a.copy(child = prunedChild(child, a.references))
-    case w @ Window(_, _, _, _, child) if (child.outputSet -- w.references).nonEmpty =>
-      w.copy(child = prunedChild(child, w.references))
     case e @ Expand(_, _, child) if (child.outputSet -- e.references).nonEmpty =>
       e.copy(child = prunedChild(child, e.references))
     case g: Generate if !g.join && (g.child.outputSet -- g.references).nonEmpty =>
@@ -380,6 +374,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
       } else {
         p
       }
+
+    // Prune unnecessary window expressions
+    case p @ Project(_, w: Window) if (w.windowOutputSet -- p.references).nonEmpty =>
+      p.copy(child = w.copy(
+        windowExpressions = w.windowExpressions.filter(p.references.contains)))
+
+    // Eliminate no-op Window
+    case w: Window if w.windowExpressions.isEmpty => w.child
 
     // Eliminate no-op Projects
     case p @ Project(projectList, child) if sameOutput(child.output, p.output) => child
