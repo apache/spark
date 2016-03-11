@@ -20,6 +20,7 @@ Unit tests for Spark ML Python APIs.
 """
 
 import sys
+import numpy as np
 try:
     import xmlrunner
 except ImportError:
@@ -103,20 +104,53 @@ class ParamTypeConversionTests(PySparkTestCase):
     Test that param type conversion happens.
     """
 
-    def test_int_to_float(self):
-        from pyspark.mllib.linalg import Vectors
-        df = self.sc.parallelize([
-            Row(label=1.0, weight=2.0, features=Vectors.dense(1.0))]).toDF()
-        lr = LogisticRegression(elasticNetParam=0)
-        lr.fit(df)
-        lr.setElasticNetParam(0)
-        lr.fit(df)
+    def test_int(self):
+        lr = LogisticRegression(maxIter=5.0)
+        self.assertEqual(lr.getMaxIter(), 5)
+        self.assertRaises(TypeError, lambda: LogisticRegression(maxIter="notAnInt"))
 
-    def test_invalid_to_float(self):
-        from pyspark.mllib.linalg import Vectors
-        self.assertRaises(Exception, lambda: LogisticRegression(elasticNetParam="happy"))
-        lr = LogisticRegression(elasticNetParam=0)
-        self.assertRaises(Exception, lambda: lr.setElasticNetParam("panda"))
+    def test_float(self):
+        lr = LogisticRegression(tol=1)
+        self.assertEqual(lr.getTol(), 1.0)
+        self.assertRaises(TypeError, lambda: LogisticRegression(tol="notAFloat"))
+
+    def test_string(self):
+        lr = LogisticRegression(featuresCol=1)
+        self.assertEqual(lr.getFeaturesCol(), '1')
+
+    def test_bool(self):
+        lr = LogisticRegression(fitIntercept=1)
+        self.assertEqual(lr.getFitIntercept(), True)
+        lr.setFitIntercept(0.0)
+        self.assertEqual(lr.getFitIntercept(), False)
+        self.assertRaises(TypeError, lambda: lr.setFitIntercept(1.2))
+        self.assertRaises(TypeError, lambda: lr.setFitIntercept("false"))
+
+    def test_vector(self):
+        ewp = ElementwiseProduct(scalingVec=[1, 3])
+        self.assertEqual(ewp.getScalingVec(), DenseVector([1.0, 3.0]))
+        ewp = ElementwiseProduct(scalingVec=np.array([1.2, 3.4]))
+        self.assertEqual(ewp.getScalingVec(), DenseVector([1.2, 3.4]))
+        self.assertRaises(TypeError, lambda: ElementwiseProduct(scalingVec=["a", "b"]))
+
+    def test_list_int(self):
+        vs = VectorSlicer(indices=[1.0, 4.0])
+        self.assertEqual(vs.getIndices(), [1, 4])
+        vs = VectorSlicer(indices=np.array([1.0, 4.0]))
+        self.assertEqual(vs.getIndices(), [1, 4])
+        vs = VectorSlicer(indices=DenseVector([1.0, 4.0]))
+        self.assertEqual(vs.getIndices(), [1, 4])
+        self.assertRaises(TypeError, lambda: VectorSlicer(indices=["a", "b"]))
+
+    def test_list_float(self):
+        b = Bucketizer(splits=[1, 4])
+        self.assertEqual(b.getSplits(), [1.0, 4.0])
+        self.assertRaises(TypeError, lambda: Bucketizer(splits=["a", "b"]))
+
+    def test_list_string(self):
+        idx_to_string = IndexToString(labels=[1, 4])
+        self.assertEqual(idx_to_string.getLabels(), ['1', '4'])
+        self.assertRaises(TypeError, lambda: IndexToString(labels="a"))
 
 
 class PipelineTests(PySparkTestCase):

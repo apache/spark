@@ -100,16 +100,19 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     .. versionadded:: 1.4.0
     """
 
-    rank = Param(Params._dummy(), "rank", "rank of the factorization")
-    numUserBlocks = Param(Params._dummy(), "numUserBlocks", "number of user blocks")
-    numItemBlocks = Param(Params._dummy(), "numItemBlocks", "number of item blocks")
-    implicitPrefs = Param(Params._dummy(), "implicitPrefs", "whether to use implicit preference")
-    alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference")
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids")
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids")
-    ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings")
-    nonnegative = Param(Params._dummy(), "nonnegative",
-                        "whether to use nonnegative constraint for least squares")
+    rank = IntParam(Params._dummy(), "rank", "rank of the factorization", ParamValidators.gtEq(1))
+    numUserBlocks = IntParam(Params._dummy(), "numUserBlocks", "number of user blocks",
+                             ParamValidators.gtEq(1))
+    numItemBlocks = IntParam(Params._dummy(), "numItemBlocks", "number of item blocks",
+                             ParamValidators.gtEq(1))
+    implicitPrefs = BooleanParam(Params._dummy(), "implicitPrefs",
+                                 "whether to use implicit preference")
+    alpha = FloatParam(Params._dummy(), "alpha", "alpha for implicit preference")
+    userCol = StringParam(Params._dummy(), "userCol", "column name for user ids")
+    itemCol = StringParam(Params._dummy(), "itemCol", "column name for item ids")
+    ratingCol = StringParam(Params._dummy(), "ratingCol", "column name for ratings")
+    nonnegative = BooleanParam(Params._dummy(), "nonnegative",
+                               "whether to use nonnegative constraint for least squares")
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,

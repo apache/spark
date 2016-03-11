@@ -73,9 +73,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     .. versionadded:: 1.3.0
     """
 
-    threshold = Param(Params._dummy(), "threshold",
-                      "Threshold in binary classification prediction, in range [0, 1]." +
-                      " If threshold and thresholds are both set, they must match.")
+    threshold = FloatParam(Params._dummy(), "threshold",
+                           "Threshold in binary classification prediction, in range [0, 1]." +
+                           " If threshold and thresholds are both set, they must match.",
+                           ParamValidators.inRange(0, 1))
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -228,10 +229,11 @@ class TreeClassifierParams(object):
     """
     supportedImpurities = ["entropy", "gini"]
 
-    impurity = Param(Params._dummy(), "impurity",
-                     "Criterion used for information gain calculation (case-insensitive). " +
-                     "Supported options: " +
-                     ", ".join(supportedImpurities))
+    impurity = StringParam(Params._dummy(), "impurity",
+                           "Criterion used for information gain calculation (case-insensitive). " +
+                           "Supported options: " +
+                           ", ".join(supportedImpurities),
+                           ParamValidators.inList(supportedImpurities))
 
     def __init__(self):
         super(TreeClassifierParams, self).__init__()
@@ -520,9 +522,10 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     .. versionadded:: 1.4.0
     """
 
-    lossType = Param(Params._dummy(), "lossType",
-                     "Loss function which GBT tries to minimize (case-insensitive). " +
-                     "Supported options: " + ", ".join(GBTParams.supportedLossTypes))
+    lossType = StringParam(Params._dummy(), "lossType",
+                           "Loss function which GBT tries to minimize (case-insensitive). " +
+                           "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
+                           ParamValidators.inList(GBTParams.supportedLossTypes))
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -627,10 +630,12 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     .. versionadded:: 1.5.0
     """
 
-    smoothing = Param(Params._dummy(), "smoothing", "The smoothing parameter, should be >= 0, " +
-                      "default is 1.0")
-    modelType = Param(Params._dummy(), "modelType", "The model type which is a string " +
-                      "(case-sensitive). Supported options: multinomial (default) and bernoulli.")
+    supportedModelTypes = ['multinomial', 'bernoulli']
+    smoothing = FloatParam(Params._dummy(), "smoothing", "The smoothing parameter, should be " +
+                           ">= 0, default is 1.0", ParamValidators.gtEq(0))
+    modelType = StringParam(Params._dummy(), "modelType", "The model type which is a string " +
+                            "(case-sensitive). Supported options: multinomial (default) and " +
+                            "bernoulli.", ParamValidators.inList(supportedModelTypes))
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
@@ -756,13 +761,15 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     .. versionadded:: 1.6.0
     """
 
-    layers = Param(Params._dummy(), "layers", "Sizes of layers from input layer to output layer " +
-                   "E.g., Array(780, 100, 10) means 780 inputs, one hidden layer with 100 " +
-                   "neurons and output layer of 10 neurons, default is [1, 1].")
-    blockSize = Param(Params._dummy(), "blockSize", "Block size for stacking input data in " +
-                      "matrices. Data is stacked within partitions. If block size is more than " +
-                      "remaining data in a partition then it is adjusted to the size of this " +
-                      "data. Recommended size is between 10 and 1000, default is 128.")
+    layers = ListIntParam(Params._dummy(), "layers", "Sizes of layers from input layer to output " +
+                          "layer E.g., Array(780, 100, 10) means 780 inputs, one hidden layer " +
+                          "with 100 neurons and output layer of 10 neurons, default is [1, 1].",
+                          ParamValidators.listLengthGt(1))
+    blockSize = IntParam(Params._dummy(), "blockSize", "Block size for stacking input data in " +
+                         "matrices. Data is stacked within partitions. If block size is more " +
+                         "than remaining data in a partition then it is adjusted to the size of " +
+                         "this data. Recommended size is between 10 and 1000, default is 128.",
+                         ParamValidators.gt(0))
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",

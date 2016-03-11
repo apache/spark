@@ -87,12 +87,15 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create")
-    initMode = Param(Params._dummy(), "initMode",
-                     "the initialization algorithm. This can be either \"random\" to " +
-                     "choose random points as initial cluster centers, or \"k-means||\" " +
-                     "to use a parallel variant of k-means++")
-    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode")
+    initModes = ["random", "k-means||"]
+    k = IntParam(Params._dummy(), "k", "number of clusters to create", ParamValidators.gt(1))
+    initMode = StringParam(Params._dummy(), "initMode",
+                           "the initialization algorithm. This can be either \"random\" to " +
+                           "choose random points as initial cluster centers, or \"k-means||\" " +
+                           "to use a parallel variant of k-means++",
+                           ParamValidators.inList(initModes))
+    initSteps = IntParam(Params._dummy(), "initSteps", "steps for k-means initialization mode",
+                         ParamValidators.gt(0))
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
