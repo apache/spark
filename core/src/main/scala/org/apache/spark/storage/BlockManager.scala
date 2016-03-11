@@ -721,6 +721,8 @@ private[spark] class BlockManager(
       case None =>
         true
       case Some(iter) =>
+        // Caller doesn't care about the iterator values, so we can close the iterator here
+        // to free resources earlier
         iter.close()
         false
     }
@@ -801,6 +803,8 @@ private[spark] class BlockManager(
           memoryStore.putIterator(blockId, values, level) match {
             case Right(_) => true
             case Left(iter) =>
+              // If putting deserialized values in memory failed, we will put the bytes directly to
+              // disk, so we don't need this iterator and can close it to free resources earlier.
               iter.close()
               false
           }

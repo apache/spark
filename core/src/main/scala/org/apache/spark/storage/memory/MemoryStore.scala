@@ -112,8 +112,14 @@ private[spark] class MemoryStore(
   /**
    * Attempt to put the given block in memory store.
    *
+   * It's possible that the iterator is too large to materialize and store in memory. To avoid
+   * OOM exceptions, this method will gradually unroll the iterator while periodically checking
+   * whether there is enough free memory. If the block is successfully materialized, then the
+   * temporary unroll memory used during the materialization is "transferred" to storage memory,
+   * so we won't acquire more memory than is actually needed to store the block.
+   *
    * @return in case of success, the estimated the estimated size of the stored data. In case of
-   *         failure, return an iterator contianing the values of the block. The returned iterator
+   *         failure, return an iterator containing the values of the block. The returned iterator
    *         will be backed by the combination of the partially-unrolled block and the remaining
    *         elements of the original input iterator. The caller must either fully consume this
    *         iterator or call `close()` on it in order to free the storage memory consumed by the
@@ -126,9 +132,7 @@ private[spark] class MemoryStore(
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
-    // It's possible that the iterator is too large to materialize and store in memory. To avoid
-    // OOM exceptions, this method will gradually unroll the iterator while periodically checking
-    // whether there is enough free memory.
+
 
     // Number of elements unrolled so far
     var elementsUnrolled = 0
@@ -188,17 +192,18 @@ private[spark] class MemoryStore(
         new MemoryEntry(bytes, bytes.limit, deserialized = false)
       }
       val size = entry.size
-      val acquiredStorageMemory = {
-        if (unrollMemoryUsedByThisBlock == size) {
-          true
-        } else if (unrollMemoryUsedByThisBlock < size) {
+      // Acquire storage memory if necessary to store this block in memory. If this task
+      // attempt already owns more unroll memory than is necessary to store the block,
+      // then release the extra memory that will not be used.
+      val enoughStorageMemory = {
+        if (unrollMemoryUsedByThisBlock <= size) {
           memoryManager.acquireStorageMemory(blockId, size - unrollMemoryUsedByThisBlock)
         } else {
           memoryManager.releaseUnrollMemory(unrollMemoryUsedByThisBlock - size)
           true
         }
       }
-      if (acquiredStorageMemory) {
+      if (enoughStorageMemory) {
         // We acquired enough memory for the block, so go ahead and put it
         memoryManager.synchronized {
           unrollMemoryMap(currentTaskAttemptId()) -= unrollMemoryUsedByThisBlock
@@ -463,10 +468,10 @@ private[storage] class PartiallyUnrolledIterator(
     rest: Iterator[Any])
   extends Iterator[Any] {
 
-  private[this] var unrolledIteratorIsCompleted: Boolean = false
+  private[this] var unrolledIteratorIsFullyConsumed: Boolean = false
   private[this] var iter: Iterator[Any] = {
     val completionIterator = CompletionIterator[Any, Iterator[Any]](unrolled, {
-      unrolledIteratorIsCompleted = true
+      unrolledIteratorIsFullyConsumed = true
       memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
     })
     completionIterator ++ rest
@@ -479,9 +484,9 @@ private[storage] class PartiallyUnrolledIterator(
    * Called to dispose of this iterator and free its memory.
    */
   def close(): Unit = {
-    if (!unrolledIteratorIsCompleted) {
+    if (!unrolledIteratorIsFullyConsumed) {
       memoryStore.releaseUnrollMemoryForThisTask(unrollMemory)
-      unrolledIteratorIsCompleted = true
+      unrolledIteratorIsFullyConsumed = true
     }
     iter = null
   }
