@@ -87,7 +87,7 @@ function drawLine(svg, xFunc, yFunc, x1, y1, x2, y2) {
  * @param unitY the unit of Y axis
  * @param batchInterval if "batchInterval" is specified, we will draw a line for "batchInterval" in the graph
  */
-function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
+function drawTimeline(id, dataSets, minX, maxX, minY, maxY, unitY, batchInterval) {
     // Hide the right border of "<td>". We cannot use "css" directly, or "sorttable.js" will override them.
     d3.select(d3.select(id).node().parentNode)
         .style("padding", "8px 0 8px 8px")
@@ -143,10 +143,17 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
         drawLine(svg, x, y, minX, batchInterval, maxX, batchInterval);
     }
 
-    svg.append("path")
-        .datum(data)
-        .attr("class", "line")
-        .attr("d", line);
+    for (var dataSetIdx = 0; dataSetIdx < dataSets.length; dataSetIdx ++) {
+      svg.append("path")
+         .datum(dataSets[dataSetIdx])
+         // 0th line is the event rate line
+         // 1st, 3rd, 5th... lines are the *dashed* rate limit lines
+         // 2nd, 4th, 6th... lines are the *solid* rate limit lines
+         .attr("class", dataSetIdx == 0 ? "line" : (dataSetIdx % 2 == 1 ?
+                                                    "line rate_limit_line_dashed" :
+                                                    "line rate_limit_line_solid"))
+         .attr("d", line);
+    }
 
     // If the user click one point in the graphs, jump to the batch row and highlight it. And
     // recovery the batch row after 3 seconds if necessary.
@@ -161,7 +168,8 @@ function drawTimeline(id, data, minX, maxX, minY, maxY, unitY, batchInterval) {
     // Add points to the line. However, we make it invisible at first. But when the user moves mouse
     // over a point, it will be displayed with its detail.
     svg.selectAll(".point")
-        .data(data)
+        // Only add points of the 0th line, i.e., the event rate line
+        .data(dataSets[0])
         .enter().append("circle")
             .attr("stroke", function(d) { return isFailedBatch(d.x) ? "red" : "white";}) // white and opacity = 0 make it invisible
             .attr("fill", function(d) { return isFailedBatch(d.x) ? "red" : "white";})
