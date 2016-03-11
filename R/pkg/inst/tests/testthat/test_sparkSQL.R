@@ -1076,6 +1076,17 @@ test_that("column functions", {
   result <- collect(select(df, encode(df$a, "utf-8"), decode(df$c, "utf-8")))
   expect_equal(result[[1]][[1]], bytes)
   expect_equal(result[[2]], markUtf8("大千世界"))
+
+  # Test first(), last()
+  df <- read.json(sqlContext, jsonPath)
+  expect_equal(collect(select(df, first(df$age)))[[1]], NA)
+  expect_equal(collect(select(df, first(df$age, TRUE)))[[1]], 30)
+  expect_equal(collect(select(df, first("age")))[[1]], NA)
+  expect_equal(collect(select(df, first("age", TRUE)))[[1]], 30)
+  expect_equal(collect(select(df, last(df$age)))[[1]], 19)
+  expect_equal(collect(select(df, last(df$age, TRUE)))[[1]], 19)
+  expect_equal(collect(select(df, last("age")))[[1]], 19)
+  expect_equal(collect(select(df, last("age", TRUE)))[[1]], 19)
 })
 
 test_that("column binary mathfunctions", {
