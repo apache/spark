@@ -23,16 +23,18 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
-import org.scalatest.{PrivateMethodTester, BeforeAndAfter}
+import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester {
   type MapType = mutable.HashMap[InternalRow, InternalRow]
+
+  import StateStoreSuite._
 
   private val tempDir = Utils.createTempDir().toString
 
@@ -279,36 +281,31 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
   private def update(store: StateStore, key: String, value: Int): Unit = {
     store.update(wrapKey(key), _ => wrapValue(value))
   }
+}
 
-  private def increment(store: StateStore, key: String): Unit = {
-    val keyRow = new GenericInternalRow(Array(key).asInstanceOf[Array[Any]])
-    store.update(keyRow, oldRow => {
-      val oldValue = oldRow.map(unwrapValue).getOrElse(0)
-      wrapValue(oldValue + 1)
-    })
-  }
+private[state] object StateStoreSuite {
 
-  private def wrapValue(i: Int): InternalRow = {
+  def wrapValue(i: Int): InternalRow = {
     new GenericInternalRow(Array[Any](i))
   }
 
-  private def wrapKey(s: String): InternalRow = {
+  def wrapKey(s: String): InternalRow = {
     new GenericInternalRow(Array[Any](UTF8String.fromString(s)))
   }
 
-  private def unwrapKey(row: InternalRow): String = {
+  def unwrapKey(row: InternalRow): String = {
     row.asInstanceOf[GenericInternalRow].getString(0)
   }
 
-  private def unwrapValue(row: InternalRow): Int = {
+  def unwrapValue(row: InternalRow): Int = {
     row.asInstanceOf[GenericInternalRow].getInt(0)
   }
 
-  private def unwrapKeyValue(row: (InternalRow, InternalRow)): (String, Int) = {
+  def unwrapKeyValue(row: (InternalRow, InternalRow)): (String, Int) = {
     (unwrapKey(row._1), unwrapValue(row._2))
   }
 
-  private def unwrapKeyValue(row: InternalRow): (String, Int) = {
+  def unwrapKeyValue(row: InternalRow): (String, Int) = {
     (row.getString(0), row.getInt(1))
   }
 }

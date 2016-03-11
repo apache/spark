@@ -32,21 +32,22 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     operatorId: Long,
     newStoreVersion: Long,
     storeDirectory: String,
-    storeCoordinator: StateStoreCoordinator
-  )
-  extends RDD[OUTPUT](dataRDD) {
+    storeCoordinator: StateStoreCoordinator) extends RDD[OUTPUT](dataRDD) {
 
   override protected def getPartitions: Array[Partition] = dataRDD.partitions
   override def getPreferredLocations(partition: Partition): Seq[String] = {
+    Seq.empty
+    /*
     storeCoordinator.getLocation(
       StateStoreId(operatorId, partition.index)).toSeq
+    */
   }
 
   override def compute(partition: Partition, ctxt: TaskContext): Iterator[OUTPUT] = {
     var store: StateStore = null
 
     Utils.tryWithSafeFinally {
-      StateStore.get(
+      store = StateStore.get(
         StateStoreId(operatorId, partition.index),
         storeDirectory
       )
@@ -58,19 +59,5 @@ class StateStoreRDD[INPUT: ClassTag, OUTPUT: ClassTag](
     } {
       if (store != null) store.cancelUpdates()
     }
-  }
-}
-
-object StateStoreRDD {
-  implicit def withStateStores[INPUT: ClassTag, OUTPUT: ClassTag](
-    dataRDD: RDD[INPUT],
-    storeUpdateFunction: (StateStore, Iterator[INPUT]) => Iterator[OUTPUT],
-    operatorId: Long,
-    newStoreVersion: Long,
-    storeDirectory: String,
-    storeCoordinator: StateStoreCoordinator
-  ): RDD[OUTPUT] = {
-    new StateStoreRDD(
-      dataRDD, storeUpdateFunction, operatorId, newStoreVersion, storeDirectory, storeCoordinator)
   }
 }

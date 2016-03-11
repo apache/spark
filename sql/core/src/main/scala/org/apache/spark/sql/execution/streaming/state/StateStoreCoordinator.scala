@@ -37,8 +37,9 @@ class StateStoreCoordinator(rpcEnv: RpcEnv) {
     "StateStoreCoordinator", new StateStoreCoordinatorEndpoint(rpcEnv, this))
   private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
 
-  def reportActiveInstance(storeId: StateStoreId, host: String, executorId: String): Unit = {
+  def reportActiveInstance(storeId: StateStoreId, host: String, executorId: String): Boolean = {
     instances.synchronized { instances.put(storeId, ExecutorCacheTaskLocation(host, executorId)) }
+    true
   }
 
   def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
@@ -74,7 +75,7 @@ private[spark] object StateStoreCoordinator {
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case ReportActiveInstance(id, host, executorId) =>
-        coordinator.reportActiveInstance(id, host, executorId)
+        context.reply(coordinator.reportActiveInstance(id, host, executorId))
       case VerifyIfInstanceActive(id, executor) =>
         context.reply(coordinator.verifyIfInstanceActive(id, executor))
     }

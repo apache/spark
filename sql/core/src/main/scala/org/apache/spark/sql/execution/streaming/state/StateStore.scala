@@ -172,9 +172,10 @@ private[sql] class StateStore(
 
   /** Cancel all the updates that have been made to the store. */
   def cancelUpdates(): Unit = {
-    verify(uncommittedDelta != null, "Cannot commit data before calling newVersion()")
-    uncommittedDelta.cancel()
-    uncommittedDelta = null
+    if (uncommittedDelta != null) {
+      uncommittedDelta.cancel()
+      uncommittedDelta = null
+    }
   }
 
   /**
