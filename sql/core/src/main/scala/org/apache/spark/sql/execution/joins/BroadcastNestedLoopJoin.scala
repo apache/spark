@@ -55,7 +55,9 @@ case class BroadcastNestedLoopJoin(
       UnsafeProjection.create(output, output)
     } else {
       // Always put the stream side on left to simplify implementation
-      UnsafeProjection.create(output, streamed.output ++ broadcast.output)
+      // both of left and right side could be null
+      UnsafeProjection.create(
+        output, (streamed.output ++ broadcast.output).map(_.withNullability(true)))
     }
   }
 
