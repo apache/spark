@@ -899,7 +899,7 @@ private[spark] class BlockManager(
    * Attempts to cache spilled bytes read from disk into the MemoryStore in order to speed up
    * subsequent reads. This method requires the caller to hold a read lock on the block.
    *
-   * @return a copy of the bytes. The original byes passed this method should no longer
+   * @return a copy of the bytes. The original bytes passed this method should no longer
    *         be used after this method returns.
    */
   private def maybeCacheDiskBytesInMemory(
