@@ -143,7 +143,7 @@ case class DataSource(
           SparkHadoopUtil.get.globPathIfNecessary(qualified)
         }.toArray
 
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
+        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths, None)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sqlContext,
@@ -208,7 +208,20 @@ case class DataSource(
           SparkHadoopUtil.get.globPathIfNecessary(qualified)
         }.toArray
 
-        val fileCatalog: FileCatalog = new HDFSFileCatalog(sqlContext, options, globbedPaths)
+        // If they gave a schema, then we try and figure out the types of the partition columns
+        // from that schema.
+        val partitionSchema = userSpecifiedSchema.map { schema =>
+          StructType(
+            partitionColumns.map { c =>
+              // TODO: Case sensitivity.
+              schema
+                  .find(_.name.toLowerCase() == c.toLowerCase())
+                  .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
+            })
+        }
+
+        val fileCatalog: FileCatalog =
+          new HDFSFileCatalog(sqlContext, options, globbedPaths, partitionSchema)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sqlContext,
@@ -220,22 +233,11 @@ case class DataSource(
             "It must be specified manually")
         }
 
-        // If they gave a schema, then we try and figure out the types of the partition columns
-        // from that schema.
-        val partitionSchema = userSpecifiedSchema.map { schema =>
-          StructType(
-            partitionColumns.map { c =>
-              // TODO: Case sensitivity.
-              schema
-                .find(_.name.toLowerCase() == c.toLowerCase())
-                .getOrElse(throw new AnalysisException(s"Invalid partition column '$c'"))
-          })
-        }.getOrElse(fileCatalog.partitionSpec(None).partitionColumns)
 
         HadoopFsRelation(
           sqlContext,
           fileCatalog,
-          partitionSchema = partitionSchema,
+          partitionSchema = fileCatalog.partitionSpec().partitionColumns,
           dataSchema = dataSchema.asNullable,
           bucketSpec = bucketSpec,
           format,
@@ -296,7 +298,7 @@ case class DataSource(
               resolveRelation()
                 .asInstanceOf[HadoopFsRelation]
                 .location
-                .partitionSpec(None)
+                .partitionSpec()
                 .partitionColumns
                 .fieldNames
                 .toSet)

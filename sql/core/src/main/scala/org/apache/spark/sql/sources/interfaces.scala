@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark
+
 import scala.collection.mutable
 import scala.util.Try
 
@@ -25,12 +27,12 @@ import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{TaskContext, Logging, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.execution.datasources._
@@ -409,7 +411,7 @@ case class HadoopFsRelation(
 
   def partitionSchemaOption: Option[StructType] =
     if (partitionSchema.isEmpty) None else Some(partitionSchema)
-  def partitionSpec: PartitionSpec = location.partitionSpec(partitionSchemaOption)
+  def partitionSpec: PartitionSpec = location.partitionSpec()
 
   def refresh(): Unit = location.refresh()
 
@@ -454,12 +456,66 @@ trait FileFormat {
       requiredColumns: Array[String],
       filters: Array[Filter],
       bucketSet: Option[BitSet],
-      inputFiles: Array[FileStatus],
+      inputFiles: Seq[FileStatus],
       broadcastedConf: Broadcast[SerializableConfiguration],
       options: Map[String, String]): RDD[InternalRow]
+
+  /**
+   * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
+   *
+   * @param partitionSchema The schema of the partition column row that will be present in each
+   *                        PartitionedFile.  These columns should be prepended to the rows that
+   *                        are produced by the iterator.
+   * @param dataSchema The schema of the data that should be output for each row.  This may be a
+   *                   subset of the columns that are present in the file if  column pruning has
+   *                   occurred.
+   * @param filters A set of filters than can optionally be used to reduce the number of rows output
+   * @param options A set of string -> string configuration options.
+   * @return
+   */
+  def buildReader(
+      sqlContext: SQLContext,
+      partitionSchema: StructType,
+      dataSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+    (file: PartitionedFile) => {
+      println(s"SCANNING $file $partitionSchema $dataSchema $filters")
+      ???
+    }
+  }
 }
 
-case class FileMetaData(path: String, partitionValues: InternalRow, sizeBytes: Long)
+/**
+ * A single file that should be read, along with partition column values that
+ * need to be prepended to each row.  The reading should start at the first
+ * valid record found after `offset`.
+ */
+case class PartitionedFile(partitionValues: InternalRow, filePath: String, start: Long, length: Long)
+
+/** A collection of files that should be read as a single task possibly from multiple partitions. */
+case class FilePartition(val index: Int, files: Seq[PartitionedFile]) // extends SparkPartition
+
+class FileScanRDD(
+    @transient val sqlContext: SQLContext,
+    readFunction: (PartitionedFile) => Iterator[InternalRow],
+    @transient val filePartitions: Seq[FilePartition])
+    extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
+  /**
+   * :: DeveloperApi ::
+   * Implemented by subclasses to compute a given partition.
+   */
+  override def compute(split: spark.Partition, context: TaskContext): Iterator[InternalRow] = ???
+
+  /**
+   * Implemented by subclasses to return the set of partitions in this RDD. This method will only
+   * be called once, so it is safe to implement a time-consuming computation in it.
+   *
+   * The partitions in this array must satisfy the following property:
+   * `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
+   */
+  override protected def getPartitions: Array[spark.Partition] = Array.empty
+}
 
 /**
  * An interface for objects capable of enumerating the files that comprise a relation as well
@@ -468,9 +524,9 @@ case class FileMetaData(path: String, partitionValues: InternalRow, sizeBytes: L
 trait FileCatalog {
   def paths: Seq[Path]
 
-  def partitionSpec(schema: Option[StructType]): PartitionSpec
+  def partitionSpec(): PartitionSpec
 
-  def listFiles(filters: Seq[Expression]): Seq[FileMetaData]
+  def listFiles(filters: Seq[Expression]): Seq[Partition]
 
   def allFiles(): Seq[FileStatus]
 
@@ -479,6 +535,8 @@ trait FileCatalog {
   def refresh(): Unit
 }
 
+case class Partition(values: InternalRow, files: Seq[FileStatus])
+
 /**
  * A file catalog that caches metadata gathered by scanning all the files present in `paths`
  * recursively.
@@ -486,7 +544,8 @@ trait FileCatalog {
 class HDFSFileCatalog(
     val sqlContext: SQLContext,
     val parameters: Map[String, String],
-    val paths: Seq[Path])
+    val paths: Seq[Path],
+    val partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
   private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
@@ -495,15 +554,60 @@ class HDFSFileCatalog(
   var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
   var cachedPartitionSpec: PartitionSpec = _
 
-  def partitionSpec(schema: Option[StructType]): PartitionSpec = {
+  def partitionSpec(): PartitionSpec = {
     if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning(schema)
+      cachedPartitionSpec = inferPartitioning(partitionSchema)
     }
 
     cachedPartitionSpec
   }
 
   refresh()
+
+  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
+    if (partitionSpec().partitionColumns.isEmpty) {
+      Partition(InternalRow.empty, allFiles()) :: Nil
+    } else {
+      prunePartitions(filters, partitionSpec()).map {
+        case PartitionPath(values, path) => Partition(values, getStatus(path))
+      }
+    }
+  }
+
+  protected def prunePartitions(
+      predicates: Seq[Expression],
+      partitionSpec: PartitionSpec): Seq[PartitionPath] = {
+    val PartitionSpec(partitionColumns, partitions) = partitionSpec
+    val partitionColumnNames = partitionColumns.map(_.name).toSet
+    val partitionPruningPredicates = predicates.filter {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (partitionPruningPredicates.nonEmpty) {
+      val predicate =
+        partitionPruningPredicates
+            .reduceOption(expressions.And)
+            .getOrElse(Literal(true))
+
+      val boundPredicate = InterpretedPredicate.create(predicate.transform {
+        case a: AttributeReference =>
+          val index = partitionColumns.indexWhere(a.name == _.name)
+          BoundReference(index, partitionColumns(index).dataType, nullable = true)
+      })
+
+      val selected = partitions.filter { case PartitionPath(values, _) => boundPredicate(values) }
+      logInfo {
+        val total = partitions.length
+        val selectedSize = selected.length
+        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
+        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
+      }
+
+      selected
+    } else {
+      partitions
+    }
+  }
 
   def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
@@ -564,7 +668,7 @@ class HDFSFileCatalog(
         PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
           part.copy(values = castPartitionValuesToUserSchema(part.values))
         })
-      case None =>
+      case _ =>
         PartitioningUtils.parsePartitions(
           leafDirs,
           PartitioningUtils.DEFAULT_PARTITION_NAME,
@@ -614,8 +718,6 @@ class HDFSFileCatalog(
   }
 
   override def hashCode(): Int = paths.toSet.hashCode()
-
-  override def listFiles(filters: Seq[Expression]): Seq[FileMetaData] = ???
 }
 
 /**
