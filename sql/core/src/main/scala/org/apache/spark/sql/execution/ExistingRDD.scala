@@ -199,6 +199,7 @@ private[sql] case class DataSourceScan(
   // never requires UnsafeRow as input.
   override protected def doProduce(ctx: CodegenContext): String = {
     val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+    val columnarBatchRowClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row"
     val input = ctx.freshName("input")
     val idx = ctx.freshName("batchIdx")
     val batch = ctx.freshName("batch")
@@ -226,10 +227,12 @@ private[sql] case class DataSourceScan(
       | private void $scanBatches() throws java.io.IOException {
       |  while (true) {
       |     int numRows = $batch.numRows();
+      |     java.util.Iterator<$columnarBatchRowClz> rowIterator = $batch.rowIterator();
       |     if ($idx == 0) $numOutputRows.add(numRows);
       |
-      |     while (!shouldStop() && $idx < numRows) {
-      |       InternalRow $row = $batch.getRow($idx++);
+      |     while (!shouldStop() && rowIterator.hasNext()) {
+      |       InternalRow $row = ($columnarBatchRowClz)rowIterator.next();
+      |       $idx++;
       |       ${consume(ctx, columns1).trim}
       |     }
       |     if (shouldStop()) return;
@@ -239,6 +242,7 @@ private[sql] case class DataSourceScan(
       |       break;
       |     }
       |     $batch = ($columnarBatchClz)$input.next();
+      |     // $batch.filterNullsInColumn()
       |     $idx = 0;
       |   }
       | }""".stripMargin)

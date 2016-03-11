@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.vectorized;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.Vector;
 
 import org.apache.commons.lang.NotImplementedException;
-
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow;
@@ -57,6 +57,9 @@ public final class ColumnarBatch {
 
   // True if the row is filtered.
   private final boolean[] filteredRows;
+
+  // Column indices that cannot have null values.
+  private final Vector<Integer> nullFilteredColumns;
 
   // Total number of rows that have been filtered.
   private int numRowsFiltered = 0;
@@ -234,6 +237,21 @@ public final class ColumnarBatch {
   }
 
   /**
+   * Marks a given row as "filtered" if one of its attributes is part of a non-nullable column
+   *
+   * @return true if a given rowId can be filtered
+   */
+  public boolean shouldSkipRow(int rowId) {
+    for (int ordinal : nullFilteredColumns) {
+      if (columns[ordinal].getIsNull(rowId)) {
+        filteredRows[rowId] = true;
+        break;
+      }
+    }
+    return filteredRows[rowId];
+  }
+
+  /**
    * Returns an iterator over the rows in this batch. This skips rows that are filtered out.
    */
   public Iterator<Row> rowIterator() {
@@ -244,7 +262,7 @@ public final class ColumnarBatch {
 
       @Override
       public boolean hasNext() {
-        while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId]) {
+        while (rowId < maxRows && ColumnarBatch.this.filteredRows[rowId] && shouldSkipRow(rowId)) {
           ++rowId;
         }
         return rowId < maxRows;
@@ -345,15 +363,25 @@ public final class ColumnarBatch {
    * in this batch will not include this row.
    */
   public final void markFiltered(int rowId) {
-    assert(filteredRows[rowId] == false);
+    assert(!filteredRows[rowId]);
     filteredRows[rowId] = true;
     ++numRowsFiltered;
+  }
+
+  /**
+   * Marks a given column as non-nullable. Any row that has a NULL value for the corresponding
+   * attribute is filtered out.
+   */
+  public final void filterNullsInColumn(int ordinal) {
+    assert(!nullFilteredColumns.contains(ordinal));
+    nullFilteredColumns.add(ordinal);
   }
 
   private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
+    this.nullFilteredColumns = new Vector<>();
     this.filteredRows = new boolean[maxRows];
 
     for (int i = 0; i < schema.fields().length; ++i) {
