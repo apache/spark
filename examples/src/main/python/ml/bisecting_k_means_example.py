@@ -37,9 +37,9 @@ if __name__ == "__main__":
 
     # $example on$
     data = sc.textFile("data/mllib/kmeans_data.txt")
-    parsedData = data.map(lambda line: Row(features=Vectors.dense([float(x) for x in line.split(' ')])))
-    schema = StructType([StructField("features", VectorUDT(), False)])
-    training = sqlContext.createDataFrame(parsedData, schema)
+    parsedData = data.map(lambda line: Row(features=Vectors.dense(
+            [float(x) for x in line.split(' ')])))
+    training = sqlContext.createDataFrame(parsedData)
 
     kmeans = BisectingKMeans().setK(2).setSeed(1).setFeaturesCol("features")
 
