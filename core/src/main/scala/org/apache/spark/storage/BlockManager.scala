@@ -422,9 +422,10 @@ private[spark] class BlockManager(
           val iterToReturn: Iterator[Any] = {
             val diskBytes = diskStore.getBytes(blockId)
             if (level.deserialized) {
-              maybeCacheDiskValuesInMemory(blockId, level, dataDeserialize(blockId, diskBytes))
+              val diskValues = dataDeserialize(blockId, diskBytes)
+              maybeCacheDiskValuesInMemory(info, blockId, level, diskValues)
             } else {
-              dataDeserialize(blockId, maybeCacheDiskBytesInMemory(blockId, level, diskBytes))
+              dataDeserialize(blockId, maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes))
             }
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
@@ -484,7 +485,7 @@ private[spark] class BlockManager(
       if (level.useMemory && memoryStore.contains(blockId)) {
         memoryStore.getBytes(blockId).get
       } else if (level.useDisk && diskStore.contains(blockId)) {
-        maybeCacheDiskBytesInMemory(blockId, level, diskStore.getBytes(blockId))
+        maybeCacheDiskBytesInMemory(info, blockId, level, diskStore.getBytes(blockId))
       } else {
         releaseLock(blockId)
         throw new SparkException(s"Block $blockId was not found even though it's read-locked")
@@ -896,12 +897,13 @@ private[spark] class BlockManager(
 
   /**
    * Attempts to cache spilled bytes read from disk into the MemoryStore in order to speed up
-   * subsequent reads.
+   * subsequent reads. This method requires the caller to hold a read lock on the block.
    *
    * @return a copy of the bytes. The original byes passed this method should no longer
    *         be used after this method returns.
    */
   private def maybeCacheDiskBytesInMemory(
+      blockInfo: BlockInfo,
       blockId: BlockId,
       level: StorageLevel,
       diskBytes: ByteBuffer): ByteBuffer = {
@@ -927,12 +929,13 @@ private[spark] class BlockManager(
 
   /**
    * Attempts to cache spilled values read from disk into the MemoryStore in order to speed up
-   * subsequent reads.
+   * subsequent reads. This method requires the caller to hold a read lock on the block.
    *
    * @return a copy of the iterator. The original iterator passed this method should no longer
    *         be used after this method returns.
    */
   private def maybeCacheDiskValuesInMemory(
+      blockInfo: BlockInfo,
       blockId: BlockId,
       level: StorageLevel,
       diskIterator: Iterator[Any]): Iterator[Any] = {
