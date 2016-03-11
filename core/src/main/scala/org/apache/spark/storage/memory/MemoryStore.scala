@@ -448,11 +448,20 @@ private[spark] class MemoryStore(
   }
 }
 
+/**
+ * The result of a failed [[MemoryStore.putIterator()]] call.
+ *
+ * @param memoryStore the memoryStore, used for freeing memory.
+ * @param unrollMemory the amount of unroll memory used by the values in `unrolled`.
+ * @param unrolled an iterator for the partially-unrolled values.
+ * @param rest the rest of the original iterator passed to [[MemoryStore.putIterator()]].
+ */
 private[storage] class PartiallyUnrolledIterator(
-  memoryStore: MemoryStore,
-  unrollMemory: Long,
-  unrolled: Iterator[Any],
-  rest: Iterator[Any]) extends Iterator[Any] {
+    memoryStore: MemoryStore,
+    unrollMemory: Long,
+    unrolled: Iterator[Any],
+    rest: Iterator[Any])
+  extends Iterator[Any] {
 
   private[this] var unrolledIteratorIsCompleted: Boolean = false
   private[this] var iter: Iterator[Any] = {
@@ -467,7 +476,7 @@ private[storage] class PartiallyUnrolledIterator(
   override def next(): Any = iter.next()
 
   /**
-   * Called to dispose of this iterator when the rest of it will not be consumed.
+   * Called to dispose of this iterator and free its memory.
    */
   def close(): Unit = {
     if (!unrolledIteratorIsCompleted) {
