@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.streaming.state
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
-import org.apache.spark.{Partition, TaskContext}
 
 /**
   * Created by tdas on 3/9/16.

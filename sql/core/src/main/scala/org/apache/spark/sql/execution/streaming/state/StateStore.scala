@@ -27,11 +27,11 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.serializer.{DeserializationStream, KryoSerializer, SerializationStream}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.util.{RpcUtils, CompletionIterator, Utils}
-import org.apache.spark.{SparkEnv, Logging, SparkConf}
+import org.apache.spark.util.{CompletionIterator, RpcUtils, Utils}
 
 case class StateStoreId(operatorId: Long, partitionId: Int)
 
@@ -441,8 +441,6 @@ private[sql] class StateStore(
           case _ =>
             logWarning(s"Could not identify file $path")
         }
-      } else {
-        println("\tIgnoring")
       }
     }
     versionToFiles.values.toSeq.sortBy(_.version)
