@@ -422,39 +422,9 @@ private[spark] class BlockManager(
           val iterToReturn: Iterator[Any] = {
             val diskBytes = diskStore.getBytes(blockId)
             if (level.deserialized) {
-              val diskIterator = dataDeserialize(blockId, diskBytes)
-              if (level.useMemory) {
-                // Cache the values before returning them
-                memoryStore.putIterator(blockId, diskIterator, level) match {
-                  case Left(iter) =>
-                    // The memory store put() failed, so it returned the iterator back to us:
-                    iter
-                  case Right(_) =>
-                    // The put() succeeded, so we can read the values back:
-                    memoryStore.getValues(blockId).get
-                }
-              } else {
-                diskIterator
-              }
-            } else { // storage level is serialized
-              if (level.useMemory) {
-                // Cache the bytes back into memory to speed up subsequent reads.
-                val putSucceeded = memoryStore.putBytes(blockId, diskBytes.limit(), () => {
-                  // https://issues.apache.org/jira/browse/SPARK-6076
-                  // If the file size is bigger than the free memory, OOM will happen. So if we
-                  // cannot put it into MemoryStore, copyForMemory should not be created. That's why
-                  // this action is put into a `() => ByteBuffer` and created lazily.
-                  val copyForMemory = ByteBuffer.allocate(diskBytes.limit)
-                  copyForMemory.put(diskBytes)
-                })
-                if (putSucceeded) {
-                  dataDeserialize(blockId, memoryStore.getBytes(blockId).get)
-                } else {
-                  dataDeserialize(blockId, diskBytes)
-                }
-              } else {
-                dataDeserialize(blockId, diskBytes)
-              }
+              maybeCacheDiskValuesInMemory(blockId, level, dataDeserialize(blockId, diskBytes))
+            } else {
+              dataDeserialize(blockId, maybeCacheDiskBytesInMemory(blockId, level, diskBytes))
             }
           }
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
@@ -514,26 +484,7 @@ private[spark] class BlockManager(
       if (level.useMemory && memoryStore.contains(blockId)) {
         memoryStore.getBytes(blockId).get
       } else if (level.useDisk && diskStore.contains(blockId)) {
-        val bytes = diskStore.getBytes(blockId)
-        if (level.useMemory) {
-          // Cache the bytes back into memory to speed up subsequent reads.
-          val memoryStorePutSucceeded = memoryStore.putBytes(blockId, bytes.limit(), () => {
-            // https://issues.apache.org/jira/browse/SPARK-6076
-            // If the file size is bigger than the free memory, OOM will happen. So if we cannot
-            // put it into MemoryStore, copyForMemory should not be created. That's why this
-            // action is put into a `() => ByteBuffer` and created lazily.
-            val copyForMemory = ByteBuffer.allocate(bytes.limit)
-            copyForMemory.put(bytes)
-          })
-          if (memoryStorePutSucceeded) {
-            memoryStore.getBytes(blockId).get
-          } else {
-            bytes.rewind()
-            bytes
-          }
-        } else {
-          bytes
-        }
+        maybeCacheDiskBytesInMemory(blockId, level, diskStore.getBytes(blockId))
       } else {
         releaseLock(blockId)
         throw new SparkException(s"Block $blockId was not found even though it's read-locked")
@@ -940,6 +891,63 @@ private[spark] class BlockManager(
       }
       assert(blockWasSuccessfullyStored == iteratorFromFailedMemoryStorePut.isEmpty)
       iteratorFromFailedMemoryStorePut
+    }
+  }
+
+  /**
+   * Attempts to cache spilled bytes read from disk into the MemoryStore in order to speed up
+   * subsequent reads.
+   *
+   * @return a copy of the bytes. The original byes passed this method should no longer
+   *         be used after this method returns.
+   */
+  private def maybeCacheDiskBytesInMemory(
+      blockId: BlockId,
+      level: StorageLevel,
+      diskBytes: ByteBuffer): ByteBuffer = {
+    if (level.useMemory) {
+      val putSucceeded = memoryStore.putBytes(blockId, diskBytes.limit(), () => {
+        // https://issues.apache.org/jira/browse/SPARK-6076
+        // If the file size is bigger than the free memory, OOM will happen. So if we
+        // cannot put it into MemoryStore, copyForMemory should not be created. That's why
+        // this action is put into a `() => ByteBuffer` and created lazily.
+        val copyForMemory = ByteBuffer.allocate(diskBytes.limit)
+        copyForMemory.put(diskBytes)
+      })
+      if (putSucceeded) {
+        memoryStore.getBytes(blockId).get
+      } else {
+        diskBytes.rewind()
+        diskBytes
+      }
+    } else {
+      diskBytes
+    }
+  }
+
+  /**
+   * Attempts to cache spilled values read from disk into the MemoryStore in order to speed up
+   * subsequent reads.
+   *
+   * @return a copy of the iterator. The original iterator passed this method should no longer
+   *         be used after this method returns.
+   */
+  private def maybeCacheDiskValuesInMemory(
+      blockId: BlockId,
+      level: StorageLevel,
+      diskIterator: Iterator[Any]): Iterator[Any] = {
+    if (level.useMemory) {
+      // Cache the values before returning them
+      memoryStore.putIterator(blockId, diskIterator, level) match {
+        case Left(iter) =>
+          // The memory store put() failed, so it returned the iterator back to us:
+          iter
+        case Right(_) =>
+          // The put() succeeded, so we can read the values back:
+          memoryStore.getValues(blockId).get
+      }
+    } else {
+      diskIterator
     }
   }
 
