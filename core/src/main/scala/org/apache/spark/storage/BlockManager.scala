@@ -907,20 +907,29 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       diskBytes: ByteBuffer): ByteBuffer = {
+    require(!level.deserialized)
     if (level.useMemory) {
-      val putSucceeded = memoryStore.putBytes(blockId, diskBytes.limit(), () => {
-        // https://issues.apache.org/jira/browse/SPARK-6076
-        // If the file size is bigger than the free memory, OOM will happen. So if we
-        // cannot put it into MemoryStore, copyForMemory should not be created. That's why
-        // this action is put into a `() => ByteBuffer` and created lazily.
-        val copyForMemory = ByteBuffer.allocate(diskBytes.limit)
-        copyForMemory.put(diskBytes)
-      })
-      if (putSucceeded) {
-        memoryStore.getBytes(blockId).get
-      } else {
-        diskBytes.rewind()
-        diskBytes
+      // Synchronize on blockInfo to guard against a race condition where two readers both try to
+      // put values read from disk into the MemoryStore.
+      blockInfo.synchronized {
+        if (memoryStore.contains(blockId)) {
+          memoryStore.getBytes(blockId).get
+        } else {
+          val putSucceeded = memoryStore.putBytes(blockId, diskBytes.limit(), () => {
+            // https://issues.apache.org/jira/browse/SPARK-6076
+            // If the file size is bigger than the free memory, OOM will happen. So if we
+            // cannot put it into MemoryStore, copyForMemory should not be created. That's why
+            // this action is put into a `() => ByteBuffer` and created lazily.
+            val copyForMemory = ByteBuffer.allocate(diskBytes.limit)
+            copyForMemory.put(diskBytes)
+          })
+          if (putSucceeded) {
+            memoryStore.getBytes(blockId).get
+          } else {
+            diskBytes.rewind()
+            diskBytes
+          }
+        }
       }
     } else {
       diskBytes
@@ -939,15 +948,24 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       diskIterator: Iterator[Any]): Iterator[Any] = {
+    require(level.deserialized)
     if (level.useMemory) {
-      // Cache the values before returning them
-      memoryStore.putIterator(blockId, diskIterator, level) match {
-        case Left(iter) =>
-          // The memory store put() failed, so it returned the iterator back to us:
-          iter
-        case Right(_) =>
-          // The put() succeeded, so we can read the values back:
+      // Synchronize on blockInfo to guard against a race condition where two readers both try to
+      // put values read from disk into the MemoryStore.
+      blockInfo.synchronized {
+        if (memoryStore.contains(blockId)) {
+          // Note: if we had a means to discard the disk iterator, we would do that here.
           memoryStore.getValues(blockId).get
+        } else {
+          memoryStore.putIterator(blockId, diskIterator, level) match {
+            case Left(iter) =>
+              // The memory store put() failed, so it returned the iterator back to us:
+              iter
+            case Right(_) =>
+              // The put() succeeded, so we can read the values back:
+              memoryStore.getValues(blockId).get
+          }
+        }
       }
     } else {
       diskIterator
