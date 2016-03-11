@@ -48,7 +48,7 @@ class MQTTUtils(object):
         except Py4JJavaError as e:
             if 'ClassNotFoundException' in str(e.java_exception):
                 MQTTUtils._printErrorMsg(ssc.sparkContext)
-            raise e
+            raise
 
         return DStream(jstream, ssc, UTF8Deserializer())
 
