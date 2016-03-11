@@ -88,29 +88,14 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
-    "TOK_ALTERTABLE",
-    "TOK_ALTERTABLE_ADDCOLS",
-    "TOK_ALTERTABLE_ADDPARTS",
     "TOK_ALTERTABLE_ALTERPARTS",
-    "TOK_ALTERTABLE_ARCHIVE",
-    "TOK_ALTERTABLE_CLUSTER_SORT",
-    "TOK_ALTERTABLE_DROPPARTS",
     "TOK_ALTERTABLE_PARTITION",
-    "TOK_ALTERTABLE_PROPERTIES",
-    "TOK_ALTERTABLE_RENAME",
-    "TOK_ALTERTABLE_RENAMECOL",
-    "TOK_ALTERTABLE_REPLACECOLS",
-    "TOK_ALTERTABLE_SKEWED",
-    "TOK_ALTERTABLE_TOUCH",
-    "TOK_ALTERTABLE_UNARCHIVE",
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
 
-    "TOK_CREATEDATABASE",
-    "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
     "TOK_CREATEMACRO",
     "TOK_CREATEROLE",
@@ -164,7 +149,8 @@ private[hive] class HiveQl(conf: ParserConf) extends SparkQl(conf) with Logging 
   protected val noExplainCommands = Seq(
     "TOK_DESCTABLE",
     "TOK_SHOWTABLES",
-    "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_TRUNCATETABLE", // truncate table" is a NativeCommand, does not need to explain.
+    "TOK_ALTERTABLE"
   ) ++ nativeCommands
 
   /**
