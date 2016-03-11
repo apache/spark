@@ -320,11 +320,12 @@ class Column(object):
     def cast(self, dataType):
         """ Convert the column into type ``dataType``.
 
+        :func:`cast` is an alias for :func:`astype`.
+
         >>> df.select(df.age.cast("string").alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
         >>> df.select(df.age.cast(StringType()).alias('ages')).collect()
         [Row(ages=u'2'), Row(ages=u'5')]
-        :func:`cast` is an alias for :func:`astype`.
         """
         if isinstance(dataType, basestring):
             jc = self._jc.cast(dataType)
