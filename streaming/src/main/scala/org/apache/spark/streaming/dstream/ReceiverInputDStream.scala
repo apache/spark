@@ -23,7 +23,7 @@ import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
-import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.streaming.receiver.{RateLimiterHelper, Receiver}
 import org.apache.spark.streaming.scheduler.{RateController, ReceivedBlockInfo, StreamInputInfo}
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.streaming.util.WriteAheadLogUtils
@@ -80,8 +80,12 @@ abstract class ReceiverInputDStream[T: ClassTag](_ssc: StreamingContext)
         val receiverTracker = ssc.scheduler.receiverTracker
         val blockInfos = receiverTracker.getBlocksOfBatch(validTime).getOrElse(id, Seq.empty)
 
+        val numRecordsSum = blockInfos.flatMap(_.numRecordsOption).sum
+        val numRecordsLimitSumOption =
+              RateLimiterHelper.sumRateLimits(blockInfos.map(_.numRecordsLimitOption))
+
         // Register the input blocks information into InputInfoTracker
-        val inputInfo = StreamInputInfo(id, blockInfos.flatMap(_.numRecords).sum)
+        val inputInfo = StreamInputInfo(id, numRecordsSum, numRecordsLimitSumOption)
         ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
         // Create the BlockRDD

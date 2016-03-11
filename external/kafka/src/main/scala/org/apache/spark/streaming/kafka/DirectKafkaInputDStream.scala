@@ -85,6 +85,9 @@ class DirectKafkaInputDStream[
     }
   }
 
+  /* This DirectKafkaInputDStream would be under rate control if its rateController is defined. */
+  override protected[streaming] lazy val underRateControl = rateController.isDefined
+
   protected val kc = new KafkaCluster(kafkaParams)
 
   private val maxRateLimitPerPartition: Int = context.sparkContext.getConf.getInt(
@@ -174,7 +177,7 @@ class DirectKafkaInputDStream[
     val metadata = Map(
       "offsets" -> offsetRanges.toList,
       StreamInputInfo.METADATA_KEY_DESCRIPTION -> description)
-    val inputInfo = StreamInputInfo(id, rdd.count, metadata)
+    val inputInfo = StreamInputInfo(id, rdd.count, None, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
 
     currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
