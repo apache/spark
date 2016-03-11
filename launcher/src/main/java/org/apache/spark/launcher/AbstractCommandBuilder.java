@@ -173,11 +173,9 @@ abstract class AbstractCommandBuilder {
     // Add Spark jars to the classpath. For the testing case, we rely on the test code to set and
     // propagate the test classpath appropriately. For normal invocation, look for the jars
     // directory under SPARK_HOME.
-    if (!isTesting) {
-      String jarsDir = findJarsDir();
-      if (jarsDir != null) {
-        addToClassPath(cp, join(File.separator, jarsDir, "*"));
-      }
+    String jarsDir = findJarsDir(!isTesting);
+    if (jarsDir != null) {
+      addToClassPath(cp, join(File.separator, jarsDir, "*"));
     }
 
     // Datanucleus jars must be included on the classpath. Datanucleus jars do not work if only
@@ -312,18 +310,19 @@ abstract class AbstractCommandBuilder {
     return props;
   }
 
-  private String findJarsDir() {
+  private String findJarsDir(boolean failIfNotFound) {
     // TODO: change to the correct directory once the assembly build is changed.
     String sparkHome = getSparkHome();
     File libdir;
     if (new File(sparkHome, "RELEASE").isFile()) {
       libdir = new File(sparkHome, "lib");
-      checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
+      checkState(!failIfNotFound || libdir.isDirectory(),
+        "Library directory '%s' does not exist.",
         libdir.getAbsolutePath());
     } else {
       libdir = new File(sparkHome, String.format("assembly/target/scala-%s", getScalaVersion()));
       if (!libdir.isDirectory()) {
-        checkState(!isEmpty(getenv("SPARK_PREPEND_CLASSES")),
+        checkState(!failIfNotFound,
           "Library directory '%s' does not exist; make sure Spark is built.",
           libdir.getAbsolutePath());
         libdir = null;
