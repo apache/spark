@@ -46,6 +46,8 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   private def constructIsNotNullConstraints(constraints: Set[Expression]): Set[Expression] = {
     // Currently we only propagate constraints if the condition consists of equality
     // and ranges. For all other cases, we return an empty set of constraints
+    // Note: Almost all the subclasses of BinaryComparison (EqualTo, LessThan, LessThanOrEqual,
+    // GreaterThan and GreaterThanOrEqual) are NULL intolerant. The only exception is EqualNullSafe
     var isNotNullConstraints = Set.empty[Expression]
     constraints.collect {
       case b @ BinaryComparison(l, r) if !b.isInstanceOf[EqualNullSafe] =>
