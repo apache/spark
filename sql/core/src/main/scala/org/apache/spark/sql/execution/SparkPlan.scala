@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.ArrayBuffer
@@ -34,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -220,7 +222,61 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[InternalRow] = {
-    execute().map(_.copy()).collect()
+    // Packing the UnsafeRows into byte array for faster serialization.
+    // The byte arrays are in the following format:
+    // [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+    val byteArrayRdd = execute().mapPartitionsInternal { iter =>
+      new Iterator[Array[Byte]] {
+        private var row: UnsafeRow = _
+        override def hasNext: Boolean = row != null || iter.hasNext
+        override def next: Array[Byte] = {
+          var cap = 1 << 20  // 1 MB
+          if (row != null) {
+            // the buffered row could be larger than default buffer size
+            cap = Math.max(cap, 4 + row.getSizeInBytes + 4) // reverse 4 bytes for ending mark (-1).
+          }
+          val buffer = ByteBuffer.allocate(cap)
+          if (row != null) {
+            buffer.putInt(row.getSizeInBytes)
+            row.writeTo(buffer)
+            row = null
+          }
+          while (iter.hasNext) {
+            row = iter.next().asInstanceOf[UnsafeRow]
+            // Reserve last 4 bytes for ending mark
+            if (4 + row.getSizeInBytes + 4 <= buffer.remaining()) {
+              buffer.putInt(row.getSizeInBytes)
+              row.writeTo(buffer)
+              row = null
+            } else {
+              buffer.putInt(-1)
+              return buffer.array()
+            }
+          }
+          buffer.putInt(-1)
+          // copy the used bytes to make it smaller
+          val bytes = new Array[Byte](buffer.limit())
+          System.arraycopy(buffer.array(), 0, bytes, 0, buffer.limit())
+          bytes
+        }
+      }
+    }
+    // Collect the byte arrays back to driver, then decode them as UnsafeRows.
+    val nFields = schema.length
+    byteArrayRdd.collect().flatMap { bytes =>
+      val buffer = ByteBuffer.wrap(bytes)
+      new Iterator[InternalRow] {
+        private var sizeInBytes = buffer.getInt()
+        override def hasNext: Boolean = sizeInBytes >= 0
+        override def next: InternalRow = {
+          val row = new UnsafeRow(nFields)
+          row.pointTo(buffer.array(), Platform.BYTE_ARRAY_OFFSET + buffer.position(), sizeInBytes)
+          buffer.position(buffer.position() + sizeInBytes)
+          sizeInBytes = buffer.getInt()
+          row
+        }
+      }
+    }
   }
 
   /**
