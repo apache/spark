@@ -34,6 +34,7 @@ import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.launcher._
 import org.apache.spark.util.Utils
 
@@ -202,7 +203,7 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraConf: Map[String, String] = Map()): String = {
     val props = new Properties()
-    props.put("spark.yarn.jar", "local:" + fakeSparkJar.getAbsolutePath())
+    props.put(SPARK_JARS.key, "local:" + fakeSparkJar.getAbsolutePath())
 
     val testClasspath = new TestClasspathBuilder()
       .buildClassPath(
