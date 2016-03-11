@@ -84,9 +84,6 @@ private[spark] class MemoryStore(
     memoryUsed - currentUnrollMemory
   }
 
-  /**
-   * Return the size of a block in bytes.
-   */
   def getSize(blockId: BlockId): Long = {
     entries.synchronized {
       entries.get(blockId).size
@@ -113,14 +110,13 @@ private[spark] class MemoryStore(
   }
 
   /**
-   * Put in a block and, possibly, also return its content as either bytes or another Iterator.
-   * This is used to efficiently write the values to multiple locations (e.g. for replication).
+   * Attempt to put the given block in memory store.
    *
    * @return the estimated size of the stored data if the put() succeeded, or an iterator
    *         in case the put() failed (the returned iterator lets callers fall back to the disk
    *         store if desired).
    */
-  def putIterator(
+  private[storage] def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel): Either[Iterator[Any], Long] = {
@@ -173,13 +169,6 @@ private[spark] class MemoryStore(
     }
   }
 
-  /**
-   * Remove a block, if it exists.
-   *
-   * @param blockId the block to remove.
-   * @return True if the block was found and removed, False otherwise.
-   * @throws IllegalStateException if the block is pinned by a task.
-   */
   def remove(blockId: BlockId): Boolean = memoryManager.synchronized {
     val entry = entries.synchronized {
       entries.remove(blockId)
