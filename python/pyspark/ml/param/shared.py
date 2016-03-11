@@ -25,7 +25,7 @@ class HasMaxIter(Params):
     Mixin for param maxIter: max number of iterations (>= 0).
     """
 
-    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0).", int, TypeConverters.convertToInt)
+    maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0).", typeConverter=TypeConverters.convertToInt)
 
     def __init__(self):
         super(HasMaxIter, self).__init__()
@@ -49,7 +49,7 @@ class HasRegParam(Params):
     Mixin for param regParam: regularization parameter (>= 0).
     """
 
-    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0).", float, TypeConverters.convertToFloat)
+    regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0).", typeConverter=TypeConverters.convertToFloat)
 
     def __init__(self):
         super(HasRegParam, self).__init__()
@@ -73,7 +73,7 @@ class HasFeaturesCol(Params):
     Mixin for param featuresCol: features column name.
     """
 
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", str, None)
+    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", typeConverter=None)
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
@@ -98,7 +98,7 @@ class HasLabelCol(Params):
     Mixin for param labelCol: label column name.
     """
 
-    labelCol = Param(Params._dummy(), "labelCol", "label column name.", str, None)
+    labelCol = Param(Params._dummy(), "labelCol", "label column name.", typeConverter=None)
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
@@ -123,7 +123,7 @@ class HasPredictionCol(Params):
     Mixin for param predictionCol: prediction column name.
     """
 
-    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.", str, None)
+    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.", typeConverter=None)
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
@@ -148,7 +148,7 @@ class HasProbabilityCol(Params):
     Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
     """
 
-    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.", str, None)
+    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.", typeConverter=None)
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
@@ -173,7 +173,7 @@ class HasRawPredictionCol(Params):
     Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name.
     """
 
-    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", str, None)
+    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", typeConverter=None)
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
@@ -198,7 +198,7 @@ class HasInputCol(Params):
     Mixin for param inputCol: input column name.
     """
 
-    inputCol = Param(Params._dummy(), "inputCol", "input column name.", str, None)
+    inputCol = Param(Params._dummy(), "inputCol", "input column name.", typeConverter=None)
 
     def __init__(self):
         super(HasInputCol, self).__init__()
@@ -222,7 +222,7 @@ class HasInputCols(Params):
     Mixin for param inputCols: input column names.
     """
 
-    inputCols = Param(Params._dummy(), "inputCols", "input column names.", None, TypeConverters.convertToList)
+    inputCols = Param(Params._dummy(), "inputCols", "input column names.", typeConverter=TypeConverters.convertToList)
 
     def __init__(self):
         super(HasInputCols, self).__init__()
@@ -246,7 +246,7 @@ class HasOutputCol(Params):
     Mixin for param outputCol: output column name.
     """
 
-    outputCol = Param(Params._dummy(), "outputCol", "output column name.", str, None)
+    outputCol = Param(Params._dummy(), "outputCol", "output column name.", typeConverter=None)
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
@@ -271,7 +271,7 @@ class HasNumFeatures(Params):
     Mixin for param numFeatures: number of features.
     """
 
-    numFeatures = Param(Params._dummy(), "numFeatures", "number of features.", int, TypeConverters.convertToInt)
+    numFeatures = Param(Params._dummy(), "numFeatures", "number of features.", typeConverter=TypeConverters.convertToInt)
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
@@ -295,7 +295,7 @@ class HasCheckpointInterval(Params):
     Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
     """
 
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", int, TypeConverters.convertToInt)
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", typeConverter=TypeConverters.convertToInt)
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -319,7 +319,7 @@ class HasSeed(Params):
     Mixin for param seed: random seed.
     """
 
-    seed = Param(Params._dummy(), "seed", "random seed.", int, TypeConverters.convertToInt)
+    seed = Param(Params._dummy(), "seed", "random seed.", typeConverter=TypeConverters.convertToInt)
 
     def __init__(self):
         super(HasSeed, self).__init__()
@@ -344,7 +344,7 @@ class HasTol(Params):
     Mixin for param tol: the convergence tolerance for iterative algorithms.
     """
 
-    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", float, TypeConverters.convertToFloat)
+    tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", typeConverter=TypeConverters.convertToFloat)
 
     def __init__(self):
         super(HasTol, self).__init__()
@@ -368,7 +368,7 @@ class HasStepSize(Params):
     Mixin for param stepSize: Step size to be used for each iteration of optimization.
     """
 
-    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization.", float, TypeConverters.convertToFloat)
+    stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization.", typeConverter=TypeConverters.convertToFloat)
 
     def __init__(self):
         super(HasStepSize, self).__init__()
@@ -392,7 +392,7 @@ class HasHandleInvalid(Params):
     Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
     """
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", str, None)
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", typeConverter=None)
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
@@ -416,7 +416,7 @@ class HasElasticNetParam(Params):
     Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
     """
 
-    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", float, TypeConverters.convertToFloat)
+    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", typeConverter=TypeConverters.convertToFloat)
 
     def __init__(self):
         super(HasElasticNetParam, self).__init__()
@@ -441,7 +441,7 @@ class HasFitIntercept(Params):
     Mixin for param fitIntercept: whether to fit an intercept term.
     """
 
-    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.", bool, None)
+    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.", typeConverter=None)
 
     def __init__(self):
         super(HasFitIntercept, self).__init__()
@@ -466,7 +466,7 @@ class HasStandardization(Params):
     Mixin for param standardization: whether to standardize the training features before fitting the model.
     """
 
-    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.", bool, None)
+    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.", typeConverter=None)
 
     def __init__(self):
         super(HasStandardization, self).__init__()
@@ -491,7 +491,7 @@ class HasThresholds(Params):
     Mixin for param thresholds: Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.
     """
 
-    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", None, TypeConverters.convertToListFloat)
+    thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", typeConverter=TypeConverters.convertToListFloat)
 
     def __init__(self):
         super(HasThresholds, self).__init__()
@@ -515,7 +515,7 @@ class HasWeightCol(Params):
     Mixin for param weightCol: weight column name. If this is not set or empty, we treat all instance weights as 1.0.
     """
 
-    weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.", str, None)
+    weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.", typeConverter=None)
 
     def __init__(self):
         super(HasWeightCol, self).__init__()
@@ -539,7 +539,7 @@ class HasSolver(Params):
     Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
     """
 
-    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.", str, None)
+    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.", typeConverter=None)
 
     def __init__(self):
         super(HasSolver, self).__init__()

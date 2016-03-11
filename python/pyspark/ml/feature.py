@@ -246,13 +246,13 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
         " times the term must appear in the document); if this is a double in [0,1), then this " +
         "specifies a fraction (out of the document's token count). Note that the parameter is " +
         "only used in transform of CountVectorizerModel and does not affect fitting. Default 1.0",
-        typeConverter=TypeConverters.convertToInt)
+        typeConverter=TypeConverters.convertToFloat)
     minDF = Param(
         Params._dummy(), "minDF", "Specifies the minimum number of" +
         " different documents a term must appear in to be included in the vocabulary." +
         " If this is an integer >= 1, this specifies the number of documents the term must" +
         " appear in; if this is a double in [0,1), then this specifies the fraction of documents." +
-        " Default 1.0", typeConverter=TypeConverters.convertToInt)
+        " Default 1.0", typeConverter=TypeConverters.convertToFloat)
     vocabSize = Param(
         Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.",
         typeConverter=TypeConverters.convertToInt)
@@ -753,9 +753,9 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     """
 
     min = Param(Params._dummy(), "min", "Lower bound of the output feature range",
-                typeConverter=TypeConverters.convertToInt)
+                typeConverter=TypeConverters.convertToFloat)
     max = Param(Params._dummy(), "max", "Upper bound of the output feature range",
-                typeConverter=TypeConverters.convertToInt)
+                typeConverter=TypeConverters.convertToFloat)
 
     @keyword_only
     def __init__(self, min=0.0, max=1.0, inputCol=None, outputCol=None):
