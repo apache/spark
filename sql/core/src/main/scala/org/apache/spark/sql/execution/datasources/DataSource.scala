@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.execution.streaming.{FileStreamSource, Sink, Source}
 import org.apache.spark.sql.sources._
@@ -154,7 +154,7 @@ case class DataSource(
         }
 
         def dataFrameBuilder(files: Array[String]): DataFrame = {
-          DataFrame(
+          Dataset.newDataFrame(
             sqlContext,
             LogicalRelation(
               DataSource(

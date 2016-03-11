@@ -17,45 +17,37 @@
 
 package org.apache.spark.examples.ml;
 
-// $example on$
-import java.util.Arrays;
-
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.ml.feature.SQLTransformer;
+// $example on$
+import org.apache.spark.ml.feature.MaxAbsScaler;
+import org.apache.spark.ml.feature.MaxAbsScalerModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.*;
 // $example off$
+import org.apache.spark.sql.SQLContext;
 
-public class JavaSQLTransformerExample {
+public class JavaMaxAbsScalerExample {
+
   public static void main(String[] args) {
-
-    SparkConf conf = new SparkConf().setAppName("JavaSQLTransformerExample");
+    SparkConf conf = new SparkConf().setAppName("JavaMaxAbsScalerExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SQLContext jsql = new SQLContext(jsc);
 
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
-      RowFactory.create(0, 1.0, 3.0),
-      RowFactory.create(2, 2.0, 5.0)
-    ));
-    StructType schema = new StructType(new StructField [] {
-      new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
-      new StructField("v1", DataTypes.DoubleType, false, Metadata.empty()),
-      new StructField("v2", DataTypes.DoubleType, false, Metadata.empty())
-    });
-    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    MaxAbsScaler scaler = new MaxAbsScaler()
+        .setInputCol("features")
+        .setOutputCol("scaledFeatures");
 
-    SQLTransformer sqlTrans = new SQLTransformer().setStatement(
-      "SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__");
+    // Compute summary statistics and generate MaxAbsScalerModel
+    MaxAbsScalerModel scalerModel = scaler.fit(dataFrame);
 
-    sqlTrans.transform(df).show();
+    // rescale each feature to range [-1, 1].
+    Dataset<Row> scaledData = scalerModel.transform(dataFrame);
+    scaledData.show();
     // $example off$
-
     jsc.stop();
   }
+
 }
