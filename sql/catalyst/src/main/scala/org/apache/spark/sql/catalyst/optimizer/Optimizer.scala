@@ -613,7 +613,6 @@ object NullFiltering extends Rule[LogicalPlan] with PredicateHelper {
       // operator's child constraints.
       val newIsNotNullConstraints = filter.constraints.filter(_.isInstanceOf[IsNotNull]) --
         (child.constraints ++ splitConjunctivePredicates(condition))
-
       if (newIsNotNullConstraints.nonEmpty) {
         Filter(And(newIsNotNullConstraints.reduce(And), condition), child)
       } else {
