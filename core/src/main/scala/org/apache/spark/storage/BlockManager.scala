@@ -133,6 +133,9 @@ private[spark] class BlockManager(
   private val compressRdds = conf.getBoolean("spark.rdd.compress", false)
   // Whether to compress shuffle output temporarily spilled to disk
   private val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", true)
+  // Max number of failures before this block manager refreshes the block locations from the driver
+  private val maxFailuresBeforeLocationRefresh =
+    conf.getInt("spark.block.failures.beforeLocationRefresh", 5)
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     "BlockManagerEndpoint" + BlockManager.ID_GENERATOR.next,
@@ -568,26 +571,46 @@ private[spark] class BlockManager(
   def getRemoteBytes(blockId: BlockId): Option[ByteBuffer] = {
     logDebug(s"Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
+    var runningFailureCount = 0
+    var totalFailureCount = 0
     val locations = getLocations(blockId)
-    var numFetchFailures = 0
-    for (loc <- locations) {
+    val maxFetchFailures = locations.size
+    var locationIterator = locations.iterator
+    while (locationIterator.hasNext) {
+      val loc = locationIterator.next()
       logDebug(s"Getting remote block $blockId from $loc")
       val data = try {
         blockTransferService.fetchBlockSync(
           loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
       } catch {
         case NonFatal(e) =>
-          numFetchFailures += 1
-          if (numFetchFailures == locations.size) {
-            // An exception is thrown while fetching this block from all locations
-            throw new BlockFetchException(s"Failed to fetch block from" +
-              s" ${locations.size} locations. Most recent failure cause:", e)
-          } else {
-            // This location failed, so we retry fetch from a different one by returning null here
-            logWarning(s"Failed to fetch remote block $blockId " +
-              s"from $loc (failed attempt $numFetchFailures)", e)
-            null
+          runningFailureCount += 1
+          totalFailureCount += 1
+
+          if (totalFailureCount >= maxFetchFailures) {
+            // Give up trying anymore locations. Either we've tried all of the original locations,
+            // or we've refreshed the list of locations from the master, and have still
+            // hit failures after trying locations from the refreshed list.
+            throw new BlockFetchException(s"Failed to fetch block after" +
+              s" ${totalFailureCount} fetch failures. Most recent failure cause:", e)
           }
+
+          logWarning(s"Failed to fetch remote block $blockId " +
+            s"from $loc (failed attempt $runningFailureCount)", e)
+
+          // If there is a large number of executors then locations list can contain a
+          // large number of stale entries causing a large number of retries that may
+          // take a significant amount of time. To get rid of these stale entries
+          // we refresh the block locations after a certain number of fetch failures
+          if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
+            locationIterator = getLocations(blockId).iterator
+            logDebug(s"Refreshed locations from the driver " +
+              s"after ${runningFailureCount} fetch failures.")
+            runningFailureCount = 0
+          }
+
+          // This location failed, so we retry fetch from a different one by returning null here
+          null
       }
 
       if (data != null) {
