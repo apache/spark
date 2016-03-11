@@ -24,11 +24,10 @@ import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, QueryTest, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.PhysicalRDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -269,7 +268,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           l.copy(relation =
             r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
       }
-      DataFrame(sqlContext, bucketed)
+      Dataset.newDataFrame(sqlContext, bucketed)
     } else {
       df
     }
