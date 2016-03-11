@@ -261,109 +261,291 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("insert into table1 select 6, 7, 4")
       sql("insert into table1 select 6, 7, 8")
 
-      /*
+
       //sliding frame with exclude current row
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and 2 following exclude current row)" +
-        " from table1 where col1 = 6").show()
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6, 10, 1, 18),
+          Row(6, 11, 4, 32),
+          Row(6, 7, 4, 51),
+          Row(6, 15, 8, 40),
+          Row(6,  15,   8, 41),
+          Row(6,   7,   8, 51),
+          Row(6,  12,  10, 44),
+          Row(6,   9,  10, 32),
+          Row(6,  13,  11, 21)
+        )
+      )
 
       //sliding frame with exclude group
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and " +
         " 2 following exclude group) " +
-        " from table1 where col1 = 6").show()
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1, 18),
+          Row(6,  11,   4, 25),
+          Row(6,   7,   4, 40),
+          Row(6,  15,   8, 18),
+          Row(6,  15,   8, 19),
+          Row(6,   7,   8, 21),
+          Row(6,  12,  10, 35),
+          Row(6,   9,  10, 20),
+          Row(6,  13,  11, 21)
+        )
+      )
 
       //sliding frame with exclude ties
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and " +
         " 2 following exclude ties) " +
-        " from table1 where col1 = 6").show()
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1, 28),
+          Row(6,  11,   4, 36),
+          Row(6,   7,   4, 47),
+          Row(6,  15,   8, 33),
+          Row(6,  15,   8, 34),
+          Row(6,   7,   8, 28),
+          Row(6,  12,  10, 47),
+          Row(6,   9,  10, 29),
+          Row(6,  13,  11, 34)       
+        )
+      )
 
       //sliding frame with exclude no others
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between 2 preceding and " +
         " 2 following) " +
-        " from table1 where col1 = 6").show
-      */
-/*
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1, 28),
+          Row(6,  11,   4, 43),
+          Row(6,   7,   4, 58),
+          Row(6,  15,   8, 55),
+          Row(6,  15,   8, 56),
+          Row(6,   7,   8, 58),
+          Row(6,  12,  10, 56),
+          Row(6,   9,  10, 41),
+          Row(6,  13,  11, 34)
+        )
+      )
+
+
       //expanding frame with exclude current row
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row exclude current row) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,  null),
+          Row(6,  11,   4,    10),
+          Row(6,   7,   4,    21),
+          Row(6,  15,   8,    28),
+          Row(6,  15,   8,    43),
+          Row(6,   7,   8,    58),
+          Row(6,  12,  10,    65),
+          Row(6,   9,  10,    77),
+          Row(6,  13,  11,    86)
+        )
+      )
 
       //expanding frame with exclude group
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row exclude group) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,  null),
+          Row(6,  11,   4,    10),
+          Row(6,   7,   4,    10),
+          Row(6,  15,   8,    28),
+          Row(6,  15,   8,    28),
+          Row(6,   7,   8,    28),
+          Row(6,  12,  10,    65),
+          Row(6,   9,  10,    65),
+          Row(6,  13,  11,    86)
+        )
+      )
 
-*/
       //expanding frame with exclude ties
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " current row exclude ties) " +
-        " from table1 where col1 = 6").show
-
-/*
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    10),
+          Row(6,  11,   4,    21),
+          Row(6,   7,   4,    17),
+          Row(6,  15,   8,    43),
+          Row(6,  15,   8,    43),
+          Row(6,   7,   8,    35),
+          Row(6,  12,  10,    77),
+          Row(6,   9,  10,    74),
+          Row(6,  13,  11,    99)
+        )
+      )
+      
       //expanding frame with exclude no others
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
-        " current row) from table1 where col1 = 6").show
-
-
-
+        " current row) from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    10),
+          Row(6,  11,   4,    21),
+          Row(6,   7,   4,    28),
+          Row(6,  15,   8,    43), 
+          Row(6,  15,   8,    58),
+          Row(6,   7,   8,    65),
+          Row(6,  12,  10,    77),
+          Row(6,   9,  10,    86),
+          Row(6,  13,  11,    99)
+        )
+      )
 
       //shrinking frame with exclude current row
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following exclude current row) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    89),
+          Row(6,  11,   4,    78),
+          Row(6,   7,   4,    71),
+          Row(6,  15,   8,    56),
+          Row(6,  15,   8,    41),
+          Row(6,   7,   8,    34),
+          Row(6,  12,  10,    22),
+          Row(6,   9,  10,    13),
+          Row(6,  13,  11,  null)
+        )
+      )
 
       //shrinking frame with exclude current group
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following exclude group) " +
-        " from table1 where col1 = 6").show
-
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    89),
+          Row(6,  11,   4,    71),
+          Row(6,   7,   4,    71),
+          Row(6,  15,   8,    34),
+          Row(6,  15,   8,    34),
+          Row(6,   7,   8,    34),
+          Row(6,  12,  10,    13),
+          Row(6,   9,  10,    13),
+          Row(6,  13,  11,  null)
+        )
+      )
       //shrinking frame with exclude current ties
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
         " unbounded following exclude ties) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    99),
+          Row(6,  11,   4,    82),
+          Row(6,   7,   4,    78),
+          Row(6,  15,   8,    49),
+          Row(6,  15,   8,    49),
+          Row(6,   7,   8,    41),
+          Row(6,  12,  10,    25),
+          Row(6,   9,  10,    22),
+          Row(6,  13,  11,    13)
+        )
+      )
 
       //shrinking frame with exclude current no others
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between current row and " +
-        " unbounded following) from table1 where col1 = 6").show
+        " unbounded following) from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    99),
+          Row(6,  11,   4,    89),
+          Row(6,   7,   4,    78),
+          Row(6,  15,   8,    71),
+          Row(6,  15,   8,    56),
+          Row(6,   7,   8,    41),
+          Row(6,  12,  10,    34),
+          Row(6,   9,  10,    22),
+          Row(6,  13,  11,    13)
+        )
+      )
 
 
       //whole partition frame with exclude current row
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following exclude current row) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    89),
+          Row(6,  11,   4,    88),
+          Row(6,   7,   4,    92), 
+          Row(6,  15,   8,    84),
+          Row(6,  15,   8,    84),
+          Row(6,   7,   8,    92),
+          Row(6,  12,  10,    87),
+          Row(6,   9,  10,    90),
+          Row(6,  13,  11,    86)
+        )
+      )
 
       //whole partition frame with exclude group
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following exclude group) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    89),
+          Row(6,  11,   4,    81),
+          Row(6,   7,   4,    81),
+          Row(6,  15,   8,    62),
+          Row(6,  15,   8,    62),
+          Row(6,   7,   8,    62),
+          Row(6,  12,  10,    78),
+          Row(6,   9,  10,    78),
+          Row(6,  13,  11,    86)
+        )
+      )
 
       //whole partition frame with exclude ties
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
         " unbounded following exclude ties) " +
-        " from table1 where col1 = 6").show
+        " from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    99),
+          Row(6,  11,   4,    92),
+          Row(6,   7,   4,    88),
+          Row(6,  15,   8,    77),
+          Row(6,  15,   8,    77),
+          Row(6,   7,   8,    69), 
+          Row(6,  12,  10,    90),
+          Row(6,   9,  10,    87),
+          Row(6,  13,  11,    99)
+        )
+      )
 
       //whole partition frame with exclude no others
-      sql("select col1, col2, col3, sum(col2) over " +
+      checkAnswer(sql("select col1, col2, col3, sum(col2) over " +
         " (partition by col1 order by col3 rows between unbounded preceding and " +
-        " unbounded following) from table1 where col1 = 6").show
-
-        */
-
-
+        " unbounded following) from table1 where col1 = 6"),
+        Seq(
+          Row(6,  10,   1,    99),
+          Row(6,  11,   4,    99),
+          Row(6,   7,   4,    99),
+          Row(6,  15,   8,    99),
+          Row(6,  15,   8,    99),
+          Row(6,   7,   8,    99),
+          Row(6,  12,  10,    99),
+          Row(6,   9,  10,    99),
+          Row(6,  13,  11,    99)
+        )
+      )
     }
   }
 
