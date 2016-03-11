@@ -62,7 +62,7 @@ public class JavaIsotonicRegressionExample {
         @Override
         public Tuple2<Double, Double> call(Tuple3<Double, Double, Double> point) {
           Double predictedLabel = model.predict(point._2());
-          return new Tuple2<Double, Double>(predictedLabel, point._1());
+          return new Tuple2<>(predictedLabel, point._1());
         }
       }
     );
@@ -82,5 +82,7 @@ public class JavaIsotonicRegressionExample {
     model.save(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
     IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
     // $example off$
+
+    jsc.stop();
   }
 }

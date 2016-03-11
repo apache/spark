@@ -91,7 +91,6 @@ class Analyzer(
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
-      DistinctAggregationRewriter(conf) ::
       HiveTypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
@@ -298,12 +297,10 @@ class Analyzer(
           }.asInstanceOf[NamedExpression]
         }
 
-        val child = Project(x.child.output ++ groupByAliases, x.child)
-
         Aggregate(
           groupByAttributes :+ VirtualColumn.groupingIdAttribute,
           aggregations,
-          Expand(x.bitmasks, groupByAttributes, gid, child))
+          Expand(x.bitmasks, groupByAliases, groupByAttributes, gid, x.child))
     }
   }
 
@@ -424,7 +421,7 @@ class Analyzer(
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
           (oldVersion, oldVersion.copy(generatorOutput = newOutput))
 
-        case oldVersion @ Window(_, windowExpressions, _, _, child)
+        case oldVersion @ Window(windowExpressions, _, _, child)
             if AttributeSet(windowExpressions.map(_.toAttribute)).intersect(conflictingAttributes)
               .nonEmpty =>
           (oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions)))
@@ -512,8 +509,9 @@ class Analyzer(
 
       // A special case for Generate, because the output of Generate should not be resolved by
       // ResolveReferences. Attributes in the output will be resolved by ResolveGenerate.
-      case g @ Generate(generator, join, outer, qualifier, output, child)
-        if child.resolved && !generator.resolved =>
+      case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
+
+      case g @ Generate(generator, join, outer, qualifier, output, child) =>
         val newG = resolveExpression(generator, child, throws = true)
         if (newG.fastEquals(generator)) {
           g
@@ -660,10 +658,6 @@ class Analyzer(
         case p: Project =>
           val missing = missingAttrs -- p.child.outputSet
           Project(p.projectList ++ missingAttrs, addMissingAttr(p.child, missing))
-        case w: Window =>
-          val missing = missingAttrs -- w.child.outputSet
-          w.copy(projectList = w.projectList ++ missingAttrs,
-            child = addMissingAttr(w.child, missing))
         case a: Aggregate =>
           // all the missing attributes should be grouping expressions
           // TODO: push down AggregateExpression
@@ -1168,7 +1162,6 @@ class Analyzer(
         // Set currentChild to the newly created Window operator.
         currentChild =
           Window(
-            currentChild.output,
             windowExpressions,
             partitionSpec,
             orderSpec,
@@ -1201,7 +1194,7 @@ class Analyzer(
         val withWindow = addWindow(windowExpressions, withFilter)
 
         // Finally, generate output columns according to the original projectList.
-        val finalProjectList = aggregateExprs.map (_.toAttribute)
+        val finalProjectList = aggregateExprs.map(_.toAttribute)
         Project(finalProjectList, withWindow)
 
       case p: LogicalPlan if !p.childrenResolved => p
@@ -1217,7 +1210,7 @@ class Analyzer(
         val withWindow = addWindow(windowExpressions, withAggregate)
 
         // Finally, generate output columns according to the original projectList.
-        val finalProjectList = aggregateExprs.map (_.toAttribute)
+        val finalProjectList = aggregateExprs.map(_.toAttribute)
         Project(finalProjectList, withWindow)
 
       // We only extract Window Expressions after all expressions of the Project
@@ -1232,7 +1225,7 @@ class Analyzer(
         val withWindow = addWindow(windowExpressions, withProject)
 
         // Finally, generate output columns according to the original projectList.
-        val finalProjectList = projectList.map (_.toAttribute)
+        val finalProjectList = projectList.map(_.toAttribute)
         Project(finalProjectList, withWindow)
     }
   }
@@ -1438,10 +1431,10 @@ object CleanupAliases extends Rule[LogicalPlan] {
       val cleanedAggs = aggs.map(trimNonTopLevelAliases(_).asInstanceOf[NamedExpression])
       Aggregate(grouping.map(trimAliases), cleanedAggs, child)
 
-    case w @ Window(projectList, windowExprs, partitionSpec, orderSpec, child) =>
+    case w @ Window(windowExprs, partitionSpec, orderSpec, child) =>
       val cleanedWindowExprs =
         windowExprs.map(e => trimNonTopLevelAliases(e).asInstanceOf[NamedExpression])
-      Window(projectList, cleanedWindowExprs, partitionSpec.map(trimAliases),
+      Window(cleanedWindowExprs, partitionSpec.map(trimAliases),
         orderSpec.map(trimAliases(_).asInstanceOf[SortOrder]), child)
 
     // Operators that operate on objects should only have expressions from encoders, which should

@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
 /**
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
+ *
  * @param table The table to be described.
  * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
  *                   It is effective only when the table is a Hive table.
@@ -50,6 +51,7 @@ case class DescribeCommand(
 
 /**
   * Used to represent the operation of create table using a data source.
+ *
   * @param allowExisting If it is true, we will do nothing when the table already exists.
   *                      If it is false, an exception will be thrown
   */
@@ -91,11 +93,14 @@ case class CreateTempTableUsing(
     options: Map[String, String]) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
-    val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], bucketSpec = None, provider, options)
+    val dataSource = DataSource(
+      sqlContext,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      options = options)
     sqlContext.catalog.registerTable(
       tableIdent,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+      Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation())).logicalPlan)
 
     Seq.empty[Row]
   }
@@ -110,18 +115,17 @@ case class CreateTempTableUsingAsSelect(
     query: LogicalPlan) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(
+    val df = Dataset.newDataFrame(sqlContext, query)
+    val dataSource = DataSource(
       sqlContext,
-      provider,
-      partitionColumns,
+      className = provider,
+      partitionColumns = partitionColumns,
       bucketSpec = None,
-      mode,
-      options,
-      df)
+      options = options)
+    val result = dataSource.write(mode, df)
     sqlContext.catalog.registerTable(
       tableIdent,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+      Dataset.newDataFrame(sqlContext, LogicalRelation(result)).logicalPlan)
 
     Seq.empty[Row]
   }
@@ -142,7 +146,7 @@ case class RefreshTable(tableIdent: TableIdentifier)
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
-      val df = DataFrame(sqlContext, logicalPlan)
+      val df = Dataset.newDataFrame(sqlContext, logicalPlan)
       // Uncache the logicalPlan.
       sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.

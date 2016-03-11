@@ -64,13 +64,13 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testExecution() {
-    DataFrame df = context.table("testData").filter("key = 1");
-    Assert.assertEquals(1, df.select("key").collect()[0].get(0));
+    Dataset<Row> df = context.table("testData").filter("key = 1");
+    Assert.assertEquals(1, df.select("key").collectRows()[0].get(0));
   }
 
   @Test
   public void testCollectAndTake() {
-    DataFrame df = context.table("testData").filter("key = 1 or key = 2 or key = 3");
+    Dataset<Row> df = context.table("testData").filter("key = 1 or key = 2 or key = 3");
     Assert.assertEquals(3, df.select("key").collectAsList().size());
     Assert.assertEquals(2, df.select("key").takeAsList(2).size());
   }
@@ -80,7 +80,7 @@ public class JavaDataFrameSuite {
    */
   @Test
   public void testVarargMethods() {
-    DataFrame df = context.table("testData");
+    Dataset<Row> df = context.table("testData");
 
     df.toDF("key1", "value1");
 
@@ -109,7 +109,7 @@ public class JavaDataFrameSuite {
     df.select(coalesce(col("key")));
 
     // Varargs with mathfunctions
-    DataFrame df2 = context.table("testData2");
+    Dataset<Row> df2 = context.table("testData2");
     df2.select(exp("a"), exp("b"));
     df2.select(exp(log("a")));
     df2.select(pow("a", "a"), pow("b", 2.0));
@@ -123,7 +123,7 @@ public class JavaDataFrameSuite {
   @Ignore
   public void testShow() {
     // This test case is intended ignored, but to make sure it compiles correctly
-    DataFrame df = context.table("testData");
+    Dataset<Row> df = context.table("testData");
     df.show();
     df.show(1000);
   }
@@ -151,7 +151,7 @@ public class JavaDataFrameSuite {
     }
   }
 
-  void validateDataFrameWithBeans(Bean bean, DataFrame df) {
+  void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
     StructType schema = df.schema();
     Assert.assertEquals(new StructField("a", DoubleType$.MODULE$, false, Metadata.empty()),
       schema.apply("a"));
@@ -191,7 +191,7 @@ public class JavaDataFrameSuite {
   public void testCreateDataFrameFromLocalJavaBeans() {
     Bean bean = new Bean();
     List<Bean> data = Arrays.asList(bean);
-    DataFrame df = context.createDataFrame(data, Bean.class);
+    Dataset<Row> df = context.createDataFrame(data, Bean.class);
     validateDataFrameWithBeans(bean, df);
   }
 
@@ -199,7 +199,7 @@ public class JavaDataFrameSuite {
   public void testCreateDataFrameFromJavaBeans() {
     Bean bean = new Bean();
     JavaRDD<Bean> rdd = jsc.parallelize(Arrays.asList(bean));
-    DataFrame df = context.createDataFrame(rdd, Bean.class);
+    Dataset<Row> df = context.createDataFrame(rdd, Bean.class);
     validateDataFrameWithBeans(bean, df);
   }
 
@@ -207,8 +207,8 @@ public class JavaDataFrameSuite {
   public void testCreateDataFromFromList() {
     StructType schema = createStructType(Arrays.asList(createStructField("i", IntegerType, true)));
     List<Row> rows = Arrays.asList(RowFactory.create(0));
-    DataFrame df = context.createDataFrame(rows, schema);
-    Row[] result = df.collect();
+    Dataset<Row> df = context.createDataFrame(rows, schema);
+    Row[] result = df.collectRows();
     Assert.assertEquals(1, result.length);
   }
 
@@ -235,13 +235,13 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testCrosstab() {
-    DataFrame df = context.table("testData2");
-    DataFrame crosstab = df.stat().crosstab("a", "b");
+    Dataset<Row> df = context.table("testData2");
+    Dataset<Row> crosstab = df.stat().crosstab("a", "b");
     String[] columnNames = crosstab.schema().fieldNames();
     Assert.assertEquals("a_b", columnNames[0]);
     Assert.assertEquals("2", columnNames[1]);
     Assert.assertEquals("1", columnNames[2]);
-    Row[] rows = crosstab.collect();
+    Row[] rows = crosstab.collectRows();
     Arrays.sort(rows, crosstabRowComparator);
     Integer count = 1;
     for (Row row : rows) {
@@ -254,31 +254,31 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testFrequentItems() {
-    DataFrame df = context.table("testData2");
+    Dataset<Row> df = context.table("testData2");
     String[] cols = {"a"};
-    DataFrame results = df.stat().freqItems(cols, 0.2);
-    Assert.assertTrue(results.collect()[0].getSeq(0).contains(1));
+    Dataset<Row> results = df.stat().freqItems(cols, 0.2);
+    Assert.assertTrue(results.collectRows()[0].getSeq(0).contains(1));
   }
 
   @Test
   public void testCorrelation() {
-    DataFrame df = context.table("testData2");
+    Dataset<Row> df = context.table("testData2");
     Double pearsonCorr = df.stat().corr("a", "b", "pearson");
     Assert.assertTrue(Math.abs(pearsonCorr) < 1.0e-6);
   }
 
   @Test
   public void testCovariance() {
-    DataFrame df = context.table("testData2");
+    Dataset<Row> df = context.table("testData2");
     Double result = df.stat().cov("a", "b");
     Assert.assertTrue(Math.abs(result) < 1.0e-6);
   }
 
   @Test
   public void testSampleBy() {
-    DataFrame df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
-    DataFrame sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
-    Row[] actual = sampled.groupBy("key").count().orderBy("key").collect();
+    Dataset<Row> df = context.range(0, 100, 1, 2).select(col("id").mod(3).as("key"));
+    Dataset<Row> sampled = df.stat().<Integer>sampleBy("key", ImmutableMap.of(0, 0.1, 1, 0.2), 0L);
+    Row[] actual = sampled.groupBy("key").count().orderBy("key").collectRows();
     Assert.assertEquals(0, actual[0].getLong(0));
     Assert.assertTrue(0 <= actual[0].getLong(1) && actual[0].getLong(1) <= 8);
     Assert.assertEquals(1, actual[1].getLong(0));
@@ -287,10 +287,10 @@ public class JavaDataFrameSuite {
 
   @Test
   public void pivot() {
-    DataFrame df = context.table("courseSales");
+    Dataset<Row> df = context.table("courseSales");
     Row[] actual = df.groupBy("year")
       .pivot("course", Arrays.<Object>asList("dotNET", "Java"))
-      .agg(sum("earnings")).orderBy("year").collect();
+      .agg(sum("earnings")).orderBy("year").collectRows();
 
     Assert.assertEquals(2012, actual[0].getInt(0));
     Assert.assertEquals(15000.0, actual[0].getDouble(1), 0.01);
@@ -303,11 +303,11 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testGenericLoad() {
-    DataFrame df1 = context.read().format("text").load(
+    Dataset<Row> df1 = context.read().format("text").load(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
     Assert.assertEquals(4L, df1.count());
 
-    DataFrame df2 = context.read().format("text").load(
+    Dataset<Row> df2 = context.read().format("text").load(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
       Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
     Assert.assertEquals(5L, df2.count());
@@ -315,11 +315,11 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testTextLoad() {
-    DataFrame df1 = context.read().text(
+    Dataset<Row> df1 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString());
     Assert.assertEquals(4L, df1.count());
 
-    DataFrame df2 = context.read().text(
+    Dataset<Row> df2 = context.read().text(
       Thread.currentThread().getContextClassLoader().getResource("text-suite.txt").toString(),
       Thread.currentThread().getContextClassLoader().getResource("text-suite2.txt").toString());
     Assert.assertEquals(5L, df2.count());
@@ -327,7 +327,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testCountMinSketch() {
-    DataFrame df = context.range(1000);
+    Dataset<Row> df = context.range(1000);
 
     CountMinSketch sketch1 = df.stat().countMinSketch("id", 10, 20, 42);
     Assert.assertEquals(sketch1.totalCount(), 1000);
@@ -352,7 +352,7 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testBloomFilter() {
-    DataFrame df = context.range(1000);
+    Dataset<Row> df = context.range(1000);
 
     BloomFilter filter1 = df.stat().bloomFilter("id", 1000, 0.03);
     Assert.assertTrue(filter1.expectedFpp() - 0.03 < 1e-3);

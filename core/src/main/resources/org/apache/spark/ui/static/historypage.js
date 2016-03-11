@@ -110,7 +110,7 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("/api/v1/applications", function(response,status,jqXHR) {
+    $.getJSON("api/v1/applications", function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
@@ -123,19 +123,34 @@ $(document).ready(function() {
         if (app["attempts"].length > 1) {
             hasMultipleAttempts = true;
         }
-        var num = app["attempts"].length;
+
+        var maxAttemptId = null
         for (j in app["attempts"]) {
           var attempt = app["attempts"][j];
+          if (attempt['attemptId'] != null) {
+            if (maxAttemptId == null || attempt['attemptId'] > maxAttemptId) {
+              maxAttemptId = attempt['attemptId']
+            }
+          }
+
           attempt["startTime"] = formatDate(attempt["startTime"]);
           attempt["endTime"] = formatDate(attempt["endTime"]);
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
-          var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
+
+          var url = null
+          if (maxAttemptId == null) {
+            url = "history/" + id + "/"
+          } else {
+            url = "history/" + id + "/" + maxAttemptId + "/"
+          }
+
+          var app_clone = {"id" : id, "name" : name, "url" : url, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
 
       var data = {"applications": array}
-      $.get("/static/historypage-template.html", function(template) {
+      $.get("static/historypage-template.html", function(template) {
         historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
         var conf = {
@@ -150,7 +165,7 @@ $(document).ready(function() {
                         {name: 'eighth'},
                     ],
                     "autoWidth": false,
-                    "order": [[ 0, "desc" ]]
+                    "order": [[ 4, "desc" ]]
         };
 
         var rowGroupConf = {
