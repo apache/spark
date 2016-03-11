@@ -172,10 +172,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         val partitionColumns = getColumnNames("part")
 
         val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
-          BucketSpec(
-            n.toInt,
-            getColumnNames("bucket"),
-            getColumnNames("sort").map { n => (n, Ascending) })
+          BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
 
         val options = table.storage.serdeProperties
@@ -248,7 +245,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
-      val BucketSpec(numBuckets, bucketColumnNames, sortColumns) = bucketSpec.get
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _) = bucketSpec.get
 
       tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
       tableProperties.put("spark.sql.sources.schema.numBucketCols",
@@ -257,7 +254,6 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
         tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
       }
 
-      val sortColumnNames = sortColumns.map { case (name, _) => name }
       if (sortColumnNames.nonEmpty) {
         tableProperties.put("spark.sql.sources.schema.numSortCols",
           sortColumnNames.length.toString)

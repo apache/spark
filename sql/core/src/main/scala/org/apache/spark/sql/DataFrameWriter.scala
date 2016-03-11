@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
@@ -313,8 +312,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             s"partitionBy columns '${partitioningColumns.get.mkString(", ")}'")
       }
 
-      val sortColumns = normalizedSortColNames.getOrElse(Nil).map { n => (n, Ascending) }
-      BucketSpec(n, normalizedBucketColNames.get, sortColumns)
+      BucketSpec(n, normalizedBucketColNames.get, normalizedSortColNames.getOrElse(Nil))
     }
   }
 

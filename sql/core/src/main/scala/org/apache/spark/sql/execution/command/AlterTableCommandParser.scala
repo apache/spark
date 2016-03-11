@@ -190,7 +190,7 @@ object AlterTableCommandParser {
         }
         AlterTableStorageProperties(
           tableIdent,
-          BucketSpec(numBuckets, clusterCols, sortCols.zip(sortDirections)))(node.source)
+          BucketSpec(numBuckets, clusterCols, sortCols, sortDirections))(node.source)
 
       // ALTER TABLE table_name NOT CLUSTERED
       case Token("TOK_ALTERTABLE_CLUSTER_SORT", Token("TOK_NOT_CLUSTERED", Nil) :: Nil) :: _ =>
