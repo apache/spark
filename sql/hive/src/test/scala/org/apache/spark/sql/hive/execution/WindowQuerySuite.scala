@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  * numerical differences or due semantic differences between Hive and Spark.
  */
 class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-
+/*
   override def beforeAll(): Unit = {
     super.beforeAll()
     sql("DROP TABLE IF EXISTS part")
@@ -49,7 +49,7 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |LOAD DATA LOCAL INPATH '$testData1' overwrite into table part
       """.stripMargin)
   }
-
+*/
   override def afterAll(): Unit = {
     try {
       sql("DROP TABLE IF EXISTS part")
@@ -246,6 +246,125 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         |null as avg
         |from part
         """.stripMargin))
+  }
+
+  test("Exclude clause"){
+    withTable("table1"){
+      sql("create table table1 (col1 int, col2 int, col3 int)")
+      sql("insert into table1 select 6, 12, 10")
+      sql("insert into table1 select 6, 11, 4")
+      sql("insert into table1 select 6, 13, 11")
+      sql("insert into table1 select 6, 9, 10")
+      sql("insert into table1 select 6, 15, 8")
+      sql("insert into table1 select 6, 10, 1")
+      sql("insert into table1 select 6, 15, 8")
+      sql("insert into table1 select 6, 7, 4")
+      sql("insert into table1 select 6, 7, 8")
+
+      /*
+      //sliding frame with exclude current row
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between 2 preceding and 2 following exclude current row)" +
+        " from table1 where col1 = 6").show()
+
+      //sliding frame with exclude group
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between 2 preceding and " +
+        " 2 following exclude group) " +
+        " from table1 where col1 = 6").show()
+
+      //sliding frame with exclude ties
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between 2 preceding and " +
+        " 2 following exclude ties) " +
+        " from table1 where col1 = 6").show()
+
+      //sliding frame with exclude no others
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between 2 preceding and " +
+        " 2 following) " +
+        " from table1 where col1 = 6").show
+      */
+/*
+      //expanding frame with exclude current row
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " current row exclude current row) " +
+        " from table1 where col1 = 6").show
+
+      //expanding frame with exclude group
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " current row exclude group) " +
+        " from table1 where col1 = 6").show
+
+*/
+      //expanding frame with exclude ties
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " current row exclude ties) " +
+        " from table1 where col1 = 6").show
+
+/*
+      //expanding frame with exclude no others
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " current row) from table1 where col1 = 6").show
+
+
+
+
+      //shrinking frame with exclude current row
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between current row and " +
+        " unbounded following exclude current row) " +
+        " from table1 where col1 = 6").show
+
+      //shrinking frame with exclude current group
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between current row and " +
+        " unbounded following exclude group) " +
+        " from table1 where col1 = 6").show
+
+      //shrinking frame with exclude current ties
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between current row and " +
+        " unbounded following exclude ties) " +
+        " from table1 where col1 = 6").show
+
+      //shrinking frame with exclude current no others
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between current row and " +
+        " unbounded following) from table1 where col1 = 6").show
+
+
+      //whole partition frame with exclude current row
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " unbounded following exclude current row) " +
+        " from table1 where col1 = 6").show
+
+      //whole partition frame with exclude group
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " unbounded following exclude group) " +
+        " from table1 where col1 = 6").show
+
+      //whole partition frame with exclude ties
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " unbounded following exclude ties) " +
+        " from table1 where col1 = 6").show
+
+      //whole partition frame with exclude no others
+      sql("select col1, col2, col3, sum(col2) over " +
+        " (partition by col1 order by col3 rows between unbounded preceding and " +
+        " unbounded following) from table1 where col1 = 6").show
+
+        */
+
+
+    }
   }
 
   test("SPARK-16646: LAST_VALUE(FALSE) OVER ()") {
