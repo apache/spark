@@ -461,7 +461,6 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     new StateDStream(self, newUpdateFunc, partitioner, rememberPartitioner, None)
   }
 
-
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of the key.
@@ -508,8 +507,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     val newUpdateFunc = (_: Time, it: Iterator[(K, Seq[V], Option[S])]) => {
       cleanedFunc(it)
     }
-    new StateDStream(self, newUpdateFunc, partitioner,
-      rememberPartitioner, Some(initialRDD))
+    new StateDStream(self, newUpdateFunc, partitioner, rememberPartitioner, Some(initialRDD))
   }
 
   /**
@@ -522,17 +520,15 @@ class PairDStreamFunctions[K, V](self: DStream[(K, V)])
     *                    DStream.
     * @tparam S State type
     */
-  def updateStateByKey[S: ClassTag]
-  (updateFunc: (Time, K, Seq[V], Option[S]) => Option[S],
-   partitioner: Partitioner,
-   rememberPartitioner: Boolean,
-   initialRDD: Option[RDD[(K, S)]] = None): DStream[(K, S)] = ssc.withScope {
+  def updateStateByKey[S: ClassTag](updateFunc: (Time, K, Seq[V], Option[S]) => Option[S],
+      partitioner: Partitioner,
+      rememberPartitioner: Boolean,
+      initialRDD: Option[RDD[(K, S)]] = None): DStream[(K, S)] = ssc.withScope {
     val cleanedFunc = ssc.sc.clean(updateFunc)
     val newUpdateFunc = (time: Time, iterator: Iterator[(K, Seq[V], Option[S])]) => {
       iterator.flatMap(t => cleanedFunc(time, t._1, t._2, t._3).map(s => (t._1, s)))
     }
-    new StateDStream(self, newUpdateFunc, partitioner,
-      rememberPartitioner, initialRDD)
+    new StateDStream(self, newUpdateFunc, partitioner, rememberPartitioner, initialRDD)
   }
 
   /**
