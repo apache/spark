@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
  * by user specified columns.
  *
- * At a high level planning occurs in four phases:
+ * At a high level planning occurs in several phases:
  *  - Split filters by when they need to be evaluated.
  *  - Prune the schema of the data requested based on any projections present. Today this pruning
  *    is only done on top level columns, but formats should support pruning of nested columns as
