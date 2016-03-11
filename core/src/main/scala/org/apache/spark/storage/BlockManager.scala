@@ -443,7 +443,7 @@ private[spark] class BlockManager(
                   // https://issues.apache.org/jira/browse/SPARK-6076
                   // If the file size is bigger than the free memory, OOM will happen. So if we
                   // cannot put it into MemoryStore, copyForMemory should not be created. That's why
-                  // this action is put into a `() => ByteBuffer` and created sazily.
+                  // this action is put into a `() => ByteBuffer` and created lazily.
                   val copyForMemory = ByteBuffer.allocate(diskBytes.limit)
                   copyForMemory.put(diskBytes)
                 })
