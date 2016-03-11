@@ -469,7 +469,7 @@ private[hive] class HiveMetastoreCatalog(val client: HiveClient, hive: HiveConte
             parquetRelation.location.paths.map(_.toString).toSet == pathsInMetastore.toSet &&
             logical.schema.sameType(metastoreSchema) &&
             parquetRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
-              PartitionSpec(StructType(Nil), Array.empty[datasources.PartitionPath])
+              PartitionSpec(StructType(Nil), Array.empty[datasources.PartitionDirectory])
             }
 
           if (useCached) {

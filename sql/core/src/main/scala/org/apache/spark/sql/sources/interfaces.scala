@@ -487,37 +487,6 @@ trait FileFormat {
 }
 
 /**
- * A single file that should be read, along with partition column values that
- * need to be prepended to each row.  The reading should start at the first
- * valid record found after `offset`.
- */
-case class PartitionedFile(partitionValues: InternalRow, filePath: String, start: Long, length: Long)
-
-/** A collection of files that should be read as a single task possibly from multiple partitions. */
-case class FilePartition(val index: Int, files: Seq[PartitionedFile]) // extends SparkPartition
-
-class FileScanRDD(
-    @transient val sqlContext: SQLContext,
-    readFunction: (PartitionedFile) => Iterator[InternalRow],
-    @transient val filePartitions: Seq[FilePartition])
-    extends RDD[InternalRow](sqlContext.sparkContext, Nil) {
-  /**
-   * :: DeveloperApi ::
-   * Implemented by subclasses to compute a given partition.
-   */
-  override def compute(split: spark.Partition, context: TaskContext): Iterator[InternalRow] = ???
-
-  /**
-   * Implemented by subclasses to return the set of partitions in this RDD. This method will only
-   * be called once, so it is safe to implement a time-consuming computation in it.
-   *
-   * The partitions in this array must satisfy the following property:
-   * `rdd.partitions.zipWithIndex.forall { case (partition, index) => partition.index == index }`
-   */
-  override protected def getPartitions: Array[spark.Partition] = Array.empty
-}
-
-/**
  * An interface for objects capable of enumerating the files that comprise a relation as well
  * as the partitioning characteristics of those files.
  */
@@ -569,14 +538,14 @@ class HDFSFileCatalog(
       Partition(InternalRow.empty, allFiles()) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
-        case PartitionPath(values, path) => Partition(values, getStatus(path))
+        case PartitionDirectory(values, path) => Partition(values, getStatus(path))
       }
     }
   }
 
   protected def prunePartitions(
       predicates: Seq[Expression],
-      partitionSpec: PartitionSpec): Seq[PartitionPath] = {
+      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
     val PartitionSpec(partitionColumns, partitions) = partitionSpec
     val partitionColumnNames = partitionColumns.map(_.name).toSet
     val partitionPruningPredicates = predicates.filter {
@@ -595,7 +564,7 @@ class HDFSFileCatalog(
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
       })
 
-      val selected = partitions.filter { case PartitionPath(values, _) => boundPredicate(values) }
+      val selected = partitions.filter { case PartitionDirectory(values, _) => boundPredicate(values) }
       logInfo {
         val total = partitions.length
         val selectedSize = selected.length

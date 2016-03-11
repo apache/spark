@@ -195,6 +195,8 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  // Helpers for checking the arguments passed to the FileFormat.
+
   protected val checkPartitionSchema =
     checkArgument("partition schema", _.partitionSchema, _: StructType)
   protected val checkDataSchema =
@@ -214,10 +216,12 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  /** Returns a resolved expression for `str` in the context of `df`. */
   def resolve(df: DataFrame, str: String): Expression = {
     df.select(expr(str)).queryExecution.analyzed.expressions.head.children.head
   }
 
+  /** Returns a set with all the filters present in the physical plan. */
   def getPhysicalFilters(df: DataFrame): ExpressionSet = {
     ExpressionSet(
       df.queryExecution.executedPlan.collect {
@@ -236,6 +240,15 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     func(fileScan.filePartitions)
   }
 
+  /**
+   * Constructs a new table given a list of file names and sizes expressed in bytes. The table
+   * is written out in a temporary directory and any nested directories in the files names
+   * are automatically created.
+   *
+   * When `buckets` is > 0 the returned [[DataFrame]] will have metadata specifying that number of
+   * buckets.  However, it is the responsibility of the caller to assign files to each bucket
+   * by appending the bucket id to the file names.
+   */
   def createTable(
       files: Seq[(String, Int)],
       buckets: Int = 0): DataFrame = {
@@ -257,13 +270,14 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           l.copy(relation =
             r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
       }
-      new DataFrame(sqlContext, bucketed)
+      DataFrame(sqlContext, bucketed)
     } else {
       df
     }
   }
 }
 
+/** Holds the last arguments passed to [[TestFileFormat]]. */
 object LastArguments {
   var partitionSchema: StructType = _
   var dataSchema: StructType = _
@@ -271,6 +285,7 @@ object LastArguments {
   var options: Map[String, String] = _
 }
 
+/** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
 class TestFileFormat extends FileFormat {
 
   override def toString: String = "TestFileFormat"
