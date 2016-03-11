@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{Logging, SparkConf, TaskContext}
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
-import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
+import org.apache.spark.util.{CompletionIterator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
@@ -132,8 +132,6 @@ private[spark] class MemoryStore(
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
-
-
     // Number of elements unrolled so far
     var elementsUnrolled = 0
     // Whether there is still enough memory for us to continue unrolling this block
@@ -183,10 +181,10 @@ private[spark] class MemoryStore(
     if (keepUnrolling) {
       // We successfully unrolled the entirety of this block
       val arrayValues = vector.toArray
+      val arraySizeEstimate = vector.estimateSize()
       vector = null
       val entry = if (level.deserialized) {
-        val sizeEstimate = SizeEstimator.estimate(arrayValues.asInstanceOf[AnyRef])
-        new MemoryEntry(arrayValues, sizeEstimate, deserialized = true)
+        new MemoryEntry(arrayValues, arraySizeEstimate, deserialized = true)
       } else {
         val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
         new MemoryEntry(bytes, bytes.limit, deserialized = false)
