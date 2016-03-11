@@ -99,7 +99,6 @@ class DecisionTreeRegressorSuite
     }
   }
 
-<<<<<<< cfc6f97eab35c60fec15accaab25e6e1a236da37
   test("Feature importance with toy data") {
     val dt = new DecisionTreeRegressor()
       .setImpurity("variance")
@@ -118,7 +117,8 @@ class DecisionTreeRegressorSuite
     assert(mostImportantFeature === 1)
     assert(importances.toArray.sum === 1.0)
     assert(importances.toArray.forall(_ >= 0.0))
-=======
+  }
+
   test("should support all NumericType labels") {
     val df = sqlContext.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
@@ -162,7 +162,6 @@ class DecisionTreeRegressorSuite
     }
     assert(thrown.getMessage contains
       "Column label must be of type NumericType but was actually of type StringType")
->>>>>>> uts for the decision tree regressor
   }
 
   /////////////////////////////////////////////////////////////////////////////
