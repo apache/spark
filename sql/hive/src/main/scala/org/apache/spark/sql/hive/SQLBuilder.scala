@@ -356,7 +356,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
         //            +- MetastoreRelation default, src, None
         case plan @ Project(_, Filter(_, _: Aggregate)) => wrapChildWithSubquery(plan)
 
-        case w @ Window(_, _, _, _, Filter(_, _: Aggregate)) => wrapChildWithSubquery(w)
+        case w @ Window(_, _, _, Filter(_, _: Aggregate)) => wrapChildWithSubquery(w)
 
         case plan @ Project(_,
           _: SubqueryAlias
@@ -373,7 +373,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
         // We will generate "SELECT ... FROM ..." for Window operator, so its child operator should
         // be able to put in the FROM clause, or we wrap it with a subquery.
-        case w @ Window(_, _, _, _,
+        case w @ Window(_, _, _,
           _: SubqueryAlias
             | _: Filter
             | _: Join
