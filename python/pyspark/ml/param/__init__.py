@@ -43,7 +43,8 @@ class Param(object):
         self.doc = str(doc)
         self.expectedType = expectedType
         if expectedType is not None:
-            warnings.warn("expectedType will be deprecated in 2.1.0, use typeConverter instead.")
+            warnings.warn("expectedType is deprecated and will be removed in 2.1.0, " +
+                          "use typeConverter instead.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):
