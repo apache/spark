@@ -84,7 +84,7 @@ setGeneric("filterRDD", function(x, f) { standardGeneric("filterRDD") })
 
 # @rdname first
 # @export
-setGeneric("first", function(x) { standardGeneric("first") })
+setGeneric("first", function(x, ...) { standardGeneric("first") })
 
 # @rdname flatMap
 # @export
@@ -889,7 +889,7 @@ setGeneric("lag", function(x, ...) { standardGeneric("lag") })
 
 #' @rdname last
 #' @export
-setGeneric("last", function(x) { standardGeneric("last") })
+setGeneric("last", function(x, ...) { standardGeneric("last") })
 
 #' @rdname last_day
 #' @export

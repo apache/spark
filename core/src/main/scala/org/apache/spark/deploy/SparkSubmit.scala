@@ -626,7 +626,6 @@ object SparkSubmit {
     val pathConfigs = Seq(
       "spark.jars",
       "spark.files",
-      "spark.yarn.jar",
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives")
     pathConfigs.foreach { config =>
