@@ -17,10 +17,12 @@
 
 from abc import ABCMeta, abstractmethod
 
+from pyspark import SparkContext
 from pyspark import since
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import keyword_only
-from pyspark.mllib.common import inherit_doc
+from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader
+from pyspark.ml.wrapper import JavaWrapper
+from pyspark.mllib.common import inherit_doc, _py2java, _java2py
 
 
 @inherit_doc
@@ -125,6 +127,93 @@ class Model(Transformer):
     """
 
     __metaclass__ = ABCMeta
+
+
+def stages_java2py(java_stages):
+    """
+    Transforms the parameter Python stages from a list of Java stages.
+    :param java_stages: An array of Java stages.
+    :return: An array of Python stages.
+    """
+
+    sc = SparkContext._active_spark_context
+
+    def __get_class(clazz):
+        """
+        Loads Python class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
+
+    def __transfer_stage_from_java(java_stage):
+        stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
+        # Generate a default new instance from the stage_name class.
+        py_stage = __get_class(stage_name)()
+        # Load information from java_stage to the instance.
+        py_stage._java_obj = java_stage
+        py_stage._resetUid(_java2py(sc, java_stage.uid()))
+        py_stage._transfer_params_from_java()
+        return py_stage
+
+    return map(__transfer_stage_from_java, java_stages)
+
+
+def stages_py2java(py_stages):
+    """
+    Transforms the parameter of Python stages to a Java array of Java stages.
+    :param py_stages: An array of Python stages.
+    :return: A Java array of Java Stages.
+    """
+
+    java_stages = map(lambda stage: stage._java_obj,
+               map(lambda stage: stage._transfer_params_to_java(), py_stages))
+    gateway = SparkContext._gateway
+    jvm = SparkContext._jvm
+    jstages = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(java_stages))
+    for idx, java_stage in enumerate(java_stages):
+        jstages[idx] = java_stage
+    return jstages
+
+
+@inherit_doc
+class PipelineMLWriter(JavaMLWriter, JavaWrapper):
+    """
+    .. note:: Experimental
+
+    Utility class that can save ML instances through their Scala implementation.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, instance):
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.Pipeline", instance.uid)
+        jparam = self._java_obj.getParam(instance.stages.name)
+        jstages = stages_py2java(instance.getStages())
+        self._java_obj.set(jparam.w(jstages))
+        self._jwrite = self._java_obj.write()
+
+
+@inherit_doc
+class PipelineMLReader(JavaMLReader):
+    def load(self, path):
+        """Load the ML instance from the input path."""
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
+
+        sc = SparkContext._active_spark_context
+        java_obj = self._jread.load(path)
+        instance = self._clazz()
+        instance._resetUid(java_obj.uid())
+        jparam = java_obj.getParam(instance.stages.name)
+        if java_obj.isDefined(jparam):
+            java_stages = _java2py(sc, java_obj.getOrDefault(jparam))
+            instance._paramMap[instance.stages] = stages_java2py(java_stages)
+
+        return instance
 
 
 @inherit_doc
@@ -232,6 +321,53 @@ class Pipeline(Estimator):
         stages = [stage.copy(extra) for stage in that.getStages()]
         return that.setStages(stages)
 
+    def write(self):
+        """Returns an JavaMLWriter instance for this ML instance."""
+        return PipelineMLWriter(self)
+
+    def save(self, path):
+        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
+        self.write().save(path)
+
+    @classmethod
+    def read(cls):
+        """Returns an JavaMLReader instance for this class."""
+        return PipelineMLReader(cls)
+
+    @classmethod
+    def load(cls, path):
+        """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
+        return cls.read().load(path)
+
+
+@inherit_doc
+class PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
+    """
+    .. note:: Experimental
+
+    Utility class that can save ML instances through their Scala implementation.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, instance):
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.PipelineModel",
+                                            instance.uid,
+                                            stages_py2java(instance.stages))
+        self._jwrite = self._java_obj.write()
+
+
+@inherit_doc
+class PipelineModelMLReader(JavaMLReader):
+    def load(self, path):
+        """Load the ML instance from the input path."""
+        if not isinstance(path, basestring):
+            raise TypeError("path should be a basestring, got type %s" % type(path))
+        java_obj = self._jread.load(path)
+        instance = self._clazz(stages_java2py(java_obj))
+        instance._resetUid(java_obj.uid())
+        return instance
+
 
 @inherit_doc
 class PipelineModel(Model):
@@ -262,3 +398,21 @@ class PipelineModel(Model):
             extra = dict()
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
+
+    def write(self):
+        """Returns an JavaMLWriter instance for this ML instance."""
+        return PipelineModelMLWriter(self)
+
+    def save(self, path):
+        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
+        self.write().save(path)
+
+    @classmethod
+    def read(cls):
+        """Returns an JavaMLReader instance for this class."""
+        return PipelineModelMLReader(cls)
+
+    @classmethod
+    def load(cls, path):
+        """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
+        return cls.read().load(path)
