@@ -44,7 +44,7 @@ import org.apache.spark.sql.types._
 private[feature] trait Word2PhraseParams extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * minimum number of occurrences before word is counted
+   * delta
    * Default: 100
    * @group param
    */
@@ -54,7 +54,12 @@ private[feature] trait Word2PhraseParams extends Params with HasInputCol with Ha
   /** @group getParam */
   def getMinCount: Int = $(minCount)
 
-  val minWords: IntParam = new IntParam(this, "minWords",
+  /**
+   * minimum number of occurrences before word is counted
+   * Default: 5
+   * @group param
+   */
+   val minWords: IntParam = new IntParam(this, "minWords",
     "minimum word count before it's counted")
 
   /**
@@ -116,7 +121,8 @@ class Word2Phrase(override val uid: String)
     val tokenizer = new RegexTokenizer().setInputCol($(inputCol)).setOutputCol("words").setPattern("\\W")
     val inputColName = $(inputCol)
     val wordsData = tokenizer.transform(dataset)
-    wordsData.registerTempTable("wordsData")
+    //val wordsDataTable = Identifiable.randomUID("words")
+    //wordsData.registerTempTable(wordsDataTable)
 
     var ind = wordsData.select(s"$inputColName")
     // counts the number of times each word appears
@@ -128,16 +134,19 @@ class Word2Phrase(override val uid: String)
 
     // counts the number of bigrams (w1 w2, w2 w3, etc.)
     var biGramCount = ngramDataFrame.select("ngrams").rdd.flatMap(line => line(0).asInstanceOf[Seq[String]]).map(word => (word, 1)).reduceByKey(_ + _).toDF("biGram", "count")
-    biGramCount.registerTempTable("biGramCount")
+    //biGramCount.registerTempTable("biGramCount")
+    val biGramCountName = Identifiable.randomUID("bgc")
+    biGramCount.registerTempTable(biGramCountName)
 
     val minCountA = $(minCount)
     val minWordsA = $(minWords)
+    val bi_gram_scoresName = Identifiable.randomUID("bgs")
     // calculated the score for each bigram ***************************** minCount and threshold should probably be used in the below formula
-    sqlContext.sql(s"select biGram, (bigram_count - $minCountA)/(word1_count * word2_count) as score from (select biGrams.biGram as biGram, biGrams.count as bigram_count, wc1.word as word1, wc1.count as word1_count, wc2.word as word2, wc2.count as word2_count from (Select biGram, count, split(biGram,' ')[0] as word1, split(biGram,' ')[1] as word2 from biGramCount) biGrams inner join wordCount as wc1 on (wc1.word = biGrams.word1) inner join wordCount as wc2 on (wc2.word = biGrams.word2) ) biGramsStats where word2_count > $minWordsA and word1_count > $minWordsA order by score desc").registerTempTable("bi_gram_scores")
+    sqlContext.sql(s"select biGram, (bigram_count - $minCountA)/(word1_count * word2_count) as score from (select biGrams.biGram as biGram, biGrams.count as bigram_count, wc1.word as word1, wc1.count as word1_count, wc2.word as word2, wc2.count as word2_count from (Select biGram, count, split(biGram,' ')[0] as word1, split(biGram,' ')[1] as word2 from $biGramCountName) biGrams inner join wordCount as wc1 on (wc1.word = biGrams.word1) inner join wordCount as wc2 on (wc2.word = biGrams.word2) ) biGramsStats where word2_count > $minWordsA and word1_count > $minWordsA order by score desc").registerTempTable(bi_gram_scoresName)
 
     val thresholdA = $(threshold)
     // Scores > threshold
-    var biGrams = sqlContext.sql(s"select biGram from bi_gram_scores where score > $thresholdA").collect()
+    var biGrams = sqlContext.sql(s"select biGram from $bi_gram_scoresName where score > $thresholdA").collect()
     var bigram_list = biGrams.map(row => (row(0).toString))
 
     copyValues(new Word2PhraseModel(uid, bigram_list).setParent(this))
