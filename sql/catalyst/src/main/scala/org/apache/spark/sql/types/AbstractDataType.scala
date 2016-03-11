@@ -151,7 +151,7 @@ abstract class NumericType extends AtomicType {
 }
 
 
-private[spark] object NumericType extends AbstractDataType {
+private[sql] object NumericType extends AbstractDataType {
   /**
    * Enables matching against NumericType for expressions:
    * {{{
