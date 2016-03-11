@@ -72,9 +72,15 @@ package object config {
 
   /* File distribution. */
 
-  private[spark] val SPARK_JAR = ConfigBuilder("spark.yarn.jar")
-    .doc("Location of the Spark jar to use.")
+  private[spark] val SPARK_ARCHIVE = ConfigBuilder("spark.yarn.archive")
+    .doc("Location of archive containing jars files with Spark classes.")
     .stringConf
+    .optional
+
+  private[spark] val SPARK_JARS = ConfigBuilder("spark.yarn.jars")
+    .doc("Location of jars containing Spark classes.")
+    .stringConf
+    .toSequence
     .optional
 
   private[spark] val ARCHIVES_TO_DISTRIBUTE = ConfigBuilder("spark.yarn.dist.archives")

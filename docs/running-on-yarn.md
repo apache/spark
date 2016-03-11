@@ -272,14 +272,25 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.jar</code></td>
+  <td><code>spark.yarn.jars</code></td>
   <td>(none)</td>
   <td>
-    The location of the Spark jar file, in case overriding the default location is desired.
-    By default, Spark on YARN will use a Spark jar installed locally, but the Spark jar can also be
+    List of libraries containing Spark code to distribute to YARN containers.
+    By default, Spark on YARN will use Spark jars installed locally, but the Spark jars can also be
     in a world-readable location on HDFS. This allows YARN to cache it on nodes so that it doesn't
-    need to be distributed each time an application runs. To point to a jar on HDFS, for example,
-    set this configuration to <code>hdfs:///some/path</code>.
+    need to be distributed each time an application runs. To point to jars on HDFS, for example,
+    set this configuration to <code>hdfs:///some/path</code>. Globs are allowed.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.archive</code></td>
+  <td>(none)</td>
+  <td>
+    An archive containing needed Spark jars for distribution to the YARN cache. If set, this
+    configuration replaces <code>spark.yarn.jars</code> and the archive is used in all the
+    application's containers. The archive should contain jar files in its root directory.
+    Like with the previous option, the archive can also be hosted on HDFS to speed up file
+    distribution.
   </td>
 </tr>
 <tr>
@@ -288,8 +299,8 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>
     A comma-separated list of secure HDFS namenodes your Spark application is going to access. For
     example, <code>spark.yarn.access.namenodes=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
-    webhdfs://nn3.com:50070</code>. The Spark application must have access to the namenodes listed 
-    and Kerberos must be properly configured to be able to access them (either in the same realm 
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the namenodes listed
+    and Kerberos must be properly configured to be able to access them (either in the same realm
     or in a trusted realm). Spark acquires security tokens for each of the namenodes so that
     the Spark application can access those remote HDFS clusters.
   </td>
