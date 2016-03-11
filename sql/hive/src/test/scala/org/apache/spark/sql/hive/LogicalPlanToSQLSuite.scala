@@ -585,6 +585,15 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkHiveQl("SELECT key, json_tuple(jstring, 'f1', 'f2', 'f3', 'f4', 'f5') FROM parquet_t3")
   }
 
+  test("Lateral view with join") {
+    checkHiveQl(
+      """
+      |SELECT gencol, explode(array(1,2,3)), x1.key
+      |FROM (t1 LATERAL VIEW OUTER explode(value) gentab as gencol), t1 as x1
+      """.stripMargin
+    )
+  }
+
   test("SQL generation for lateral views") {
     // Filter and OUTER clause
     checkHiveQl(

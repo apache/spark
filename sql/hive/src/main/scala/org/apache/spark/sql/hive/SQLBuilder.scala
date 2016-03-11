@@ -94,7 +94,7 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
     case Distinct(p: Project) =>
       projectToSQL(p, isDistinct = true)
 
-    case p@ Project(_, g: Generate) =>
+    case p @ Project(_, g: Generate) =>
       generateToSQL(p)
 
     case g: Generate =>
@@ -311,18 +311,19 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
       (w.child.output ++ w.windowExpressions).map(_.sql).mkString(", "),
       if (w.child == OneRowRelation) "" else "FROM",
       toSQL(w.child)
+    )
   }
 
-  /* This function handles the SQL generation for generators.
+  /**
+   *  This function handles the SQL generation for generators.
    * sample plan :
    *   +- Project [mycol2#192]
    *     +- Generate explode(myCol#191), true, false, Some(mytable2), [mycol2#192]
    *       +- Generate explode(array(array(1, 2, 3))), true, false, Some(mytable), [mycol#191]
    *         +- MetastoreRelation default, src, None
-   *
    */
   private def generateToSQL(plan: Generate): String = {
-    val columnAliases = plan.generatorOutput.map(a => quoteIdentifier(a.name)).mkString(",")
+    val columnAliases = plan.generatorOutput.map(_.sql).mkString(",")
     val generatorAlias = if (plan.qualifier.isEmpty) "" else plan.qualifier.get
     val outerClause = if (plan.outer) "OUTER" else ""
     build(
@@ -342,8 +343,8 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
   }
 
   private def generateToSQL(plan: Project): String = {
-    // assert if child is a generate or not.
     val generate = plan.child.asInstanceOf[Generate]
+    assert(generate.join == true || plan.projectList.size == 1)
     // Generators that appear in projection list will be expressed as LATERAL VIEW.
     // A qualifier is needed for a LATERAL VIEw.
     val generatorAlias: String = generate.qualifier.getOrElse(SQLBuilder.newGeneratorName)
