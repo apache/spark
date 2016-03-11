@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -34,6 +36,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.Function0;
 import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
@@ -82,25 +85,30 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     Random random = new Random();
 
-    Map<String, Object> kafkaParams = new HashMap<>();
+    final Map<String, Object> kafkaParams = new HashMap<>();
     kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());
     kafkaParams.put("key.deserializer", StringDeserializer.class);
     kafkaParams.put("value.deserializer", StringDeserializer.class);
     kafkaParams.put("auto.offset.reset", "earliest");
     kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
 
-    Map<TopicPartition, String> preferredHosts = new HashMap<>();
+    Map<TopicPartition, String> preferredHosts = DirectKafkaInputDStream.preferConsistent();
 
     JavaInputDStream istream1 = DirectKafkaInputDStream.create(
         ssc,
         String.class,
         String.class,
+        preferredHosts,
         kafkaParams,
-        kafkaParams,
-        preferredHosts
+        new Function0<Consumer<String, String>>() {
+          @Override
+          public Consumer<String, String> call() {
+            KafkaConsumer<String, String> consumer = new KafkaConsumer(kafkaParams);
+            consumer.subscribe(Arrays.asList(topic1));
+            return consumer;
+          }
+        }
     );
-
-    ((DirectKafkaInputDStream) istream1.inputDStream()).subscribe(Arrays.asList(topic1));
 
     JavaDStream<String> stream1 = istream1.transform(
         // Make sure you can get offset ranges from the rdd
@@ -125,18 +133,24 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
         }
     );
 
-    kafkaParams.put("group.id", "java-test-consumer-" + random.nextInt());
+    final Map<String, Object> kafkaParams2 = new HashMap<>(kafkaParams);
+    kafkaParams2.put("group.id", "java-test-consumer-" + random.nextInt());
 
     JavaInputDStream istream2 = DirectKafkaInputDStream.create(
         ssc,
         String.class,
         String.class,
-        kafkaParams,
-        kafkaParams,
-        preferredHosts
+        preferredHosts,
+        kafkaParams2,
+        new Function0<Consumer<String, String>>() {
+          @Override
+          public Consumer<String, String> call() {
+            KafkaConsumer<String, String> consumer = new KafkaConsumer(kafkaParams2);
+            consumer.subscribe(Arrays.asList(topic2));
+            return consumer;
+          }
+        }
     );
-
-    ((DirectKafkaInputDStream) istream2.inputDStream()).subscribe(Arrays.asList(topic2));
 
     JavaDStream<String> stream2 = istream2.transform(
         // Make sure you can get offset ranges from the rdd

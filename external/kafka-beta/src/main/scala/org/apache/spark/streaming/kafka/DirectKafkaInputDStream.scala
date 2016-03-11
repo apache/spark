@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 import java.{ util => ju }
 
 import org.apache.kafka.clients.consumer.{
-  ConsumerConfig, ConsumerRebalanceListener, ConsumerRecord, KafkaConsumer
+  ConsumerConfig, ConsumerRebalanceListener, ConsumerRecord, Consumer
 }
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
 
@@ -53,156 +53,44 @@ import scala.collection.JavaConverters._
 
 class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     _ssc: StreamingContext,
-    val driverKafkaParams: ju.Map[String, Object],
-    val executorKafkaParams: ju.Map[String, Object],
-    preferredHosts: ju.Map[TopicPartition, String]
+    preferredHosts: ju.Map[TopicPartition, String],
+    executorKafkaParams: ju.Map[String, Object],
+    driverConsumer: () => Consumer[K, V]
   ) extends InputDStream[ConsumerRecord[K,V]](_ssc) with Logging {
 
-  import DirectKafkaInputDStream.{
-    PartitionAssignment, Assigned, Subscribed, PatternSubscribed, Unassigned
-  }
-
-  assert(false ==
-    driverKafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
-    ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG +
-      " must be set to false for driver kafka params, else offsets may commit before processing")
-
-  @transient private var kc: KafkaConsumer[K, V] = null
-  private var partitionAssignment: PartitionAssignment = Unassigned
-  protected def consumer(): KafkaConsumer[K, V] = this.synchronized {
+  @transient private var kc: Consumer[K, V] = null
+  def consumer(): Consumer[K, V] = this.synchronized {
     if (null == kc) {
-      kc = new KafkaConsumer(driverKafkaParams)
-      assignPartitions(partitionAssignment)
+      kc = driverConsumer()
     }
     kc
   }
   consumer()
 
-  // XXX TODO listeners arent much use if they dont have a reference to the consumer
-  private def listenerFor(className: String): ConsumerRebalanceListener =
-    Class.forName(className)
-      .newInstance()
-      .asInstanceOf[ConsumerRebalanceListener]
-
-  private def assignPartitions(pa: PartitionAssignment): Unit = this.synchronized {
-    import DirectKafkaInputDStream.defaultListener
-
-    val reset = driverKafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String]
-      .toLowerCase
-    val resetMsg = "Dynamic topic subscriptions may not work well unless " +
-      ConsumerConfig.AUTO_OFFSET_RESET_CONFIG + " is set or a rebalance listener is configured"
-
-    // using kc directly because consumer() calls this method
-    pa match {
-      case Assigned(partitions) =>
-        kc.assign(partitions)
-      case Subscribed(topics, className) =>
-        if (!(reset == "earliest" || reset == "latest" || className != defaultListener)) {
-          log.warn(resetMsg)
+  protected def getBrokers = {
+    val c = consumer
+    val result = new ju.HashMap[TopicPartition, String]()
+    val hosts = new ju.HashMap[TopicPartition, String]()
+    val assignments = c.assignment().iterator()
+    while (assignments.hasNext()) {
+      val tp: TopicPartition = assignments.next()
+      if (null == hosts.get(tp)) {
+        val infos = c.partitionsFor(tp.topic).iterator()
+        while (infos.hasNext()) {
+          val i = infos.next()
+          hosts.put(new TopicPartition(i.topic(), i.partition()), i.leader.host())
         }
-        kc.subscribe(topics, listenerFor(className))
-      case PatternSubscribed(pattern, className) =>
-        if (!(reset == "earliest" || reset == "latest" || className != defaultListener)) {
-          log.warn(resetMsg)
-        }
-        kc.subscribe(pattern, listenerFor(className))
-      case Unassigned =>
-    }
-
-    this.partitionAssignment = pa
-  }
-
-  /** Manually assign a list of partitions */
-  def assign(partitions: ju.List[TopicPartition]): Unit = {
-    assignPartitions(Assigned(partitions))
-  }
-
-  /** Subscribe to the given list of topics to get dynamically assigned partitions */
-  def subscribe(topics: ju.List[String]): Unit = {
-    assignPartitions(Subscribed(topics))
-  }
-
-  /** Subscribe to the given list of topics to get dynamically assigned partitions */
-  def subscribe(
-    topics: ju.List[String],
-    consumerRebalanceListenerClassName: String): Unit = {
-    assignPartitions(Subscribed(topics, consumerRebalanceListenerClassName))
-  }
-
-  /** Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
-    * The pattern matching will be done periodically against topics existing at the time of check.
-    */
-  def subscribe(pattern: ju.regex.Pattern): Unit = {
-    assignPartitions(PatternSubscribed(pattern))
-  }
-
-  /** Subscribe to all topics matching specified pattern to get dynamically assigned partitions.
-    * The pattern matching will be done periodically against topics existing at the time of check.
-    */
-  def subscribe(
-    pattern: ju.regex.Pattern,
-    consumerRebalanceListenerClassName: String): Unit = {
-    assignPartitions(PatternSubscribed(pattern, consumerRebalanceListenerClassName))
-  }
-
-  /** Get the set of partitions currently assigned to the underlying consumer */
-  def assignment(): ju.Set[TopicPartition] = this.synchronized {
-    consumer.assignment()
-  }
-
-  /** Get metadata about the partitions for a given topic. */
-  def partitionsFor(topic: String): ju.List[PartitionInfo] = this.synchronized {
-    consumer.partitionsFor(topic)
-  }
-
-  /** Necessary to fetch metadata and update subscriptions,
-    * driver shouldn't be reading messages, so don't call this with non-zero timeout */
-  def poll(timeout: Long): Unit = this.synchronized {
-    consumer.poll(timeout)
-  }
-
-  /** Get the offset of the next record that will be fetched
-    *  (if a record with that offset exists).
-    */
-  def position(partition: TopicPartition): Long = this.synchronized {
-    consumer.position(partition)
-  }
-
-  def seek(partition: TopicPartition, offset: Long): Unit = this.synchronized {
-    consumer.seek(partition, offset)
-  }
-
-  def seekToBeginning(partitions: TopicPartition*): Unit = this.synchronized {
-    consumer.seekToBeginning(partitions: _*)
-  }
-
-  def seekToEnd(partitions: TopicPartition*): Unit = this.synchronized {
-    consumer.seekToEnd(partitions: _*)
-  }
-
-  // TODO is there a better way to distinguish between
-  // - want to use leader brokers (null map)
-  // - don't care, use consistent executor (empty map)
-  // - want to use specific hosts (non-null, non-empty map)
-  private def getPreferredHosts: ju.Map[TopicPartition, String] = {
-    if (null != preferredHosts) {
-      preferredHosts
-    } else {
-      val result = new ju.HashMap[TopicPartition, String]()
-      val hosts = new ju.HashMap[TopicPartition, String]()
-      val assignments = assignment().iterator()
-      while (assignments.hasNext()) {
-        val a = assignments.next()
-        if (null == hosts.get(a)) {
-          val infos = partitionsFor(a.topic).iterator()
-          while (infos.hasNext()) {
-            val i = infos.next()
-            hosts.put(new TopicPartition(i.topic(), i.partition()), i.leader.host())
-          }
-        }
-        result.put(a, hosts.get(a))
       }
-      result
+      result.put(tp, hosts.get(tp))
+    }
+    result
+  }
+
+  protected def getPreferredHosts: ju.Map[TopicPartition, String] = {
+    if (preferredHosts == DirectKafkaInputDStream.preferBrokers) {
+      getBrokers
+    } else {
+      preferredHosts
     }
   }
 
@@ -260,15 +148,15 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
 
   protected var currentOffsets = Map[TopicPartition, Long]()
 
-  protected def latestOffsets(): Map[TopicPartition, Long] = this.synchronized {
+  protected def latestOffsets(): Map[TopicPartition, Long] = {
     val c = consumer
     c.poll(0)
     val parts = c.assignment().asScala
-    if (!partitionAssignment.isInstanceOf[Assigned]) {
-      // make sure new partitions are reflected in currentOffsets
-      val newPartitions = parts.diff(currentOffsets.keySet)
-      currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
-    }
+
+    // make sure new partitions are reflected in currentOffsets
+    val newPartitions = parts.diff(currentOffsets.keySet)
+    currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+
     c.seekToEnd()
     parts.map(tp => tp -> c.position(tp)).toMap
   }
@@ -314,8 +202,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     Some(rdd)
   }
 
-  override def start(): Unit = this.synchronized {
-    assert(partitionAssignment != Unassigned, "Must call subscribe or assign before starting")
+  override def start(): Unit = {
     val c = consumer
     c.poll(0)
     if (currentOffsets.isEmpty) {
@@ -325,9 +212,9 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     }
   }
 
-  override def stop(): Unit = {
-    this.synchronized {
-      consumer.close()
+  override def stop(): Unit = this.synchronized {
+    if (kc != null) {
+      kc.close()
     }
   }
 
@@ -348,8 +235,6 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     override def cleanup(time: Time) { }
 
     override def restore() {
-      poll(0)
-
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
          generatedRDDs += t -> new KafkaRDD[K, V](
@@ -369,72 +254,36 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
 
 object DirectKafkaInputDStream extends Logging {
   import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
+  import org.apache.spark.api.java.function.{ Function0 => JFunction0 }
 
-  protected val defaultListener =
-    "org.apache.kafka.clients.consumer.internals.NoOpConsumerRebalanceListener"
-  /** There are several different ways of specifying partition assignment,
-    * and they need to be able to survive checkpointing
-    */
-  protected sealed trait PartitionAssignment extends Serializable
-  /** manual assignment via consumer.assign() */
-  protected case class Assigned(partitions: ju.List[TopicPartition]) extends PartitionAssignment
-  /** dynamic subscription to list of topics via consumer.subscribe */
-  protected case class Subscribed(
-    topics: ju.List[String],
-    consumerRebalanceListenerClassName: String = defaultListener) extends PartitionAssignment
-  /** dynamic subscription to topics matching pattern via consumer.subscribe */
-  protected case class PatternSubscribed(
-    pattern: ju.regex.Pattern,
-    consumerRebalanceListenerClassName: String = defaultListener) extends PartitionAssignment
-  /** Not yet assigned */
-  protected case object Unassigned extends PartitionAssignment
+  /** Prefer to run on kafka brokers, if they are on same hosts as executors */
+  val preferBrokers: ju.Map[TopicPartition, String] = null
+  /** Prefer a consistent executor per TopicPartition, evenly from all executors */
+  val preferConsistent: ju.Map[TopicPartition, String] = ju.Collections.emptyMap()
 
-  private def fixKafkaParams(
-    dkp: ju.HashMap[String, Object],
-    ekp: ju.HashMap[String, Object]
-  ): Unit = {
-    // wouldn't this be nice to have...  0.10 has it, but with a minimum of 1
-    // log.warn(s"overriding ${ConsumerConfig.MAX_POLL_RECORDS_CONFIG} to 0 for driver")
-    // dkp.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 0: Integer)
-
-    log.warn(s"overriding ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} to false for driver")
-    dkp.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false: java.lang.Boolean)
-
-    // this probably doesnt matter since executors are manually assigned partitions, but just in case
-    if (null != ekp.get(ConsumerConfig.GROUP_ID_CONFIG) &&
-      ekp.get(ConsumerConfig.GROUP_ID_CONFIG) ==
-      dkp.get(ConsumerConfig.GROUP_ID_CONFIG)
-    ) {
-      val id = ekp.get(ConsumerConfig.GROUP_ID_CONFIG) + "-executor"
-      log.warn(s"overriding ${ConsumerConfig.GROUP_ID_CONFIG} to ${id} for executor")
-      ekp.put(ConsumerConfig.GROUP_ID_CONFIG, id)
-    }
-
-  }
-
+  /** Scala constructor */
   def apply[K: ClassTag, V: ClassTag](
       ssc: StreamingContext,
-      driverKafkaParams: ju.Map[String, Object],
+      preferredHosts: ju.Map[TopicPartition, String],
       executorKafkaParams: ju.Map[String, Object],
-      preferredHosts: ju.Map[TopicPartition, String]
+      driverConsumer: () => Consumer[K,V]
     ): DirectKafkaInputDStream[K, V] = {
-    val dkp = new ju.HashMap[String, Object](driverKafkaParams)
-    val ekp = new ju.HashMap[String, Object](executorKafkaParams)
     val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
-
-    fixKafkaParams(dkp, ekp)
+    val ekp = new ju.HashMap[String, Object](executorKafkaParams)
     KafkaRDD.fixKafkaParams(ekp)
+    val cleaned = ssc.sparkContext.clean(driverConsumer)
 
-    new DirectKafkaInputDStream[K, V](ssc, dkp, ekp, ph)
+    new DirectKafkaInputDStream[K, V](ssc, ph, ekp, cleaned)
   }
 
+  /** Java constructor */
   def create[K, V](
       jssc: JavaStreamingContext,
       keyClass: Class[K],
       valueClass: Class[V],
-      driverKafkaParams: ju.Map[String, Object],
+      preferredHosts: ju.Map[TopicPartition, String],
       executorKafkaParams: ju.Map[String, Object],
-      preferredHosts: ju.Map[TopicPartition, String]
+      driverConsumer: JFunction0[Consumer[K, V]]
     ): JavaInputDStream[ConsumerRecord[K, V]] = {
 
     implicit val keyCmt: ClassTag[K] = ClassTag(keyClass)
@@ -442,7 +291,7 @@ object DirectKafkaInputDStream extends Logging {
 
     new JavaInputDStream(
       DirectKafkaInputDStream[K, V](
-        jssc.ssc, driverKafkaParams, executorKafkaParams, preferredHosts))
+        jssc.ssc, preferredHosts, executorKafkaParams, driverConsumer.call _))
   }
 
 }

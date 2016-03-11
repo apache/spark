@@ -209,6 +209,10 @@ object KafkaRDD extends Logging {
       offsetRanges: Array[OffsetRange],
       preferredHosts: ju.Map[TopicPartition, String]
     ): KafkaRDD[K, V] = {
+    assert(preferredHosts != DirectKafkaInputDStream.preferBrokers,
+      "If you want to prefer brokers, you must provide a mapping for preferredHosts. " +
+        "A single KafkaRDD does not have a driver consumer and cannot look up brokers for you. ")
+
     val kp = new ju.HashMap[String, Object](kafkaParams)
     fixKafkaParams(kp)
     val osr = offsetRanges.clone()
