@@ -97,9 +97,11 @@ private[spark] class Executor(
   // Set the classloader for serializer
   env.serializer.setDefaultClassLoader(replClassLoader)
 
-  // Max RPC message size. If task result is bigger than this, we use the block manager
+  // Max size of direct result. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val maxRpcMessageSize = RpcUtils.maxMessageSizeBytes(conf)
+  private val maxDirectResultSize = Math.min(
+    conf.getSizeAsBytes("spark.task.maxDirectResultSize", 1L << 20),
+    RpcUtils.maxMessageSizeBytes(conf))
 
   // Limit of bytes for total size of results (default is 1GB)
   private val maxResultSize = Utils.getMaxResultSize(conf)
@@ -279,6 +281,7 @@ private[spark] class Executor(
 
         // Note: accumulator updates must be collected after TaskMetrics is updated
         val accumUpdates = task.collectAccumulatorUpdates()
+        // TODO: do not serialize value twice
         val directResult = new DirectTaskResult(valueBytes, accumUpdates)
         val serializedDirectResult = ser.serialize(directResult)
         val resultSize = serializedDirectResult.limit
@@ -290,7 +293,7 @@ private[spark] class Executor(
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
             ser.serialize(new IndirectTaskResult[Any](TaskResultBlockId(taskId), resultSize))
-          } else if (resultSize >= maxRpcMessageSize) {
+          } else if (resultSize > maxDirectResultSize) {
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
