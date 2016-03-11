@@ -22,7 +22,7 @@ from pyspark import SparkContext
 from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
 from pyspark.mllib.linalg import VectorUDT, _convert_to_vector, Vectors
 from pyspark.mllib.linalg import Vectors
-from pyspark.sql.types import Row, StructField, StructType
+from pyspark.sql.types import Row
 # $example off$
 from pyspark.sql import SQLContext
 
