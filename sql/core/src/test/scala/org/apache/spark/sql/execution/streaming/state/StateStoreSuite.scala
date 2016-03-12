@@ -57,9 +57,6 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
     intercept[IllegalStateException] {
       store.commitUpdates()
     }
-    intercept[IllegalStateException] {
-      store.cancelUpdates()
-    }
 
     // Verify states after starting updates
     store.prepareForUpdates(0)
