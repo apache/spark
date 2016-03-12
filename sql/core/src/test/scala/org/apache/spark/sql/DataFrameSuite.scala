@@ -25,7 +25,8 @@ import scala.util.Random
 import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchange, ReusedExchange, ShuffleExchange}
 import org.apache.spark.sql.functions._
@@ -1365,5 +1366,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException](df.registerTempTable("#$@sum"))
     // another invalid table name test as below
     intercept[AnalysisException](df.registerTempTable("table!#"))
+  }
+
+  test("assertAnalyzed shouldn't replace original stack trace") {
+    val e = intercept[AnalysisException] {
+      sqlContext.range(1).select('id as 'a, 'id as 'b).groupBy('a).agg('b)
+    }
+
+    assert(e.getStackTrace.head.getClassName != classOf[QueryExecution].getName)
   }
 }
