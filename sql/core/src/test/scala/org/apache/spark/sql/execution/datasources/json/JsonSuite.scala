@@ -1441,7 +1441,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .save(jsonDir)
 
       val compressedFiles = new File(jsonDir).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      assert(compressedFiles.exists(_.getName.endsWith(".json.gz")))
 
       val jsonCopy = sqlContext.read
         .format("json")
@@ -1479,7 +1479,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .save(jsonDir)
 
         val compressedFiles = new File(jsonDir).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".gz")))
+        assert(compressedFiles.exists(!_.getName.endsWith(".json.gz")))
 
         val jsonCopy = sqlContext.read
           .format("json")

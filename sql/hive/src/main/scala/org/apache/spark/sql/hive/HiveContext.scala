@@ -535,6 +535,15 @@ class HiveContext private[hive](
     }
   }
 
+  /**
+   * Executes a SQL query without parsing it, but instead passing it directly to Hive.
+   * This is currently only used for DDLs and will be removed as soon as Spark can parse
+   * all supported Hive DDLs itself.
+   */
+  protected[sql] override def runNativeSql(sqlText: String): Seq[Row] = {
+    runSqlHive(sqlText).map { s => Row(s) }
+  }
+
   /** Extends QueryExecution with hive specific features. */
   protected[sql] class QueryExecution(logicalPlan: LogicalPlan)
     extends org.apache.spark.sql.execution.QueryExecution(this, logicalPlan) {

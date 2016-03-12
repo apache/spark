@@ -246,7 +246,7 @@ case class CreateMetastoreDataSourceAsSelect(
       createMetastoreTable = true
     }
 
-    val data = DataFrame(hiveContext, query)
+    val data = Dataset.newDataFrame(hiveContext, query)
     val df = existingSchema match {
       // If we are inserting into an existing table, just use the existing schema.
       case Some(s) => sqlContext.internalCreateDataFrame(data.queryExecution.toRdd, s)
