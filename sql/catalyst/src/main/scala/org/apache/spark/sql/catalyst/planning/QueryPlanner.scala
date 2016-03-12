@@ -53,9 +53,21 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
    */
   protected def planLater(plan: LogicalPlan): PhysicalPlan = this.plan(plan).next()
 
+  /**
+   * This is used to establish a link between physical and logical plan nodes. The default
+   * implementation is a no-op.
+   */
+  protected def attachLogicalPlan(
+      physicalPlans: Seq[PhysicalPlan],
+      logicalPlan: LogicalPlan): Seq[PhysicalPlan] = {
+    physicalPlans
+  }
+
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
-    val iter = strategies.view.flatMap(_(plan)).toIterator
+    val iter = strategies.view.flatMap { strategy =>
+      attachLogicalPlan(strategy(plan), plan)
+    }.toIterator
     assert(iter.hasNext, s"No plan for $plan")
     iter
   }

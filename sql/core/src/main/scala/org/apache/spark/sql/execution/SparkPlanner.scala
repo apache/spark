@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 
 class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
@@ -83,4 +84,11 @@ class SparkPlanner(val sqlContext: SQLContext) extends SparkStrategies {
       Project(projectList, filterCondition.map(Filter(_, scan)).getOrElse(scan))
     }
   }
+
+  override protected def attachLogicalPlan(
+      physicalPlans: Seq[SparkPlan],
+      logicalPlan: LogicalPlan): Seq[SparkPlan] = {
+    physicalPlans.map(_.withLogicalPlan(logicalPlan))
+  }
+
 }
