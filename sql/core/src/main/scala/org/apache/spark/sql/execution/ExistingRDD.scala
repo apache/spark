@@ -202,6 +202,7 @@ private[sql] case class DataSourceScan(
     val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
     val input = ctx.freshName("input")
     val idx = ctx.freshName("batchIdx")
+    val rowidx = ctx.freshName("rowIdx")
     val batch = ctx.freshName("batch")
     // PhysicalRDD always just has one input
     ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
@@ -209,8 +210,8 @@ private[sql] case class DataSourceScan(
     ctx.addMutableState("int", idx, s"$idx = 0;")
 
     val exprs = output.zipWithIndex.map(x => new BoundReference(x._2, x._1.dataType, true))
-    val row = ctx.freshName("row")
-    val col = ctx.freshName("col")
+    val row = ctx.freshName("row", "InternalRow")
+    val col = ctx.freshName("col", columnVectorClz)
     val numOutputRows = metricTerm(ctx, "numOutputRows")
 
     // The input RDD can either return (all) ColumnarBatches or InternalRows. We determine this
@@ -219,14 +220,16 @@ private[sql] case class DataSourceScan(
     // TODO: The abstractions between this class and SqlNewHadoopRDD makes it difficult to know
     // here which path to use. Fix this.
 
-    ctx.isRow = false
-    ctx.INPUT_ROW = col
-    ctx.INPUT_COLORDINAL = idx
+    ctx.INPUT_COLORDINAL = rowidx
     ctx.currentVars = null
-    val columns1 = exprs.map(_.gen(ctx))
+    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2 , columnVectorClz))
+    val colDeclarations = colVars.zipWithIndex.map(x => {
+      (columnVectorClz + " " + x._1 + " = " + batch + ".column(" + x._2 + ");\n").trim} )
+    val columns1 = (exprs zip colVars).map(x => {
+      ctx.INPUT_ROW = x._2
+      x._1.gen(ctx)
+    })
     val scanBatches = ctx.freshName("processBatches")
-    val colDeclarations = output.zipWithIndex.map(x =>
-      (columnVectorClz + " " + col + x._2 + " = " + batch + ".column(" + x._2 + ");\n").trim)
     ctx.addNewFunction(scanBatches,
       s"""
       | private void $scanBatches() throws java.io.IOException {
@@ -235,9 +238,9 @@ private[sql] case class DataSourceScan(
       |     if ($idx == 0) $numOutputRows.add(numRows);
       |
       |     while (!shouldStop() && $idx < numRows) {
-      |       ${colDeclarations.mkString}
+      |       int $rowidx = $idx++;
+      |       ${colDeclarations.mkString("", "\n", "\n")}
       |       ${consume(ctx, columns1).trim}
-      |       $idx++;
       |     }
       |     if (shouldStop()) return;
       |
@@ -250,7 +253,6 @@ private[sql] case class DataSourceScan(
       |   }
       | }""".stripMargin)
 
-    ctx.isRow = true
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprs.map(_.gen(ctx))
