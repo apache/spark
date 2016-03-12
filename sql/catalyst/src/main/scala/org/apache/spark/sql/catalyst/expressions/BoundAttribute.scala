@@ -60,10 +60,10 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
     val javaType = ctx.javaType(dataType)
-    val value = if (ctx.isRow) {
+    val value = if (!ctx.isColumnarType(ctx.INPUT_ROW)) {
       ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     } else {
-      ctx.getValue(ctx.INPUT_ROW + ordinal.toString, dataType, ctx.INPUT_COLORDINAL)
+      ctx.getValue(ctx.INPUT_ROW, dataType, ctx.INPUT_COLORDINAL)
     }
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
@@ -73,14 +73,14 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       oev.code = ""
       code
     } else if (nullable) {
-      if (ctx.isRow) {
+      if (!ctx.isColumnarType(ctx.INPUT_ROW)) {
         s"""
           boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
           $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
         """
       } else {
         s"""
-          boolean ${ev.isNull} = ${ctx.INPUT_ROW}${ordinal}.getIsNull(${ctx.INPUT_COLORDINAL});
+          boolean ${ev.isNull} = ${ctx.INPUT_ROW}.getIsNull(${ctx.INPUT_COLORDINAL});
           $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
         """
       }
