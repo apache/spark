@@ -102,19 +102,19 @@ private[ml] class WeightedLeastSquares(
       }
     }
     /*
-      If more than of the features in the data are constant (i.e, data matrix has constant columns),
-      then A^T.A is no longer positive definite and Cholesky decomposition fails (because the
-      normal equation does not have a solution).
-      In order to find a solution, we need to drop constant columns from the data matrix. Or,
-      we can drop corresponding column and row from A^T.A matrix.
-      Once we drop rows/columns from A^T.A matrix, the Cholesky decomposition will produce
-      correct coefficients. But, for the final result, we need to add zeros to the list of
-      coefficients corresponding to the constant features.
-   */
+     * If more than one of the features in the data are constant (i.e. data matrix has constant
+     * columns), then A^T.A is no longer positive definite and Cholesky decomposition fails
+     * (because the normal equation does not have a solution).
+     * In order to find a solution, we need to drop constant columns from the data matrix. Or,
+     * we can drop corresponding column and row from A^T.A matrix.
+     * Once we drop rows/columns from A^T.A matrix, the Cholesky decomposition will produce
+     * correct coefficients. But, for the final result, we need to add zeros to the list of
+     * coefficients corresponding to the constant features.
+     */
     val aVarRaw = summary.aVar.values
     // this will keep track of features to keep in the model, and remove
     // features with zero variance.
-    val nzVarIndex = aVarRaw.zipWithIndex.filter( _._1 != 0 ).map( _._2 )
+    val nzVarIndex = aVarRaw.zipWithIndex.filter(_._1 != 0).map(_._2)
     val nz = nzVarIndex.length
     // if there are features with zero variance, then ATA is not positive definite, and we need to
     // keep track of that.
@@ -123,13 +123,13 @@ private[ml] class WeightedLeastSquares(
     val triK = nz * (nz + 1) / 2
 
     val aVar = if (singular) {
-      for (i <- nzVarIndex) yield {aVarRaw(i)}
+      for (i <- nzVarIndex) yield aVarRaw(i)
     } else {
       aVarRaw
     }
     val aBar = if (singular) {
       val aBarTemp = summary.aBar.values
-      for (i <- nzVarIndex) yield {aBarTemp(i)}
+      for (i <- nzVarIndex) yield aBarTemp(i)
     } else {
       summary.aBar.values
     }
@@ -139,11 +139,15 @@ private[ml] class WeightedLeastSquares(
     } else {
       summary.abBar.values
     }
+    // NOTE: aaBar represents upper triangular part of A^T.A matrix in column major order.
+    // We need to drop columns and rows from A^T.A corresponding to the features which have
+    // zero variance. The following logic removes elements from aaBar corresponding to zerp
+    // variance which effectively removes columns and rows from A^T.A.
     val aaBar = if (singular) {
       val aaBarTemp = summary.aaBar.values
       (for { col <- 0 until summary.k
              row <- 0 to col
-             if aVarRaw(col) != 0 & aVarRaw(row) != 0 } yield
+             if aVarRaw(col) != 0 && aVarRaw(row) != 0 } yield
         aaBarTemp(row + col * (col + 1) / 2)).toArray
     } else {
       summary.aaBar.values
@@ -178,7 +182,7 @@ private[ml] class WeightedLeastSquares(
 
     val x = CholeskyDecomposition.solve(aa, ab)
     val (coefs, intercept) = if (fitIntercept) {
-      (x.slice(0, x.length - 1), x.last)
+      (x.init, x.last)
     } else {
       (x, 0.0)
     }
