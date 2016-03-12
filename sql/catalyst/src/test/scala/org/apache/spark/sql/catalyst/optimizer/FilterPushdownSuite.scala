@@ -670,24 +670,16 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("Window: push down filters -- basic") {
-    val originalQuery = testRelation
-      .select('a, 'b, 'c,
-        WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).where('a > 1).select('a, 'c)
+    val winSpec = windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
+
+    val originalQuery =
+      testRelation.select('a, 'b, 'c, winExpr.as('window)).where('a > 1).select('a, 'c)
 
     val correctAnswer = testRelation
       .select('a, 'b, 'c).where('a > 1)
-        .window(
-          WindowExpression(
-            AggregateExpression(Count('b), Complete, isDistinct = false),
-            WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
-              SortOrder('b, Ascending) :: Nil,
-              UnspecifiedFrame)).as('window) :: Nil,
-          'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
-        .select('a, 'c).analyze
+      .window( winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .select('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -695,25 +687,16 @@ class FilterPushdownSuite extends PlanTest {
   }
 
   test("Window: no push down -- predicates are not from partitioning keys") {
-    val originalQuery = testRelation
-      .select('a, 'b, 'c,
-        WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).where('c > 1).select('a, 'c)
+    val winSpec = windowSpec('a.attr :: 'b.attr :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('b), winSpec)
 
+    val originalQuery =
+      testRelation.select('a, 'b, 'c, winExpr.as('window)).where('c > 1).select('a, 'c)
 
     val correctAnswer = testRelation
       .select('a, 'b, 'c)
-      .window(
-        WindowExpression(
-          AggregateExpression(Count('b), Complete, isDistinct = false),
-          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
-            SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window) :: Nil,
-        'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil).where('c > 1)
-      .select('a, 'c).analyze
+      .window(winExpr.as('window) :: Nil, 'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+      .where('c > 1).select('a, 'c).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
