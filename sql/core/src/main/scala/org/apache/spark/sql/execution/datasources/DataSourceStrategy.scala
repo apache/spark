@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.PhysicalRDD.{INPUT_PATHS, PUSHED_FILTERS}
+import org.apache.spark.sql.execution.DataSourceScan.{INPUT_PATHS, PUSHED_FILTERS}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.ExecutedCommand
 import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVectorUtils}
@@ -239,7 +239,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       }
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
-      execution.PhysicalRDD.createFromDataSource(
+      execution.DataSourceScan(
         l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
@@ -639,7 +639,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // Don't request columns that are only referenced by pushed filters.
         .filterNot(handledSet.contains)
 
-      val scan = execution.PhysicalRDD.createFromDataSource(
+      val scan = execution.DataSourceScan(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata)
@@ -649,7 +649,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.PhysicalRDD.createFromDataSource(
+      val scan = execution.DataSourceScan(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation, metadata)

@@ -101,17 +101,76 @@ private[sql] case class LogicalRDD(
 private[sql] case class PhysicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
-    override val nodeName: String,
-    override val metadata: Map[String, String] = Map.empty,
-    isUnsafeRow: Boolean = false,
-    override val outputPartitioning: Partitioning = UnknownPartitioning(0))
-  extends LeafNode with CodegenSupport {
+    override val nodeName: String) extends LeafNode {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val unsafeRow = if (isUnsafeRow) {
+    val numOutputRows = longMetric("numOutputRows")
+    rdd.mapPartitionsInternal { iter =>
+      val proj = UnsafeProjection.create(schema)
+      iter.map { r =>
+        numOutputRows += 1
+        proj(r)
+      }
+    }
+  }
+
+  override def simpleString: String = {
+    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+  }
+}
+
+/** Physical plan node for scanning data from a relation. */
+private[sql] case class DataSourceScan(
+    output: Seq[Attribute],
+    rdd: RDD[InternalRow],
+    @transient relation: BaseRelation,
+    override val metadata: Map[String, String] = Map.empty)
+  extends LeafNode with CodegenSupport {
+
+  override val nodeName: String = relation.toString
+
+  // Ignore rdd when checking results
+  override def sameResult(plan: SparkPlan ): Boolean = plan match {
+    case other: DataSourceScan => relation == other.relation && metadata == other.metadata
+    case _ => false
+  }
+
+  private[sql] override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+
+  val outputUnsafeRows = relation match {
+    case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
+      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+    case _: HadoopFsRelation => true
+    case _ => false
+  }
+
+  override val outputPartitioning = {
+    val bucketSpec = relation match {
+      // TODO: this should be closer to bucket planning.
+      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled() => r.bucketSpec
+      case _ => None
+    }
+
+    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
+      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
+        s"(${output.map(_.name).mkString(", ")})")
+    }
+
+    bucketSpec.map { spec =>
+      val numBuckets = spec.numBuckets
+      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+      HashPartitioning(bucketColumns, numBuckets)
+    }.getOrElse {
+      UnknownPartitioning(0)
+    }
+  }
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    val unsafeRow = if (outputUnsafeRows) {
       rdd
     } else {
       rdd.mapPartitionsInternal { iter =>
@@ -187,7 +246,7 @@ private[sql] case class PhysicalRDD(
     ctx.INPUT_ROW = row
     ctx.currentVars = null
     val columns2 = exprs.map(_.gen(ctx))
-    val inputRow = if (isUnsafeRow) row else null
+    val inputRow = if (outputUnsafeRows) row else null
     val scanRows = ctx.freshName("processRows")
     ctx.addNewFunction(scanRows,
       s"""
@@ -221,42 +280,8 @@ private[sql] case class PhysicalRDD(
   }
 }
 
-private[sql] object PhysicalRDD {
+private[sql] object DataSourceScan {
   // Metadata keys
   val INPUT_PATHS = "InputPaths"
   val PUSHED_FILTERS = "PushedFilters"
-
-  def createFromDataSource(
-      output: Seq[Attribute],
-      rdd: RDD[InternalRow],
-      relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): PhysicalRDD = {
-
-    val outputUnsafeRows = relation match {
-      case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-        !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
-      case _: HadoopFsRelation => true
-      case _ => false
-    }
-
-    val bucketSpec = relation match {
-      // TODO: this should be closer to bucket planning.
-      case r: HadoopFsRelation if r.sqlContext.conf.bucketingEnabled() => r.bucketSpec
-      case _ => None
-    }
-
-    def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-      throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-        s"(${output.map(_.name).mkString(", ")})")
-    }
-
-    bucketSpec.map { spec =>
-      val numBuckets = spec.numBuckets
-      val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-      val partitioning = HashPartitioning(bucketColumns, numBuckets)
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows, partitioning)
-    }.getOrElse {
-      PhysicalRDD(output, rdd, relation.toString, metadata, outputUnsafeRows)
-    }
-  }
 }
