@@ -825,9 +825,13 @@ object CombineUnions extends Rule[LogicalPlan] {
 object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) =>
-      val ac = (ExpressionSet(splitConjunctivePredicates(nc)) --
-        ExpressionSet(splitConjunctivePredicates(fc))).reduce(And)
-      Filter(And(ac, fc), grandChild)
+      (ExpressionSet(splitConjunctivePredicates(fc)) --
+        ExpressionSet(splitConjunctivePredicates(nc))).reduceOption(And) match {
+        case Some(ac) =>
+          Filter(And(ac, nc), grandChild)
+        case None =>
+          nf
+      }
   }
 }
 
