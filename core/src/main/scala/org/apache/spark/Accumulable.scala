@@ -124,7 +124,9 @@ class Accumulable[R, T] private[spark] (
   @volatile @transient private var value_ : R = initialValue // Current value on driver
   // For consistent accumulators pending and processed updates
   @volatile @transient private[spark] var pending =
-    new mutable.HashMap[(Int, Int, Int), (R, Boolean)]()
+    new mutable.HashMap[(Int, Int, Int), R]()
+  @volatile @transient private[spark] var completed =
+    new mutable.HashSet[(Int, Int, Int)]()
   @volatile @transient private[spark] var processed =
     new mutable.HashMap[(Int, Int), mutable.BitSet]()
 
@@ -177,24 +179,18 @@ class Accumulable[R, T] private[spark] (
     value_ = param.addAccumulator(value_, term)
     if (consistent) {
       val updateInfo = TaskContext.get().getRDDPartitionInfo()
-      val (base, complete) = pending.getOrElse(updateInfo, (zero, false))
-      pending(updateInfo) = (param.addAccumulator(base, term), complete)
+      val base = pending.getOrElse(updateInfo, zero)
+      pending(updateInfo) = param.addAccumulator(base, term)
     }
   }
 
   /**
    * Mark a specific rdd/shuffle/partition as completely processed.
-   * noop for non-consistent or accumulators with no value for this
-   * rdd/shuffle/partition combination.
+   * noop for non-consistent accumuables.
    */
   private[spark] def markFullyProcessed(rddId: Int, shuffleId: Int, partitionId: Int): Unit = {
     if (consistent) {
-      val key = (rddId, shuffleId, partitionId)
-      pending.get(key) match {
-        case Some((value, complete)) =>
-          pending(key) = (value, true)
-        case _ => pending(key) = (zero, true)
-      }
+      completed += ((rddId, shuffleId, partitionId))
     }
   }
 
@@ -222,7 +218,7 @@ class Accumulable[R, T] private[spark] (
     if (!consistent) {
       merge(term.asInstanceOf[R])
     } else {
-      mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int, Int), (R, Boolean)]])
+      mergePending(term.asInstanceOf[mutable.HashMap[(Int, Int, Int), R]])
     }
   }
 
@@ -230,14 +226,12 @@ class Accumulable[R, T] private[spark] (
    * Merge another pending updates, checks to make sure that each pending update has not
    * already been processed before updating.
    */
-  private[spark] def mergePending(term: mutable.HashMap[(Int, Int, Int), (R, Boolean)]) = {
-    term.foreach{case ((rddId, shuffleId, splitId), (v, full)) =>
-      if (full) {
-        val splits = processed.getOrElseUpdate((rddId, shuffleId), new mutable.BitSet())
-        if (!splits.contains(splitId)) {
-          splits += splitId
-          value_ = param.addInPlace(value_, v)
-        }
+  private[spark] def mergePending(term: mutable.HashMap[(Int, Int, Int), R]) = {
+    term.foreach{case ((rddId, shuffleId, splitId), v) =>
+      val splits = processed.getOrElseUpdate((rddId, shuffleId), new mutable.BitSet())
+      if (!splits.contains(splitId)) {
+        splits += splitId
+        value_ = param.addInPlace(value_, v)
       }
     }
   }
@@ -271,7 +265,7 @@ class Accumulable[R, T] private[spark] (
    */
   private[spark] def updateValue: Any = {
     if (consistent) {
-      pending
+      pending.filter{case (k, v) => completed.contains(k)}
     } else {
       localValue
     }
@@ -314,7 +308,8 @@ class Accumulable[R, T] private[spark] (
     in.defaultReadObject()
     value_ = zero
     if (consistent) {
-      pending = new mutable.HashMap[(Int, Int, Int), (R, Boolean)]()
+      pending = new mutable.HashMap[(Int, Int, Int), R]()
+      completed = new mutable.HashSet[(Int, Int, Int)]()
     }
     deserialized = true
 
