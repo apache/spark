@@ -110,7 +110,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * All Attributes that appear in expressions from this operator.  Note that this set does not
    * include attributes that are implicitly referenced by being passed through to the output tuple.
    */
-  def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
+  final def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
 
   /**
    * The set of all attributes that are input to this operator by its children.
@@ -128,7 +128,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Subclasses should override this method if they produce attributes internally as it is used by
    * assertions designed to prevent the construction of invalid plans.
    */
-  def missingInput: AttributeSet = references -- inputSet -- producedAttributes
+  final def missingInput: AttributeSet = references -- inputSet -- producedAttributes
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.

@@ -46,8 +46,7 @@ case class Expand(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
-  override def references: AttributeSet =
-    AttributeSet(projections.flatten.flatMap(_.references))
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   private[this] val projection =
     (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)

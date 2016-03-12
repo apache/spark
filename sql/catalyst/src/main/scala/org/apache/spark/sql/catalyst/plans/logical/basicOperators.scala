@@ -519,8 +519,7 @@ case class Expand(
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
 
-  override def references: AttributeSet =
-    AttributeSet(projections.flatten.flatMap(_.references))
+  override def producedAttributes: AttributeSet = AttributeSet(output)
 
   override def statistics: Statistics = {
     val sizeInBytes = super.statistics.sizeInBytes * projections.length

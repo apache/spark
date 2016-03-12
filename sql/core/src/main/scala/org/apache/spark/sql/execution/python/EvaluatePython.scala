@@ -45,8 +45,7 @@ case class EvaluatePython(
 
   def output: Seq[Attribute] = child.output :+ resultAttribute
 
-  // References should not include the produced attribute.
-  override def references: AttributeSet = udf.references
+  override def producedAttributes: AttributeSet = AttributeSet(resultAttribute)
 }
 
 
