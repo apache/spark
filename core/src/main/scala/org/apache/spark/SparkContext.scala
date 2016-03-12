@@ -1251,8 +1251,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * RDD/partition. This adds some additional overhead for tracking and is an experimental feature.
    */
   def accumulator[T](initialValue: T, name: String, consistent: Boolean)
-    (implicit param: AccumulatorParam[T])
-    : Accumulator[T] = {
+    (implicit param: AccumulatorParam[T]) : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name), internal = false,
       consistent = consistent)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc))
