@@ -41,15 +41,21 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     // Set the ID of the RDD and partition being processed. We need to do this per
     // element since we chain the iterator transformations together
     val data = input.map{x =>
-      context.setRDDPartitionInfo(id, shuffleId, split.index, input.isEmpty)
+      context.setRDDPartitionInfo(id, shuffleId, split.index)
       if (input.isEmpty) {
         context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
       }
-      x}
+      x
+    }
     // We also set it before the first call to the user function in case the user provides a
     // function which access a consistent accumulator before accessing any elements.
-    context.setRDDPartitionInfo(id, shuffleId, split.index, input.isEmpty)
-    f(context, split.index, data)
+    context.setRDDPartitionInfo(id, shuffleId, split.index)
+    val result = f(context, split.index, data)
+    // We also check if our input is empty here just for empty partitions.
+    if (input.isEmpty) {
+      context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
+    }
+    result
   }
 
   override def clearDependencies() {

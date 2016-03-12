@@ -36,16 +36,16 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (210)
   }
 
-  test("adding only the first element per partition should work") {
+  test("adding only the first element per partition should work even if partition is empty") {
     sc = new SparkContext("local[2]", "test")
     val acc: Accumulator[Int] = sc.accumulator(0, consistent = true)
-    val a = sc.parallelize(1 to 20, 10)
+    val a = sc.parallelize(1 to 20, 30)
     val b = a.mapPartitions{itr =>
       acc += 1
       itr
     }
     b.count()
-    acc.value should be (10)
+    acc.value should be (30)
   }
 
   test("shuffled (combineByKey)") {

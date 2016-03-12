@@ -176,8 +176,8 @@ class Accumulable[R, T] private[spark] (
   def add(term: T) {
     value_ = param.addAccumulator(value_, term)
     if (consistent) {
-      val (updateInfo, complete) = TaskContext.get().getRDDPartitionInfo()
-      val (base, _) = pending.getOrElse(updateInfo, (zero, false))
+      val updateInfo = TaskContext.get().getRDDPartitionInfo()
+      val (base, complete) = pending.getOrElse(updateInfo, (zero, false))
       pending(updateInfo) = (param.addAccumulator(base, term), complete)
     }
   }
@@ -193,7 +193,7 @@ class Accumulable[R, T] private[spark] (
       pending.get(key) match {
         case Some((value, complete)) =>
           pending(key) = (value, true)
-        case _ => // Skip everything else
+        case _ => pending(key) = (zero, true)
       }
     }
   }
