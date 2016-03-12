@@ -19,6 +19,7 @@ from __future__ import unicode_literals
 from future.standard_library import install_aliases
 
 install_aliases()
+import argparse
 from builtins import str
 from builtins import object, bytes
 import copy
@@ -2609,6 +2610,15 @@ class DAG(LoggingMixin):
             ignore_dependencies=ignore_dependencies,
             pool=pool)
         job.run()
+
+    def cli(self):
+        """
+        Exposes a CLI specific to this DAG
+        """
+        from airflow.bin import cli
+        parser = cli.CLIFactory.get_parser(dag_parser=True)
+        args = parser.parse_args()
+        args.func(args, self)
 
 
 class Chart(Base):
