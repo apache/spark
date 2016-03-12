@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -41,6 +42,7 @@ class FilterPushdownSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushPredicateThroughGenerate,
         PushPredicateThroughAggregate,
+        PushPredicateThroughWindow,
         CollapseProject) :: Nil
   }
 
@@ -663,6 +665,57 @@ class FilterPushdownSuite extends PlanTest {
       .groupBy('a)('a + Rand(10) as 'aa, count('b) as 'c, Rand(11).as("rnd"))
       .where('c === 2L && 'aa + Rand(10).as("rnd") === 3 && 'rnd === 5)
       .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Window: push down filters -- basic") {
+    val originalQuery = testRelation
+      .select('a, 'b, 'c,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window)).where('a > 1).select('a, 'c)
+
+    val correctAnswer = testRelation
+      .select('a, 'b, 'c).where('a > 1)
+        .window(
+          WindowExpression(
+            AggregateExpression(Count('b), Complete, isDistinct = false),
+            WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
+              SortOrder('b, Ascending) :: Nil,
+              UnspecifiedFrame)).as('window) :: Nil,
+          'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil)
+        .select('a, 'c).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Window: no push down -- predicates are not from partitioning keys") {
+    val originalQuery = testRelation
+      .select('a, 'b, 'c,
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window)).where('c > 1).select('a, 'c)
+
+
+    val correctAnswer = testRelation
+      .select('a, 'b, 'c)
+      .window(
+        WindowExpression(
+          AggregateExpression(Count('b), Complete, isDistinct = false),
+          WindowSpecDefinition( 'a.attr :: 'b.attr :: Nil,
+            SortOrder('b, Ascending) :: Nil,
+            UnspecifiedFrame)).as('window) :: Nil,
+        'a.attr :: 'b.attr :: Nil, 'b.asc :: Nil).where('c > 1)
+      .select('a, 'c).analyze
+
+    val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
   }
