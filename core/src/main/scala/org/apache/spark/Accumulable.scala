@@ -185,8 +185,8 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Mark a specific rdd/shuffle/partition as completely processed.
-   * noop for non-consistent accumuables.
+   * Mark a specific rdd/shuffle/partition as completely processed. This is a noop for
+   * non-consistent accumuables.
    */
   private[spark] def markFullyProcessed(rddId: Int, shuffleId: Int, partitionId: Int): Unit = {
     if (consistent) {
