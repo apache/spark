@@ -77,6 +77,13 @@ private[spark] class CoarseMesosSchedulerBackend(
   val coresByTaskId = new HashMap[String, Int]
   var totalCoresAcquired = 0
 
+  // Ports acquired so far
+  // SlaveID ->  ports
+  val takenPortsPerSlave = new mutable.HashMap[String, List[Long]]
+
+  // TaskId -> ports
+  val takenPortsByTaskId = new HashMap[String, List[Long]]
+
   // SlaveID -> Slave
   // This map accumulates entries for the duration of the job.  Slaves are never deleted, because
   // we need to maintain e.g. failure state and connection state.
@@ -154,7 +161,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     startScheduler(driver)
   }
 
-  def createCommand(offer: Offer, numCores: Int, taskId: String): CommandInfo = {
+  def createCommand(offer: Offer, numCores: Int, taskId: String, randPorts: List[Long] = List())
+  : CommandInfo = {
     val executorSparkHome = conf.getOption("spark.mesos.executor.home")
       .orElse(sc.getSparkHome())
       .getOrElse {
@@ -187,9 +195,13 @@ private[spark] class CoarseMesosSchedulerBackend(
         .build())
     }
 
+    // Pick random ports only because at the executor side we only
+    // care about random ports from which we are going to assign ports in case we have
+    // zero port values. User specific ports are already checked and we have assigned
+    // resources to them.
     environment.addVariables(Environment.Variable.newBuilder()
-      .setName("AVAILABLE_PORTS")
-      .setValue(getRangeResource(offer.getResourcesList, "ports").mkString(" ")))
+      .setName("AVAILABLE_RAND_PORTS")
+      .setValue(randPorts.map(port => (port, port)).mkString(" ")))
 
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
@@ -383,13 +395,16 @@ private[spark] class CoarseMesosSchedulerBackend(
             partitionResources(resources, "cpus", taskCPUs)
           val (remainingMemResources, memResourcesToUse) =
             partitionResources(afterCPUResources.asJava, "mem", taskMemory)
-          val (resourcesLeft, portResourcesToUse) = remainingMemResources
-            .partition {r => ! ( r.getType == Value.Type.RANGES &  r.getName == "ports" )}
+          // process port offers
+          val (resourcesLeft, portResources) = getPortResources(remainingMemResources)
+          val (portResourcesLeft, portResourcesToUse, portsToUse) =
+            partitionPorts(conf, portResources)
 
+          val randPorts = portsToUse.filter(port => isRandPortRange(conf, (port, port)))
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId))
+            .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId, randPorts))
             .setName("Task " + taskId)
             .addAllResources(cpuResourcesToUse.asJava)
             .addAllResources(memResourcesToUse.asJava)
@@ -401,9 +416,11 @@ private[spark] class CoarseMesosSchedulerBackend(
           }
 
           tasks(offer.getId) ::= taskBuilder.build()
-          remainingResources(offerId) = resourcesLeft.asJava
+          remainingResources(offerId) = (resourcesLeft ++ portResourcesLeft).asJava
           totalCoresAcquired += taskCPUs
           coresByTaskId(taskId) = taskCPUs
+          takenPortsPerSlave(slaveId) = takenPortsPerSlave.getOrElse(slaveId, List()) ++ portsToUse
+          takenPortsByTaskId(taskId) = portsToUse
         }
       }
     }
@@ -416,7 +433,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     val cpus = executorCores(offerCPUs)
     val mem = executorMemory(sc)
     val ports = getRangeResource(resources, "ports")
-    val meetsPortRequirements = checkPorts(sc, ports)
+    val meetsPortRequirements = checkPorts(sc,
+      ports, takenPortsPerSlave.getOrElse(slaveId, List()))
 
     cpus > 0 &&
       cpus <= offerCPUs &&
@@ -468,6 +486,13 @@ private[spark] class CoarseMesosSchedulerBackend(
         for (cores <- coresByTaskId.get(taskId)) {
           totalCoresAcquired -= cores
           coresByTaskId -= taskId
+        }
+        // Remove tasks ports remembered on that slave if any
+        for (taskPorts <- takenPortsByTaskId.get(taskId)) {
+          for (slavePorts <- takenPortsPerSlave.get(slaveId)) {
+            takenPortsPerSlave(slaveId) = slavePorts.filterNot(port => taskPorts.contains(port))
+          }
+          takenPortsByTaskId -= taskId
         }
         // If it was a failure, mark the slave as failed for blacklisting purposes
         if (TaskState.isFailed(state)) {
