@@ -532,6 +532,13 @@ public abstract class ColumnVector {
   }
 
   /**
+   * Returns the value for rowId.
+   */
+  public MapData getMap(int ordinal) {
+    throw new NotImplementedException();
+  }
+
+  /**
    * Returns the decimal for rowId.
    */
   public final Decimal getDecimal(int rowId, int precision, int scale) {
