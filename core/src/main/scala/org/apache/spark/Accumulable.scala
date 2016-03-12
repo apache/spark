@@ -59,8 +59,7 @@ import org.apache.spark.util.Utils
  *                   prevents double counting on reevaluation. Partial evaluation of a partition
  *                   will not increment a consistent [[Accumulable]]. Consistent [[Accumulable]]s
  *                   are currently experimental and the behaviour may change in future versions.
- *                   Consistent [[Accumulable]]s can only be added to inside is
- *                   [[MapPartitionsRDD]]s and are designed for counting "data properties".
+ *                   Consistent [[Accumulable]]s are designed for counting "data properties".
  * @tparam R the full accumulated data
  * @tparam T partial data that can be added in
  */
