@@ -25,7 +25,6 @@ import org.apache.spark.scheduler._
 
 
 class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
-
   test("single partition") {
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
@@ -35,6 +34,73 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     b.cache()
     b.count()
     acc.value should be (210)
+  }
+
+  test("adding only the first element per partition should work") {
+    sc = new SparkContext("local[2]", "test")
+    val acc: Accumulator[Int] = sc.accumulator(0, consistent = true)
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.mapPartitions{itr =>
+      acc += 1
+      itr
+    }
+    b.count()
+    acc.value should be (10)
+  }
+
+  test("shuffled (combineByKey)") {
+    sc = new SparkContext("local[2]", "test")
+    val a = sc.parallelize(1 to 40, 5)
+    val buckets = 4
+    val b = a.map{x => ((x % buckets), x)}
+    val inputs = List(b, b.repartition(10), b.partitionBy(new HashPartitioner(5))).map(_.cache())
+    val mapSideCombines = List(true, false)
+    inputs.foreach{input =>
+      mapSideCombines.foreach{mapSideCombine =>
+        val accs = 1.to(4).map(x => sc.accumulator(0, consistent = true)).toList
+        val raccs = 1.to(4).map(x => sc.accumulator(0, consistent = false)).toList
+        val List(acc, acc1, acc2, acc3) = accs
+        val List(racc, racc1, racc2, racc3) = raccs
+        val c = input.combineByKey(
+          (x: Int) => {acc1 += 1; acc += 1; racc1 += 1; racc += 1; x},
+          {(a: Int, b: Int) => acc2 += 1; acc += 1; racc2 += 1; racc += 1; (a + b)},
+          {(a: Int, b: Int) => acc3 += 1; acc += 1; racc3 += 1; racc += 1; (a + b)},
+          new HashPartitioner(10),
+          mapSideCombine)
+        val d = input.combineByKey(
+          (x: Int) => {acc1 += 1; acc += 1; x},
+          {(a: Int, b: Int) => acc2 += 1; acc += 1; (a + b)},
+          {(a: Int, b: Int) => acc3 += 1; acc += 1; (a + b)},
+          new HashPartitioner(10),
+          mapSideCombine)
+        c.count()
+        // If our partitioner is known then we should only create
+        // one combiner for each key value. Otherwise we should
+        // create at least that many combiners.
+        if (input.partitioner.isDefined) {
+          acc1.value should be (buckets)
+        } else {
+          acc1.value should be >= (buckets)
+        }
+        if (input.partitioner.isDefined) {
+          acc2.value should be > (0)
+        } else if (mapSideCombine) {
+          acc3.value should be > (0)
+        } else {
+          acc2.value should be > (0)
+          acc3.value should be (0)
+        }
+        acc.value should be (acc1.value + acc2.value + acc3.value)
+        val oldValues = accs.map(_.value)
+        // For one action the consistent accumulators and regular should have the same value.
+        accs.map(_.value) should be (raccs.map(_.value))
+        c.count()
+        accs.map(_.value) should be (oldValues)
+        // Executing a second _different_ aggregation should count everything 2x
+        d.count()
+        accs.map(_.value) should be (oldValues.map(_ * 2))
+      }
+    }
   }
 
   test("map + cache + first + count") {

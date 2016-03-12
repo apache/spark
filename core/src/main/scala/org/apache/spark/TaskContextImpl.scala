@@ -124,13 +124,14 @@ private[spark] class TaskContextImpl(
     taskMetrics.registerAccumulator(a)
   }
 
-  private var rddPartitionInfo: ((Int, Int), Boolean) = null
+  private var rddPartitionInfo: ((Int, Int, Int), Boolean) = null
 
-  private[spark] def setRDDPartitionInfo(rddId: Int, index: Int, consumed: Boolean) = {
-    rddPartitionInfo = ((rddId, index), consumed)
+  private[spark] def setRDDPartitionInfo(rddId: Int, shuffleId: Int, index: Int, consumed: Boolean):
+      Unit = {
+    rddPartitionInfo = ((rddId, shuffleId, index), consumed)
   }
 
-  private[spark] override def getRDDPartitionInfo(): ((Int, Int), Boolean) = {
+  private[spark] override def getRDDPartitionInfo(): ((Int, Int, Int), Boolean) = {
     rddPartitionInfo
   }
 }

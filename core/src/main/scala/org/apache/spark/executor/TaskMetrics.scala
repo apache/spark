@@ -331,6 +331,13 @@ class TaskMetrics private[spark] (initialAccums: Seq[Accumulator[_]]) extends Se
   }
 
   /**
+   * Mark an rdd/shuffle/and partition as fully processed for all consistent accumulators.
+   */
+  private[spark] def markFullyProcessed(rddId: Int, shuffleId: Int, partitionId: Int) = {
+    accums.filter(_.isConsistent).map(_.markFullyProcessed(rddId, shuffleId, partitionId))
+  }
+
+  /**
    * Return the latest updates of accumulators in this task.
    *
    * The [[AccumulableInfo.update]] field is always defined and the [[AccumulableInfo.value]]
