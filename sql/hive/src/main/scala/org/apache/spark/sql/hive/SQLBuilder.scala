@@ -354,9 +354,10 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
     object NormalizedAttribute extends Rule[LogicalPlan] {
       override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-        case a: AttributeReference => AttributeReference(normalizedName(a), a.dataType)(
-          exprId = a.exprId, isGenerated = false, qualifiers = Nil)
-        case a: Alias => Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifiers = Nil)
+        case a: AttributeReference =>
+          AttributeReference(normalizedName(a), a.dataType)(exprId = a.exprId, qualifiers = Nil)
+        case a: Alias =>
+          Alias(a.child, normalizedName(a))(exprId = a.exprId, qualifiers = Nil)
       }
     }
 
