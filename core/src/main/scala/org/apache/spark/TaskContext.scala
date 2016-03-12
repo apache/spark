@@ -192,10 +192,10 @@ abstract class TaskContext extends Serializable {
     consumed: Boolean): Unit
 
   /**
-   * Returns the current RDD, Partition ids, and if the partition has been fully consumed.
-   * This can be used to track of if an RDD has been previously computed, the IDs will be the same
-   * during a recompute.
-   * Note: May be null if called outside of a MapPartitionsRDD.
+   * Returns the current RDD, shuffle id (or -1 for not in a shuffle), partition id, and if the
+   * partition is fully consumed. This can be used to track of if an RDD has been previously
+   * computed, the IDs will be the same during a recompute.
+   * Note: May be null if called outside of a MapPartitions, ShuffledRDD, or ShuffleTask.
    */
   private[spark] def getRDDPartitionInfo(): ((Int, Int, Int), Boolean)
 }
