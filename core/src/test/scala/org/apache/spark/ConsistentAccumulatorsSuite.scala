@@ -116,6 +116,18 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (210)
   }
 
+  test("coalasce acc on either side") {
+    sc = new SparkContext("local[2]", "test")
+    val List(acc1, acc2, acc3) = 1.to(3).map(x => sc.accumulator(0, consistent = true)).toList
+    val a = sc.parallelize(1 to 20, 10)
+    val b = a.map{x => acc1 += x; acc2 += x; 2 * x}
+    val c = b.coalesce(2).map{x => acc1 += x; acc3 += x; x}
+    c.count()
+    acc1.value should be (630)
+    acc2.value should be (210)
+    acc3.value should be (420)
+  }
+
   test("map + cache + map + first + count") {
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)

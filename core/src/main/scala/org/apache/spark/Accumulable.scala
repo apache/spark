@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils
  *                          and false for things with absolute values like number of input rows.
  *                          This should be used for internal metrics only.
  * @param consistent if this [[Accumulable]] is consistent. Consistent [[Accumulable]]s will only
- *                   have values added once for each RDD/Partition execution combination. This
+ *                   have values added once for each RDD/Partition/Shuffle combination. This
  *                   prevents double counting on reevaluation. Partial evaluation of a partition
  *                   will not increment a consistent [[Accumulable]]. Consistent [[Accumulable]]s
  *                   are currently experimental and the behaviour may change in future versions.
