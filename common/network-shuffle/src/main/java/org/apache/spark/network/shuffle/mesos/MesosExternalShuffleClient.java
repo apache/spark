@@ -116,6 +116,7 @@ public class MesosExternalShuffleClient extends ExternalShuffleClient {
 
     @Override
     public void run() {
+      // TODO: Stop sending heartbeats if the shuffle service has lost the app due to timeout
       client.send(new ShuffleServiceHeartbeat(appId).toByteBuffer());
     }
   }
