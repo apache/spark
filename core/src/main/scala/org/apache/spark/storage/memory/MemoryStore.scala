@@ -26,7 +26,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{Logging, SparkConf, TaskContext}
 import org.apache.spark.memory.MemoryManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel}
-import org.apache.spark.util.{CompletionIterator, Utils}
+import org.apache.spark.util.{CompletionIterator, SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
 
 private case class MemoryEntry(value: Any, size: Long, deserialized: Boolean)
@@ -181,10 +181,9 @@ private[spark] class MemoryStore(
     if (keepUnrolling) {
       // We successfully unrolled the entirety of this block
       val arrayValues = vector.toArray
-      val arraySizeEstimate = vector.estimateSize()
       vector = null
       val entry = if (level.deserialized) {
-        new MemoryEntry(arrayValues, arraySizeEstimate, deserialized = true)
+        new MemoryEntry(arrayValues, SizeEstimator.estimate(arrayValues), deserialized = true)
       } else {
         val bytes = blockManager.dataSerialize(blockId, arrayValues.iterator)
         new MemoryEntry(bytes, bytes.limit, deserialized = false)
@@ -194,17 +193,22 @@ private[spark] class MemoryStore(
       // attempt already owns more unroll memory than is necessary to store the block,
       // then release the extra memory that will not be used.
       val enoughStorageMemory = {
-        if (unrollMemoryUsedByThisBlock <= size) {
+        if (unrollMemoryUsedByThisBlock < size) {
           memoryManager.acquireStorageMemory(blockId, size - unrollMemoryUsedByThisBlock)
         } else {
-          memoryManager.releaseUnrollMemory(unrollMemoryUsedByThisBlock - size)
           true
         }
       }
       if (enoughStorageMemory) {
         // We acquired enough memory for the block, so go ahead and put it
         memoryManager.synchronized {
-          unrollMemoryMap(currentTaskAttemptId()) -= unrollMemoryUsedByThisBlock
+          val taskAttemptId = currentTaskAttemptId()
+          releaseUnrollMemoryForThisTask(unrollMemoryUsedByThisBlock)
+          if (size > unrollMemoryUsedByThisBlock) {
+            memoryManager.releaseStorageMemory(size - unrollMemoryUsedByThisBlock)
+          }
+          val success = memoryManager.acquireStorageMemory(blockId, size)
+          assert(success, "transferring unroll memory to storage memory failed")
         }
         entries.synchronized {
           entries.put(blockId, entry)
