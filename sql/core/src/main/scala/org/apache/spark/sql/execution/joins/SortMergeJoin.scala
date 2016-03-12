@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryNode, CodegenSupport, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.collection.ExternalAppendOnlyArrayBuffer
 
 /**
  * Performs an sort merge join of two child relations.
@@ -79,7 +80,7 @@ case class SortMergeJoin(
         // An ordering that can be used to compare keys from both sides.
         private[this] val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
         private[this] var currentLeftRow: InternalRow = _
-        private[this] var currentRightMatches: ArrayBuffer[InternalRow] = _
+        private[this] var currentRightMatchesIter: Iterator[InternalRow] = _
         private[this] var currentMatchIdx: Int = -1
         private[this] val smjScanner = new SortMergeJoinScanner(
           leftKeyGenerator,
@@ -88,6 +89,8 @@ case class SortMergeJoin(
           RowIterator.fromScala(leftIter),
           RowIterator.fromScala(rightIter)
         )
+        private[this] var currentRightMatches: ExternalAppendOnlyArrayBuffer[InternalRow] =
+          smjScanner.getBufferedMatches
         private[this] val joinRow = new JoinedRow
         private[this] val resultProjection: (InternalRow) => InternalRow =
           UnsafeProjection.create(schema)
@@ -103,6 +106,7 @@ case class SortMergeJoin(
             if (currentMatchIdx == currentRightMatches.length) {
               if (smjScanner.findNextInnerJoinRows()) {
                 currentRightMatches = smjScanner.getBufferedMatches
+                currentRightMatchesIter = currentRightMatches.iterator
                 currentLeftRow = smjScanner.getStreamedRow
                 currentMatchIdx = 0
               } else {
@@ -112,7 +116,7 @@ case class SortMergeJoin(
                 return false
               }
             }
-            joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
+            joinRow(currentLeftRow, currentRightMatchesIter.next)
             currentMatchIdx += 1
             if (boundCondition(joinRow)) {
               numOutputRows += 1
@@ -410,7 +414,8 @@ private[joins] class SortMergeJoinScanner(
    */
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
-  private[this] val bufferedMatches: ArrayBuffer[InternalRow] = new ArrayBuffer[InternalRow]
+  private[this] val bufferedMatches: ExternalAppendOnlyArrayBuffer[InternalRow] =
+    new ExternalAppendOnlyArrayBuffer[InternalRow]
 
   // Initialization (note: do _not_ want to advance streamed here).
   advancedBufferedToRowWithNullFreeJoinKey()
@@ -419,7 +424,7 @@ private[joins] class SortMergeJoinScanner(
 
   def getStreamedRow: InternalRow = streamedRow
 
-  def getBufferedMatches: ArrayBuffer[InternalRow] = bufferedMatches
+  def getBufferedMatches: ExternalAppendOnlyArrayBuffer[InternalRow] = bufferedMatches
 
   /**
    * Advances both input iterators, stopping when we have found rows with matching join keys.
@@ -435,7 +440,7 @@ private[joins] class SortMergeJoinScanner(
     if (streamedRow == null) {
       // We have consumed the entire streamed iterator, so there can be no more matches.
       matchJoinKey = null
-      bufferedMatches.clear()
+      bufferedMatches.reset()
       false
     } else if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
       // The new streamed row has the same join key as the previous row, so return the same matches.
@@ -444,7 +449,7 @@ private[joins] class SortMergeJoinScanner(
       // The streamed row's join key does not match the current batch of buffered rows and there are
       // no more rows to read from the buffered iterator, so there can be no more matches.
       matchJoinKey = null
-      bufferedMatches.clear()
+      bufferedMatches.reset()
       false
     } else {
       // Advance both the streamed and buffered iterators to find the next pair of matching rows.
@@ -462,7 +467,7 @@ private[joins] class SortMergeJoinScanner(
       if (streamedRow == null || bufferedRow == null) {
         // We have either hit the end of one of the iterators, so there can be no more matches.
         matchJoinKey = null
-        bufferedMatches.clear()
+        bufferedMatches.reset()
         false
       } else {
         // The streamed row's join key matches the current buffered row's join, so walk through the
@@ -485,7 +490,7 @@ private[joins] class SortMergeJoinScanner(
     if (!advancedStreamed()) {
       // We have consumed the entire streamed iterator, so there can be no more matches.
       matchJoinKey = null
-      bufferedMatches.clear()
+      bufferedMatches.reset()
       false
     } else {
       if (matchJoinKey != null && keyOrdering.compare(streamedRowKey, matchJoinKey) == 0) {
@@ -493,7 +498,7 @@ private[joins] class SortMergeJoinScanner(
       } else {
         // The streamed row does not match the current group.
         matchJoinKey = null
-        bufferedMatches.clear()
+        bufferedMatches.reset()
         if (bufferedRow != null && !streamedRowKey.anyNull) {
           // The buffered iterator could still contain matching rows, so we'll need to walk through
           // it until we either find matches or pass where they would be found.
@@ -563,7 +568,7 @@ private[joins] class SortMergeJoinScanner(
     assert(keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0)
     // This join key may have been produced by a mutable projection, so we need to make a copy:
     matchJoinKey = streamedRowKey.copy()
-    bufferedMatches.clear()
+    bufferedMatches.reset()
     do {
       bufferedMatches += bufferedRow.copy() // need to copy mutable rows before buffering them
       advancedBufferedToRowWithNullFreeJoinKey()
