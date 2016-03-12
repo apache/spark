@@ -71,7 +71,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
           (x: Int) => {acc1 += 1; acc += 1; x},
           {(a: Int, b: Int) => acc2 += 1; acc += 1; (a + b)},
           {(a: Int, b: Int) => acc3 += 1; acc += 1; (a + b)},
-          new HashPartitioner(10),
+          new HashPartitioner(2),
           mapSideCombine)
         val e = d.map{x => acc += 1; x}
         c.count()
