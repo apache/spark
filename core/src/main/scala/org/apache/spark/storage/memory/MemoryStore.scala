@@ -202,7 +202,6 @@ private[spark] class MemoryStore(
       if (enoughStorageMemory) {
         // We acquired enough memory for the block, so go ahead and put it
         memoryManager.synchronized {
-          val taskAttemptId = currentTaskAttemptId()
           releaseUnrollMemoryForThisTask(unrollMemoryUsedByThisBlock)
           if (size > unrollMemoryUsedByThisBlock) {
             memoryManager.releaseStorageMemory(size - unrollMemoryUsedByThisBlock)
