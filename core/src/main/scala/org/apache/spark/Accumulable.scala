@@ -223,8 +223,8 @@ class Accumulable[R, T] private[spark] (
   }
 
   /**
-   * Merge another pending updates, checks to make sure that each pending update has not
-   * already been processed before updating.
+   * Merge another Accumulable's pending updates, checks to make sure that each pending update has
+   * not already been processed before updating.
    */
   private[spark] def mergePending(term: mutable.HashMap[(Int, Int, Int), R]) = {
     term.foreach{case ((rddId, shuffleId, splitId), v) =>

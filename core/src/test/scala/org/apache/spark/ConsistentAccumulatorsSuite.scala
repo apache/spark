@@ -73,6 +73,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
           {(a: Int, b: Int) => acc3 += 1; acc += 1; (a + b)},
           new HashPartitioner(10),
           mapSideCombine)
+        val e = d.map{x => acc += 1; x}
         c.count()
         // If our partitioner is known then we should only create
         // one combiner for each key value. Otherwise we should
@@ -99,6 +100,11 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
         // Executing a second _different_ aggregation should count everything 2x
         d.count()
         accs.map(_.value) should be (oldValues.map(_ * 2))
+        // Computing the mapped value on top and verify new changes are processed and old changes
+        // are note double counted.
+        val count = e.count()
+        accs.tail.map(_.value) should be (oldValues.tail.map(_ * 2))
+        acc.value should be (oldValues.head * 2 + count)
       }
     }
   }
