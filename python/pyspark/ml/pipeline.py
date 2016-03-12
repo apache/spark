@@ -21,53 +21,38 @@ from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.common import inherit_doc, _java2py
+from pyspark.mllib.common import inherit_doc
 
 
-def stages_java2py(java_stages):
+def _stages_java2py(java_stages):
     """
     Transforms the parameter Python stages from a list of Java stages.
     :param java_stages: An array of Java stages.
     :return: An array of Python stages.
     """
 
-    def __get_class(clazz):
-        """
-        Loads Python class from its name.
-        """
-        parts = clazz.split('.')
-        module = ".".join(parts[:-1])
-        m = __import__(module)
-        for comp in parts[1:]:
-            m = getattr(m, comp)
-        return m
-
-    def __transfer_stage_from_java(java_stage):
-        stage_name = java_stage.getClass().getName().replace("org.apache.spark", "pyspark")
-        # Generate a default new instance from the stage_name class.
-        py_stage = __get_class(stage_name)()
-        # Load information from java_stage to the instance.
-        py_stage._java_obj = java_stage
-        py_stage._resetUid(java_stage.uid())
-        py_stage._transfer_params_from_java()
-        return py_stage
-
-    return map(__transfer_stage_from_java, java_stages)
+    for stage in java_stages:
+        assert(stage.getClass().getName() != "org.apache.spark.Pipeline" or
+               stage.getClass().getName() != "org.apache.spark.PipelineModel",
+               "Nested Pipeline and PipelineModel are not supported for save/load now.")
+    return map(JavaWrapper._transfer_stage_from_java, java_stages)
 
 
-def stages_py2java(py_stages):
+def _stages_py2java(py_stages):
     """
     Transforms the parameter of Python stages to a Java array of Java stages.
     :param py_stages: An array of Python stages.
     :return: A Java array of Java Stages.
     """
 
+    for stage in py_stages:
+        assert(isinstance(stage, JavaWrapper),
+               "Nested Pipeline and PipelineModel are not supported for save/load now.")
     gateway = SparkContext._gateway
     jvm = SparkContext._jvm
     java_stages = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(py_stages))
     for idx, stage in enumerate(py_stages):
-        stage._transfer_params_to_java()
-        java_stages[idx] = stage._java_obj
+        java_stages[idx] = stage._transfer_stage_to_java()
     return java_stages
 
 
@@ -84,7 +69,7 @@ class PipelineMLWriter(JavaMLWriter, JavaWrapper):
     def __init__(self, instance):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.Pipeline", instance.uid)
         jparam = self._java_obj.getParam(instance.stages.name)
-        jstages = stages_py2java(instance.getStages())
+        jstages = _stages_py2java(instance.getStages())
         self._java_obj.set(jparam.w(jstages))
         self._jwrite = self._java_obj.write()
 
@@ -110,8 +95,8 @@ class PipelineMLReader(JavaMLReader):
         instance._resetUid(java_obj.uid())
         jparam = java_obj.getParam(instance.stages.name)
         if java_obj.isDefined(jparam):
-            java_stages = _java2py(sc, java_obj.getOrDefault(jparam))
-            instance._paramMap[instance.stages] = stages_java2py(java_stages)
+            java_stages = java_obj.getOrDefault(jparam)
+            instance._paramMap[instance.stages] = _stages_java2py(java_stages)
 
         return instance
 
@@ -304,7 +289,7 @@ class PipelineModelMLWriter(JavaMLWriter, JavaWrapper):
     def __init__(self, instance):
         self._java_obj = self._new_java_obj("org.apache.spark.ml.PipelineModel",
                                             instance.uid,
-                                            stages_py2java(instance.stages))
+                                            _stages_py2java(instance.stages))
         self._jwrite = self._java_obj.write()
 
 
@@ -323,7 +308,7 @@ class PipelineModelMLReader(JavaMLReader):
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
         java_obj = self._jread.load(path)
-        instance = self._clazz(stages_java2py(java_obj.stages()))
+        instance = self._clazz(_stages_java2py(java_obj.stages()))
         instance._resetUid(java_obj.uid())
         return instance
 
