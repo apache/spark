@@ -21,7 +21,6 @@ import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
@@ -40,7 +39,9 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
   }
 
   def isMaterialized(rddId: Int): Boolean = {
-    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+    val maybeBlock = sparkContext.env.blockManager.get(RDDBlockId(rddId, 0))
+    maybeBlock.foreach(_ => sparkContext.env.blockManager.releaseLock(RDDBlockId(rddId, 0)))
+    maybeBlock.nonEmpty
   }
 
   test("cache table") {

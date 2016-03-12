@@ -22,6 +22,7 @@ import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowab
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 
+import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.commons.lang3.StringUtils
@@ -47,7 +48,7 @@ import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, U
 
 /**
  * Whether to submit, kill, or request the status of an application.
- * The latter two operations are currently supported only for standalone cluster mode.
+ * The latter two operations are currently supported only for standalone and Mesos cluster modes.
  */
 private[deploy] object SparkSubmitAction extends Enumeration {
   type SparkSubmitAction = Value
@@ -150,6 +151,7 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    */
+  @tailrec
   private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
@@ -624,7 +626,6 @@ object SparkSubmit {
     val pathConfigs = Seq(
       "spark.jars",
       "spark.files",
-      "spark.yarn.jar",
       "spark.yarn.dist.files",
       "spark.yarn.dist.archives")
     pathConfigs.foreach { config =>
@@ -721,6 +722,7 @@ object SparkSubmit {
       throw new IllegalStateException("The main method in the given main class must be static")
     }
 
+    @tailrec
     def findCause(t: Throwable): Throwable = t match {
       case e: UndeclaredThrowableException =>
         if (e.getCause() != null) findCause(e.getCause()) else e

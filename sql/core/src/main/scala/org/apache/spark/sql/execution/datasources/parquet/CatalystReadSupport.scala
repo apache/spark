@@ -29,7 +29,6 @@ import org.apache.parquet.schema._
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 

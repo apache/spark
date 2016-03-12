@@ -130,7 +130,7 @@ test_that("kmeans", {
 
   # Test stats::kmeans is working
   statsModel <- kmeans(x = newIris, centers = 2)
-  expect_equal(unique(statsModel$cluster), c(1, 2))
+  expect_equal(sort(unique(statsModel$cluster)), c(1, 2))
 
   # Test fitted works on KMeans
   fitted.model <- fitted(model)

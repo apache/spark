@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 
@@ -46,7 +47,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     val operators = physical.collect {
       case j: LeftSemiJoinHash => j
       case j: BroadcastHashJoin => j
-      case j: LeftSemiJoinBNL => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
       case j: BroadcastLeftSemiJoinHash => j
@@ -66,16 +66,17 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
-        ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData RIGHT JOIN testData2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[CartesianProduct]),
-        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+        ("SELECT * FROM testData LEFT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData RIGHT JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[BroadcastNestedLoopJoin]),
+        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
-          classOf[CartesianProduct]),
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
         ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
           classOf[CartesianProduct]),
@@ -346,7 +347,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -356,7 +357,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -463,7 +464,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[LeftSemiJoinHash]),
         ("SELECT * FROM testData LEFT SEMI JOIN testData2",
-          classOf[LeftSemiJoinBNL]),
+          classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2",
           classOf[BroadcastNestedLoopJoin]),
         ("SELECT * FROM testData JOIN testData2 WHERE key = 2",

@@ -21,14 +21,15 @@ from collections import namedtuple
 
 from pyspark import SparkContext, since
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, inherit_doc
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
+from pyspark.mllib.util import JavaSaveable, JavaLoader, inherit_doc
 
 __all__ = ['FPGrowth', 'FPGrowthModel', 'PrefixSpan', 'PrefixSpanModel']
 
 
 @inherit_doc
 @ignore_unicode_prefix
-class FPGrowthModel(JavaModelWrapper):
+class FPGrowthModel(JavaModelWrapper, JavaSaveable, JavaLoader):
     """
     .. note:: Experimental
 
@@ -40,6 +41,11 @@ class FPGrowthModel(JavaModelWrapper):
     >>> model = FPGrowth.train(rdd, 0.6, 2)
     >>> sorted(model.freqItemsets().collect())
     [FreqItemset(items=[u'a'], freq=4), FreqItemset(items=[u'c'], freq=3), ...
+    >>> model_path = temp_path + "/fpm"
+    >>> model.save(sc, model_path)
+    >>> sameModel = FPGrowthModel.load(sc, model_path)
+    >>> sorted(model.freqItemsets().collect()) == sorted(sameModel.freqItemsets().collect())
+    True
 
     .. versionadded:: 1.4.0
     """
@@ -50,6 +56,16 @@ class FPGrowthModel(JavaModelWrapper):
         Returns the frequent itemsets of this model.
         """
         return self.call("getFreqItemsets").map(lambda x: (FPGrowth.FreqItemset(x[0], x[1])))
+
+    @classmethod
+    @since("2.0.0")
+    def load(cls, sc, path):
+        """
+        Load a model from the given path.
+        """
+        model = cls._load_java(sc, path)
+        wrapper = sc._jvm.FPGrowthModelWrapper(model)
+        return FPGrowthModel(wrapper)
 
 
 class FPGrowth(object):
@@ -111,7 +127,7 @@ class PrefixSpanModel(JavaModelWrapper):
 
     @since("1.6.0")
     def freqSequences(self):
-        """Gets frequence sequences"""
+        """Gets frequent sequences"""
         return self.call("getFreqSequences").map(lambda x: PrefixSpan.FreqSequence(x[0], x[1]))
 
 
@@ -170,8 +186,19 @@ def _test():
     import pyspark.mllib.fpm
     globs = pyspark.mllib.fpm.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    import tempfile
+
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        globs['sc'].stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
     if failure_count:
         exit(-1)
 

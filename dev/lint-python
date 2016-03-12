@@ -37,7 +37,7 @@ compile_status="${PIPESTATUS[0]}"
 #+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
 #+ TODOs:
 #+  - Download pep8 from PyPI. It's more "official".
-PEP8_VERSION="1.6.2"
+PEP8_VERSION="1.7.0"
 PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
 PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/$PEP8_VERSION/pep8.py"
 
@@ -80,7 +80,7 @@ export "PATH=$PYTHONPATH:$PATH"
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
+python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 --config=dev/tox.ini $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
 pep8_status="${PIPESTATUS[0]}"
 
 if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
@@ -122,7 +122,7 @@ fi
 
 # for to_be_checked in "$PATHS_TO_CHECK"
 # do
-#     pylint --rcfile="$SPARK_ROOT_DIR/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
+#     pylint --rcfile="$SPARK_ROOT_DIR/python/pylintrc" $to_be_checked >> "$PYLINT_REPORT_PATH"
 # done
 
 # if [ "${PIPESTATUS[0]}" -ne 0 ]; then

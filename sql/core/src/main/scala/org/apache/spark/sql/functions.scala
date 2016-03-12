@@ -22,11 +22,12 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.catalyst.{CatalystQl, ScalaReflection}
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.parser.CatalystQl
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.types._
@@ -935,7 +936,7 @@ object functions extends LegacyFunctions {
    * @since 1.5.0
    */
   def broadcast(df: DataFrame): DataFrame = {
-    DataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
+    Dataset.newDataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**
