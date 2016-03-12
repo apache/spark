@@ -39,7 +39,8 @@ private[spark] object Utils {
 
   /**
    * Signal when empty.
-   * Wraps an iterator and calls the provided call back when the iterator is consumed.
+   * Wraps an iterator and calls the provided call back when the iterator is consumed. If provided
+   * iterator is empty when, calls func right away.
    */
   def signalWhenEmpty[T](itr: Iterator[T], func: () => Unit): Iterator[T] = {
     if (itr.isEmpty) {
