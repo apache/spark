@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedAttribute, UnresolvedExtractValue, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
@@ -231,6 +231,12 @@ package object dsl {
         AttributeReference(s, structType, nullable = true)()
       def struct(attrs: AttributeReference*): AttributeReference =
         struct(StructType.fromAttributes(attrs))
+
+      /** Create a function. */
+      def function(exprs: Expression*): UnresolvedFunction =
+        UnresolvedFunction(s, exprs, isDistinct = false)
+      def distinctFunction(exprs: Expression*): UnresolvedFunction =
+        UnresolvedFunction(s, exprs, isDistinct = true)
     }
 
     implicit class DslAttribute(a: AttributeReference) {

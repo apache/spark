@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.parser.ng
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, TerminalNode}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -43,6 +43,7 @@ import org.apache.spark.util.random.RandomSampler
  */
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   import AstBuilder._
+  import ParseUtils._
 
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
@@ -79,10 +80,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         case name :: Nil =>
           ShowFunctions(None, Some(name))
         case _ =>
-          notSupported("SHOW FUNCTIONS unsupported name", ctx)
+          throw new ParseException("SHOW FUNCTIONS unsupported name", ctx)
       }
     } else if (pattern != null) {
-      ShowFunctions(None, Some(unquote(pattern.getText)))
+      ShowFunctions(None, Some(unescapeSQLString(pattern.getText)))
     } else {
       ShowFunctions(None, None)
     }
@@ -183,7 +184,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).toSeq.flatMap {
       _.partitionVal.asScala.map {
-        pVal => (pVal.identifier.getText, Option(pVal.constant).map(c => unquote(c.getText)))
+        pVal =>
+          val name = pVal.identifier.getText
+          val value = Option(pVal.constant).map(c => unescapeSQLString(c.getText))
+          name -> value
       }
     }.toMap
 
@@ -231,7 +235,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       // [EMPTY]
       query
     } else {
-      notSupported("Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported", ctx)
+      throw new ParseException(
+        "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported", ctx)
     }
 
     // LIMIT
@@ -298,7 +303,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Create the transform.
         ScriptTransformation(
           expressions,
-          unquote(script.getText),
+          unescapeSQLString(script.getText),
           attributes,
           withFilter,
           withScriptIOSchema(inRowFormat, outRowFormat, outRecordReader))
@@ -309,7 +314,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         // Add lateral views.
         val withLateralView = ctx.lateralView.asScala.foldLeft(withFilter)(withGenerate)
 
-        // Add aggregation with having or a project.
+        // Add aggregation or a project.
         val withProject = if (aggregation != null) {
           withAggregation(aggregation, expressions, withLateralView)
         } else {
@@ -366,11 +371,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.UNION =>
         Distinct(Union(left, right))
       case SqlBaseParser.INTERSECT if all =>
-        notSupported("INTERSECT ALL is not supported.", ctx)
+        throw new ParseException("INTERSECT ALL is not supported.", ctx)
       case SqlBaseParser.INTERSECT =>
         Intersect(left, right)
       case SqlBaseParser.EXCEPT if all =>
-        notSupported("EXCEPT ALL is not supported.", ctx)
+        throw new ParseException("EXCEPT ALL is not supported.", ctx)
       case SqlBaseParser.EXCEPT =>
         Except(left, right)
     }
@@ -421,8 +426,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
             // Find the index of the expression.
             val e = typedVisit[Expression](eCtx)
             val index = expressionMap.find(_._1.semanticEquals(e)).map(_._2).getOrElse(
-              throw new AnalysisException(
-                s"${e.treeString} doesn't show up in the GROUP BY list"))
+              throw new ParseException(
+                s"${e.treeString} doesn't show up in the GROUP BY list", ctx))
             // 0 means that the column at the given index is a grouping column, 1 means it is not,
             // so we unset the bit in bitmap.
             bitmap & ~(1 << (numExpressions - 1 - index))
@@ -458,7 +463,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case "json_tuple" =>
         JsonTuple(expressions)
       case other =>
-        notSupported(s"Generator function '$other' is not supported", ctx)
+        throw new ParseException(s"Generator function '$other' is not supported", ctx)
     }
 
     Generate(
@@ -493,8 +498,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     } else {
       plan(ctx.rightRelation)
     }
-    assert(left != null, "Left side should not be null", ctx)
-    assert(right != null, "Right side should not be null", ctx)
     Join(left, right, joinType, Option(ctx.booleanExpression).map(expression))
   }
 
@@ -527,12 +530,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           // function takes X PERCENT as the input and the range of X is [0, 100], we need to
           // adjust the fraction.
           val eps = RandomSampler.roundingEpsilon
-          require(fraction >= 0.0 - eps && fraction <= 100.0 + eps,
-            s"Sampling fraction ($fraction) must be on interval [0, 100]")
+          assert(fraction >= 0.0 - eps && fraction <= 100.0 + eps,
+            s"Sampling fraction ($fraction) must be on interval [0, 100]",
+            ctx)
           sample(fraction / 100.0d)
 
         case SqlBaseParser.BUCKET if ctx.ON != null =>
-          notSupported("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
+          throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
 
         case SqlBaseParser.BUCKET =>
           sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
@@ -645,6 +649,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     ctx.identifier.asScala.map(_.getText)
   }
 
+  /* ********************************************************************************************
+   * Table Identifier parsing
+   * ******************************************************************************************** */
   /**
    * Create a [[TableIdentifier]] from a 'tableName' or 'databaseName'.'tableName' pattern.
    */
@@ -656,12 +663,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   /* ********************************************************************************************
    * Expression parsing
    * ******************************************************************************************** */
-  private def expression(tree: ParserRuleContext): Expression = typedVisit(tree)
+  /**
+   * Create an expression from the given context. This method just passes the context on to the
+   * vistor and only takes care of typing (We assume that the visitor returns an Expression here).
+   */
+  private def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
 
+  /**
+   * Create sequence of expressions from the given sequence of contexts.
+   */
   private def expressionList(trees: java.util.List[ExpressionContext]): Seq[Expression] = {
     trees.asScala.map(expression)
   }
 
+  /**
+   * Invert a boolean expression if it has a valid NOT clause.
+   */
   private def invertIfNotDefined(expression: Expression, not: TerminalNode): Expression = {
     if (not != null) {
       Not(expression)
@@ -670,10 +687,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a star (i.e. all) expression; this selects all elements (in the specified object).
+   * Both un-targeted (global) and targeted aliases are supported.
+   */
   override def visitStar(ctx: StarContext): Expression = withOrigin(ctx) {
     UnresolvedStar(Option(ctx.qualifiedName()).map(_.identifier.asScala.map(_.getText)))
   }
 
+  /**
+   * Create an aliased expression if an alias is specified. Both single and multi-aliases are
+   * supported.
+   */
   override def visitNamedExpression(ctx: NamedExpressionContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
@@ -685,25 +710,80 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Combine a number of boolean expressions into a balanced expression tree. These expressions are
+   * either combined by a logical [[And]] or a logical [[Or]].
+   *
+   * A balanced binary tree is created because regular left recursive trees cause considerable
+   * performance degradations and can cause stack overflows.
+   */
   override def visitLogicalBinary(ctx: LogicalBinaryContext): Expression = withOrigin(ctx) {
-    val left = expression(ctx.left)
-    val right = expression(ctx.right)
-    ctx.operator.getType match {
-      case SqlBaseParser.AND =>
-        And(left, right)
-      case SqlBaseParser.OR =>
-        Or(left, right)
+    val expressionType = ctx.operator.getType
+    val expressionCombiner = expressionType match {
+      case SqlBaseParser.AND => And.apply _
+      case SqlBaseParser.OR => Or.apply _
     }
+
+    // Collect all similar left hand contexts.
+    val contexts = ArrayBuffer(ctx.right)
+    var current = ctx.left
+    def collectContexts: Boolean = current match {
+      case lbc: LogicalBinaryContext if lbc.operator.getType == expressionType =>
+        contexts += lbc.right
+        current = lbc.left
+        true
+      case _ =>
+        contexts += current
+        false
+    }
+    while (collectContexts) {
+      // No body - all updates take place in the collectContexts.
+    }
+
+    // Reverse the contexts to have them in the same sequence as in the SQL statement & turn them
+    // into expressions.
+    val expressions = contexts.reverse.map(expression)
+
+    // Create a balanced tree.
+    def reduceToExpressionTree(low: Int, high: Int): Expression = high - low match {
+      case 0 =>
+        expressions(low)
+      case 1 =>
+        expressionCombiner(expressions(low), expressions(high))
+      case x =>
+        val mid = low + x / 2
+        expressionCombiner(
+          reduceToExpressionTree(low, mid),
+          reduceToExpressionTree(mid + 1, high))
+    }
+    reduceToExpressionTree(0, expressions.size - 1)
   }
 
+  /**
+   * Invert a boolean expression.
+   */
   override def visitLogicalNot(ctx: LogicalNotContext): Expression = withOrigin(ctx) {
     Not(expression(ctx.booleanExpression()))
   }
 
+  /**
+   * Create a filtering correlated sub-query. This is not supported yet.
+   */
   override def visitExists(ctx: ExistsContext): Expression = {
-    notSupported("Exists is not supported.", ctx)
+    throw new ParseException("EXISTS clauses are not supported.", ctx)
   }
 
+  /**
+   * Create a comparison expression. This compares two expressions. The following comparison
+   * operators are supported:
+   * - Equal: '=' or '=='
+   * - Null-safe Equal: '<=>'
+   * - Not Equal: '<>' or '!='
+   * - Less than: '<'
+   * - Less then or Equal: '<='
+   * - Greater than: '>'
+   * - Greater then or Equal: '>='
+   */
   override def visitComparison(ctx: ComparisonContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.value)
     val right = expression(ctx.right)
@@ -726,6 +806,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a BETWEEN expression. This tests if an expression lies with in the bounds set by two
+   * other expressions. The inverse can also be created.
+   */
   override def visitBetween(ctx: BetweenContext): Expression = withOrigin(ctx) {
     val value = expression(ctx.value)
     val between = And(
@@ -734,15 +818,25 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     invertIfNotDefined(between, ctx.NOT)
   }
 
+  /**
+   * Create an IN expression. This tests if the value of the left hand side expression is
+   * contained by the sequence of expressions on the right hand side.
+   */
   override def visitInList(ctx: InListContext): Expression = withOrigin(ctx) {
     val in = In(expression(ctx.value), ctx.expression().asScala.map(expression))
     invertIfNotDefined(in, ctx.NOT)
   }
 
+  /**
+   * Create an IN expression, where the the right hand side is a query. This is unsupported.
+   */
   override def visitInSubquery(ctx: InSubqueryContext): Expression = {
-    notSupported("IN with a Sub-query is currently not supported.", ctx)
+    throw new ParseException("IN with a Sub-query is currently not supported.", ctx)
   }
 
+  /**
+   * Create a (R)LIKE/REGEXP expression.
+   */
   override def visitLike(ctx: LikeContext): Expression = {
     val left = expression(ctx.value)
     val right = expression(ctx.pattern)
@@ -755,6 +849,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     invertIfNotDefined(like, ctx.NOT)
   }
 
+  /**
+   * Create an IS (NOT) NULL expression.
+   */
   override def visitNullPredicate(ctx: NullPredicateContext): Expression = withOrigin(ctx) {
     val value = expression(ctx.value)
     if (ctx.NOT != null) {
@@ -764,6 +861,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a binary arithmetic expression. The following arithmetic operators are supported:
+   * - Mulitplication: '*'
+   * - Division: '/'
+   * - Hive Long Division: 'DIV'
+   * - Modulo: '%'
+   * - Addition: '+'
+   * - Subtraction: '-'
+   * - Binary AND: '&'
+   * - Binary XOR
+   * - Binary OR: '|'
+   */
   override def visitArithmeticBinary(ctx: ArithmeticBinaryContext): Expression = withOrigin(ctx) {
     val left = expression(ctx.left)
     val right = expression(ctx.right)
@@ -785,10 +894,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       case SqlBaseParser.HAT =>
         BitwiseXor(left, right)
       case SqlBaseParser.PIPE =>
-        BitwiseXor(left, right)
+        BitwiseOr(left, right)
     }
   }
 
+  /**
+   * Create a unary arithmetic expression. The following arithmetic operators are supported:
+   * - Plus: '+'
+   * - Minus: '-'
+   * - Bitwise Not: '~'
+   */
   override def visitArithmeticUnary(ctx: ArithmeticUnaryContext): Expression = withOrigin(ctx) {
     val value = expression(ctx.valueExpression)
     ctx.operator.getType match {
@@ -801,64 +916,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a [[Cast]] expression.
+   */
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     Cast(expression(ctx.expression), typedVisit(ctx.dataType))
   }
 
-  override def visitPrimitiveDatatype(ctx: PrimitiveDatatypeContext): DataType = withOrigin(ctx) {
-    (ctx.identifier.getText.toLowerCase, ctx.INTEGER_VALUE().asScala.toList) match {
-      case ("boolean", Nil) => BooleanType
-      case ("tinyint" | "byte", Nil) => ByteType
-      case ("smallint" | "short", Nil) => ShortType
-      case ("int" | "integer", Nil) => IntegerType
-      case ("bigint" | "long", Nil) => LongType
-      case ("float", Nil) => FloatType
-      case ("double", Nil) => DoubleType
-      case ("date", Nil) => DateType
-      case ("timestamp", Nil) => TimestampType
-      case ("char" | "varchar" | "string", Nil) => StringType
-      case ("char" | "varchar", _ :: Nil) => StringType
-      case ("binary", Nil) => BinaryType
-      case ("decimal", Nil) => DecimalType.USER_DEFAULT
-      case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
-      case ("decimal", precision :: scale :: Nil) =>
-        DecimalType(precision.getText.toInt, scale.getText.toInt)
-      case (dt, params) =>
-        notSupported(s"DataType $dt${params.mkString("(", ",", ")")} is not supported.", ctx)
-    }
-  }
-
-  override def visitComplexDataType(ctx: ComplexDataTypeContext): DataType = withOrigin(ctx) {
-    ctx.complex.getType match {
-      case SqlBaseParser.ARRAY =>
-        ArrayType(typedVisit(ctx.dataType(0)))
-      case SqlBaseParser.MAP =>
-        MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
-      case SqlBaseParser.STRUCT =>
-        visitColTypeList(ctx.colTypeList)
-    }
-  }
-
-  override def visitColTypeList(ctx: ColTypeListContext): StructType = withOrigin(ctx) {
-    StructType(ctx.colType().asScala.map(visitColType))
-  }
-
-  override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
-    import ctx._
-
-    // Add the comment to the metadata.
-    val builder = new MetadataBuilder
-    if (STRING != null) {
-      builder.putString("comment", unquote(STRING.getText))
-    }
-
-    StructField(
-      identifier.getText,
-      typedVisit(dataType),
-      nullable = true,
-      builder.build())
-  }
-
+  /**
+   * Create a (windowed) Function expression.
+   */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     val arguments = if (ctx.ASTERISK != null) {
       Seq(Literal(1))
@@ -881,10 +948,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a reference to a window frame, i.e. [[WindowSpecReference]].
+   */
   override def visitWindowRef(ctx: WindowRefContext): WindowSpecReference = withOrigin(ctx) {
     WindowSpecReference(ctx.identifier.getText)
   }
 
+  /**
+   * Create a window definition, i.e. [[WindowSpecDefinition]].
+   */
   override def visitWindowDef(ctx: WindowDefContext): WindowSpecDefinition = withOrigin(ctx) {
     // PARTITION BY ... ORDER BY ...
     val partition = ctx.partition.asScala.map(expression)
@@ -909,11 +982,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       frameSpecOption.getOrElse(UnspecifiedFrame))
   }
 
+  /**
+   * Create or resolve a [[FrameBoundary]]. Simple math expressions are allowed for Value
+   * Preceding/Following boundaries. These expressions must be constant (foldable) and return an
+   * integer value.
+   */
   override def visitFrameBound(ctx: FrameBoundContext): FrameBoundary = withOrigin(ctx) {
     // We currently only allow foldable integers.
     def value: Int = {
       val e = expression(ctx.expression)
-      assert(e.foldable && e.dataType == IntegerType,
+      assert(e.resolved && e.foldable && e.dataType == IntegerType,
         "Frame bound value must be a constant integer.",
         ctx)
       e.eval().asInstanceOf[Int]
@@ -934,19 +1012,31 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a [[CreateStruct]] expression.
+   */
   override def visitRowConstructor(ctx: RowConstructorContext): Expression = withOrigin(ctx) {
     CreateStruct(ctx.expression().asScala.map(expression))
   }
 
-  override def visitArrayConstructor(ctx: ArrayConstructorContext): Expression = withOrigin(ctx) {
-    CreateArray(ctx.expression().asScala.map(expression))
-  }
-
+  /**
+   * Create a [[ScalarSubquery]] expression.
+   */
   override def visitSubqueryExpression(
       ctx: SubqueryExpressionContext): Expression = withOrigin(ctx) {
     ScalarSubquery(plan(ctx.query))
   }
 
+  /**
+   * Create a value based [[CaseWhen]] expression. This has the following SQL form:
+   * {{{
+   *   CASE [expression]
+   *    WHEN [value] THEN [expression]
+   *    ...
+   *    ELSE [expression]
+   *   END
+   * }}}
+   */
   override def visitSimpleCase(ctx: SimpleCaseContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.valueExpression)
     val branches = ctx.whenClause.asScala.map { wCtx =>
@@ -955,6 +1045,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     CaseWhen(branches, Option(ctx.elseExpression).map(expression))
   }
 
+  /**
+   * Create a condition based [[CaseWhen]] expression. This has the following SQL syntax:
+   * {{{
+   *   CASE
+   *    WHEN [predicate] THEN [expression]
+   *    ...
+   *    ELSE [expression]
+   *   END
+   * }}}
+   * @param ctx the parse tree
+   *    */
   override def visitSearchedCase(ctx: SearchedCaseContext): Expression = withOrigin(ctx) {
     val branches = ctx.whenClause.asScala.map { wCtx =>
       (expression(wCtx.condition), expression(wCtx.result))
@@ -962,6 +1063,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     CaseWhen(branches, Option(ctx.elseExpression).map(expression))
   }
 
+  /**
+   * Create a dereference expression. The return type depends on the type of the parent, this can
+   * either be a [[UnresolvedAttribute]] (if the parent is an [[UnresolvedAttribute]]), or an
+   * [[UnresolvedExtractValue]] if the parent is some expression.
+   */
   override def visitDereference(ctx: DereferenceContext): Expression = withOrigin(ctx) {
     val attr = ctx.fieldName.getText
     expression(ctx.base) match {
@@ -972,20 +1078,32 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create an [[UnresolvedAttribute]] expression.
+   */
   override def visitColumnReference(ctx: ColumnReferenceContext): Expression = withOrigin(ctx) {
     UnresolvedAttribute.quoted(ctx.getText)
   }
 
+  /**
+   * Create an [[UnresolvedExtractValue]] expression, this is used for subscript access to an array.
+   */
   override def visitSubscript(ctx: SubscriptContext): Expression = withOrigin(ctx) {
     UnresolvedExtractValue(expression(ctx.value), expression(ctx.index))
   }
 
-
+  /**
+   * Create an expression for an expression between parentheses. This is need because the ANTLR
+   * visitor cannot automatically convert the nested context into an expression.
+   */
   override def visitParenthesizedExpression(
      ctx: ParenthesizedExpressionContext): Expression = withOrigin(ctx) {
     expression(ctx.expression)
   }
 
+  /**
+   * Create a [[SortOrder]] expression.
+   */
   override def visitSortItem(ctx: SortItemContext): SortOrder = withOrigin(ctx) {
     if (ctx.DESC != null) {
       SortOrder(expression(ctx.expression), Descending)
@@ -994,26 +1112,49 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
+  /**
+   * Create a typed Literal expression. A typed literal has the following SQL syntax:
+   * {{{
+   *   [TYPE] '[VALUE]'
+   * }}}
+   * Currently Date and Timestamp typed literals are supported.
+   *
+   * TODO what the added value of this over casting?
+   */
   override def visitTypeConstructor(ctx: TypeConstructorContext): Literal = withOrigin(ctx) {
-    val value = unquote(ctx.STRING.getText)
+    val value = unescapeSQLString(ctx.STRING.getText)
     ctx.identifier.getText.toUpperCase match {
       case "DATE" =>
         Literal(Date.valueOf(value))
       case "TIMESTAMP" =>
         Literal(Timestamp.valueOf(value))
       case other =>
-        notSupported(s"Literals of type '$other' are currently not supported.", ctx)
+        throw new ParseException(s"Literals of type '$other' are currently not supported.", ctx)
     }
   }
 
+  /**
+   * Create a NULL literal expression.
+   */
   override def visitNullLiteral(ctx: NullLiteralContext): Literal = withOrigin(ctx) {
     Literal(null)
   }
 
+  /**
+   * Create a Boolean literal expression.
+   */
   override def visitBooleanLiteral(ctx: BooleanLiteralContext): Literal = withOrigin(ctx) {
-   Literal(ctx.getText.toBoolean)
+    if (ctx.getText.toBoolean) {
+      Literal.TrueLiteral
+    } else {
+      Literal.FalseLiteral
+    }
   }
 
+  /**
+   * Create an integral literal expression. The code selects the most narrow integral type
+   * possible, either a BigDecimal, a Long or an Integer is returned.
+   */
   override def visitIntegerLiteral(ctx: IntegerLiteralContext): Literal = withOrigin(ctx) {
     BigDecimal(ctx.getText) match {
       case v if v.isValidInt =>
@@ -1024,66 +1165,180 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     }
   }
 
-  override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.getText.toByte)
-  }
-
-  override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.getText.toShort)
-  }
-
-  override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.getText.toLong)
-  }
-
-  override def visitDecimalLiteral(ctx: DecimalLiteralContext): Literal = withOrigin(ctx) {
-    Literal(BigDecimal(ctx.getText).underlying())
-  }
-
+  /**
+   * Create a double literal for a number denoted in scientifc notation.
+   */
   override def visitScientificDecimalLiteral(
       ctx: ScientificDecimalLiteralContext): Literal = withOrigin(ctx) {
     Literal(ctx.getText.toDouble)
   }
 
-  override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.getText.toDouble)
+  /**
+   * Create a decimal literal for a regular decimal number.
+   */
+  override def visitDecimalLiteral(ctx: DecimalLiteralContext): Literal = withOrigin(ctx) {
+    Literal(BigDecimal(ctx.getText).underlying())
   }
 
+  /** Create a numeric literal expression. */
+  private def numericLiteral(ctx: NumberContext)(f: String => Any): Literal = withOrigin(ctx) {
+    val raw = ctx.getText
+    try {
+      Literal(f(raw.substring(0, raw.length - 1)))
+    } catch {
+      case e: NumberFormatException =>
+        throw new ParseException(e.getMessage, ctx)
+    }
+  }
+
+  /**
+   * Create a Byte Literal expression.
+   */
+  override def visitTinyIntLiteral(ctx: TinyIntLiteralContext): Literal = numericLiteral(ctx) {
+    _.toByte
+  }
+
+  /**
+   * Create a Short Literal expression.
+   */
+  override def visitSmallIntLiteral(ctx: SmallIntLiteralContext): Literal = numericLiteral(ctx) {
+    _.toShort
+  }
+
+  /**
+   * Create a Long Literal expression.
+   */
+  override def visitBigIntLiteral(ctx: BigIntLiteralContext): Literal = numericLiteral(ctx) {
+    _.toLong
+  }
+
+  /**
+   * Create a Double Literal expression.
+   */
+  override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = numericLiteral(ctx) {
+    _.toDouble
+  }
+
+  /**
+   * Create a String literal expression. This supports multiple consecutive string literals, these
+   * are concatenated, for example this expression "'hello' 'world'" will be converted into
+   * "helloworld".
+   *
+   * Special characters can be escaped by using Hive/C-style escaping.
+   */
   override def visitStringLiteral(ctx: StringLiteralContext): Literal = withOrigin(ctx) {
-    Literal(ctx.STRING().asScala.map(s => unquote(s.getText)).mkString)
+    Literal(ctx.STRING().asScala.map(s => unescapeSQLString(s.getText)).mkString)
   }
 
+  /**
+   * Create a [[CalendarInterval]] literal expression. An interval expression can contain multiple
+   * unit value pairs, for instance: interval 2 months 2 days.
+   */
   override def visitInterval(ctx: IntervalContext): Literal = withOrigin(ctx) {
     val intervals = ctx.intervalField.asScala.map(visitIntervalField)
     assert(intervals.nonEmpty, "at least one time unit should be given for interval literal", ctx)
     Literal(intervals.reduce(_.add(_)))
   }
 
+  /**
+   * Create a [[CalendarInterval]] for a unit value pair. Two unit configuration types are
+   * supported:
+   * - Single unit.
+   * - From-To unit (only 'YEAR TO MONTH' and 'DAY TO SECOND' are supported).
+   */
   override def visitIntervalField(ctx: IntervalFieldContext): CalendarInterval = withOrigin(ctx) {
-    val s = ctx.value.getText
-    val i = (ctx.unit.getText.toLowerCase, Option(ctx.to).map(_.getText.toLowerCase)) match {
-      case (unit, None) if unit.endsWith("s") =>
-        CalendarInterval.fromSingleUnitString(unit.substring(0, unit.length - 1), s)
-      case (unit, None) =>
-        CalendarInterval.fromSingleUnitString(unit, s)
+    import ctx._
+    val s = value.getText
+    val interval = (unit.getText.toLowerCase, Option(to).map(_.getText.toLowerCase)) match {
+      case (u, None) if u.endsWith("s") =>
+        // Handle plural forms, e.g: yearS/monthS/weekS/dayS/hourS/minuteS/hourS/...
+        CalendarInterval.fromSingleUnitString(u.substring(0, u.length - 1), s)
+      case (u, None) =>
+        CalendarInterval.fromSingleUnitString(u, s)
       case ("year", Some("month")) =>
         CalendarInterval.fromYearMonthString(s)
       case ("day", Some("second")) =>
         CalendarInterval.fromDayTimeString(s)
-      case (from, Some(to)) =>
-        notSupported(s"Intervals FROM $from TO $to are not supported.", ctx)
+      case (from, Some(t)) =>
+        throw new ParseException(s"Intervals FROM $from TO $t are not supported.", ctx)
     }
-    assert(i != null, "No interval can be constructed", ctx)
-    i
+    assert(interval != null, "No interval can be constructed", ctx)
+    interval
+  }
+
+  /* ********************************************************************************************
+   * DataType parsing
+   * ******************************************************************************************** */
+  /**
+   * Resolve/create a primitive type.
+   */
+  override def visitPrimitiveDataType(ctx: PrimitiveDataTypeContext): DataType = withOrigin(ctx) {
+    (ctx.identifier.getText.toLowerCase, ctx.INTEGER_VALUE().asScala.toList) match {
+      case ("boolean", Nil) => BooleanType
+      case ("tinyint" | "byte", Nil) => ByteType
+      case ("smallint" | "short", Nil) => ShortType
+      case ("int" | "integer", Nil) => IntegerType
+      case ("bigint" | "long", Nil) => LongType
+      case ("float", Nil) => FloatType
+      case ("double", Nil) => DoubleType
+      case ("date", Nil) => DateType
+      case ("timestamp", Nil) => TimestampType
+      case ("char" | "varchar" | "string", Nil) => StringType
+      case ("char" | "varchar", _ :: Nil) => StringType
+      case ("binary", Nil) => BinaryType
+      case ("decimal", Nil) => DecimalType.USER_DEFAULT
+      case ("decimal", precision :: Nil) => DecimalType(precision.getText.toInt, 0)
+      case ("decimal", precision :: scale :: Nil) =>
+        DecimalType(precision.getText.toInt, scale.getText.toInt)
+      case (dt, params) =>
+        throw new ParseException(
+          s"DataType $dt${params.mkString("(", ",", ")")} is not supported.", ctx)
+    }
+  }
+
+  /**
+   * Create a complex DataType. Arrays, Maps and Structures are supported.
+   */
+  override def visitComplexDataType(ctx: ComplexDataTypeContext): DataType = withOrigin(ctx) {
+    ctx.complex.getType match {
+      case SqlBaseParser.ARRAY =>
+        ArrayType(typedVisit(ctx.dataType(0)))
+      case SqlBaseParser.MAP =>
+        MapType(typedVisit(ctx.dataType(0)), typedVisit(ctx.dataType(1)))
+      case SqlBaseParser.STRUCT =>
+        visitColTypeList(ctx.colTypeList)
+    }
+  }
+
+  /**
+   * Create a [[StructType]] from a number of column definitions.
+   */
+  override def visitColTypeList(ctx: ColTypeListContext): StructType = withOrigin(ctx) {
+    StructType(ctx.colType().asScala.map(visitColType))
+  }
+
+  /**
+   * Create a [[StructField]] from a column definition.
+   */
+  override def visitColType(ctx: ColTypeContext): StructField = withOrigin(ctx) {
+    import ctx._
+
+    // Add the comment to the metadata.
+    val builder = new MetadataBuilder
+    if (STRING != null) {
+      builder.putString("comment", unescapeSQLString(STRING.getText))
+    }
+
+    StructField(identifier.getText, typedVisit(dataType), nullable = true, builder.build())
   }
 }
 
-private[spark] object AstBuilder extends Logging {
-
-  def unquote(raw: String): String = {
-    ParseUtils.unescapeSQLString(raw)
-  }
-
+private[sql] object AstBuilder extends Logging {
+  /**
+   * Register the origin of the context. Any TreeNode created in the closure will be assigned the
+   * registered origin. This method restores the previously set origin after completion of the
+   * closure.
+   */
   def withOrigin[T](ctx: ParserRuleContext)(f: => T): T = {
     val current = CurrentOrigin.get
     val token = ctx.getStart
@@ -1095,17 +1350,21 @@ private[spark] object AstBuilder extends Logging {
     }
   }
 
-  def notSupported(message: String, ctx: ParserRuleContext): Nothing = {
-    throw new ParseException(message, ctx)
-  }
-
+  /**
+   * Assert if a condition holds. If it doesn't throw a parse exception.
+   */
   def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
     if (!f) {
       throw new ParseException(message, ctx)
     }
   }
 
+  /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
+    /**
+     * Create a plan using the block of code when the given context exists. Otherwise return the
+     * original plan.
+     */
     def optional(ctx: AnyRef)(f: => LogicalPlan): LogicalPlan = {
       if (ctx != null) {
         f
@@ -1114,6 +1373,10 @@ private[spark] object AstBuilder extends Logging {
       }
     }
 
+    /**
+     * Map a [[LogicalPlan]] to another [[LogicalPlan]] if the passed context exists using the
+     * passed function. The original plan is returned when the context does not exist.
+     */
     def optionalMap[C <: ParserRuleContext](
         ctx: C)(
         f: (C, LogicalPlan) => LogicalPlan): LogicalPlan = {

@@ -324,7 +324,6 @@ primaryExpression
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END                   #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CAST '(' expression AS dataType ')'                                                      #cast
-    | ARRAY '[' (expression (',' expression)*)? ']'                                            #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
     | identifier                                                                               #columnReference
     | base=primaryExpression '.' fieldName=identifier                                          #dereference
@@ -365,9 +364,8 @@ dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT '<' colTypeList '>'                        #complexDataType
-    | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDatatype
+    | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
-
 colTypeList
     : colType (',' colType)*
     ;
@@ -392,8 +390,7 @@ windowSpec
     : name=identifier  #windowRef
     | '('
       (PARTITION BY partition+=expression (',' partition+=expression)*)?
-      (ORDER BY sortItem (',' sortItem)*)?
-      windowFrame?
+      (ORDER BY sortItem (',' sortItem)* windowFrame?)?
       ')'              #windowDef
     ;
 
@@ -405,8 +402,7 @@ windowFrame
     ;
 
 frameBound
-    : UNBOUNDED boundType=PRECEDING
-    | UNBOUNDED boundType=FOLLOWING
+    : UNBOUNDED boundType=(PRECEDING | FOLLOWING)
     | boundType=CURRENT ROW
     | expression boundType=(PRECEDING | FOLLOWING)
     ;
