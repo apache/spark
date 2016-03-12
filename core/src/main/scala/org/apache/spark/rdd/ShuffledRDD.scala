@@ -101,6 +101,9 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
       context)
       .read()
       .asInstanceOf[Iterator[(K, C)]]
+    if (itr.isEmpty) {
+      context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
+    }
     itr.map{x =>
       if (itr.isEmpty) {
         context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
