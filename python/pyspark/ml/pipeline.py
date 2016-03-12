@@ -15,118 +15,13 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
-
 from pyspark import SparkContext
 from pyspark import since
+from pyspark.ml import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import keyword_only, JavaMLWriter, JavaMLReader
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.mllib.common import inherit_doc, _py2java, _java2py
-
-
-@inherit_doc
-class Estimator(Params):
-    """
-    Abstract class for estimators that fit models to data.
-
-    .. versionadded:: 1.3.0
-    """
-
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def _fit(self, dataset):
-        """
-        Fits a model to the input dataset. This is called by the
-        default implementation of fit.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :returns: fitted model
-        """
-        raise NotImplementedError()
-
-    @since("1.3.0")
-    def fit(self, dataset, params=None):
-        """
-        Fits a model to the input dataset with optional parameters.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overrides embedded
-                       params. If a list/tuple of param maps is given,
-                       this calls fit on each param map and returns a
-                       list of models.
-        :returns: fitted model(s)
-        """
-        if params is None:
-            params = dict()
-        if isinstance(params, (list, tuple)):
-            return [self.fit(dataset, paramMap) for paramMap in params]
-        elif isinstance(params, dict):
-            if params:
-                return self.copy(params)._fit(dataset)
-            else:
-                return self._fit(dataset)
-        else:
-            raise ValueError("Params must be either a param map or a list/tuple of param maps, "
-                             "but got %s." % type(params))
-
-
-@inherit_doc
-class Transformer(Params):
-    """
-    Abstract class for transformers that transform one dataset into
-    another.
-
-    .. versionadded:: 1.3.0
-    """
-
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
-    def _transform(self, dataset):
-        """
-        Transforms the input dataset.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :returns: transformed dataset
-        """
-        raise NotImplementedError()
-
-    @since("1.3.0")
-    def transform(self, dataset, params=None):
-        """
-        Transforms the input dataset with optional parameters.
-
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: an optional param map that overrides embedded
-                       params.
-        :returns: transformed dataset
-        """
-        if params is None:
-            params = dict()
-        if isinstance(params, dict):
-            if params:
-                return self.copy(params,)._transform(dataset)
-            else:
-                return self._transform(dataset)
-        else:
-            raise ValueError("Params must be either a param map but got %s." % type(params))
-
-
-@inherit_doc
-class Model(Transformer):
-    """
-    Abstract class for models that are fitted by estimators.
-
-    .. versionadded:: 1.4.0
-    """
-
-    __metaclass__ = ABCMeta
+from pyspark.mllib.common import inherit_doc, _java2py
 
 
 def stages_java2py(java_stages):
@@ -169,14 +64,13 @@ def stages_py2java(py_stages):
     :return: A Java array of Java Stages.
     """
 
-    java_stages = map(lambda stage: stage._java_obj,
-               map(lambda stage: stage._transfer_params_to_java(), py_stages))
     gateway = SparkContext._gateway
     jvm = SparkContext._jvm
-    jstages = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(java_stages))
-    for idx, java_stage in enumerate(java_stages):
-        jstages[idx] = java_stage
-    return jstages
+    java_stages = gateway.new_array(jvm.org.apache.spark.ml.PipelineStage, len(py_stages))
+    for idx, stage in enumerate(py_stages):
+        stage._transfer_params_to_java()
+        java_stages[idx] = stage._java_obj
+    return java_stages
 
 
 @inherit_doc
@@ -363,8 +257,11 @@ class PipelineModelMLReader(JavaMLReader):
         """Load the ML instance from the input path."""
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
+        sc = SparkContext._active_spark_context
         java_obj = self._jread.load(path)
-        instance = self._clazz(stages_java2py(java_obj))
+        print(type(java_obj.stages))
+        print(type(java_obj.stages()))
+        instance = self._clazz(stages_java2py(_java2py(sc, java_obj.stages())))
         instance._resetUid(java_obj.uid())
         return instance
 
