@@ -558,4 +558,14 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
         |FROM parquet_t1 x JOIN parquet_t1 y ON x.key = y.key
       """.stripMargin)
   }
+
+  test("join 2 tables and aggregate function in having clause") {
+    checkHiveQl(
+      """
+        |SELECT COUNT(a.value), b.KEY, a.KEY
+        |FROM parquet_t1 a, parquet_t1 b
+        |GROUP BY a.KEY, b.KEY
+        |HAVING MAX(a.KEY) > 0
+      """.stripMargin)
+  }
 }

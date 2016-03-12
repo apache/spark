@@ -55,12 +55,24 @@ class SQLBuilder(logicalPlan: LogicalPlan, sqlContext: SQLContext) extends Loggi
 
   def toSQL: String = {
     val canonicalizedPlan = Canonicalizer.execute(logicalPlan)
+    val outputNames = logicalPlan.output.map(_.name)
+    val qualifiers = logicalPlan.output.flatMap(_.qualifiers).distinct
+
+    // Keep the qualifier information by using it as sub-query name, if there is only one qualifier
+    // present.
+    val finalName = if (qualifiers.isEmpty || qualifiers.length > 1) {
+      SQLBuilder.newSubqueryName
+    } else {
+      qualifiers.head
+    }
+
     // Canonicalizer will remove all naming information, we should add it back by adding an extra
     // Project and alias the outputs.
-    val outputWithName = canonicalizedPlan.output.zip(logicalPlan.output).map {
-      case (a1, a2) => Alias(a1.withQualifiers(Nil), a2.name)()
+    val aliasedOutput = canonicalizedPlan.output.zip(outputNames).map {
+      case (attr, name) => Alias(attr.withQualifiers(Nil), name)()
     }
-    val finalPlan = Project(outputWithName, SubqueryAlias("result", canonicalizedPlan))
+    val finalPlan = Project(aliasedOutput, SubqueryAlias(finalName, canonicalizedPlan))
+
     try {
       val replaced = finalPlan.transformAllExpressions {
         case e: SubqueryExpression =>
