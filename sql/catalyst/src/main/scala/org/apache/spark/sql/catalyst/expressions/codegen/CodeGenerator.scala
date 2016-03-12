@@ -170,11 +170,11 @@ class CodegenContext {
 
   /** The variable name of the input col in generated code. */
   var INPUT_COLORDINAL = "idx"
-  var isRow = true
 
   /**
     * The map from a variable name to it's next ID.
     */
+  private val freshNameJavaTypes = new mutable.HashMap[String, String]
   private val freshNameIds = new mutable.HashMap[String, Int]
   freshNameIds += INPUT_ROW -> 1
 
@@ -186,13 +186,13 @@ class CodegenContext {
   /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
-  def freshName(name: String): String = synchronized {
+  def freshName(name: String, javaType: String = ""): String = synchronized {
     val fullName = if (freshNamePrefix == "") {
       name
     } else {
       s"${freshNamePrefix}_$name"
     }
-    if (freshNameIds.contains(fullName)) {
+    val freshname = if (freshNameIds.contains(fullName)) {
       val id = freshNameIds(fullName)
       freshNameIds(fullName) = id + 1
       s"$fullName$id"
@@ -200,6 +200,13 @@ class CodegenContext {
       freshNameIds += fullName -> 1
       fullName
     }
+    freshNameJavaTypes.put(freshname, javaType)
+    freshname
+  }
+
+  def isColumnarType(name: String): Boolean = {
+    val javaType = freshNameJavaTypes.getOrElse(name, "")
+    (javaType.indexOf("ColumnVector") >= 0)
   }
 
   /**
@@ -213,7 +220,8 @@ class CodegenContext {
       case StringType => s"$input.getUTF8String($ordinal)"
       case BinaryType => s"$input.getBinary($ordinal)"
       case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case t: StructType => if (!isColumnarType(input)) { s"$input.getStruct($ordinal, ${t.size})" }
+        else { s"$input.getStruct($ordinal)" }
       case _: ArrayType => s"$input.getArray($ordinal)"
       case _: MapType => s"$input.getMap($ordinal)"
       case NullType => "null"
