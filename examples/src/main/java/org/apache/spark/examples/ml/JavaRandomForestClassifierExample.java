@@ -27,7 +27,8 @@ import org.apache.spark.ml.classification.RandomForestClassificationModel;
 import org.apache.spark.ml.classification.RandomForestClassifier;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 // $example off$
 
@@ -39,7 +40,8 @@ public class JavaRandomForestClassifierExample {
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> data =
+        sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
@@ -56,9 +58,9 @@ public class JavaRandomForestClassifierExample {
       .fit(data);
 
     // Split the data into training and test sets (30% held out for testing)
-    DataFrame[] splits = data.randomSplit(new double[] {0.7, 0.3});
-    DataFrame trainingData = splits[0];
-    DataFrame testData = splits[1];
+    Dataset<Row>[] splits = data.randomSplit(new double[] {0.7, 0.3});
+    Dataset<Row> trainingData = splits[0];
+    Dataset<Row> testData = splits[1];
 
     // Train a RandomForest model.
     RandomForestClassifier rf = new RandomForestClassifier()
@@ -79,7 +81,7 @@ public class JavaRandomForestClassifierExample {
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
-    DataFrame predictions = model.transform(testData);
+    Dataset<Row> predictions = model.transform(testData);
 
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5);

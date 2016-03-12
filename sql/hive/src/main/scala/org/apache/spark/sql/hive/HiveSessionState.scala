@@ -58,6 +58,7 @@ private[hive] class HiveSessionState(ctx: HiveContext) extends SessionState(ctx)
         catalog.PreInsertionCasts ::
         python.ExtractPythonUDFs ::
         PreInsertCastAndRename ::
+        DataSourceAnalysis ::
         (if (conf.runSQLOnFile) new ResolveDataSource(ctx) :: Nil else Nil)
 
       override val extendedCheckRules = Seq(PreWriteCheck(catalog))

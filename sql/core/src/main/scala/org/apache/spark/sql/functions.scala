@@ -936,7 +936,7 @@ object functions extends LegacyFunctions {
    * @since 1.5.0
    */
   def broadcast(df: DataFrame): DataFrame = {
-    DataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
+    Dataset.newDataFrame(df.sqlContext, BroadcastHint(df.logicalPlan))
   }
 
   /**

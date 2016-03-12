@@ -17,150 +17,20 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.nio.charset.Charset
-
 import scala.util.control.NonFatal
 
-import com.google.common.base.Objects
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
+import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.RecordWriter
+import org.apache.hadoop.mapreduce.TaskAttemptContext
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.CompressionCodecs
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-
-private[sql] class CSVRelation(
-    private val inputRDD: Option[RDD[String]],
-    override val paths: Array[String] = Array.empty[String],
-    private val maybeDataSchema: Option[StructType],
-    override val userDefinedPartitionColumns: Option[StructType],
-    private val parameters: Map[String, String])
-    (@transient val sqlContext: SQLContext) extends HadoopFsRelation {
-
-  override lazy val dataSchema: StructType = maybeDataSchema match {
-    case Some(structType) => structType
-    case None => inferSchema(paths)
-  }
-
-  private val options = new CSVOptions(parameters)
-
-  @transient
-  private var cachedRDD: Option[RDD[String]] = None
-
-  private def readText(location: String): RDD[String] = {
-    if (Charset.forName(options.charset) == Charset.forName("UTF-8")) {
-      sqlContext.sparkContext.textFile(location)
-    } else {
-      val charset = options.charset
-      sqlContext.sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](location)
-        .mapPartitions { _.map { pair =>
-            new String(pair._2.getBytes, 0, pair._2.getLength, charset)
-          }
-        }
-    }
-  }
-
-  private def baseRdd(inputPaths: Array[String]): RDD[String] = {
-    inputRDD.getOrElse {
-      cachedRDD.getOrElse {
-        val rdd = readText(inputPaths.mkString(","))
-        cachedRDD = Some(rdd)
-        rdd
-      }
-    }
-  }
-
-  private def tokenRdd(header: Array[String], inputPaths: Array[String]): RDD[Array[String]] = {
-    val rdd = baseRdd(inputPaths)
-    // Make sure firstLine is materialized before sending to executors
-    val firstLine = if (options.headerFlag) findFirstLine(rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
-  }
-
-  /**
-    * This supports to eliminate unneeded columns before producing an RDD
-    * containing all of its tuples as Row objects. This reads all the tokens of each line
-    * and then drop unneeded tokens without casting and type-checking by mapping
-    * both the indices produced by `requiredColumns` and the ones of tokens.
-    * TODO: Switch to using buildInternalScan
-    */
-  override def buildScan(requiredColumns: Array[String], inputs: Array[FileStatus]): RDD[Row] = {
-    val pathsString = inputs.map(_.getPath.toUri.toString)
-    val header = schema.fields.map(_.name)
-    val tokenizedRdd = tokenRdd(header, pathsString)
-    CSVRelation.parseCsv(tokenizedRdd, schema, requiredColumns, inputs, sqlContext, options)
-  }
-
-  override def prepareJobForWrite(job: Job): OutputWriterFactory = {
-    val conf = job.getConfiguration
-    options.compressionCodec.foreach { codec =>
-      CompressionCodecs.setCodecConfiguration(conf, codec)
-    }
-
-    new CSVOutputWriterFactory(options)
-  }
-
-  override def hashCode(): Int = Objects.hashCode(paths.toSet, dataSchema, schema, partitionColumns)
-
-  override def equals(other: Any): Boolean = other match {
-    case that: CSVRelation => {
-      val equalPath = paths.toSet == that.paths.toSet
-      val equalDataSchema = dataSchema == that.dataSchema
-      val equalSchema = schema == that.schema
-      val equalPartitionColums = partitionColumns == that.partitionColumns
-
-      equalPath && equalDataSchema && equalSchema && equalPartitionColums
-    }
-    case _ => false
-  }
-
-  private def inferSchema(paths: Array[String]): StructType = {
-    val rdd = baseRdd(paths)
-    val firstLine = findFirstLine(rdd)
-    val firstRow = new LineCsvReader(options).parseLine(firstLine)
-
-    val header = if (options.headerFlag) {
-      firstRow
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
-    }
-
-    val parsedRdd = tokenRdd(header, paths)
-    if (options.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, options.nullValue)
-    } else {
-      // By default fields are assumed to be StringType
-      val schemaFields = header.map { fieldName =>
-        StructField(fieldName.toString, StringType, nullable = true)
-      }
-      StructType(schemaFields)
-    }
-  }
-
-  /**
-    * Returns the first line of the first non-empty file in path
-    */
-  private def findFirstLine(rdd: RDD[String]): String = {
-    if (options.isCommentSet) {
-      val comment = options.comment.toString
-      rdd.filter { line =>
-        line.trim.nonEmpty && !line.startsWith(comment)
-      }.first()
-    } else {
-      rdd.filter { line =>
-        line.trim.nonEmpty
-      }.first()
-    }
-  }
-}
 
 object CSVRelation extends Logging {
 
@@ -246,8 +116,10 @@ object CSVRelation extends Logging {
 private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
+      bucketId: Option[Int],
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
+    if (bucketId.isDefined) sys.error("csv doesn't support bucketing")
     new CsvOutputWriter(path, dataSchema, context, params)
   }
 }
@@ -268,7 +140,7 @@ private[sql] class CsvOutputWriter(
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$extension")
+        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
       }
     }.getRecordWriter(context)
   }
