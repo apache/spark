@@ -282,8 +282,8 @@ public class JavaDataFrameSuite {
     List<Row> actual = sampled.groupBy("key").count().orderBy("key").collectAsList();
     Assert.assertEquals(0, actual.get(0).getLong(0));
     Assert.assertTrue(0 <= actual.get(0).getLong(1) && actual.get(0).getLong(1) <= 8);
-    Assert.assertEquals(1, actual.get(0).getLong(0));
-    Assert.assertTrue(2 <= actual.get(0).getLong(1) && actual.get(1).getLong(1) <= 13);
+    Assert.assertEquals(1, actual.get(1).getLong(0));
+    Assert.assertTrue(2 <= actual.get(1).getLong(1) && actual.get(1).getLong(1) <= 13);
   }
 
   @Test

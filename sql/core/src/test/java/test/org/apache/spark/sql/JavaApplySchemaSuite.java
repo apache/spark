@@ -115,7 +115,7 @@ public class JavaApplySchemaSuite implements Serializable {
     expected.add(RowFactory.create("Michael", 29));
     expected.add(RowFactory.create("Yin", 28));
 
-    Assert.assertEquals(expected, Arrays.asList(actual));
+    Assert.assertEquals(expected, actual);
   }
 
   @Test
