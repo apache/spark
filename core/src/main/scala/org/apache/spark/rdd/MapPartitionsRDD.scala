@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.util.collection.Utils
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
@@ -42,20 +43,14 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     // element since we chain the iterator transformations together
     val data = input.map{x =>
       context.setRDDPartitionInfo(id, shuffleId, split.index)
-      if (input.isEmpty) {
-        context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
-      }
       x
     }
+    val wrappedData = Utils.signalWhenEmpty(data,
+      () => context.taskMetrics.markFullyProcessed(id, shuffleId, split.index))
     // We also set it before the first call to the user function in case the user provides a
     // function which access a consistent accumulator before accessing any elements.
     context.setRDDPartitionInfo(id, shuffleId, split.index)
-    val result = f(context, split.index, data)
-    // We also check if our input is empty here just for empty partitions.
-    if (input.isEmpty) {
-      context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
-    }
-    result
+    f(context, split.index, wrappedData)
   }
 
   override def clearDependencies() {

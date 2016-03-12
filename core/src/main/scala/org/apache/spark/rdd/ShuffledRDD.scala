@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.util.collection.Utils
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index: Int = idx
@@ -101,15 +102,8 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
       context)
       .read()
       .asInstanceOf[Iterator[(K, C)]]
-    if (itr.isEmpty) {
-      context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
-    }
-    itr.map{x =>
-      if (itr.isEmpty) {
-        context.taskMetrics.markFullyProcessed(id, shuffleId, split.index)
-      }
-      x
-    }
+    Utils.signalWhenEmpty(itr,
+      () => context.taskMetrics.markFullyProcessed(id, shuffleId, split.index))
   }
 
   override def clearDependencies() {

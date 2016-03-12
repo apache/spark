@@ -36,4 +36,20 @@ private[spark] object Utils {
     }
     ordering.leastOf(input.asJava, num).iterator.asScala
   }
+
+  /**
+   * Signal when empty.
+   * Wraps an iterator and calls the provided call back when the iterator is consumed.
+   */
+  def signalWhenEmpty[T](itr: Iterator[T], func: () => Unit): Iterator[T] = {
+    if (itr.isEmpty) {
+      func()
+    }
+    itr.map{x =>
+      if (itr.isEmpty) {
+        func()
+      }
+      x
+    }
+  }
 }
