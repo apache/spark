@@ -222,7 +222,7 @@ private[sql] case class DataSourceScan(
 
     ctx.INPUT_COLORDINAL = rowidx
     ctx.currentVars = null
-    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2 , columnVectorClz))
+    val colVars = output.zipWithIndex.map(x => ctx.freshName("col" + x._2, columnVectorClz))
     val colDeclarations = colVars.zipWithIndex.map(x => {
       (columnVectorClz + " " + x._1 + " = " + batch + ".column(" + x._2 + ");\n").trim} )
     val columns1 = (exprs zip colVars).map(x => {
