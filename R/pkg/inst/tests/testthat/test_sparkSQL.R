@@ -42,6 +42,7 @@ mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
                "{\"name\":\"Justin\", \"age\":19}")
 jsonPath <- tempfile(pattern="sparkr-test", fileext=".tmp")
+csvPath <- tempfile(pattern="sparkr-test", fileext=".csv")
 parquetPath <- tempfile(pattern="sparkr-test", fileext=".parquet")
 writeLines(mockLines, jsonPath)
 
@@ -1605,6 +1606,30 @@ test_that("read/write text files", {
 
   unlink(textPath)
   unlink(textPath2)
+})
+
+test_that("read/write csv files", {
+  df <- read.df(sqlContext, jsonPath, "json")
+  write.df(df, csvPath, "csv", "overwrite")
+
+  # Test write.df and read.df
+  dfCSV <- read.df(sqlContext, csvPath, "csv")
+  expect_is(dfCSV, "DataFrame")
+  expect_equal(colnames(dfCSV), c("C0", "C1"))
+  expect_equal(count(dfCSV), 3)
+  csvPath2 <- tempfile(pattern = "csvPath2", fileext = ".csv")
+  write.df(dfCSV, csvPath2, "csv", mode="overwrite")
+
+  # Test write.csv and read.csv
+  csvPath3 <- tempfile(pattern = "csvPath3", fileext = ".csv")
+  write.csv(dfCSV, csvPath3)
+  dfCSV2 <- read.csv(sqlContext, c(csvPath2, csvPath3))
+  expect_is(dfCSV2, "DataFrame")
+  expect_equal(colnames(dfCSV2), c("C0", "C1"))
+  expect_equal(count(dfCSV2), count(dfCSV) * 2)
+
+  unlink(csvPath2)
+  unlink(csvPath3)
 })
 
 test_that("describe() and summarize() on a DataFrame", {

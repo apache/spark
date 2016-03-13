@@ -712,6 +712,33 @@ setMethod("write.text",
             invisible(callJMethod(write, "text", path))
           })
 
+#' write.csv
+#'
+#' Save the contents of a DataFrame as a CSV file. Files written out
+#' with this method can be read back in as a DataFrame using read.csv().
+#'
+#' @param x A SparkSQL DataFrame
+#' @param path The directory where the file is saved
+#'
+#' @family DataFrame functions
+#' @rdname write.csv
+#' @name write.csv
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.csv"
+#' df <- read.csv(sqlContext, path)
+#' write.csv(df, "/tmp/sparkr-tmp/")
+#'}
+setMethod("write.csv",
+          signature(x = "DataFrame", path = "character"),
+          function(x, path) {
+            write <- callJMethod(x@sdf, "write")
+            invisible(callJMethod(write, "csv", path))
+          })
+
 #' Distinct
 #'
 #' Return a new DataFrame containing the distinct rows in this DataFrame.

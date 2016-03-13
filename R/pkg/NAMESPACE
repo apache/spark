@@ -101,7 +101,8 @@ exportMethods("arrange",
               "write.df",
               "write.json",
               "write.parquet",
-              "write.text")
+              "write.text",
+              "write.csv")
 
 exportClasses("Column")
 
@@ -284,6 +285,7 @@ export("as.DataFrame",
        "read.json",
        "read.parquet",
        "read.text",
+       "read.csv",
        "sql",
        "str",
        "tableToDF",
