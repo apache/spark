@@ -186,7 +186,7 @@ readMultipleObjects <- function(inputCon) {
   # of the objects, so the number of objects varies, we try to read
   # all objects in a loop until the end of the stream.
   data <- list()
-  while(TRUE) {
+  while (TRUE) {
     # If reaching the end of the stream, type returned should be "".
     type <- readType(inputCon)
     if (type == "") {
