@@ -19,7 +19,7 @@ package org.apache.spark.mllib.linalg.distributed
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
 
 import org.apache.spark.{Logging, Partitioner, SparkException}
 import org.apache.spark.annotation.Since
@@ -262,31 +262,26 @@ class BlockMatrix @Since("1.3.0") (
     }
     new CoordinateMatrix(entryRDD, numRows(), numCols())
   }
-  
+
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   @Since("1.3.0")
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
       s"numCols: ${numCols()}")
 
-    val rows = blocks.map(block => (block._1._1, (block._1._2, block._2)))
-      .groupByKey()
-      .flatMap { case (row, matricesItr) =>
-
-        val rows = matricesItr.head._2.numRows
-        val res = BDM.zeros[Double](rows, numCols.toInt)
-
-        matricesItr.foreach { case ((idx: Int, mat: Matrix)) =>
-          val offset = colsPerBlock * idx
-          res(0 until mat.numRows, offset until offset + mat.numCols) := mat.toBreeze
-        }
-
-        (0 until rows).map(idx => new IndexedRow(
-          (row * rowsPerBlock) + idx,
-          Vectors.dense(res.t(::, idx).toArray)
-        ))
+    val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
+      val dMat = mat.toBreeze.toDenseMatrix.t
+      (0 until mat.numRows).map(rowIds =>
+        blockRowIdx * rowsPerBlock + rowIds -> (blockColIdx, dMat(::, rowIds).toDenseVector)
+      )
+    }.groupByKey().map { case (rowIdx, vectors) =>
+      val wholeVector = BDV.zeros[Double](numCols().toInt)
+      vectors.foreach { case (blockColIdx: Int, vec: BDV[Double]) =>
+        val offset = colsPerBlock * blockColIdx
+        wholeVector(offset until offset + vec.length) := vec
       }
-
+      new IndexedRow(rowIdx, Vectors.fromBreeze(wholeVector))
+    }
     new IndexedRowMatrix(rows)
   }
 
