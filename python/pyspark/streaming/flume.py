@@ -111,13 +111,9 @@ class FlumeUtils(object):
     @staticmethod
     def _get_helper(sc):
         try:
-            helperClass = sc._jvm.java.lang.Thread.currentThread().getContextClassLoader() \
-                .loadClass("org.apache.spark.streaming.flume.FlumeUtilsPythonHelper")
-            return helperClass.newInstance()
-        except Py4JJavaError as e:
-            # TODO: use --jar once it also work on driver
-            if 'ClassNotFoundException' in str(e.java_exception):
-                FlumeUtils._printErrorMsg(sc)
+            return sc._jvm.org.apache.spark.streaming.flume.FlumeUtilsPythonHelper()
+        except:
+            FlumeUtils._printErrorMsg(sc)
             raise
 
     @staticmethod
