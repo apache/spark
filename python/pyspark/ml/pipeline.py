@@ -40,7 +40,7 @@ def _stages_java2py(java_stages):
         assert(stage.getClass().getName() != "org.apache.spark.Pipeline" or
                stage.getClass().getName() != "org.apache.spark.PipelineModel",
                "Nested Pipeline and PipelineModel are not supported for save/load now.")
-    return map(JavaWrapper._transfer_stage_from_java, java_stages)
+    return list(map(JavaWrapper._transfer_stage_from_java, java_stages))
 
 
 def _stages_py2java(py_stages):
