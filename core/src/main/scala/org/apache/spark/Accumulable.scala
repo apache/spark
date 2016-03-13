@@ -122,13 +122,14 @@ class Accumulable[R, T] private[spark] (
     this(initialValue, param, None)
 
   @volatile @transient private var value_ : R = initialValue // Current value on driver
-  // For consistent accumulators pending and processed updates
-  @volatile @transient private[spark] var pending =
-    new mutable.HashMap[(Int, Int, Int), R]()
-  @volatile @transient private[spark] var completed =
-    new mutable.HashSet[(Int, Int, Int)]()
-  @volatile @transient private[spark] var processed =
-    new mutable.HashMap[(Int, Int), mutable.BitSet]()
+
+  // For consistent accumulators pending and processed updates.
+  // Completed and processed are keyed by (rdd id, shuffle id, partition id)
+  @transient private[spark] lazy val pending = new mutable.HashMap[(Int, Int, Int), R]()
+  @transient private[spark] lazy val completed = new mutable.HashSet[(Int, Int, Int)]()
+  // processed is keyed by (rdd id, shuffle id) and bitset contains all partitions for that
+  // combination which have been merged into the value.
+  @transient private[spark] lazy val processed = new mutable.HashMap[(Int, Int), mutable.BitSet]()
 
   val zero = param.zero(initialValue) // Zero value to be passed to executors
   private var deserialized = false
@@ -212,7 +213,7 @@ class Accumulable[R, T] private[spark] (
 
   /**
    * Merge in pending updates for ac consistent accumulators or merge accumulated values for
-   * regular accumulators.
+   * regular accumulators. This is only called on the driver when merging task results together.
    */
   private[spark] def internalMerge(term: Any) {
     if (!consistent) {
@@ -307,10 +308,6 @@ class Accumulable[R, T] private[spark] (
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     value_ = zero
-    if (consistent) {
-      pending = new mutable.HashMap[(Int, Int, Int), R]()
-      completed = new mutable.HashSet[(Int, Int, Int)]()
-    }
     deserialized = true
 
     // Automatically register the accumulator when it is deserialized with the task closure.
