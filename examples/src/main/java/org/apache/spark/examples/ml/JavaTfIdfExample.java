@@ -66,7 +66,7 @@ public class JavaTfIdfExample {
     IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
     IDFModel idfModel = idf.fit(featurizedData);
     Dataset<Row> rescaledData = idfModel.transform(featurizedData);
-    for (Row r : rescaledData.select("features", "label").takeRows(3)) {
+    for (Row r : rescaledData.select("features", "label").takeAsList(3)) {
       Vector features = r.getAs(0);
       Double label = r.getDouble(1);
       System.out.println(features);

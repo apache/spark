@@ -23,6 +23,7 @@ import org.apache.spark.sql.SQLContext;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.PolynomialExpansion;
@@ -61,8 +62,8 @@ public class JavaPolynomialExpansionExample {
     Dataset<Row> df = jsql.createDataFrame(data, schema);
     Dataset<Row> polyDF = polyExpansion.transform(df);
 
-    Row[] row = polyDF.select("polyFeatures").takeRows(3);
-    for (Row r : row) {
+    List<Row> rows = polyDF.select("polyFeatures").takeAsList(3);
+    for (Row r : rows) {
       System.out.println(r.get(0));
     }
     // $example off$

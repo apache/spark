@@ -59,7 +59,7 @@ public class JavaTokenizerExample {
     Tokenizer tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words");
 
     Dataset<Row> wordsDataFrame = tokenizer.transform(sentenceDataFrame);
-    for (Row r : wordsDataFrame.select("words", "label").takeRows(3)) {
+    for (Row r : wordsDataFrame.select("words", "label").takeAsList(3)) {
       java.util.List<String> words = r.getList(0);
       for (String word : words) System.out.print(word + " ");
       System.out.println();
