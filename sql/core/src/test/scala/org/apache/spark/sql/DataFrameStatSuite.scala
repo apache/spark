@@ -80,7 +80,7 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     // Verify that the splits span the entire dataset
     assert(splits.flatMap(_.collect()).toSet == data.collect().toSet)
 
-    // Verify that the splits don't overalap
+    // Verify that the splits don't overlap
     assert(splits(0).intersect(splits(1)).collect().isEmpty)
 
     // Verify that the results are deterministic across multiple runs

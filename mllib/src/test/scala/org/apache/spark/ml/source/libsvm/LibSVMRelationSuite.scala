@@ -88,7 +88,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val df = sqlContext.read.format("libsvm").load(path)
     val tempDir2 = Utils.createTempDir()
     val writepath = tempDir2.toURI.toString
-    // TODO: Remove requirement to coalesce by supporting mutiple reads.
+    // TODO: Remove requirement to coalesce by supporting multiple reads.
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
 
     val df2 = sqlContext.read.format("libsvm").load(writepath)
