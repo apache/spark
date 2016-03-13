@@ -578,11 +578,11 @@ class CleanerTester(
   }
 
   private def uncleanedResourcesToString = {
-    val s1 = {toBeCleanedRDDIds.synchronized {
-      toBeCleanedRDDIds.toSeq.sorted.mkString("[", ", ", "]")}
+    val s1 = toBeCleanedRDDIds.synchronized {
+      toBeCleanedRDDIds.toSeq.sorted.mkString("[", ", ", "]")
     }
-    val s2 = {toBeCleanedShuffleIds.synchronized {
-      toBeCleanedShuffleIds.toSeq.sorted.mkString("[", ", ", "]")}
+    val s2 = toBeCleanedShuffleIds.synchronized {
+      toBeCleanedShuffleIds.toSeq.sorted.mkString("[", ", ", "]")
     }
     val s3 = toBeCleanedBroadcstIds.synchronized {
       toBeCleanedBroadcstIds.toSeq.sorted.mkString("[", ", ", "]")
