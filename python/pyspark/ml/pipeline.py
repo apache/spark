@@ -257,20 +257,24 @@ class Pipeline(Estimator):
         stages = [stage.copy(extra) for stage in that.getStages()]
         return that.setStages(stages)
 
+    @since("2.0.0")
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
         return PipelineMLWriter(self)
 
+    @since("2.0.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
     @classmethod
+    @since("2.0.0")
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
         return PipelineMLReader(cls)
 
     @classmethod
+    @since("2.0.0")
     def load(cls, path):
         """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
         return cls.read().load(path)
@@ -343,20 +347,24 @@ class PipelineModel(Model):
         stages = [stage.copy(extra) for stage in self.stages]
         return PipelineModel(stages)
 
+    @since("2.0.0")
     def write(self):
         """Returns an JavaMLWriter instance for this ML instance."""
         return PipelineModelMLWriter(self)
 
+    @since("2.0.0")
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
         self.write().save(path)
 
     @classmethod
+    @since("2.0.0")
     def read(cls):
         """Returns an JavaMLReader instance for this class."""
         return PipelineModelMLReader(cls)
 
     @classmethod
+    @since("2.0.0")
     def load(cls, path):
         """Reads an ML instance from the input path, a shortcut of `read().load(path)`."""
         return cls.read().load(path)
