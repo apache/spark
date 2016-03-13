@@ -26,6 +26,7 @@ import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class ExecutorDelegationTokenUpdater(
@@ -34,7 +35,7 @@ private[spark] class ExecutorDelegationTokenUpdater(
 
   @volatile private var lastCredentialsFileSuffix = 0
 
-  private val credentialsFile = sparkConf.get("spark.yarn.credentials.file")
+  private val credentialsFile = sparkConf.get(CREDENTIALS_FILE_PATH)
   private val freshHadoopConf =
     SparkHadoopUtil.get.getConfBypassingFSCache(
       hadoopConf, new Path(credentialsFile).toUri.getScheme)

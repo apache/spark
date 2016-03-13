@@ -203,6 +203,17 @@ class CatalystQlSuite extends PlanTest {
       "from windowData")
   }
 
+  test("very long AND/OR expression") {
+    val equals = (1 to 1000).map(x => s"$x == $x")
+    val expr = parser.parseExpression(equals.mkString(" AND "))
+    assert(expr.isInstanceOf[And])
+    assert(expr.collect( { case EqualTo(_, _) => true } ).size == 1000)
+
+    val expr2 = parser.parseExpression(equals.mkString(" OR "))
+    assert(expr2.isInstanceOf[Or])
+    assert(expr2.collect( { case EqualTo(_, _) => true } ).size == 1000)
+  }
+
   test("subquery") {
     parser.parsePlan("select (select max(b) from s) ss from t")
     parser.parsePlan("select * from t where a = (select b from s)")

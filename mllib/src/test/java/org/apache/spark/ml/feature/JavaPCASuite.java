@@ -35,7 +35,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
@@ -100,7 +100,7 @@ public class JavaPCASuite implements Serializable {
       }
     );
 
-    DataFrame df = sqlContext.createDataFrame(featuresExpected, VectorPair.class);
+    Dataset<Row> df = sqlContext.createDataFrame(featuresExpected, VectorPair.class);
     PCAModel pca = new PCA()
       .setInputCol("features")
       .setOutputCol("pca_features")

@@ -33,7 +33,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.QueryTest$;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.hive.test.TestHive$;
@@ -52,9 +52,9 @@ public class JavaMetastoreDataSourcesSuite {
   File path;
   Path hiveManagedPath;
   FileSystem fs;
-  DataFrame df;
+  Dataset<Row> df;
 
-  private static void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -111,7 +111,7 @@ public class JavaMetastoreDataSourcesSuite {
       sqlContext.sql("SELECT * FROM javaSavedTable"),
       df.collectAsList());
 
-    DataFrame loadedDF =
+    Dataset<Row> loadedDF =
       sqlContext.createExternalTable("externalTable", "org.apache.spark.sql.json", options);
 
     checkAnswer(loadedDF, df.collectAsList());
@@ -137,7 +137,7 @@ public class JavaMetastoreDataSourcesSuite {
     List<StructField> fields = new ArrayList<>();
     fields.add(DataTypes.createStructField("b", DataTypes.StringType, true));
     StructType schema = DataTypes.createStructType(fields);
-    DataFrame loadedDF =
+    Dataset<Row> loadedDF =
       sqlContext.createExternalTable("externalTable", "org.apache.spark.sql.json", schema, options);
 
     checkAnswer(

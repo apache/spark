@@ -374,6 +374,11 @@ private[deploy] class Worker(
           }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
         }
 
+        val execs = executors.values.map { e =>
+          new ExecutorDescription(e.appId, e.execId, e.cores, e.state)
+        }
+        masterRef.send(WorkerLatestState(workerId, execs.toList, drivers.keys.toSeq))
+
       case RegisterWorkerFailed(message) =>
         if (!registered) {
           logError("Worker registration failed: " + message)

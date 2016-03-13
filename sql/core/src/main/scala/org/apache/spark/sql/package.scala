@@ -42,4 +42,5 @@ package object sql {
   @DeveloperApi
   type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
 
+  type DataFrame = Dataset[Row]
 }
