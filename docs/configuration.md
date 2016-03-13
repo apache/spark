@@ -201,6 +201,13 @@ of the most common options to set are:
     or remotely ("cluster") on one of the nodes inside the cluster.
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.useHiveContext</code></td>
+  <td>true</td>
+  <td>
+    A flag to toggle HiveContext/SQLContext as the default type of sqlContext when spark-shell launches.
+  </td>
+</tr>
 </table>
 
 Apart from these, the following properties are also available, and may be useful in some situations:
