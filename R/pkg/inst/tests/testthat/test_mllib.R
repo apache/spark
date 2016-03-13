@@ -96,9 +96,9 @@ test_that("summary coefficients match with native glm of family 'binomial'", {
   training <- filter(df, df$Species != "setosa")
   stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
     family = "binomial"))
-  coefs <- as.vector(stats$coefficients[,1])
+  coefs <- as.vector(stats$coefficients[, 1])
 
-  rTraining <- iris[iris$Species %in% c("versicolor","virginica"),]
+  rTraining <- iris[iris$Species %in% c("versicolor", "virginica"), ]
   rCoefs <- as.vector(coef(glm(Species ~ Sepal.Length + Sepal.Width, data = rTraining,
     family = binomial(link = "logit"))))
 
