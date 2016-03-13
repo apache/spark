@@ -168,7 +168,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (10)
   }
 
-  test ("basic accumulation"){
+  test ("basic accumulation") {
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
@@ -182,7 +182,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     longAcc.value should be (210L + maxInt * 20)
   }
 
-  test ("basic accumulation flatMap"){
+  test ("basic accumulation flatMap") {
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
@@ -241,7 +241,7 @@ class ConsistentAccumulatorSuite extends SparkFunSuite with Matchers with LocalS
     acc.value should be (420)
   }
 
-  test ("map + toLocalIterator + count"){
+  test ("map + toLocalIterator + count") {
     sc = new SparkContext("local[2]", "test")
     val acc : Accumulator[Int] = sc.accumulator(0, consistent = true)
 
