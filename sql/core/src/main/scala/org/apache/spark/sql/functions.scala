@@ -214,7 +214,7 @@ object functions extends LegacyFunctions {
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_list(e: Column): Column = callUDF("collect_list", e)
+  def collect_list(e: Column): Column = withAggregateFunction { CollectList(e.expr) }
 
   /**
    * Aggregate function: returns a list of objects with duplicates.

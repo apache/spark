@@ -406,4 +406,33 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         expr("kurtosis(a)")),
       Row(null, null, null, null, null))
   }
+
+  test("collect list") {
+    checkAnswer(
+      testData2.groupBy("a").agg(collect_list("b")),
+      Seq(
+        Row(1, Seq(1, 2)),
+        Row(2, Seq(1, 2)),
+        Row(3, Seq(1, 2))
+      )
+    )
+
+    val testDataWithVariedGroups = Seq(
+      ("group1", "b", "c"),
+      ("group1", "c", "d"),
+      ("group2", "m", "n"),
+      ("group1", "p", "e"),
+      ("group3", "x", "y"),
+      ("group2", "e", null.asInstanceOf[String])
+    ).toDF("group", "other", "toList")
+
+    checkAnswer(
+      testDataWithVariedGroups.groupBy("group").agg(collect_list("toList")),
+      Seq(
+        Row("group1", Seq("c", "d", "e")),
+        Row("group2", Seq("n", null.asInstanceOf[String])),
+        Row("group3", Seq("y"))
+      )
+    )
+  }
 }
