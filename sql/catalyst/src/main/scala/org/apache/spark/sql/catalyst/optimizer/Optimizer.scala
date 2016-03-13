@@ -355,6 +355,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case j @ Join(left, right, LeftSemi, condition) =>
       j.copy(right = prunedChild(right, j.references))
 
+    // Project should not be pushed below Filter. See PushPredicateThroughProject
+    case p @ Project(_, _: Filter) => p
+
     // all the columns will be used to compare, so we can't prune them
     case p @ Project(_, _: SetOperation) => p
     case p @ Project(_, _: Distinct) => p

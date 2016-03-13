@@ -131,13 +131,12 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("Column pruning on Filter") {
+  test("No column pruning on Filter") {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val query = Project('a :: Nil, Filter('c > Literal(0.0), input)).analyze
     val expected =
       Project('a :: Nil,
-        Filter('c > Literal(0.0),
-          Project(Seq('a, 'c), input))).analyze
+        Filter('c > Literal(0.0), input)).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
@@ -287,7 +286,7 @@ class ColumnPruningSuite extends PlanTest {
           AggregateExpression(Count('b), Complete, isDistinct = false),
           WindowSpecDefinition( 'a :: Nil,
             SortOrder('b, Ascending) :: Nil,
-            UnspecifiedFrame)).as('window)).where('window > 1).select('a, 'c)
+            UnspecifiedFrame)).as('window)).select('a, 'c, 'window)
 
     val correctAnswer =
       input.select('a, 'b, 'c)
@@ -297,7 +296,7 @@ class ColumnPruningSuite extends PlanTest {
             SortOrder('b, Ascending) :: Nil,
             UnspecifiedFrame)).as('window) :: Nil,
           'a :: Nil, 'b.asc :: Nil)
-        .select('a, 'c, 'window).where('window > 1).select('a, 'c).analyze
+        .select('a, 'c, 'window).analyze
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
