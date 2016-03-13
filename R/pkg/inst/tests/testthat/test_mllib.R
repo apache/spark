@@ -161,6 +161,6 @@ test_that("naiveBayes", {
 
   # Test e1071::naiveBayes
   if (requireNamespace("e1071", quietly = TRUE)) {
-    model2 <- e1071::naiveBayes(Class ~ ., data = HouseVotes84)
+    expect_that(e1071::naiveBayes(Sepal.Width ~ ., data = iris), not(throws_error()))
   }
 })
