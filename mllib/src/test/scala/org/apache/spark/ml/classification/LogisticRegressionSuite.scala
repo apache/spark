@@ -798,7 +798,6 @@ class LogisticRegressionSuite
       .setThreshold(0.6)
     val model = lr.fit(dataset)
     val summary = model.summary.asInstanceOf[BinaryLogisticRegressionSummary]
-
     val sameSummary = model.evaluate(dataset).asInstanceOf[BinaryLogisticRegressionSummary]
     assert(summary.areaUnderROC === sameSummary.areaUnderROC)
     assert(summary.roc.collect() === sameSummary.roc.collect())
@@ -936,6 +935,18 @@ class LogisticRegressionSuite
     val lr = new LogisticRegression()
     testEstimatorAndModelReadWrite(lr, dataset, LogisticRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("BinaryLogisticRegressionSummary toString") {
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(1.0)
+      .setThreshold(0.6)
+    val model = lr.fit(dataset)
+    val summary = model.summary.asInstanceOf[BinaryLogisticRegressionSummary]
+
+    val strSummary = summary.toString
+    print(strSummary)
   }
 }
 
